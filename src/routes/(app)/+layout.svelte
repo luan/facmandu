@@ -1,7 +1,14 @@
 <script lang="ts">
 	import LogoutLink from './LogoutLink.svelte';
 
-	import { ChevronDownIcon, MoonIcon, SettingsIcon, SunIcon, UserIcon } from '@lucide/svelte';
+	import {
+		ChevronDownIcon,
+		HomeIcon,
+		MoonIcon,
+		SettingsIcon,
+		SunIcon,
+		UserIcon
+	} from '@lucide/svelte';
 	import { resetMode, setMode } from 'mode-watcher';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 
@@ -13,7 +20,7 @@
 <div class="[--header-height:calc(--spacing(14))]">
 	<header class="bg-background sticky top-0 z-50 flex w-full items-center border-b">
 		<div class="flex h-(--header-height) w-full items-center gap-2 px-4 py-2">
-			<Button variant="ghost" href="/">Home</Button>
+			<Button variant="ghost" href="/"><HomeIcon />Home</Button>
 			<div class="w-full"></div>
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger class={buttonVariants({ variant: 'ghost', size: 'icon' })}>
@@ -40,8 +47,7 @@
 				<DropdownMenu.Content>
 					<DropdownMenu.Group>
 						<DropdownMenu.Item
-							><Button variant="ghost" href="/settings" class="flex items-center gap-2"
-								><SettingsIcon />Settings</Button
+							><Button variant="ghost" href="/settings"><SettingsIcon />Settings</Button
 							></DropdownMenu.Item
 						>
 						<DropdownMenu.Item><LogoutLink /></DropdownMenu.Item>
