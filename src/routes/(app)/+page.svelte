@@ -11,10 +11,10 @@
 	<p>Your user ID is {data.user.id}.</p>
 
 	<h1>Welcome to the app</h1>
-	<p>You are logged in as {data.user.username}</p>
+	<p>You <a href="/settings">are logged in as {data.user.username}</a></p>
 
 	<form method="post" action="/logout">
-		<Button type="submit">
+		<Button type="submit" variant="secondary">
 			<LogOutIcon />
 			Logout</Button
 		>

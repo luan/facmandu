@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	--radius: 1rem;
+	--radius: 0rem;
 	--background: oklch(1 0 0);
 	--foreground: oklch(0.141 0.005 285.823);
 	--card: oklch(1 0 0);
@@ -36,6 +36,8 @@
 	--sidebar-accent-foreground: oklch(0.21 0.006 285.885);
 	--sidebar-border: oklch(0.92 0.004 286.32);
 	--sidebar-ring: oklch(0.705 0.213 47.604);
+	--header-foreground: #252324;
+	--link-color: #7dcaed;
 }
 
 .dark {
@@ -47,8 +49,8 @@
 	--popover-foreground: #f5f5f5;
 	--primary: #ffa900;
 	--primary-foreground: #604814;
-	--secondary: #2a2a2a;
-	--secondary-foreground: #ffffff;
+	--secondary: #8e8e8e;
+	--secondary-foreground: #000;
 	--muted: #2a2a2a;
 	--muted-foreground: #b3b3b3;
 	--accent: #ffa900;
@@ -70,6 +72,8 @@
 	--sidebar-accent-foreground: #ffffff;
 	--sidebar-border: rgba(255, 255, 255, 0.1);
 	--sidebar-ring: #ffa900;
+	--header-foreground: #ffe6c0;
+	--link-color: #7dcaed;
 }
 
 @theme inline {
@@ -116,6 +120,20 @@
 	}
 	body {
 		@apply bg-background text-foreground;
+	}
+
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		@apply font-bold;
+		color: var(--header-foreground);
+	}
+
+	a:not([data-slot='button']) {
+		color: var(--link-color);
 	}
 
 	@font-face {

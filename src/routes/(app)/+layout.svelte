@@ -23,7 +23,7 @@
 			<Button variant="ghost" href="/"><HomeIcon />Home</Button>
 			<div class="w-full"></div>
 			<DropdownMenu.Root>
-				<DropdownMenu.Trigger class={buttonVariants({ variant: 'ghost', size: 'icon' })}>
+				<DropdownMenu.Trigger class={buttonVariants({ variant: 'secondary', size: 'icon' })}>
 					<SunIcon
 						class="h-[1.2rem] w-[1.2rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90"
 					/>
@@ -40,7 +40,7 @@
 			</DropdownMenu.Root>
 
 			<DropdownMenu.Root>
-				<DropdownMenu.Trigger class={buttonVariants({ variant: 'ghost' })}
+				<DropdownMenu.Trigger class={buttonVariants({ variant: 'secondary' })}
 					><UserIcon />{data.user.username}
 					<ChevronDownIcon />
 				</DropdownMenu.Trigger>
