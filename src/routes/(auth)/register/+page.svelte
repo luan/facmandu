@@ -6,6 +6,7 @@
 	import { zodClient } from 'sveltekit-superforms/adapters';
 	import { registerSchema, type RegisterSchema } from './schema';
 	import * as Card from '$lib/components/ui/card';
+	import { page } from '$app/state';
 
 	let { data }: { data: { form: SuperValidated<Infer<RegisterSchema>> } } = $props();
 
@@ -14,6 +15,7 @@
 	});
 
 	const { form: formData, enhance, message } = form;
+	const redirectTo = page.url.searchParams.get('redirectTo');
 </script>
 
 <div class="flex h-screen w-full items-center justify-center px-4">
@@ -65,7 +67,7 @@
 			</form>
 			<div class="mt-4 text-center text-sm">
 				Already have an account?
-				<a href="/login" class="underline"> Login </a>
+				<a href="/login?redirectTo={redirectTo}" class="underline"> Login </a>
 			</div>
 		</Card.Content>
 	</Card.Root>

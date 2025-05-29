@@ -11,8 +11,9 @@
 
 <h1>Welcome to the app</h1>
 <p>You are logged in as {data.user.username}</p>
+
 <form method="post" action="/logout">
-	<Button>
+	<Button type="submit">
 		<LogOutIcon />
 		Logout</Button
 	>
