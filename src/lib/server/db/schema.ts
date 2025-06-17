@@ -5,7 +5,10 @@ export const user = sqliteTable('user', {
 	id: text('id').primaryKey(),
 	age: integer('age'),
 	username: text('username').notNull().unique(),
-	passwordHash: text('password_hash').notNull()
+	passwordHash: text('password_hash').notNull(),
+	factorioUsername: text('factorio_username'),
+	factorioToken: text('factorio_token'),
+	factorioTokenUpdatedAt: integer('factorio_token_updated_at', { mode: 'timestamp' })
 });
 
 export type User = typeof user.$inferSelect;
