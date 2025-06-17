@@ -1,5 +1,5 @@
 import { encodeBase32LowerCase } from '@oslojs/encoding';
-import { sqliteTable, integer, text } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, integer, text, unique } from 'drizzle-orm/sqlite-core';
 
 export const user = sqliteTable('user', {
 	id: text('id').primaryKey(),
@@ -30,13 +30,17 @@ export const modList = sqliteTable('modlist', {
 
 export type ModList = typeof modList.$inferSelect;
 
-export const mod = sqliteTable('mod', {
-	id: text('id').primaryKey(),
-	modlist: text('modlist_id')
-		.notNull()
-		.references(() => modList.id, { onDelete: 'cascade' }),
-	name: text('name').notNull(),
-	enabled: integer('enabled', { mode: 'boolean' })
-});
+export const mod = sqliteTable(
+	'mod',
+	{
+		id: text('id').primaryKey(),
+		modlist: text('modlist_id')
+			.notNull()
+			.references(() => modList.id, { onDelete: 'cascade' }),
+		name: text('name').notNull(),
+		enabled: integer('enabled', { mode: 'boolean' })
+	},
+	(t) => [unique().on(t.modlist, t.name)]
+);
 
 export type Mod = typeof mod.$inferSelect;
