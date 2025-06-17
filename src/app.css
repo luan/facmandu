@@ -20,6 +20,7 @@
 	--accent: oklch(0.967 0.001 286.375);
 	--accent-foreground: oklch(0.21 0.006 285.885);
 	--destructive: oklch(0.577 0.245 27.325);
+	--success: oklch(0.577 0.245 27.325);
 	--border: oklch(0.92 0.004 286.32);
 	--input: oklch(0.92 0.004 286.32);
 	--ring: oklch(0.705 0.213 47.604);
@@ -56,6 +57,7 @@
 	--accent: #ffa900;
 	--accent-foreground: #604814;
 	--destructive: #ff6b6b;
+	--success: #5eb563;
 	--border: rgba(255, 255, 255, 0.1);
 	--input: rgba(255, 255, 255, 0.15);
 	--ring: #ffa900;
@@ -112,6 +114,9 @@
 	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
 	--color-sidebar-border: var(--sidebar-border);
 	--color-sidebar-ring: var(--sidebar-ring);
+	--color-success: var(--success);
+	--color-link: var(--link-color);
+	--color-header-foreground: var(--header-foreground);
 }
 
 @layer base {
@@ -129,11 +134,11 @@
 	h5,
 	h6 {
 		@apply font-bold;
-		color: var(--header-foreground);
+		@apply text-header-foreground;
 	}
 
 	a:not([data-slot='button']) {
-		color: var(--link-color);
+		@apply text-link;
 	}
 
 	@font-face {
