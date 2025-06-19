@@ -313,7 +313,7 @@
 							</Table.Header>
 							<Table.Body>
 								{#each table.getRowModel().rows as row (row.id)}
-									<Table.Row>
+									<Table.Row class={row.original.enabled ? '' : 'opacity-50'}>
 										{#each row.getVisibleCells() as cell (cell.id)}
 											<Table.Cell class="p-2">
 												<FlexRender

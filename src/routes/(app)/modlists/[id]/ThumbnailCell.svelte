@@ -15,7 +15,7 @@
 			<img
 				src={`https://assets-mod.factorio.com${mod.thumbnail}`}
 				alt={mod.title || mod.name}
-				class="m-auto h-8 w-8 rounded object-cover"
+				class="m-auto h-8 w-8 rounded object-cover {mod.enabled ? '' : 'grayscale'}"
 				loading="lazy"
 			/>
 		</Tooltip.Trigger>
@@ -23,13 +23,17 @@
 			<img
 				src={`https://assets-mod.factorio.com${mod.thumbnail}`}
 				alt={mod.title || mod.name}
-				class="h-32 w-32 rounded object-cover"
+				class="h-32 w-32 rounded object-cover {mod.enabled ? '' : 'grayscale'}"
 				loading="lazy"
 			/>
 		</Tooltip.Content>
 	</Tooltip.Root>
 {:else}
-	<div class="bg-muted flex h-8 w-8 items-center justify-center rounded">
+	<div
+		class="bg-muted flex h-8 w-8 items-center justify-center rounded {mod.enabled
+			? ''
+			: 'grayscale'}"
+	>
 		<span class="text-[10px]">📦</span>
 	</div>
 {/if}
