@@ -81,7 +81,6 @@ export const actions: Actions = {
 				}
 			};
 		} catch (error) {
-			console.error('Error updating Factorio credentials:', error);
 			return fail(500, {
 				form: {
 					...form,

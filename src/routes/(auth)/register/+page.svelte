@@ -63,7 +63,7 @@
 					<UserPlusIcon />
 					Register</Form.Button
 				>
-				<p style="color: red">{$message}</p>
+				<p class="text-red-500">{$message}</p>
 			</form>
 			<div class="mt-4 text-center text-sm">
 				Already have an account?

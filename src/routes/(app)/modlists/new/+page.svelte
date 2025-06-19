@@ -19,7 +19,7 @@
 <div class="flex h-[calc(100svh-var(--header-height))] w-full flex-col gap-4 px-48 py-4">
 	<h1>Create new mod list</h1>
 	<form method="POST" class="flex h-full flex-col gap-4" use:enhance>
-		<p style="color: red">{$message}</p>
+		<p class="text-red-500">{$message}</p>
 		<Form.Field {form} name="name">
 			<Form.Control>
 				{#snippet children({ props })}

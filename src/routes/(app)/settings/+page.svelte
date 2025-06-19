@@ -53,7 +53,7 @@
 					<Link2Icon />
 					Connect</Form.Button
 				>
-				<p style="color: red">{$message}</p>
+				<p class="text-red-500">{$message}</p>
 			</form>
 			<div class="text-muted-foreground mt-4 text-sm">
 				<p>
