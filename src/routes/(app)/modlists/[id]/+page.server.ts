@@ -333,5 +333,41 @@ export const actions: Actions = {
 			console.error('Update modlist name error:', error);
 			return fail(500, { message: 'Failed to update modlist name' });
 		}
+	},
+
+	deleteModlist: async (event) => {
+		if (!event.locals.session) {
+			return fail(401);
+		}
+
+		const modlistId = event.params.id;
+
+		if (!modlistId) {
+			return fail(400, { message: 'Modlist ID is required' });
+		}
+
+		try {
+			// Verify the modlist exists and belongs to the user
+			const modlist = await db
+				.select()
+				.from(table.modList)
+				.where(
+					and(eq(table.modList.id, modlistId), eq(table.modList.owner, event.locals.session.userId))
+				)
+				.get();
+
+			if (!modlist) {
+				return fail(404, { message: 'Modlist not found or access denied' });
+			}
+
+			// Delete the modlist (mods will be cascade deleted)
+			await db.delete(table.modList).where(eq(table.modList.id, modlistId));
+		} catch (error) {
+			console.error('Delete modlist error:', error);
+			return fail(500, { message: 'Failed to delete modlist' });
+		}
+
+		// Redirect after successful deletion (outside try-catch to avoid catching the redirect)
+		return redirect(302, '/');
 	}
 };
