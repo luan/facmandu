@@ -1,0 +1,205 @@
+<script lang="ts">
+	import { enhance } from '$app/forms';
+	import { page } from '$app/stores';
+	import { Badge } from '$lib/components/ui/badge';
+	import Button from '$lib/components/ui/button/button.svelte';
+	import * as Card from '$lib/components/ui/card/index.js';
+	import { PlusIcon, ClockIcon, DownloadIcon, NutIcon, XIcon } from '@lucide/svelte';
+
+	interface ModResult {
+		name: string;
+		title: string;
+		summary?: string;
+		description?: string;
+		downloads_count?: number;
+		owner: string;
+		category?: string;
+		tags?: Array<string>;
+		thumbnail?: string;
+		updated_at?: string;
+		latest_release?: {
+			version: string;
+			released_at: string;
+			factorio_version?: string;
+		};
+		score?: number;
+	}
+
+	interface Props {
+		searchResults: ModResult[];
+		query: string;
+		currentMods: Array<{ name: string; id: string; enabled: boolean | null; modlist: string }>;
+	}
+
+	let { searchResults, query, currentMods }: Props = $props();
+
+	function isModInList(modName: string): boolean {
+		return currentMods.some((mod) => mod.name === modName);
+	}
+
+	function formatDate(dateString?: string): string {
+		if (!dateString) return 'N/A';
+		try {
+			const date = new Date(dateString);
+			const now = new Date();
+			const diffMs = now.getTime() - date.getTime();
+			const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+			const diffDays = Math.floor(diffHours / 24);
+
+			if (diffHours < 1) return 'Less than an hour ago';
+			if (diffHours < 24) return `${diffHours} hours ago`;
+			if (diffDays < 30) return `${diffDays} days ago`;
+			if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+			return `${Math.floor(diffDays / 365)} years ago`;
+		} catch {
+			return 'N/A';
+		}
+	}
+
+	function formatDownloads(count?: number): string {
+		if (!count) return '0';
+		if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
+		if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
+		return count.toString();
+	}
+
+	let clearSearchUrl = new URL($page.url);
+	clearSearchUrl.searchParams.delete('q');
+</script>
+
+{#if searchResults.length > 0}
+	<Card.Root>
+		<Card.Header>
+			<Card.CardAction>
+				<Button type="button" variant="ghost" size="icon" href={clearSearchUrl.toString()}>
+					<XIcon class="h-4 w-4" />
+				</Button>
+			</Card.CardAction>
+			<Card.Title>Search Results</Card.Title>
+			<Card.Description>Found {searchResults.length} mods for "{query}"</Card.Description>
+		</Card.Header>
+		<Card.Content>
+			<div class="max-h-[400px] space-y-6 overflow-y-auto">
+				{#each searchResults as result (result.name)}
+					<div class="hover:bg-muted/50 flex gap-4 rounded-lg border p-4 transition-colors">
+						<!-- Mod Thumbnail -->
+						<div class="flex-shrink-0">
+							{#if result.thumbnail}
+								<img
+									src={`https://assets-mod.factorio.com${result.thumbnail}`}
+									alt={result.title}
+									class="bg-muted h-20 w-20 rounded-lg object-cover"
+									loading="lazy"
+								/>
+							{:else}
+								<div class="bg-muted flex h-20 w-20 items-center justify-center rounded-lg">
+									<span class="text-muted-foreground text-xs">No Image</span>
+								</div>
+							{/if}
+						</div>
+
+						<!-- Mod Information -->
+						<div class="min-w-0 flex-1">
+							<!-- Title and Author -->
+							<div class="mb-1">
+								<a
+									href={`https://mods.factorio.com/mod/${result.name}`}
+									class="text-foreground truncate text-lg font-semibold"
+									target="_blank"
+									rel="noopener noreferrer">{result.title}</a
+								>
+								<p class="text-muted-foreground flex items-center gap-1 text-sm">
+									<span>by</span>
+									<span class="text-accent font-medium">{result.owner}</span>
+								</p>
+							</div>
+
+							<!-- Description -->
+							{#if result.summary || result.description}
+								<p class="text-muted-foreground mb-3 line-clamp-2 text-sm">
+									{result.summary || result.description}
+								</p>
+							{/if}
+
+							<!-- Metadata Row -->
+							<div class="text-muted-foreground mb-2 flex flex-wrap items-center gap-4 text-xs">
+								<!-- Content Type -->
+								{#if result.category}
+									<div class="flex items-center gap-1">
+										<NutIcon class="h-3 w-3" />
+										<span class="capitalize">{result.category}</span>
+									</div>
+								{/if}
+
+								<!-- Last Updated -->
+								{#if result.updated_at}
+									<div class="flex items-center gap-1">
+										<ClockIcon class="h-3 w-3" />
+										<span>{formatDate(result.updated_at)}</span>
+									</div>
+								{/if}
+
+								<!-- Version -->
+								{#if result.latest_release?.version}
+									<div class="flex items-center gap-1">
+										<span class="text-green-500">🏷️</span>
+										<span>{result.latest_release.version}</span>
+									</div>
+								{/if}
+
+								<!-- Downloads -->
+								<div class="flex items-center gap-1">
+									<DownloadIcon class="h-3 w-3" />
+									<span>{formatDownloads(result.downloads_count)}</span>
+								</div>
+							</div>
+
+							<!-- Tags -->
+							{#if result.tags && result.tags.length > 0}
+								<div class="mb-2 flex flex-wrap gap-1">
+									{#each result.tags.slice(0, 5) as tag (tag)}
+										<Badge variant="secondary">{tag}</Badge>
+									{/each}
+									{#if result.tags.length > 5}
+										<span class="bg-muted text-muted-foreground rounded-full px-2 py-1 text-xs">
+											+{result.tags.length - 5} more
+										</span>
+									{/if}
+								</div>
+							{/if}
+						</div>
+
+						<!-- Action Button -->
+						<div class="flex flex-shrink-0 items-start">
+							{#if isModInList(result.name)}
+								<form method="POST" action="?/removeMod" use:enhance>
+									<input type="hidden" name="modName" value={result.name} />
+									<Button type="submit" size="sm" variant="destructive">
+										<XIcon class="mr-1 h-3 w-3" />
+										Remove
+									</Button>
+								</form>
+							{:else}
+								<form method="POST" action="?/addMod" use:enhance>
+									<input type="hidden" name="modName" value={result.name} />
+									<Button type="submit" size="sm" variant="success">
+										<PlusIcon class="mr-1 h-3 w-3" />
+										Add to List
+									</Button>
+								</form>
+							{/if}
+						</div>
+					</div>
+				{/each}
+			</div>
+		</Card.Content>
+	</Card.Root>
+{/if}
+
+<style>
+	.line-clamp-2 {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+</style>
