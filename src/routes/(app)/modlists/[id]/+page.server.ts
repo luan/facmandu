@@ -1,6 +1,7 @@
 import { db } from '$lib/server/db';
 import { eq, and } from 'drizzle-orm';
 import * as table from '$lib/server/db/schema';
+import { updateModCache, refreshModsCache } from '$lib/server/db';
 import type { PageServerLoad } from './$types';
 import { error, fail, redirect, type Actions } from '@sveltejs/kit';
 
@@ -69,9 +70,41 @@ export const load: PageServerLoad = async (event) => {
 		}
 	}
 
+	// Process mods and convert timestamps to proper Date objects
+	const processedMods = result.map((r) => {
+		const mod = r.mod;
+		return {
+			...mod,
+			lastUpdated: mod.lastUpdated ? new Date(mod.lastUpdated) : null,
+			lastFetched: mod.lastFetched ? new Date(mod.lastFetched) : null
+		};
+	});
+
+	// Background refresh for mods that haven't been cached recently (older than 1 hour)
+	const now = new Date();
+	const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+	const modsNeedingRefresh = processedMods.filter(
+		(mod) => !mod.lastFetched || mod.lastFetched < oneHourAgo
+	);
+
+	if (modsNeedingRefresh.length > 0 && user?.factorioUsername && user?.factorioToken) {
+		// Refresh in background without blocking the response
+		Promise.all(
+			modsNeedingRefresh.map((mod) =>
+				updateModCache(
+					mod.id,
+					mod.name,
+					user.factorioUsername || undefined,
+					user.factorioToken || undefined
+				)
+			)
+		).catch(console.error);
+	}
+
 	return {
 		modlist: result[0].modlist,
-		mods: result.map((r) => r.mod),
+		mods: processedMods,
 		hasFactorioCredentials: !!(user?.factorioUsername && user?.factorioToken),
 		searchQuery: searchQuery || '',
 		searchResults,
@@ -122,6 +155,16 @@ export const actions: Actions = {
 				return fail(400, { message: 'Mod already exists in this modlist' });
 			}
 
+			// Get user credentials for API calls
+			const user = await db
+				.select({
+					factorioUsername: table.user.factorioUsername,
+					factorioToken: table.user.factorioToken
+				})
+				.from(table.user)
+				.where(eq(table.user.id, event.locals.session.userId))
+				.get();
+
 			// Generate ID and add mod
 			const modId = crypto.randomUUID();
 			await db.insert(table.mod).values({
@@ -130,6 +173,15 @@ export const actions: Actions = {
 				name: modName,
 				enabled: true
 			});
+
+			// Fetch mod information from API in background
+			if (user?.factorioUsername && user?.factorioToken) {
+				updateModCache(modId, modName, user.factorioUsername, user.factorioToken).catch(
+					console.error
+				);
+			} else {
+				updateModCache(modId, modName).catch(console.error);
+			}
 
 			return { success: true, message: `Added ${modName} to modlist` };
 		} catch (error) {
@@ -166,6 +218,80 @@ export const actions: Actions = {
 		} catch (error) {
 			console.error('Remove mod error:', error);
 			return fail(500, { message: 'Failed to remove mod' });
+		}
+	},
+
+	refreshMod: async (event) => {
+		if (!event.locals.session) {
+			return fail(401);
+		}
+
+		const formData = await event.request.formData();
+		const modId = formData.get('modId')?.toString();
+		const modName = formData.get('modName')?.toString();
+
+		if (!modId || !modName) {
+			return fail(400, { message: 'Mod ID and name are required' });
+		}
+
+		try {
+			// Get user credentials for API calls
+			const user = await db
+				.select({
+					factorioUsername: table.user.factorioUsername,
+					factorioToken: table.user.factorioToken
+				})
+				.from(table.user)
+				.where(eq(table.user.id, event.locals.session.userId))
+				.get();
+
+			// Update mod cache
+			if (user?.factorioUsername && user?.factorioToken) {
+				await updateModCache(modId, modName, user.factorioUsername, user.factorioToken);
+			} else {
+				await updateModCache(modId, modName);
+			}
+
+			return { success: true, message: `Refreshed ${modName} information` };
+		} catch (error) {
+			console.error('Refresh mod error:', error);
+			return fail(500, { message: 'Failed to refresh mod information' });
+		}
+	},
+
+	refreshAllMods: async (event) => {
+		if (!event.locals.session) {
+			return fail(401);
+		}
+
+		const modlistId = event.params.id;
+
+		if (!modlistId) {
+			return fail(400, { message: 'Modlist ID is required' });
+		}
+
+		try {
+			// Get user credentials for API calls
+			const user = await db
+				.select({
+					factorioUsername: table.user.factorioUsername,
+					factorioToken: table.user.factorioToken
+				})
+				.from(table.user)
+				.where(eq(table.user.id, event.locals.session.userId))
+				.get();
+
+			// Refresh all mods in the list
+			if (user?.factorioUsername && user?.factorioToken) {
+				await refreshModsCache(modlistId, user.factorioUsername, user.factorioToken);
+			} else {
+				await refreshModsCache(modlistId);
+			}
+
+			return { success: true, message: 'Refreshed all mod information' };
+		} catch (error) {
+			console.error('Refresh all mods error:', error);
+			return fail(500, { message: 'Failed to refresh mod information' });
 		}
 	}
 };

@@ -41,7 +41,22 @@ export const mod = sqliteTable(
 			.notNull()
 			.references(() => modList.id, { onDelete: 'cascade' }),
 		name: text('name').notNull(),
-		enabled: integer('enabled', { mode: 'boolean' })
+		enabled: integer('enabled', { mode: 'boolean' }),
+		// Cached mod portal data
+		title: text('title'),
+		summary: text('summary'),
+		description: text('description'),
+		category: text('category'),
+		tags: text('tags'), // JSON array stored as text
+		thumbnail: text('thumbnail'),
+		downloadsCount: integer('downloads_count'),
+		lastUpdated: integer('last_updated', { mode: 'timestamp' }),
+		version: text('version'),
+		factorioVersion: text('factorio_version'),
+		dependencies: text('dependencies'),
+		// Cache metadata
+		lastFetched: integer('last_fetched', { mode: 'timestamp' }),
+		fetchError: text('fetch_error')
 	},
 	(t) => [unique().on(t.modlist, t.name)]
 );
