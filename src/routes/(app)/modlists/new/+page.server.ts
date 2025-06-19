@@ -37,17 +37,13 @@ export const actions: Actions = {
 			return fail(400, { message: 'Invalid JSON' });
 		}
 
-		console.log('parsed modlist');
-
 		try {
 			const userID = event.locals.user.id;
 			await db.transaction(async (tx) => {
-				console.log('transaction');
 				const [modlist] = await tx
 					.insert(table.modList)
 					.values({ id: genID('modlist'), name, owner: userID })
 					.returning();
-				console.log('inserting modlist', modlist.id);
 				await tx
 					.insert(table.mod)
 					.values(

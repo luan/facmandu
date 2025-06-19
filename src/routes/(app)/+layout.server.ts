@@ -5,6 +5,7 @@ import type { LayoutServerLoad } from './$types';
 
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
+import { genID } from '$lib/server/db/ids';
 
 export const load: LayoutServerLoad = async () => {
 	const user = requireLogin();

@@ -47,7 +47,6 @@ export const load: PageServerLoad = async (event) => {
 				username: user.factorioUsername,
 				token: user.factorioToken
 			};
-			console.log(requestBody);
 
 			const response = await fetch(searchUrl, {
 				method: 'POST',
