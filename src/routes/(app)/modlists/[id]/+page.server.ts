@@ -293,5 +293,46 @@ export const actions: Actions = {
 			console.error('Refresh all mods error:', error);
 			return fail(500, { message: 'Failed to refresh mod information' });
 		}
+	},
+
+	updateModlistName: async (event) => {
+		if (!event.locals.session) {
+			return fail(401);
+		}
+
+		const formData = await event.request.formData();
+		const newName = formData.get('name')?.toString()?.trim();
+		const modlistId = event.params.id;
+
+		if (!newName || !modlistId) {
+			return fail(400, { message: 'Modlist name and ID are required' });
+		}
+
+		if (newName.length < 1 || newName.length > 100) {
+			return fail(400, { message: 'Modlist name must be between 1 and 100 characters' });
+		}
+
+		try {
+			// Verify the modlist exists and belongs to the user
+			const modlist = await db
+				.select()
+				.from(table.modList)
+				.where(
+					and(eq(table.modList.id, modlistId), eq(table.modList.owner, event.locals.session.userId))
+				)
+				.get();
+
+			if (!modlist) {
+				return fail(404, { message: 'Modlist not found or access denied' });
+			}
+
+			// Update the modlist name
+			await db.update(table.modList).set({ name: newName }).where(eq(table.modList.id, modlistId));
+
+			return { success: true, message: 'Modlist name updated successfully' };
+		} catch (error) {
+			console.error('Update modlist name error:', error);
+			return fail(500, { message: 'Failed to update modlist name' });
+		}
 	}
 };
