@@ -12,6 +12,7 @@
 		type ColumnFiltersState,
 		type SortingState,
 		type VisibilityState,
+		type SortingFn,
 		getCoreRowModel,
 		getFilteredRowModel,
 		getSortedRowModel
@@ -156,6 +157,29 @@
 				: mods
 	);
 
+	// Helper to rank a mod's status for sorting purposes
+	function statusRank(mod: Mod): number {
+		if (mod.essential) return 3; // Locked
+		if (dependencySet.has(mod.name)) return 2; // Dependency
+		return mod.enabled ? 1 : 0; // Enabled / Disabled
+	}
+
+	// Custom sorting function that considers locked and dependency states
+	const statusSortingFn: SortingFn<Mod> = (rowA, rowB) => {
+		const rankDiff = statusRank(rowA.original) - statusRank(rowB.original);
+		if (rankDiff !== 0) return rankDiff;
+
+		// Same status rank — if locked (essential) compare who locked it
+		if (rowA.original.essential && rowB.original.essential) {
+			const userA = (rowA.original.updatedBy as { username?: string } | null)?.username ?? '';
+			const userB = (rowB.original.updatedBy as { username?: string } | null)?.username ?? '';
+			return userA.localeCompare(userB);
+		}
+
+		// Fallback: alphabetical by mod name for stable ordering
+		return rowA.original.name.localeCompare(rowB.original.name);
+	};
+
 	const columns: ColumnDef<Mod>[] = [
 		{
 			id: 'thumbnail',
@@ -181,7 +205,7 @@
 			},
 			cell: ({ row }) => {
 				const mod = row.original;
-				const lockedByUser = row.getValue('updatedByUser') as {
+				const lockedByUser = row.getValue('updatedBy') as {
 					id: string;
 					username: string;
 				} | null;
@@ -193,6 +217,7 @@
 					requiredBy: dependencyMap.get(mod.name) ?? []
 				});
 			},
+			sortingFn: statusSortingFn,
 			size: 80
 		},
 		{
@@ -281,7 +306,7 @@
 			size: 100
 		},
 		{
-			accessorKey: 'updatedByUser',
+			accessorKey: 'updatedBy',
 			header: ({ header }) => {
 				const updatedByHeaderSnippet = createRawSnippet(() => ({
 					render: () => 'Enabled By'
@@ -292,11 +317,11 @@
 				});
 			},
 			cell: ({ row }) => {
-				const updatedByUser = row.getValue('updatedByUser') as {
+				const updatedBy = row.getValue('updatedBy') as {
 					id: string;
 					username: string;
 				} | null;
-				return updatedByUser?.username || '-';
+				return updatedBy?.username || '-';
 			},
 			size: 100
 		},

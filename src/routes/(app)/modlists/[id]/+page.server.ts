@@ -24,7 +24,7 @@ export const load: PageServerLoad = async (event) => {
 		.select({
 			modlist: table.modList,
 			mod: table.mod,
-			updatedByUser: {
+			updatedBy: {
 				id: table.user.id,
 				username: table.user.username
 			}
@@ -94,7 +94,7 @@ export const load: PageServerLoad = async (event) => {
 			...mod,
 			lastUpdated: mod.lastUpdated ? new Date(mod.lastUpdated) : null,
 			lastFetched: mod.lastFetched ? new Date(mod.lastFetched) : null,
-			updatedByUser: r.updatedByUser
+			updatedBy: r.updatedBy
 		};
 	});
 
