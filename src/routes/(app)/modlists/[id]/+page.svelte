@@ -16,6 +16,8 @@
 	let { data }: PageProps = $props();
 	let modlist = $derived(data.modlist);
 	let mods = $derived(data.mods);
+	let collaborators = $derived(data.collaborators);
+	let currentUserId = $derived(data.currentUserId);
 	let hasCredentials = $derived(data.hasFactorioCredentials);
 	let searchResults = $derived(data.searchResults);
 	let searchQuery = $derived(data.searchQuery);
@@ -24,10 +26,18 @@
 
 	let showDeleteConfirm = $state(false);
 	let unsubscribeRealtime: (() => void) | null = null;
+	let shareDialogOpen = $state(false);
+	let shareError = $state('');
+	let shareUsername = $state('');
+	let eventSource: EventSource | null = null;
 
 	onMount(() => {
 		if (modlist?.id) {
 			unsubscribeRealtime = subscribeToModlistUpdates(modlist.id, handleRealtimeUpdate);
+			// Open server-sent events for cross-user realtime
+			const url = `/api/modlists/${modlist.id}/events`;
+			eventSource = new EventSource(url);
+			eventSource.onmessage = () => handleRealtimeUpdate();
 		}
 	});
 
@@ -35,12 +45,35 @@
 		if (unsubscribeRealtime) {
 			unsubscribeRealtime();
 		}
+		eventSource?.close();
 	});
 
 	function handleRealtimeUpdate() {
 		// Invalidate all data to refresh from server
 		// This ensures we get the latest state including dependency validation
 		invalidateAll();
+	}
+
+	async function addCollaborator() {
+		shareError = '';
+		if (!shareUsername.trim()) return;
+		const fd = new FormData();
+		fd.append('username', shareUsername.trim());
+		const res = await fetch('?/shareAdd', { method: 'POST', body: fd });
+		if (res.ok) {
+			shareUsername = '';
+			await invalidateAll();
+		} else {
+			const data = await res.json().catch(() => ({}));
+			shareError = data?.message || 'Failed to share';
+		}
+	}
+
+	async function removeCollaborator(userId: string) {
+		const fd = new FormData();
+		fd.append('userId', userId);
+		await fetch('?/shareRemove', { method: 'POST', body: fd });
+		await invalidateAll();
 	}
 </script>
 
@@ -64,6 +97,17 @@
 					</Button>
 				</div>
 			{:else}
+				{#if modlist?.owner === currentUserId}
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						onclick={() => (shareDialogOpen = true)}
+					>
+						Share
+					</Button>
+				{/if}
+
 				<Button
 					type="button"
 					variant="outline"
@@ -95,3 +139,38 @@
 		]}
 	/>
 </div>
+
+<!-- Share Dialog -->
+{#if shareDialogOpen}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+		<div class="bg-background w-[400px] rounded-md p-6 dark:bg-neutral-900">
+			<h2 class="mb-4 text-lg font-semibold">Share Modlist</h2>
+			{#if shareError}
+				<p class="text-destructive mb-2">{shareError}</p>
+			{/if}
+			<div class="mb-4 flex gap-2">
+				<input
+					class="flex-1 rounded-sm border bg-transparent px-2 py-1"
+					placeholder="Username"
+					bind:value={shareUsername}
+				/>
+				<Button size="sm" onclick={addCollaborator}>Add</Button>
+			</div>
+
+			<div class="max-h-40 space-y-2 overflow-y-auto">
+				{#each collaborators as c, i (i)}
+					<div class="flex items-center justify-between">
+						<span>{c.username}</span>
+						<Button variant="destructive" size="sm" onclick={() => removeCollaborator(c.id)}>
+							Remove
+						</Button>
+					</div>
+				{/each}
+			</div>
+
+			<div class="mt-4 text-right">
+				<Button variant="outline" size="sm" onclick={() => (shareDialogOpen = false)}>Close</Button>
+			</div>
+		</div>
+	</div>
+{/if}

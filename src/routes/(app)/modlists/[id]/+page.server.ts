@@ -1,13 +1,23 @@
 import { db } from '$lib/server/db';
 import { eq, and } from 'drizzle-orm';
 import * as table from '$lib/server/db/schema';
-import { updateModCache, refreshModsCache } from '$lib/server/db';
+import { updateModCache, refreshModsCache, userHasModlistAccess } from '$lib/server/db';
+import { publishModlistEvent } from '$lib/server/realtime';
 import type { PageServerLoad } from './$types';
 import { error, fail, redirect, type Actions } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async (event) => {
 	if (!event.locals.session) {
 		return error(401, { message: 'unauthorized' });
+	}
+
+	// Check user has access to this modlist (owner or collaborator)
+	const hasAccess = await userHasModlistAccess(
+		event.locals.session.userId,
+		event.params.id as string
+	);
+	if (!hasAccess) {
+		return error(403, { message: 'Access denied' });
 	}
 
 	const result = await db
@@ -104,6 +114,13 @@ export const load: PageServerLoad = async (event) => {
 	// Dependency validation
 	const dependencyValidation = validateDependencies(processedMods);
 
+	// Fetch collaborators
+	const collaborators = await db
+		.select({ id: table.user.id, username: table.user.username })
+		.from(table.modListCollaborator)
+		.innerJoin(table.user, eq(table.user.id, table.modListCollaborator.userId))
+		.where(eq(table.modListCollaborator.modlistId, event.params.id));
+
 	return {
 		modlist: result[0].modlist,
 		mods: processedMods,
@@ -111,7 +128,9 @@ export const load: PageServerLoad = async (event) => {
 		searchQuery: searchQuery || '',
 		searchResults,
 		searchError,
-		dependencyValidation
+		dependencyValidation,
+		collaborators,
+		currentUserId: event.locals.session.userId
 	};
 };
 
@@ -186,6 +205,12 @@ export const actions: Actions = {
 		if (!event.locals.session) {
 			return fail(401);
 		}
+
+		// Access check
+		if (!(await userHasModlistAccess(event.locals.session.userId, event.params.id as string))) {
+			return fail(403);
+		}
+
 		const formData = await event.request.formData();
 		const modID = formData.get('modid')?.toString();
 		if (!modID) {
@@ -196,12 +221,20 @@ export const actions: Actions = {
 			return fail(404);
 		}
 		await db.update(table.mod).set({ enabled: !mod.enabled }).where(eq(table.mod.id, modID));
+
+		// Notify collaborators via SSE
+		publishModlistEvent(mod.modlist, 'mod-toggled', { modId: modID, enabled: !mod.enabled });
+
 		return { success: true, modId: modID, newStatus: !mod.enabled };
 	},
 
 	addMod: async (event) => {
 		if (!event.locals.session) {
 			return fail(401);
+		}
+
+		if (!(await userHasModlistAccess(event.locals.session.userId, event.params.id as string))) {
+			return fail(403);
 		}
 
 		const formData = await event.request.formData();
@@ -252,6 +285,9 @@ export const actions: Actions = {
 				updateModCache(modId, modName).catch(console.error);
 			}
 
+			// Broadcast new mod addition
+			publishModlistEvent(modlistId, 'mod-added', { name: modName });
+
 			return { success: true, message: `Added ${modName} to modlist` };
 		} catch (error) {
 			console.error('Add mod error:', error);
@@ -262,6 +298,10 @@ export const actions: Actions = {
 	removeMod: async (event) => {
 		if (!event.locals.session) {
 			return fail(401);
+		}
+
+		if (!(await userHasModlistAccess(event.locals.session.userId, event.params.id as string))) {
+			return fail(403);
 		}
 
 		const formData = await event.request.formData();
@@ -283,6 +323,9 @@ export const actions: Actions = {
 				return fail(404, { message: 'Mod not found in this modlist' });
 			}
 
+			// Broadcast removal
+			publishModlistEvent(modlistId, 'mod-removed', { name: modName });
+
 			return { success: true, message: `Removed ${modName} from modlist` };
 		} catch (error) {
 			console.error('Remove mod error:', error);
@@ -293,6 +336,10 @@ export const actions: Actions = {
 	refreshMod: async (event) => {
 		if (!event.locals.session) {
 			return fail(401);
+		}
+
+		if (!(await userHasModlistAccess(event.locals.session.userId, event.params.id as string))) {
+			return fail(403);
 		}
 
 		const formData = await event.request.formData();
@@ -333,6 +380,10 @@ export const actions: Actions = {
 			return fail(401);
 		}
 
+		if (!(await userHasModlistAccess(event.locals.session.userId, event.params.id as string))) {
+			return fail(403);
+		}
+
 		const modlistId = event.params.id;
 
 		if (!modlistId) {
@@ -369,6 +420,10 @@ export const actions: Actions = {
 			return fail(401);
 		}
 
+		if (!(await userHasModlistAccess(event.locals.session.userId, event.params.id as string))) {
+			return fail(403);
+		}
+
 		const formData = await event.request.formData();
 		const newName = formData.get('name')?.toString()?.trim();
 		const modlistId = event.params.id;
@@ -398,6 +453,8 @@ export const actions: Actions = {
 			// Update the modlist name
 			await db.update(table.modList).set({ name: newName }).where(eq(table.modList.id, modlistId));
 
+			publishModlistEvent(modlistId, 'modlist-name-updated', { name: newName });
+
 			return { success: true, message: 'Modlist name updated successfully' };
 		} catch (error) {
 			console.error('Update modlist name error:', error);
@@ -408,6 +465,10 @@ export const actions: Actions = {
 	deleteModlist: async (event) => {
 		if (!event.locals.session) {
 			return fail(401);
+		}
+
+		if (!(await userHasModlistAccess(event.locals.session.userId, event.params.id as string))) {
+			return fail(403);
 		}
 
 		const modlistId = event.params.id;
@@ -439,5 +500,103 @@ export const actions: Actions = {
 
 		// Redirect after successful deletion (outside try-catch to avoid catching the redirect)
 		return redirect(302, '/');
+	},
+
+	shareAdd: async (event) => {
+		if (!event.locals.session) {
+			return fail(401);
+		}
+
+		const modlistId = event.params.id as string;
+
+		const formData = await event.request.formData();
+		const username = formData.get('username')?.toString()?.trim();
+
+		if (!username) {
+			return fail(400, { message: 'Username is required' });
+		}
+
+		// Verify user is owner (only owner can share)
+		const modlist = await db
+			.select({ owner: table.modList.owner })
+			.from(table.modList)
+			.where(eq(table.modList.id, modlistId))
+			.get();
+
+		if (!modlist || modlist.owner !== event.locals.session.userId) {
+			return fail(403, { message: 'Only the owner can share this modlist' });
+		}
+
+		// Check target user exists
+		const targetUser = await db
+			.select({ id: table.user.id })
+			.from(table.user)
+			.where(eq(table.user.username, username))
+			.get();
+
+		if (!targetUser) {
+			return fail(404, { message: 'User not found' });
+		}
+
+		// Prevent sharing with self
+		if (targetUser.id === modlist.owner) {
+			return fail(400, { message: 'Cannot share with yourself (already owner)' });
+		}
+
+		// Check if already shared
+		const existing = await db
+			.select()
+			.from(table.modListCollaborator)
+			.where(
+				and(
+					eq(table.modListCollaborator.modlistId, modlistId),
+					eq(table.modListCollaborator.userId, targetUser.id)
+				)
+			)
+			.get();
+
+		if (existing) {
+			return fail(400, { message: 'User already has access' });
+		}
+
+		await db.insert(table.modListCollaborator).values({ modlistId, userId: targetUser.id });
+
+		return { success: true };
+	},
+
+	shareRemove: async (event) => {
+		if (!event.locals.session) {
+			return fail(401);
+		}
+
+		const modlistId = event.params.id as string;
+		const formData = await event.request.formData();
+		const userId = formData.get('userId')?.toString();
+
+		if (!userId) {
+			return fail(400, { message: 'User ID is required' });
+		}
+
+		// Verify owner
+		const modlist = await db
+			.select({ owner: table.modList.owner })
+			.from(table.modList)
+			.where(eq(table.modList.id, modlistId))
+			.get();
+
+		if (!modlist || modlist.owner !== event.locals.session.userId) {
+			return fail(403, { message: 'Only the owner can remove shares' });
+		}
+
+		await db
+			.delete(table.modListCollaborator)
+			.where(
+				and(
+					eq(table.modListCollaborator.modlistId, modlistId),
+					eq(table.modListCollaborator.userId, userId)
+				)
+			);
+
+		return { success: true };
 	}
 };

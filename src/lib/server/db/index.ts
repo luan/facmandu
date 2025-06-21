@@ -121,3 +121,23 @@ export async function refreshModsCache(
 		console.error('Error refreshing mods cache:', error);
 	}
 }
+
+// Helper to check if a user has access (owner or collaborator) to a modlist
+export async function userHasModlistAccess(userId: string, modlistId: string): Promise<boolean> {
+	const result = await db
+		.select({ owner: schema.modList.owner, collaborator: schema.modListCollaborator.userId })
+		.from(schema.modList)
+		.leftJoin(
+			schema.modListCollaborator,
+			and(
+				eq(schema.modListCollaborator.modlistId, schema.modList.id),
+				eq(schema.modListCollaborator.userId, userId)
+			)
+		)
+		.where(eq(schema.modList.id, modlistId))
+		.get();
+
+	if (!result) return false;
+
+	return result.owner === userId || result.collaborator === userId;
+}

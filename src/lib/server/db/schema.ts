@@ -33,6 +33,21 @@ export const modList = sqliteTable('modlist', {
 
 export type ModList = typeof modList.$inferSelect;
 
+export const modListCollaborator = sqliteTable(
+	'modlist_collaborator',
+	{
+		modlistId: text('modlist_id')
+			.notNull()
+			.references(() => modList.id, { onDelete: 'cascade' }),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' })
+	},
+	(t) => [unique().on(t.modlistId, t.userId)]
+);
+
+export type ModListCollaborator = typeof modListCollaborator.$inferSelect;
+
 export const mod = sqliteTable(
 	'mod',
 	{
