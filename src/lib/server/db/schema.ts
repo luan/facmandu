@@ -57,6 +57,8 @@ export const mod = sqliteTable(
 			.references(() => modList.id, { onDelete: 'cascade' }),
 		name: text('name').notNull(),
 		enabled: integer('enabled', { mode: 'boolean' }),
+		// Indicates that this mod is non-negotiable / locked in for the modlist
+		essential: integer('essential', { mode: 'boolean' }),
 		// Cached mod portal data
 		title: text('title'),
 		summary: text('summary'),

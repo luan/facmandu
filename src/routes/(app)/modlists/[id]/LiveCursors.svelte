@@ -85,7 +85,7 @@
 <!-- Minimap showing viewport of each collaborator -->
 {#if Object.keys(cursors).length}
 	<div
-		class="fixed top-1/2 right-2 z-40 h-full w-2 -translate-y-1/2 overflow-hidden rounded-sm bg-white/20"
+		class="fixed top-1/2 right-2 z-40 h-64 w-2 -translate-y-1/2 overflow-hidden rounded-sm bg-white/20"
 	>
 		{#each Object.values(cursors) as c (c.username + '-viewport')}
 			<div

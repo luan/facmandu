@@ -98,12 +98,22 @@
 		})()
 	);
 
+	// Set of mods explicitly marked as essential
+	const essentialSet = $derived(new Set(mods.filter((m) => m.essential).map((m) => m.name)));
+
+	// State to control hiding of essential mods and their dependencies
+	let hideEssential = $state(false);
+
 	// State to control hiding of dependency mods
 	let hideDependencies = $state(false);
 
 	// Filtered list based on hide toggle
 	const visibleMods = $derived(
-		hideDependencies ? mods.filter((m) => !dependencySet.has(m.name)) : mods
+		hideEssential
+			? mods.filter((m) => !essentialSet.has(m.name) && !dependencySet.has(m.name))
+			: hideDependencies
+				? mods.filter((m) => !dependencySet.has(m.name))
+				: mods
 	);
 
 	const columns: ColumnDef<Mod>[] = [
@@ -133,7 +143,8 @@
 				const mod = row.original;
 				return renderComponent(StatusCell, {
 					mod,
-					isDependency: dependencySet.has(mod.name)
+					isDependency: dependencySet.has(mod.name),
+					isEssential: essentialSet.has(mod.name)
 				});
 			},
 			size: 80
@@ -367,6 +378,12 @@
 						<label class="flex items-center gap-2 text-sm">
 							<input type="checkbox" bind:checked={hideDependencies} />
 							Hide dependencies
+						</label>
+
+						<!-- Hide essential mods toggle -->
+						<label class="flex items-center gap-2 text-sm">
+							<input type="checkbox" bind:checked={hideEssential} />
+							Hide locked mods & dependencies
 						</label>
 					</div>
 

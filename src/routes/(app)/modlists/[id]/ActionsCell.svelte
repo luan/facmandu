@@ -2,9 +2,9 @@
 	import { enhance } from '$app/forms';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
-	import { TrashIcon, RefreshCwIcon } from '@lucide/svelte';
+	import { TrashIcon, RefreshCwIcon, LockIcon, UnlockIcon } from '@lucide/svelte';
 	import type { Mod } from '$lib/server/db/schema';
-	import { broadcastModRemoved } from '$lib/stores/realtime.svelte';
+	import { broadcastModRemoved, broadcastModlistUpdated } from '$lib/stores/realtime.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
 
 	interface Props {
@@ -22,6 +22,16 @@
 				broadcastModRemoved(mod.modlist, mod.name);
 			}
 			// Always update the current tab
+			await update();
+		};
+	};
+
+	const handleToggleEssential: SubmitFunction = () => {
+		return async ({ result, update }) => {
+			if (result.type === 'success' && result.data?.success) {
+				// Broadcast change to other tabs
+				broadcastModlistUpdated(mod.modlist, []);
+			}
 			await update();
 		};
 	};
@@ -101,6 +111,25 @@
 			</Tooltip.Content>
 		</Tooltip.Root>
 	{/if}
+
+	<!-- Essential (lock) toggle -->
+	<form method="POST" action="?/toggleEssential" use:enhance={handleToggleEssential}>
+		<input type="hidden" name="modid" value={mod.id} />
+		<Tooltip.Root>
+			<Tooltip.Trigger>
+				<Button type="submit" variant="ghost" size="sm" class="h-6 w-6 p-0">
+					{#if mod.essential}
+						<LockIcon class="h-3 w-3" />
+					{:else}
+						<UnlockIcon class="h-3 w-3" />
+					{/if}
+				</Button>
+			</Tooltip.Trigger>
+			<Tooltip.Content>
+				<p>{mod.essential ? 'Unlock mod (make negotiable)' : 'Lock mod (non-negotiable)'}</p>
+			</Tooltip.Content>
+		</Tooltip.Root>
+	</form>
 </div>
 
 <!-- Error indicator -->

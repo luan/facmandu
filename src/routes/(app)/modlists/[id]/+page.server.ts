@@ -231,6 +231,7 @@ export const actions: Actions = {
 				id: table.mod.id,
 				name: table.mod.name,
 				enabled: table.mod.enabled,
+				essential: table.mod.essential,
 				modlist: table.mod.modlist
 			})
 			.from(table.mod)
@@ -241,7 +242,12 @@ export const actions: Actions = {
 			return fail(404);
 		}
 
-		// If we are attempting to disable this mod, ensure it is not a required dependency of another enabled mod
+		// If we are attempting to disable this mod, ensure it is not an essential mod and
+		// not a required dependency of another enabled mod
+		if (mod.essential) {
+			return fail(400, { message: 'Cannot disable an essential mod' });
+		}
+
 		if (mod.enabled) {
 			// Fetch all enabled mods in the same modlist (excluding the target mod)
 			const enabledMods = await db
@@ -662,5 +668,60 @@ export const actions: Actions = {
 			);
 
 		return { success: true };
+	},
+
+	// Toggle the essential (locked) status of a mod
+	toggleEssential: async (event) => {
+		if (!event.locals.session) {
+			return fail(401);
+		}
+
+		// Access check
+		if (!(await userHasModlistAccess(event.locals.session.userId, event.params.id as string))) {
+			return fail(403);
+		}
+
+		const formData = await event.request.formData();
+		const modID = formData.get('modid')?.toString();
+		if (!modID) {
+			return fail(400);
+		}
+
+		// Fetch current mod
+		const mod = await db
+			.select({
+				id: table.mod.id,
+				enabled: table.mod.enabled,
+				essential: table.mod.essential,
+				modlist: table.mod.modlist
+			})
+			.from(table.mod)
+			.where(eq(table.mod.id, modID))
+			.get();
+
+		if (!mod) {
+			return fail(404);
+		}
+
+		// Determine new essential state
+		const newEssential = !mod.essential;
+
+		// If making essential, also ensure the mod is enabled
+		await db
+			.update(table.mod)
+			.set({
+				essential: newEssential,
+				enabled: newEssential ? true : mod.enabled,
+				updatedBy: event.locals.session.userId
+			})
+			.where(eq(table.mod.id, modID));
+
+		// Notify collaborators via SSE
+		publishModlistEvent(mod.modlist, 'mod-essential-toggled', {
+			modId: modID,
+			essential: newEssential
+		});
+
+		return { success: true, modId: modID, newEssential };
 	}
 };

@@ -12,9 +12,11 @@
 		 * If true and the mod is already enabled, it cannot be disabled.
 		 */
 		isDependency?: boolean;
+		/** Whether mod is marked essential */
+		isEssential?: boolean;
 	}
 
-	let { mod, isDependency = false }: Props = $props();
+	let { mod, isDependency = false, isEssential = false }: Props = $props();
 
 	const handleToggle: SubmitFunction = () => {
 		return async ({ result, update }) => {
@@ -35,8 +37,12 @@
 		variant={mod.enabled ? 'default' : 'outline'}
 		size="sm"
 		class="h-6 px-2 text-xs"
-		disabled={mod.enabled && isDependency}
-		title={mod.enabled && isDependency ? 'Cannot disable required dependency' : undefined}
+		disabled={(mod.enabled && isDependency) || isEssential}
+		title={mod.enabled && isDependency
+			? 'Cannot disable required dependency'
+			: isEssential
+				? 'Essential mods cannot be disabled'
+				: undefined}
 	>
 		{mod.enabled ? 'On' : 'Off'}
 	</Button>
