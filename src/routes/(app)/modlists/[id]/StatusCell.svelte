@@ -5,6 +5,7 @@
 	import { broadcastModToggled } from '$lib/stores/realtime.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { LockIcon, PackageCheck } from '@lucide/svelte';
+	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 
 	interface Props {
 		mod: Mod;
@@ -20,9 +21,17 @@
 			id: string;
 			username: string;
 		} | null;
+		/** List of mods that require this mod */
+		requiredBy?: string[];
 	}
 
-	let { mod, isDependency = false, isEssential = false, lockedByUser = null }: Props = $props();
+	let {
+		mod,
+		isDependency = false,
+		isEssential = false,
+		lockedByUser = null,
+		requiredBy = []
+	}: Props = $props();
 
 	const handleToggle: SubmitFunction = () => {
 		return async ({ result, update }) => {
@@ -49,8 +58,22 @@
 	</div>
 {:else if isDependency}
 	<div class="flex flex-col items-center gap-1">
-		<PackageCheck class="h-4 w-4 text-amber-500" />
-		<div class="text-muted-foreground text-xs">(dependency)</div>
+		<Tooltip.Provider>
+			<Tooltip.Root>
+				<Tooltip.Trigger class="flex cursor-help flex-col items-center gap-1">
+					<PackageCheck class="h-4 w-4 text-amber-500" />
+					<div class="text-muted-foreground text-xs">(dependency)</div>
+				</Tooltip.Trigger>
+				<Tooltip.Content>
+					<p class="mb-1">Required by:</p>
+					<ul class="ml-4 list-disc">
+						{#each requiredBy as name (name)}
+							<li>{name}</li>
+						{/each}
+					</ul>
+				</Tooltip.Content>
+			</Tooltip.Root>
+		</Tooltip.Provider>
 	</div>
 {:else}
 	<form

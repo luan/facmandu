@@ -98,6 +98,29 @@
 		})()
 	);
 
+	// Map of dependencies -> list of mods that require them
+	const dependencyMap = $derived(
+		(() => {
+			const map = new Map<string, string[]>();
+			const baseMods = new Set(['base', 'space-age', 'quality', 'elevated-rails']);
+
+			for (const mod of mods) {
+				if (!mod.enabled) continue;
+				for (const dep of parseDependencies(mod.dependencies)) {
+					if (baseMods.has(dep)) continue;
+					if (!map.has(dep)) {
+						map.set(dep, []);
+					}
+					const arr = map.get(dep)!;
+					if (!arr.includes(mod.name)) {
+						arr.push(mod.name);
+					}
+				}
+			}
+			return map;
+		})()
+	);
+
 	// Set of mods explicitly marked as essential
 	const essentialSet = $derived(new Set(mods.filter((m) => m.essential).map((m) => m.name)));
 
@@ -166,7 +189,8 @@
 					mod,
 					isDependency: dependencySet.has(mod.name),
 					isEssential: essentialSet.has(mod.name),
-					lockedByUser
+					lockedByUser,
+					requiredBy: dependencyMap.get(mod.name) ?? []
 				});
 			},
 			size: 80
@@ -223,23 +247,6 @@
 			size: 100
 		},
 		{
-			accessorKey: 'factorioVersion',
-			header: ({ header }) => {
-				const factorioHeaderSnippet = createRawSnippet(() => ({
-					render: () => 'Factorio'
-				}));
-				return renderComponent(SortableHeader, {
-					header,
-					children: factorioHeaderSnippet
-				});
-			},
-			cell: ({ row }) => {
-				const version = row.getValue('factorioVersion') as string | null;
-				return renderComponent(VersionCell, { version });
-			},
-			size: 100
-		},
-		{
 			accessorKey: 'downloadsCount',
 			header: ({ header }) => {
 				const downloadsHeaderSnippet = createRawSnippet(() => ({
@@ -270,6 +277,26 @@
 			cell: ({ row }) => {
 				const lastUpdated = row.getValue('lastUpdated') as Date | null;
 				return renderComponent(UpdatedCell, { lastUpdated });
+			},
+			size: 100
+		},
+		{
+			accessorKey: 'updatedByUser',
+			header: ({ header }) => {
+				const updatedByHeaderSnippet = createRawSnippet(() => ({
+					render: () => 'Enabled By'
+				}));
+				return renderComponent(SortableHeader, {
+					header,
+					children: updatedByHeaderSnippet
+				});
+			},
+			cell: ({ row }) => {
+				const updatedByUser = row.getValue('updatedByUser') as {
+					id: string;
+					username: string;
+				} | null;
+				return updatedByUser?.username || '-';
 			},
 			size: 100
 		},
