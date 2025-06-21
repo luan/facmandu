@@ -17,7 +17,7 @@
 			missingDependencies: string[];
 			conflicts: Array<{ mod: string; conflictsWith: string }>;
 		};
-		mods: Mod[];
+		mods: Array<Omit<Mod, 'updatedBy'> & { updatedBy: { id: string; username: string } | null }>;
 	}
 
 	let { dependencyValidation, mods }: Props = $props();

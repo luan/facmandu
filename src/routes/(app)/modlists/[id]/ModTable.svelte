@@ -35,7 +35,7 @@
 	import SortableHeader from './SortableHeader.svelte';
 
 	interface Props {
-		mods: Mod[];
+		mods: Array<Omit<Mod, 'updatedBy'> & { updatedBy: { id: string; username: string } | null }>;
 		modlistName: string;
 		conflictingMods: string[];
 	}

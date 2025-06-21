@@ -260,17 +260,27 @@ export const actions: Actions = {
 				if (!dependencyString) return [];
 				try {
 					const deps = JSON.parse(dependencyString) as string[];
-					return deps.map((dep) => {
-						const [name] = dep.split(/>=|>|<=|<|=/);
-						if (name.startsWith('!')) {
-							return name.slice(1).trim();
-						} else if (name.startsWith('?') || name.startsWith('(?)')) {
-							return name.slice(1).trim();
-						} else if (name.startsWith('~')) {
-							return name.slice(1).trim();
-						}
-						return name.trim();
-					});
+					return deps
+						.map((dep) => {
+							const [raw] = dep.split(/>=|>|<=|<|=/);
+							let name = raw.trim();
+
+							// Conflicts (!) and incompatibilities (~) are still considered dependencies
+							if (name.startsWith('!')) {
+								return name.slice(1).trim();
+							}
+							if (name.startsWith('~')) {
+								return name.slice(1).trim();
+							}
+
+							// Skip optional dependencies prefixed with ? or (?)
+							if (name.startsWith('?') || name.startsWith('(?)')) {
+								return null;
+							}
+
+							return name;
+						})
+						.filter((d): d is string => Boolean(d));
 				} catch {
 					return [];
 				}
