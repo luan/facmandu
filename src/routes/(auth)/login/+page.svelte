@@ -26,6 +26,7 @@
 		</Card.Header>
 		<Card.Content>
 			<form method="POST" class="grid gap-4" use:enhance>
+				<input type="hidden" name="redirectTo" value={redirectTo} />
 				<Form.Field {form} name="username">
 					<Form.Control>
 						{#snippet children({ props })}

@@ -6,6 +6,7 @@ FROM oven/bun:${BUN_VERSION}-slim AS base
 
 ARG TURSO_CONNECTION_URL
 ARG TURSO_AUTH_TOKEN
+ARG ORIGIN
 
 LABEL fly_launch_runtime="Bun"
 
@@ -31,7 +32,7 @@ RUN bun install
 COPY . .
 
 # Build application
-RUN TURSO_CONNECTION_URL=$TURSO_CONNECTION_URL TURSO_AUTH_TOKEN=$TURSO_AUTH_TOKEN bun run build
+RUN TURSO_CONNECTION_URL=$TURSO_CONNECTION_URL TURSO_AUTH_TOKEN=$TURSO_AUTH_TOKEN ORIGIN=$ORIGIN bun run build
 
 # Remove development dependencies
 RUN rm -rf node_modules && bun install --ci

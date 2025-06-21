@@ -11,7 +11,7 @@ import { loginSchema } from './schema';
 
 export const load: PageServerLoad = async (event) => {
 	if (event.locals.user) {
-		return redirect(302, '/demo/lucia');
+		return redirect(302, '/');
 	}
 	return {
 		form: await superValidate(zod(loginSchema))

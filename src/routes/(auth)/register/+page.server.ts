@@ -48,6 +48,8 @@ export const actions: Actions = {
 		} catch (e) {
 			return fail(500, { message: 'An error has occurred' });
 		}
-		return redirect(302, '/');
+
+		const redirectTo = event.url.searchParams.get('redirectTo');
+		return redirect(302, redirectTo || '/');
 	}
 };
