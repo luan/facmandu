@@ -397,6 +397,7 @@
 										)
 											? ' bg-destructive/20 border-destructive'
 											: ''}"
+										data-mod-id={row.original.id}
 									>
 										{#each row.getVisibleCells() as cell (cell.id)}
 											<Table.Cell class="p-2">

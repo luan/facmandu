@@ -37,7 +37,21 @@
 	let exportCopied = $state(false);
 
 	let cursors = $state<
-		Record<string, { x: number; y: number; username: string; color: string; last: number }>
+		Record<
+			string,
+			{
+				x: number;
+				y: number;
+				scroll: number;
+				view: number;
+				username: string;
+				color: string;
+				last: number;
+				targetId?: string | null;
+				rx?: number | null;
+				ry?: number | null;
+			}
+		>
 	>({});
 
 	function colorForUser(id: string): string {
@@ -59,23 +73,79 @@
 		};
 	}
 
-	function sendCursorPosition(x: number, y: number) {
+	interface LocalCursorPayload {
+		x: number;
+		y: number;
+		scroll: number;
+		view: number;
+		targetId?: string | null;
+		rx?: number | null;
+		ry?: number | null;
+	}
+
+	function sendCursorPosition(
+		x: number,
+		y: number,
+		targetId?: string | null,
+		rx?: number | null,
+		ry?: number | null
+	) {
 		if (!modlist?.id) return;
+		const doc = document.documentElement;
+		const scroll = doc.scrollTop / (doc.scrollHeight - window.innerHeight || 1);
+		const view = window.innerHeight / doc.scrollHeight;
+
+		const payload: LocalCursorPayload = { x, y, scroll, view };
+		if (targetId) {
+			payload.targetId = targetId;
+			if (typeof rx === 'number' && typeof ry === 'number') {
+				payload.rx = rx;
+				payload.ry = ry;
+			}
+		}
+
 		fetch(`/api/modlists/${modlist.id}/cursor`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ x, y }),
+			body: JSON.stringify(payload),
 			keepalive: true
 		}).catch(() => {});
 	}
 
-	// Prevent SSR errors: only access window in browser context
+	let lastX = 0;
+	let lastY = 0;
+	let lastTargetId: string | null = null;
+	let lastRx: number | null = null;
+	let lastRy: number | null = null;
+
 	const handlePointerMove = browser
 		? throttle((e: PointerEvent) => {
-				const x = e.clientX / window.innerWidth;
-				const y = e.clientY / window.innerHeight;
-				sendCursorPosition(x, y);
+				lastX = e.clientX / window.innerWidth;
+				lastY = e.clientY / window.innerHeight;
+
+				const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+				const targetRow = el?.closest('[data-mod-id]') as HTMLElement | null;
+
+				if (targetRow) {
+					lastTargetId = targetRow.getAttribute('data-mod-id');
+					if (lastTargetId) {
+						const rect = targetRow.getBoundingClientRect();
+						lastRx = (e.clientX - rect.left) / rect.width;
+						lastRy = (e.clientY - rect.top) / rect.height;
+					}
+				} else {
+					lastTargetId = null;
+					lastRx = lastRy = null;
+				}
+
+				sendCursorPosition(lastX, lastY, lastTargetId, lastRx, lastRy);
 			}, 80)
+		: () => {};
+
+	const handleScroll = browser
+		? throttle(() => {
+				sendCursorPosition(lastX, lastY, lastTargetId, lastRx, lastRy);
+			}, 120)
 		: () => {};
 
 	const cleanupStaleCursors = () => {
@@ -98,11 +168,26 @@
 				try {
 					const payload = JSON.parse(ev.data);
 					if (payload.type === 'cursor') {
-						const { userId, username, x, y } = payload.data;
+						const {
+							userId,
+							username,
+							x,
+							y,
+							scroll = 0,
+							view = 0,
+							targetId = null,
+							rx = null,
+							ry = null
+						} = payload.data;
 						if (userId !== currentUserId) {
 							cursors[userId] = {
 								x,
 								y,
+								scroll,
+								view,
+								targetId: targetId ?? undefined,
+								rx: rx ?? undefined,
+								ry: ry ?? undefined,
 								username,
 								color: colorForUser(userId),
 								last: Date.now()
@@ -118,6 +203,7 @@
 			};
 
 			window.addEventListener('pointermove', handlePointerMove);
+			window.addEventListener('scroll', handleScroll);
 			// Periodically remove stale cursors
 			const interval = setInterval(cleanupStaleCursors, 2000);
 
@@ -134,6 +220,7 @@
 		eventSource?.close();
 		if (browser) {
 			window.removeEventListener('pointermove', handlePointerMove);
+			window.removeEventListener('scroll', handleScroll);
 		}
 	});
 
