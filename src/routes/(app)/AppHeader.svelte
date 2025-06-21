@@ -11,6 +11,7 @@
 	} from '@lucide/svelte';
 	import { resetMode, setMode } from 'mode-watcher';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 
 	import Button, { buttonVariants } from '$lib/components/ui/button/button.svelte';
 
@@ -19,6 +20,7 @@
 
 <header class="bg-background sticky top-0 z-50 flex w-full items-center border-b">
 	<div class="flex h-(--header-height) w-full items-center gap-2 px-4 py-2">
+		<Sidebar.Trigger />
 		<Button variant="ghost" href="/"><HomeIcon />Home</Button>
 		<div class="w-full"></div>
 		{#if false}
