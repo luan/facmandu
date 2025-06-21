@@ -13,6 +13,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import LiveCursors from './LiveCursors.svelte';
 
 	let { data }: PageProps = $props();
 	let modlist = $derived(data.modlist);
@@ -34,13 +35,91 @@
 	let sessionToken = $derived(data.sessionToken);
 	let exportCopied = $state(false);
 
+	let cursors = $state<
+		Record<string, { x: number; y: number; username: string; color: string; last: number }>
+	>({});
+
+	function colorForUser(id: string): string {
+		let hash = 0;
+		for (const char of id) {
+			hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+		}
+		return `hsl(${hash % 360}, 70%, 50%)`;
+	}
+
+	function throttle<Args extends unknown[]>(fn: (...args: Args) => void, limit: number) {
+		let last = 0;
+		return (...args: Args) => {
+			const now = Date.now();
+			if (now - last >= limit) {
+				last = now;
+				fn(...args);
+			}
+		};
+	}
+
+	function sendCursorPosition(x: number, y: number) {
+		if (!modlist?.id) return;
+		fetch(`/api/modlists/${modlist.id}/cursor`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ x, y }),
+			keepalive: true
+		}).catch(() => {});
+	}
+
+	const handlePointerMove = throttle((e: PointerEvent) => {
+		const x = e.clientX / window.innerWidth;
+		const y = e.clientY / window.innerHeight;
+		sendCursorPosition(x, y);
+	}, 80);
+
+	const cleanupStaleCursors = () => {
+		const now = Date.now();
+		for (const [uid, data] of Object.entries(cursors)) {
+			if (now - data.last > 5000) {
+				delete cursors[uid];
+			}
+		}
+	};
+
 	onMount(() => {
 		if (modlist?.id) {
 			unsubscribeRealtime = subscribeToModlistUpdates(modlist.id, handleRealtimeUpdate);
 			// Open server-sent events for cross-user realtime
 			const url = `/api/modlists/${modlist.id}/events`;
 			eventSource = new EventSource(url);
-			eventSource.onmessage = () => handleRealtimeUpdate();
+
+			eventSource.onmessage = (ev) => {
+				try {
+					const payload = JSON.parse(ev.data);
+					if (payload.type === 'cursor') {
+						const { userId, username, x, y } = payload.data;
+						if (userId !== currentUserId) {
+							cursors[userId] = {
+								x,
+								y,
+								username,
+								color: colorForUser(userId),
+								last: Date.now()
+							};
+						}
+					} else if (payload.type !== 'ping') {
+						handleRealtimeUpdate();
+					}
+				} catch {
+					// Fallback to original behaviour if parsing fails
+					handleRealtimeUpdate();
+				}
+			};
+
+			window.addEventListener('pointermove', handlePointerMove);
+			// Periodically remove stale cursors
+			const interval = setInterval(cleanupStaleCursors, 2000);
+
+			onDestroy(() => {
+				clearInterval(interval);
+			});
 		}
 	});
 
@@ -49,6 +128,7 @@
 			unsubscribeRealtime();
 		}
 		eventSource?.close();
+		window.removeEventListener('pointermove', handlePointerMove);
 	});
 
 	function handleRealtimeUpdate() {
@@ -211,4 +291,7 @@
 			...new Set(dependencyValidation.conflicts.flatMap((c) => [c.mod, c.conflictsWith]))
 		]}
 	/>
+
+	<!-- Live cursor overlay -->
+	<LiveCursors {cursors} />
 </div>
