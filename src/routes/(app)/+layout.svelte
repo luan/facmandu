@@ -1,6 +1,6 @@
 <script lang="ts">
 	import AppHeader from './AppHeader.svelte';
-	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
+	import * as Sidebar from '$lib/components/ui/sidebar';
 	import ModLists from './ModLists.svelte';
 
 	let { data, children } = $props();

@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { Badge } from '$lib/components/ui/badge';
 	import Button from '$lib/components/ui/button/button.svelte';
-	import * as Card from '$lib/components/ui/card/index.js';
+	import * as Card from '$lib/components/ui/card';
 	import { PlusIcon, ClockIcon, DownloadIcon, NutIcon, XIcon } from '@lucide/svelte';
 	import { broadcastModAdded, broadcastModRemoved } from '$lib/stores/realtime.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
+	import ModPreviewSheet from './ModPreviewSheet.svelte';
 
 	interface ModResult {
 		name: string;
@@ -34,6 +35,10 @@
 	}
 
 	let { searchResults, query, currentMods }: Props = $props();
+
+	// Add state for preview sheet
+	let previewOpen = $state(false);
+	let previewModName = $state<string | null>(null);
 
 	function isModInList(modName: string): boolean {
 		return currentMods.some((mod) => mod.name === modName);
@@ -99,8 +104,19 @@
 		return count.toString();
 	}
 
-	let clearSearchUrl = new URL($page.url);
+	let clearSearchUrl = new URL(page.url);
 	clearSearchUrl.searchParams.delete('q');
+
+	function openModPreview(name: string) {
+		previewModName = name;
+		previewOpen = true;
+	}
+
+	$effect(() => {
+		if (!previewOpen) {
+			previewModName = null;
+		}
+	});
 </script>
 
 {#if searchResults.length > 0}
@@ -140,10 +156,16 @@
 							<div class="mb-1">
 								<a
 									href={`https://mods.factorio.com/mod/${result.name}`}
-									class="text-foreground truncate text-lg font-semibold"
-									target="_blank"
-									rel="noopener noreferrer">{result.title}</a
+									class="text-foreground truncate text-left text-lg font-semibold"
+									onclick={(e) => {
+										if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+											e.preventDefault();
+											openModPreview(result.name);
+										}
+									}}
 								>
+									{result.title}
+								</a>
 								<p class="text-muted-foreground flex items-center gap-1 text-sm">
 									<span>by</span>
 									<span class="text-accent font-medium">{result.owner}</span>
@@ -231,6 +253,8 @@
 		</Card.Content>
 	</Card.Root>
 {/if}
+
+<ModPreviewSheet bind:open={previewOpen} modName={previewModName} />
 
 <style>
 	.line-clamp-2 {

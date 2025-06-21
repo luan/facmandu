@@ -5,7 +5,7 @@
 	import { broadcastModToggled } from '$lib/stores/realtime.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { LockIcon, PackageCheck } from '@lucide/svelte';
-	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import * as Tooltip from '$lib/components/ui/tooltip';
 
 	interface Props {
 		mod: Mod;

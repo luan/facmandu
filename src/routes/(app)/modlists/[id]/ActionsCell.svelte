@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import Button from '$lib/components/ui/button/button.svelte';
-	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { TrashIcon, RefreshCwIcon, LockIcon, UnlockIcon } from '@lucide/svelte';
 	import type { Mod } from '$lib/server/db/schema';
 	import { broadcastModRemoved, broadcastModlistUpdated } from '$lib/stores/realtime.svelte';

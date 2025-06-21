@@ -1,15 +1,26 @@
 <script lang="ts">
-	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import * as Tooltip from '$lib/components/ui/tooltip';
 	import type { Mod } from '$lib/server/db/schema';
 	import { ExternalLinkIcon } from '@lucide/svelte';
 
 	interface Props {
 		mod: Mod;
+		onOpenPreview?: (modName: string) => void;
 	}
 
-	let { mod }: Props = $props();
+	let { mod, onOpenPreview }: Props = $props();
 
 	let modPortalUrl = $derived(`https://mods.factorio.com/mod/${mod.name}`);
+
+	function handleClick(event: MouseEvent) {
+		// Ignore non-primary clicks or clicks with modifier keys to allow default browser behaviors
+		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+			return;
+		}
+
+		event.preventDefault();
+		onOpenPreview?.(mod.name);
+	}
 </script>
 
 <div class="space-y-1">
@@ -19,9 +30,9 @@
 				<Tooltip.Trigger class="text-left">
 					<a
 						href={modPortalUrl}
-						target="_blank"
 						rel="noopener noreferrer"
 						class="hover:text-primary inline-flex items-center gap-1 hover:underline"
+						onclick={handleClick}
 					>
 						{mod.title || mod.name}
 						<ExternalLinkIcon class="h-3 w-3 opacity-60" />
@@ -38,9 +49,9 @@
 		{:else}
 			<a
 				href={modPortalUrl}
-				target="_blank"
 				rel="noopener noreferrer"
 				class="hover:text-primary inline-flex items-center gap-1 hover:underline"
+				onclick={handleClick}
 			>
 				{mod.title || mod.name}
 				<ExternalLinkIcon class="h-3 w-3 opacity-60" />

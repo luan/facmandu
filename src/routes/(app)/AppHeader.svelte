@@ -10,8 +10,8 @@
 		UserIcon
 	} from '@lucide/svelte';
 	import { resetMode, setMode } from 'mode-watcher';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import * as Sidebar from '$lib/components/ui/sidebar';
 
 	import Button, { buttonVariants } from '$lib/components/ui/button/button.svelte';
 
