@@ -48,11 +48,20 @@
 
 	const versions = ['any', '2.0', '1.1', '1.0', '0.18', '0.17', '0.16', '0.15', '0.14', '0.13'];
 
+	// Sorting options matching Factorio API
+	const sortOptions = [
+		{ value: 'last_updated_at', label: 'Last Updated' },
+		{ value: 'relevancy', label: 'Relevance' },
+		{ value: 'most_downloads', label: 'Downloads' },
+		{ value: 'trending', label: 'Trending' }
+	];
+
 	const initialParams = browser ? new URLSearchParams(location.search) : new URLSearchParams();
 	let q = $state(initialParams.get('q') || '');
 	let category = $state(initialParams.get('category') || '');
 	let version = $state(initialParams.get('version') || 'any');
 	let selectedTags = $state(new Set<string>(initialParams.getAll('tag')));
+	let sortAttr = $state(initialParams.get('sort_attr') || 'last_updated_at');
 
 	// No reactive subscription; values remain until navigation refresh.
 </script>
@@ -93,6 +102,21 @@
 			>
 				{#each versions as v (v)}
 					<option value={v}>{v === 'any' ? 'Any' : v}</option>
+				{/each}
+			</select>
+		</div>
+
+		<!-- Sort attribute -->
+		<div>
+			<label for="sort-select" class="mb-1 block text-sm font-medium">Sort By</label>
+			<select
+				id="sort-select"
+				name="sort_attr"
+				bind:value={sortAttr}
+				class="w-full rounded border bg-transparent px-2 py-1"
+			>
+				{#each sortOptions as opt (opt.value)}
+					<option value={opt.value}>{opt.label}</option>
 				{/each}
 			</select>
 		</div>

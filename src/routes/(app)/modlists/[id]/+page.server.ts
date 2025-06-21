@@ -63,10 +63,26 @@ export const load: PageServerLoad = async (event) => {
 	) {
 		try {
 			const searchUrl = 'https://mods.factorio.com/api/search';
+			// Determine desired sort attribute for Factorio API
+			const sortAttrParam = event.url.searchParams.get('sort_attr');
+			const validSortAttributes = [
+				'relevancy',
+				'most_downloads',
+				'last_updated_at',
+				'trending'
+			] as const;
+			const sortAttribute =
+				sortAttrParam && validSortAttributes.includes(sortAttrParam as any)
+					? (sortAttrParam as (typeof validSortAttributes)[number])
+					: 'last_updated_at';
+
 			const requestBody: Record<string, unknown> = {
 				query: searchQuery.trim(),
 				username: user.factorioUsername,
-				token: user.factorioToken
+				token: user.factorioToken,
+				show_deprecated: false,
+				sort_attribute: sortAttribute,
+				exclude_category: ['internal']
 			};
 
 			// Forward filter parameters directly to the Factorio search API when provided
