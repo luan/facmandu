@@ -6,8 +6,13 @@
 	import { CheckIcon, XIcon, EditIcon } from '@lucide/svelte';
 	import { tick } from 'svelte';
 	import type { ActionResult } from '@sveltejs/kit';
+	import { broadcastModlistNameUpdated } from '$lib/stores/realtime.svelte';
 
-	let { name = '', disabled = false }: { name?: string; disabled?: boolean } = $props();
+	let {
+		name = '',
+		disabled = false,
+		modlistId
+	}: { name?: string; disabled?: boolean; modlistId: string } = $props();
 
 	let isEditing = $state(false);
 	let editValue = $state(name);
@@ -51,6 +56,10 @@
 		isSubmitting = false;
 		if (result.type === 'success') {
 			isEditing = false;
+			// Broadcast the name change to other tabs
+			if (modlistId && editValue.trim()) {
+				broadcastModlistNameUpdated(modlistId, editValue.trim());
+			}
 			// Invalidate page data to refresh the modlist name
 			await invalidateAll();
 		}

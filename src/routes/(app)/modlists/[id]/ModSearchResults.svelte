@@ -5,6 +5,8 @@
 	import Button from '$lib/components/ui/button/button.svelte';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { PlusIcon, ClockIcon, DownloadIcon, NutIcon, XIcon } from '@lucide/svelte';
+	import { broadcastModAdded, broadcastModRemoved } from '$lib/stores/realtime.svelte';
+	import type { SubmitFunction } from '@sveltejs/kit';
 
 	interface ModResult {
 		name: string;
@@ -36,6 +38,40 @@
 	function isModInList(modName: string): boolean {
 		return currentMods.some((mod) => mod.name === modName);
 	}
+
+	const handleAddMod: SubmitFunction = () => {
+		return async ({ result, update }) => {
+			if (result.type === 'success' && result.data?.success) {
+				// Get the modlist ID from the first current mod (they all have the same modlist)
+				const modlistId = currentMods[0]?.modlist;
+				if (modlistId) {
+					// Create a basic mod object for broadcasting
+					const newMod = {
+						id: crypto.randomUUID(), // This won't match the actual server ID, but that's okay for broadcasting
+						name: result.data.modName || 'Unknown',
+						enabled: true
+					};
+					broadcastModAdded(modlistId, newMod);
+				}
+			}
+			// Always update the current tab
+			await update();
+		};
+	};
+
+	const handleRemoveMod: SubmitFunction = () => {
+		return async ({ result, update }) => {
+			if (result.type === 'success' && result.data?.success) {
+				// Get the modlist ID from the first current mod
+				const modlistId = currentMods[0]?.modlist;
+				if (modlistId) {
+					broadcastModRemoved(modlistId, result.data.modName || 'Unknown');
+				}
+			}
+			// Always update the current tab
+			await update();
+		};
+	};
 
 	function formatDate(dateString?: string): string {
 		if (!dateString) return 'N/A';
@@ -172,7 +208,7 @@
 						<!-- Action Button -->
 						<div class="flex flex-shrink-0 items-start">
 							{#if isModInList(result.name)}
-								<form method="POST" action="?/removeMod" use:enhance>
+								<form method="POST" action="?/removeMod" use:enhance={handleRemoveMod}>
 									<input type="hidden" name="modName" value={result.name} />
 									<Button type="submit" size="sm" variant="destructive">
 										<XIcon class="mr-1 h-3 w-3" />
@@ -180,7 +216,7 @@
 									</Button>
 								</form>
 							{:else}
-								<form method="POST" action="?/addMod" use:enhance>
+								<form method="POST" action="?/addMod" use:enhance={handleAddMod}>
 									<input type="hidden" name="modName" value={result.name} />
 									<Button type="submit" size="sm" variant="success">
 										<PlusIcon class="mr-1 h-3 w-3" />

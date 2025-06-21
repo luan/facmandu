@@ -4,6 +4,8 @@
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import { TrashIcon, RefreshCwIcon } from '@lucide/svelte';
 	import type { Mod } from '$lib/server/db/schema';
+	import { broadcastModRemoved } from '$lib/stores/realtime.svelte';
+	import type { SubmitFunction } from '@sveltejs/kit';
 
 	interface Props {
 		mod: Mod;
@@ -12,6 +14,17 @@
 	}
 
 	let { mod, confirmDeleteId, onDeleteClick }: Props = $props();
+
+	const handleRemove: SubmitFunction = () => {
+		return async ({ result, update }) => {
+			if (result.type === 'success' && result.data?.success) {
+				// Broadcast the removal to other tabs
+				broadcastModRemoved(mod.modlist, mod.name);
+			}
+			// Always update the current tab
+			await update();
+		};
+	};
 
 	function formatDate(date?: Date | null): string {
 		if (!date) return 'N/A';
@@ -54,7 +67,7 @@
 
 	<!-- Delete Button -->
 	{#if confirmDeleteId === mod.id}
-		<form method="POST" action="?/removeMod" use:enhance>
+		<form method="POST" action="?/removeMod" use:enhance={handleRemove}>
 			<input type="hidden" name="modName" value={mod.name} />
 			<Tooltip.Root>
 				<Tooltip.Trigger>
