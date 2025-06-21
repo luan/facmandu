@@ -101,6 +101,23 @@
 	// Set of mods explicitly marked as essential
 	const essentialSet = $derived(new Set(mods.filter((m) => m.essential).map((m) => m.name)));
 
+	// Dependencies that stem specifically from locked (essential) mods
+	const lockedDependencySet = $derived(
+		(() => {
+			const deps = new Set<string>();
+			const baseMods = new Set(['base', 'space-age', 'quality', 'elevated-rails']);
+			for (const mod of mods) {
+				if (!mod.essential) continue;
+				for (const dep of parseDependencies(mod.dependencies)) {
+					if (!baseMods.has(dep)) {
+						deps.add(dep);
+					}
+				}
+			}
+			return deps;
+		})()
+	);
+
 	// State to control hiding of essential mods and their dependencies
 	let hideEssential = $state(false);
 
@@ -110,7 +127,7 @@
 	// Filtered list based on hide toggle
 	const visibleMods = $derived(
 		hideEssential
-			? mods.filter((m) => !essentialSet.has(m.name) && !dependencySet.has(m.name))
+			? mods.filter((m) => !essentialSet.has(m.name) && !lockedDependencySet.has(m.name))
 			: hideDependencies
 				? mods.filter((m) => !dependencySet.has(m.name))
 				: mods
@@ -141,10 +158,15 @@
 			},
 			cell: ({ row }) => {
 				const mod = row.original;
+				const lockedByUser = row.getValue('updatedByUser') as {
+					id: string;
+					username: string;
+				} | null;
 				return renderComponent(StatusCell, {
 					mod,
 					isDependency: dependencySet.has(mod.name),
-					isEssential: essentialSet.has(mod.name)
+					isEssential: essentialSet.has(mod.name),
+					lockedByUser
 				});
 			},
 			size: 80
@@ -164,7 +186,7 @@
 				const mod = row.original;
 				return renderComponent(ModInfoCell, { mod });
 			},
-			minSize: 200
+			minSize: 160
 		},
 		{
 			accessorKey: 'category',
@@ -252,26 +274,6 @@
 			size: 100
 		},
 		{
-			accessorKey: 'updatedByUser',
-			header: ({ header }) => {
-				const updatedByHeaderSnippet = createRawSnippet(() => ({
-					render: () => 'Enabled By'
-				}));
-				return renderComponent(SortableHeader, {
-					header,
-					children: updatedByHeaderSnippet
-				});
-			},
-			cell: ({ row }) => {
-				const updatedByUser = row.getValue('updatedByUser') as {
-					id: string;
-					username: string;
-				} | null;
-				return updatedByUser?.username || '-';
-			},
-			size: 100
-		},
-		{
 			accessorKey: 'tags',
 			header: 'Tags',
 			cell: ({ row }) => {
@@ -293,7 +295,7 @@
 				});
 			},
 			enableSorting: false,
-			size: 120
+			size: 100
 		}
 	];
 
