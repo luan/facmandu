@@ -9,7 +9,7 @@
 
 	let { mod }: Props = $props();
 
-	const modPortalUrl = `https://mods.factorio.com/mod/${mod.name}`;
+	let modPortalUrl = $derived(`https://mods.factorio.com/mod/${mod.name}`);
 </script>
 
 <div class="space-y-1">
