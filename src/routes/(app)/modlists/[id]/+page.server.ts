@@ -161,7 +161,7 @@ function validateDependencies(mods: any[]) {
 		try {
 			const deps = JSON.parse(dependencyString);
 			return deps.map((dep: string) => {
-				const [name, _version] = dep.split(/>=|>/);
+				const [name, _version] = dep.split(/>=|>|<=|<|=/);
 				if (name.startsWith('!')) {
 					return { name: name.slice(1).trim(), type: 'conflict' as const };
 				} else if (name.startsWith('?') || name.startsWith('(?)')) {
@@ -255,7 +255,7 @@ export const actions: Actions = {
 				try {
 					const deps = JSON.parse(dependencyString) as string[];
 					return deps.map((dep) => {
-						const [name] = dep.split(/>=|>/);
+						const [name] = dep.split(/>=|>|<=|<|=/);
 						if (name.startsWith('!')) {
 							return name.slice(1).trim();
 						} else if (name.startsWith('?') || name.startsWith('(?)')) {
