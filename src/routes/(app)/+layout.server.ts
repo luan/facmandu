@@ -6,8 +6,11 @@ import type { LayoutServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
 import { genID } from '$lib/server/db/ids';
+import { SIDEBAR_COOKIE_NAME } from '$lib/components/ui/sidebar/constants.js';
 
 export const load: LayoutServerLoad = async () => {
+	const { cookies } = getRequestEvent();
+
 	const user = requireLogin();
 
 	const modListRows = await db
@@ -26,7 +29,10 @@ export const load: LayoutServerLoad = async () => {
 		}
 	}
 
-	return { user, modLists: Array.from(modListMap.values()) };
+	const sidebarCookie = cookies.get(SIDEBAR_COOKIE_NAME);
+	const sidebarOpen = sidebarCookie === undefined ? true : sidebarCookie === 'true';
+
+	return { user, modLists: Array.from(modListMap.values()), sidebarOpen };
 };
 
 function requireLogin() {
