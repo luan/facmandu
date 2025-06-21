@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { ChevronUpIcon, ChevronDownIcon, ChevronsUpDownIcon } from '@lucide/svelte';
 	import type { Header } from '@tanstack/table-core';
-	import type { Mod } from '$lib/server/db/schema';
 	import type { Snippet } from 'svelte';
 
 	interface Props {
-		header: Header<Mod, unknown>;
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		header: Header<any, unknown>;
 		children: Snippet;
 	}
 

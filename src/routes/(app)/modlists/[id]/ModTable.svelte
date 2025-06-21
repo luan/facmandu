@@ -46,6 +46,9 @@
 	let columnFilters = $state<ColumnFiltersState>([]);
 	let columnVisibility = $state<VisibilityState>({});
 
+	// Derive the table row type from the `mods` prop to keep types in sync
+	type RowMod = Props['mods'][number];
+
 	function handleDeleteClick(modId: string) {
 		if (confirmDeleteId === modId) {
 			confirmDeleteId = null;
@@ -166,22 +169,32 @@
 
 	// Filtered list based on hide toggle
 	const visibleMods = $derived(
-		hideEssential
-			? mods.filter((m) => !essentialSet.has(m.name) && !lockedDependencySet.has(m.name))
-			: hideDependencies
-				? mods.filter((m) => !dependencySet.has(m.name))
-				: mods
+		(() => {
+			return mods.filter((m) => {
+				// Exclude locked (essential) mods and their dependencies when requested
+				if (hideEssential && (essentialSet.has(m.name) || lockedDependencySet.has(m.name))) {
+					return false;
+				}
+
+				// Exclude regular dependency mods when requested (this should apply even when hideEssential is active)
+				if (hideDependencies && dependencySet.has(m.name)) {
+					return false;
+				}
+
+				return true;
+			});
+		})()
 	);
 
 	// Helper to rank a mod's status for sorting purposes
-	function statusRank(mod: Mod): number {
+	function statusRank(mod: RowMod): number {
 		if (mod.essential) return 3; // Locked
 		if (dependencySet.has(mod.name)) return 2; // Dependency
 		return mod.enabled ? 1 : 0; // Enabled / Disabled
 	}
 
 	// Custom sorting function that considers locked and dependency states
-	const statusSortingFn: SortingFn<Mod> = (rowA, rowB) => {
+	const statusSortingFn: SortingFn<RowMod> = (rowA, rowB) => {
 		const rankDiff = statusRank(rowA.original) - statusRank(rowB.original);
 		if (rankDiff !== 0) return rankDiff;
 
@@ -196,13 +209,13 @@
 		return rowA.original.name.localeCompare(rowB.original.name);
 	};
 
-	const columns: ColumnDef<Mod>[] = [
+	const columns: ColumnDef<RowMod>[] = [
 		{
 			id: 'thumbnail',
 			header: '',
 			cell: ({ row }) => {
 				const mod = row.original;
-				return renderComponent(ThumbnailCell, { mod });
+				return renderComponent(ThumbnailCell, { mod: mod as unknown as Mod });
 			},
 			enableSorting: false,
 			size: 60
@@ -226,7 +239,7 @@
 					username: string;
 				} | null;
 				return renderComponent(StatusCell, {
-					mod,
+					mod: mod as unknown as Mod,
 					isDependency: dependencySet.has(mod.name),
 					isEssential: essentialSet.has(mod.name),
 					lockedByUser,
@@ -249,7 +262,7 @@
 			},
 			cell: ({ row }) => {
 				const mod = row.original;
-				return renderComponent(ModInfoCell, { mod });
+				return renderComponent(ModInfoCell, { mod: mod as unknown as Mod });
 			},
 			minSize: 160
 		},
@@ -346,7 +359,7 @@
 			header: 'Tags',
 			cell: ({ row }) => {
 				const mod = row.original;
-				return renderComponent(TagsCell, { mod });
+				return renderComponent(TagsCell, { mod: mod as unknown as Mod });
 			},
 			enableSorting: false,
 			size: 150
@@ -357,7 +370,7 @@
 			cell: ({ row }) => {
 				const mod = row.original;
 				return renderComponent(ActionsCell, {
-					mod,
+					mod: mod as unknown as Mod,
 					confirmDeleteId,
 					onDeleteClick: handleDeleteClick
 				});
