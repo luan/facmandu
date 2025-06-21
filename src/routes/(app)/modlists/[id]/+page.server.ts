@@ -47,8 +47,11 @@ export const load: PageServerLoad = async (event) => {
 		.where(eq(table.user.id, event.locals.session.userId))
 		.get();
 
-	// Handle search query from URL parameters
+	// Handle search query and filter parameters from URL
 	const searchQuery = event.url.searchParams.get('q');
+	const categoryFilter = event.url.searchParams.get('category');
+	const versionFilter = event.url.searchParams.get('version');
+	const tagFilters = event.url.searchParams.getAll('tag');
 	let searchResults: any[] = [];
 	let searchError: string | null = null;
 
@@ -60,11 +63,16 @@ export const load: PageServerLoad = async (event) => {
 	) {
 		try {
 			const searchUrl = 'https://mods.factorio.com/api/search';
-			const requestBody = {
+			const requestBody: Record<string, unknown> = {
 				query: searchQuery.trim(),
 				username: user.factorioUsername,
 				token: user.factorioToken
 			};
+
+			// Forward filter parameters directly to the Factorio search API when provided
+			if (categoryFilter) requestBody.category = categoryFilter;
+			if (versionFilter && versionFilter !== 'any') requestBody.factorio_version = versionFilter;
+			if (tagFilters.length > 0) requestBody.tag = tagFilters;
 
 			const response = await fetch(searchUrl, {
 				method: 'POST',
@@ -82,27 +90,8 @@ export const load: PageServerLoad = async (event) => {
 				searchResults = data.results || [];
 
 				// Client-side filtering and sorting based on additional query params
-				const categoryFilter = event.url.searchParams.get('category');
-				const versionFilter = event.url.searchParams.get('version');
-				const tagFilters = event.url.searchParams.getAll('tag');
 				const sortField = event.url.searchParams.get('sort');
 				const sortOrder = event.url.searchParams.get('order') ?? 'desc';
-
-				if (categoryFilter) {
-					searchResults = searchResults.filter((r: any) => r.category === categoryFilter);
-				}
-				if (versionFilter && versionFilter !== 'any') {
-					searchResults = searchResults.filter((r: any) => {
-						const v = r.latest_release?.factorio_version || '';
-						return v.startsWith(versionFilter);
-					});
-				}
-				if (tagFilters.length > 0) {
-					searchResults = searchResults.filter((r: any) => {
-						if (!r.tags) return false;
-						return tagFilters.every((t) => r.tags.includes(t));
-					});
-				}
 
 				if (sortField) {
 					searchResults.sort((a: any, b: any) => {
