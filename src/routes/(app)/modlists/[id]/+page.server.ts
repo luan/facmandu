@@ -80,6 +80,51 @@ export const load: PageServerLoad = async (event) => {
 			} else {
 				const data = await response.json();
 				searchResults = data.results || [];
+
+				// Client-side filtering and sorting based on additional query params
+				const categoryFilter = event.url.searchParams.get('category');
+				const versionFilter = event.url.searchParams.get('version');
+				const tagFilters = event.url.searchParams.getAll('tag');
+				const sortField = event.url.searchParams.get('sort');
+				const sortOrder = event.url.searchParams.get('order') ?? 'desc';
+
+				if (categoryFilter) {
+					searchResults = searchResults.filter((r: any) => r.category === categoryFilter);
+				}
+				if (versionFilter && versionFilter !== 'any') {
+					searchResults = searchResults.filter((r: any) => {
+						const v = r.latest_release?.factorio_version || '';
+						return v.startsWith(versionFilter);
+					});
+				}
+				if (tagFilters.length > 0) {
+					searchResults = searchResults.filter((r: any) => {
+						if (!r.tags) return false;
+						return tagFilters.every((t) => r.tags.includes(t));
+					});
+				}
+
+				if (sortField) {
+					searchResults.sort((a: any, b: any) => {
+						const getSortValue = (obj: any) => {
+							switch (sortField) {
+								case 'downloads':
+									return obj.downloads_count || 0;
+								case 'updated':
+									return new Date(obj.updated_at || 0).getTime();
+								case 'created':
+									return new Date(obj.created_at || 0).getTime();
+								default:
+									return obj.title || obj.name;
+							}
+						};
+						const av = getSortValue(a);
+						const bv = getSortValue(b);
+						if (av === bv) return 0;
+						const cmp = av > bv ? 1 : -1;
+						return sortOrder === 'asc' ? cmp : -cmp;
+					});
+				}
 			}
 		} catch (error) {
 			console.error('Search error:', error);

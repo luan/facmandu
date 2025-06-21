@@ -3,7 +3,6 @@
 	import { page } from '$app/state';
 	import { Badge } from '$lib/components/ui/badge';
 	import Button from '$lib/components/ui/button/button.svelte';
-	import * as Card from '$lib/components/ui/card';
 	import { PlusIcon, ClockIcon, DownloadIcon, NutIcon, XIcon } from '@lucide/svelte';
 	import { broadcastModAdded, broadcastModRemoved } from '$lib/stores/realtime.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
@@ -30,11 +29,10 @@
 
 	interface Props {
 		searchResults: ModResult[];
-		query: string;
 		currentMods: Array<{ name: string; id: string; enabled: boolean | null; modlist: string }>;
 	}
 
-	let { searchResults, query, currentMods }: Props = $props();
+	let { searchResults, currentMods }: Props = $props();
 
 	// Add state for preview sheet
 	let previewOpen = $state(false);
@@ -120,138 +118,125 @@
 </script>
 
 {#if searchResults.length > 0}
-	<Card.Root>
-		<Card.Header>
-			<Card.CardAction>
-				<Button type="button" variant="ghost" size="icon" href={clearSearchUrl.toString()}>
-					<XIcon class="h-4 w-4" />
-				</Button>
-			</Card.CardAction>
-			<Card.Title>Search Results</Card.Title>
-			<Card.Description>Found {searchResults.length} mods for "{query}"</Card.Description>
-		</Card.Header>
-		<Card.Content>
-			<div class="max-h-[400px] space-y-6 overflow-y-auto">
-				{#each searchResults as result (result.name)}
-					<div class="hover:bg-muted/50 flex gap-4 rounded-lg border p-4 transition-colors">
-						<!-- Mod Thumbnail -->
-						<div class="flex-shrink-0">
-							{#if result.thumbnail}
-								<img
-									src={`https://assets-mod.factorio.com${result.thumbnail}`}
-									alt={result.title}
-									class="bg-muted h-20 w-20 rounded-lg object-cover"
-									loading="lazy"
-								/>
-							{:else}
-								<div class="bg-muted flex h-20 w-20 items-center justify-center rounded-lg">
-									<span class="text-muted-foreground text-xs">No Image</span>
-								</div>
-							{/if}
+	<div class="space-y-6 overflow-y-auto">
+		{#each searchResults as result (result.name)}
+			<div class="hover:bg-muted/50 flex gap-4 rounded-lg border p-4 transition-colors">
+				<!-- Mod Thumbnail -->
+				<div class="flex-shrink-0">
+					{#if result.thumbnail}
+						<img
+							src={`https://assets-mod.factorio.com${result.thumbnail}`}
+							alt={result.title}
+							class="bg-muted h-20 w-20 rounded-lg object-cover"
+							loading="lazy"
+						/>
+					{:else}
+						<div class="bg-muted flex h-20 w-20 items-center justify-center rounded-lg">
+							<span class="text-muted-foreground text-xs">No Image</span>
 						</div>
+					{/if}
+				</div>
 
-						<!-- Mod Information -->
-						<div class="min-w-0 flex-1">
-							<!-- Title and Author -->
-							<div class="mb-1">
-								<a
-									href={`https://mods.factorio.com/mod/${result.name}`}
-									class="text-foreground truncate text-left text-lg font-semibold"
-									onclick={(e) => {
-										if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
-											e.preventDefault();
-											openModPreview(result.name);
-										}
-									}}
-								>
-									{result.title}
-								</a>
-								<p class="text-muted-foreground flex items-center gap-1 text-sm">
-									<span>by</span>
-									<span class="text-accent font-medium">{result.owner}</span>
-								</p>
+				<!-- Mod Information -->
+				<div class="min-w-0 flex-1">
+					<!-- Title and Author -->
+					<div class="mb-1">
+						<a
+							href={`https://mods.factorio.com/mod/${result.name}`}
+							class="text-foreground truncate text-left text-lg font-semibold"
+							onclick={(e) => {
+								if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+									e.preventDefault();
+									openModPreview(result.name);
+								}
+							}}
+						>
+							{result.title}
+						</a>
+						<p class="text-muted-foreground flex items-center gap-1 text-sm">
+							<span>by</span>
+							<span class="text-accent font-medium">{result.owner}</span>
+						</p>
+					</div>
+
+					<!-- Description -->
+					{#if result.summary || result.description}
+						<p class="text-muted-foreground mb-3 line-clamp-2 text-sm">
+							{result.summary || result.description}
+						</p>
+					{/if}
+
+					<!-- Metadata Row -->
+					<div class="text-muted-foreground mb-2 flex flex-wrap items-center gap-4 text-xs">
+						<!-- Content Type -->
+						{#if result.category}
+							<div class="flex items-center gap-1">
+								<NutIcon class="h-3 w-3" />
+								<span class="capitalize">{result.category}</span>
 							</div>
+						{/if}
 
-							<!-- Description -->
-							{#if result.summary || result.description}
-								<p class="text-muted-foreground mb-3 line-clamp-2 text-sm">
-									{result.summary || result.description}
-								</p>
-							{/if}
-
-							<!-- Metadata Row -->
-							<div class="text-muted-foreground mb-2 flex flex-wrap items-center gap-4 text-xs">
-								<!-- Content Type -->
-								{#if result.category}
-									<div class="flex items-center gap-1">
-										<NutIcon class="h-3 w-3" />
-										<span class="capitalize">{result.category}</span>
-									</div>
-								{/if}
-
-								<!-- Last Updated -->
-								{#if result.updated_at}
-									<div class="flex items-center gap-1">
-										<ClockIcon class="h-3 w-3" />
-										<span>{formatDate(result.updated_at)}</span>
-									</div>
-								{/if}
-
-								<!-- Version -->
-								{#if result.latest_release?.version}
-									<div class="flex items-center gap-1">
-										<span class="text-green-500">🏷️</span>
-										<span>{result.latest_release.version}</span>
-									</div>
-								{/if}
-
-								<!-- Downloads -->
-								<div class="flex items-center gap-1">
-									<DownloadIcon class="h-3 w-3" />
-									<span>{formatDownloads(result.downloads_count)}</span>
-								</div>
+						<!-- Last Updated -->
+						{#if result.updated_at}
+							<div class="flex items-center gap-1">
+								<ClockIcon class="h-3 w-3" />
+								<span>{formatDate(result.updated_at)}</span>
 							</div>
+						{/if}
 
-							<!-- Tags -->
-							{#if result.tags && result.tags.length > 0}
-								<div class="mb-2 flex flex-wrap gap-1">
-									{#each result.tags.slice(0, 5) as tag (tag)}
-										<Badge variant="secondary">{tag}</Badge>
-									{/each}
-									{#if result.tags.length > 5}
-										<span class="bg-muted text-muted-foreground rounded-full px-2 py-1 text-xs">
-											+{result.tags.length - 5} more
-										</span>
-									{/if}
-								</div>
-							{/if}
-						</div>
+						<!-- Version -->
+						{#if result.latest_release?.version}
+							<div class="flex items-center gap-1">
+								<span class="text-green-500">🏷️</span>
+								<span>{result.latest_release.version}</span>
+							</div>
+						{/if}
 
-						<!-- Action Button -->
-						<div class="flex flex-shrink-0 items-start">
-							{#if isModInList(result.name)}
-								<form method="POST" action="?/removeMod" use:enhance={handleRemoveMod}>
-									<input type="hidden" name="modName" value={result.name} />
-									<Button type="submit" size="sm" variant="destructive">
-										<XIcon class="mr-1 h-3 w-3" />
-										Remove
-									</Button>
-								</form>
-							{:else}
-								<form method="POST" action="?/addMod" use:enhance={handleAddMod}>
-									<input type="hidden" name="modName" value={result.name} />
-									<Button type="submit" size="sm" variant="success">
-										<PlusIcon class="mr-1 h-3 w-3" />
-										Add to List
-									</Button>
-								</form>
-							{/if}
+						<!-- Downloads -->
+						<div class="flex items-center gap-1">
+							<DownloadIcon class="h-3 w-3" />
+							<span>{formatDownloads(result.downloads_count)}</span>
 						</div>
 					</div>
-				{/each}
+
+					<!-- Tags -->
+					{#if result.tags && result.tags.length > 0}
+						<div class="mb-2 flex flex-wrap gap-1">
+							{#each result.tags.slice(0, 5) as tag (tag)}
+								<Badge variant="secondary">{tag}</Badge>
+							{/each}
+							{#if result.tags.length > 5}
+								<span class="bg-muted text-muted-foreground rounded-full px-2 py-1 text-xs">
+									+{result.tags.length - 5} more
+								</span>
+							{/if}
+						</div>
+					{/if}
+				</div>
+
+				<!-- Action Button -->
+				<div class="flex flex-shrink-0 items-start">
+					{#if isModInList(result.name)}
+						<form method="POST" action="?/removeMod" use:enhance={handleRemoveMod}>
+							<input type="hidden" name="modName" value={result.name} />
+							<Button type="submit" size="sm" variant="destructive">
+								<XIcon class="mr-1 h-3 w-3" />
+								Remove
+							</Button>
+						</form>
+					{:else}
+						<form method="POST" action="?/addMod" use:enhance={handleAddMod}>
+							<input type="hidden" name="modName" value={result.name} />
+							<Button type="submit" size="sm" variant="success">
+								<PlusIcon class="mr-1 h-3 w-3" />
+								Add to List
+							</Button>
+						</form>
+					{/if}
+				</div>
 			</div>
-		</Card.Content>
-	</Card.Root>
+		{/each}
+	</div>
 {/if}
 
 <ModPreviewSheet bind:open={previewOpen} modName={previewModName} />

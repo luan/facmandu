@@ -22,7 +22,8 @@
 	<div class="flex h-(--header-height) w-full items-center gap-2 px-4 py-2">
 		<Sidebar.Trigger />
 		<Button variant="ghost" href="/"><HomeIcon />Home</Button>
-		<div class="w-full"></div>
+
+		<div id="page-header" class="w-full"></div>
 		{#if false}
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger class={buttonVariants({ variant: 'secondary', size: 'icon' })}>
