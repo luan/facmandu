@@ -139,7 +139,8 @@ export const load: PageServerLoad = async (event) => {
 		searchError,
 		dependencyValidation,
 		collaborators,
-		currentUserId: event.locals.session.userId
+		currentUserId: event.locals.session.userId,
+		sessionToken: event.cookies.get('auth-session')
 	};
 };
 

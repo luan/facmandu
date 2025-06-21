@@ -8,7 +8,7 @@
 	import DependencyValidation from './DependencyValidation.svelte';
 	import { enhance } from '$app/forms';
 	import { Button } from '$lib/components/ui/button';
-	import { TrashIcon } from '@lucide/svelte';
+	import { DownloadIcon, ShareIcon, TrashIcon } from '@lucide/svelte';
 	import { subscribeToModlistUpdates } from '$lib/stores/realtime.svelte';
 	import { onMount, onDestroy } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
@@ -30,6 +30,9 @@
 	let shareError = $state('');
 	let shareUsername = $state('');
 	let eventSource: EventSource | null = null;
+	let exportDialogOpen = $state(false);
+	let sessionToken = $derived(data.sessionToken);
+	let exportCommand = $state('');
 
 	onMount(() => {
 		if (modlist?.id) {
@@ -75,6 +78,14 @@
 		await fetch('?/shareRemove', { method: 'POST', body: fd });
 		await invalidateAll();
 	}
+
+	function openExportDialog() {
+		if (!modlist?.id) return;
+		// Build one-liner that fetches the generated script from backend and pipes to bash
+		const cookieName = 'auth-session';
+		exportCommand = `curl -H "Cookie: ${cookieName}=${sessionToken}" -sL "${location.origin}/api/modlists/${modlist.id}/export" | bash`;
+		exportDialogOpen = true;
+	}
 </script>
 
 <div class="flex h-[calc(100svh-var(--header-height))] w-full flex-col gap-4 px-48 py-4">
@@ -104,7 +115,12 @@
 						size="sm"
 						onclick={() => (shareDialogOpen = true)}
 					>
+						<ShareIcon class="mr-2 h-4 w-4" />
 						Share
+					</Button>
+					<Button type="button" variant="outline" size="sm" onclick={openExportDialog}>
+						<DownloadIcon class="mr-2 h-4 w-4" />
+						Export
 					</Button>
 				{/if}
 
@@ -170,6 +186,26 @@
 
 			<div class="mt-4 text-right">
 				<Button variant="outline" size="sm" onclick={() => (shareDialogOpen = false)}>Close</Button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Export Dialog -->
+{#if exportDialogOpen}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+		<div class="bg-background w-[400px] rounded-md p-6 dark:bg-neutral-900">
+			<h2 class="mb-4 text-lg font-semibold">Export Modlist</h2>
+			<div class="mb-4">
+				<textarea
+					class="flex-1 rounded-sm border bg-transparent px-2 py-1"
+					readonly
+					bind:value={exportCommand}
+				></textarea>
+			</div>
+			<div class="mt-4 text-right">
+				<Button variant="outline" size="sm" onclick={() => (exportDialogOpen = false)}>Close</Button
+				>
 			</div>
 		</div>
 	</div>
