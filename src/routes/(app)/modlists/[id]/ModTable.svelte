@@ -65,7 +65,7 @@
 		try {
 			const deps = JSON.parse(dependencyString) as string[];
 			return deps.map((dep) => {
-				const [name] = dep.split(/>=|>/);
+				const [name] = dep.split(/>=|>|<=|</);
 				if (name.startsWith('!')) {
 					return name.slice(1).trim(); // conflict – still a dependency for visibility purposes
 				} else if (name.startsWith('?') || name.startsWith('(?)')) {
