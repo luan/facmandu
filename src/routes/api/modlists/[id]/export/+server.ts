@@ -89,13 +89,46 @@ export const GET: RequestHandler = async (event) => {
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ensure aria2 is available; attempt automatic installation via Homebrew when possible
+# If aria2c is missing, try to install it using the best method available on the
+# current platform. We cover the most common package managers on macOS, Linux
+# (Debian/Ubuntu, Fedora/RHEL, Arch) and Windows (Git-Bash with Chocolatey or
+# Winget). When none are available we bail out with a helpful message.
+
 if ! command -v aria2c &>/dev/null; then
-  echo "aria2c not found. Attempting to install via Homebrew..." >&2
-  if command -v brew &>/dev/null; then
-    brew install aria2
-  else
-    echo "Homebrew not found and aria2c is required. Please install aria2 manually and re-run this script." >&2
+  os="$(uname -s)"
+  echo "aria2c not found. Attempting to install for $os…" >&2
+
+  install_ok=false
+
+  case "$os" in
+    Darwin)
+      if command -v brew &>/dev/null; then
+        brew install aria2 && install_ok=true
+      fi
+      ;;
+
+    Linux)
+      if command -v apt-get &>/dev/null; then
+        sudo apt-get update && sudo apt-get install -y aria2 && install_ok=true
+      elif command -v dnf &>/dev/null; then
+        sudo dnf install -y aria2 && install_ok=true
+      elif command -v pacman &>/dev/null; then
+        sudo pacman -Sy --noconfirm aria2 && install_ok=true
+      fi
+      ;;
+
+    MINGW*|MSYS*)
+      # Git-Bash on Windows
+      if command -v choco &>/dev/null; then
+        choco install -y aria2 && install_ok=true
+      elif command -v winget &>/dev/null; then
+        winget install --id=aria2 -e --silent && install_ok=true
+      fi
+      ;;
+  esac
+
+  if ! $install_ok; then
+    echo "Automatic installation failed. Please install 'aria2' manually and re-run this script." >&2
     exit 1
   fi
 fi
