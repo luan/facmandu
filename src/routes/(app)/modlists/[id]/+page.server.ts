@@ -21,9 +21,17 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	const result = await db
-		.select()
+		.select({
+			modlist: table.modList,
+			mod: table.mod,
+			updatedByUser: {
+				id: table.user.id,
+				username: table.user.username
+			}
+		})
 		.from(table.modList)
 		.rightJoin(table.mod, eq(table.modList.id, table.mod.modlist))
+		.leftJoin(table.user, eq(table.mod.updatedBy, table.user.id))
 		.where(eq(table.modList.id, event.params.id));
 	if (result.length === 0) {
 		return error(404, { message: 'modlist not found' });
@@ -85,7 +93,8 @@ export const load: PageServerLoad = async (event) => {
 		return {
 			...mod,
 			lastUpdated: mod.lastUpdated ? new Date(mod.lastUpdated) : null,
-			lastFetched: mod.lastFetched ? new Date(mod.lastFetched) : null
+			lastFetched: mod.lastFetched ? new Date(mod.lastFetched) : null,
+			updatedByUser: r.updatedByUser
 		};
 	});
 
@@ -220,7 +229,10 @@ export const actions: Actions = {
 		if (!mod) {
 			return fail(404);
 		}
-		await db.update(table.mod).set({ enabled: !mod.enabled }).where(eq(table.mod.id, modID));
+		await db
+			.update(table.mod)
+			.set({ enabled: !mod.enabled, updatedBy: event.locals.session.userId })
+			.where(eq(table.mod.id, modID));
 
 		// Notify collaborators via SSE
 		publishModlistEvent(mod.modlist, 'mod-toggled', { modId: modID, enabled: !mod.enabled });
@@ -273,7 +285,8 @@ export const actions: Actions = {
 				id: modId,
 				modlist: modlistId,
 				name: modName,
-				enabled: true
+				enabled: true,
+				updatedBy: event.locals.session.userId
 			});
 
 			// Fetch mod information from API in background

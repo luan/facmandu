@@ -190,6 +190,26 @@
 			size: 100
 		},
 		{
+			accessorKey: 'updatedByUser',
+			header: ({ header }) => {
+				const updatedByHeaderSnippet = createRawSnippet(() => ({
+					render: () => 'Enabled By'
+				}));
+				return renderComponent(SortableHeader, {
+					header,
+					children: updatedByHeaderSnippet
+				});
+			},
+			cell: ({ row }) => {
+				const updatedByUser = row.getValue('updatedByUser') as {
+					id: string;
+					username: string;
+				} | null;
+				return updatedByUser?.username || '-';
+			},
+			size: 100
+		},
+		{
 			accessorKey: 'tags',
 			header: 'Tags',
 			cell: ({ row }) => {

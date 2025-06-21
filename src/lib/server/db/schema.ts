@@ -71,7 +71,8 @@ export const mod = sqliteTable(
 		dependencies: text('dependencies'),
 		// Cache metadata
 		lastFetched: integer('last_fetched', { mode: 'timestamp' }),
-		fetchError: text('fetch_error')
+		fetchError: text('fetch_error'),
+		updatedBy: text('updated_by').references(() => user.id)
 	},
 	(t) => [unique().on(t.modlist, t.name)]
 );
