@@ -5,7 +5,14 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import { Input } from '$lib/components/ui/input';
-	import { RefreshCwIcon } from '@lucide/svelte';
+	import {
+		BookIcon,
+		RefreshCwIcon,
+		PlusIcon,
+		ClockIcon,
+		DownloadIcon,
+		NutIcon
+	} from '@lucide/svelte';
 	import type { Mod } from '$lib/server/db/schema';
 	import {
 		type ColumnDef,
@@ -33,6 +40,9 @@
 	import DownloadsCell from './DownloadsCell.svelte';
 	import UpdatedCell from './UpdatedCell.svelte';
 	import SortableHeader from './SortableHeader.svelte';
+	import * as Sheet from '$lib/components/ui/sheet/index.js';
+	import { buttonVariants } from '$lib/components/ui/button/index.js';
+	import { Badge } from '$lib/components/ui/badge';
 
 	interface Props {
 		mods: Array<Omit<Mod, 'updatedBy'> & { updatedBy: { id: string; username: string } | null }>;
@@ -48,6 +58,23 @@
 
 	// Derive the table row type from the `mods` prop to keep types in sync
 	type RowMod = Props['mods'][number];
+
+	// Holds fetched details for recommended mods
+	interface ModDetail {
+		name: string;
+		title?: string;
+		summary?: string;
+		description?: string;
+		thumbnail?: string;
+		owner?: string;
+		category?: string;
+		tags?: string[];
+		downloads_count?: number;
+		updated_at?: string;
+		latest_release?: { version?: string };
+	}
+
+	let recommendationDetails = $state<Record<string, ModDetail>>({});
 
 	function handleDeleteClick(modId: string) {
 		if (confirmDeleteId === modId) {
@@ -75,9 +102,9 @@
 						const [raw] = dep.split(/>=|>|<=|<|=/);
 						let name = raw.trim();
 
-						// Conflicts (prefixed with '!') are treated as regular dependencies
+						// Skip conflicts entirely
 						if (name.startsWith('!')) {
-							return name.slice(1).trim();
+							return null;
 						}
 
 						// Ignore optional dependencies (prefixed with '?' or '(?)')
@@ -421,18 +448,375 @@
 			}
 		}
 	});
+
+	// Helper to parse optional dependency strings
+	function parseOptionalDependencies(dependencyString: string | null): string[] {
+		if (!dependencyString) return [];
+
+		try {
+			const deps = JSON.parse(dependencyString) as string[];
+			return (
+				deps
+					.map((dep) => {
+						// Extract the raw name segment before any version specifier
+						const [raw] = dep.split(/>=|>|<=|<|=/);
+						let name = raw.trim();
+
+						// Only consider optional dependencies (prefixed with '?' or '(?)')
+						if (name.startsWith('(?)')) {
+							name = name.slice(3).trim();
+						} else if (name.startsWith('?')) {
+							name = name.slice(1).trim();
+						} else {
+							return null;
+						}
+
+						// Ignore conflicts or empty strings
+						if (!name || name.startsWith('!')) return null;
+
+						// Incompatibility (~) – treat as regular dependency name
+						if (name.startsWith('~')) {
+							return name.slice(1).trim();
+						}
+
+						return name;
+					})
+					// Filter out null entries
+					.filter((d): d is string => Boolean(d))
+			);
+		} catch {
+			return [];
+		}
+	}
+
+	// Set of optional dependencies across all enabled mods
+	const optionalDependencySet = $derived(
+		(() => {
+			const deps = new Set<string>();
+			const baseMods = new Set(['base', 'space-age', 'quality', 'elevated-rails']);
+
+			for (const mod of mods) {
+				if (!mod.enabled) continue;
+				for (const dep of parseOptionalDependencies(mod.dependencies)) {
+					if (!baseMods.has(dep)) {
+						deps.add(dep);
+					}
+				}
+			}
+			return deps;
+		})()
+	);
+
+	// Recommendations are optional dependencies not already present in the mod list
+	const optionalRecommendations = $derived(
+		(() => {
+			const existing = new Set(mods.map((m) => m.name));
+			return Array.from(optionalDependencySet)
+				.filter((name) => !existing.has(name))
+				.sort((a, b) => a.localeCompare(b));
+		})()
+	);
+
+	const PREFETCH_COUNT = 12;
+	// Prefetch a limited number of recommendations to avoid jank when opening
+	$effect(() => {
+		for (const name of optionalRecommendations.slice(0, PREFETCH_COUNT)) {
+			loadModDetail(name);
+		}
+	});
+
+	// IntersectionObserver action to lazily load mod details when visible
+	function onVisible(node: HTMLElement, modName: string) {
+		if (recommendationDetails[modName]) return; // already loaded
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0].isIntersecting) {
+					loadModDetail(modName);
+					observer.disconnect();
+				}
+			},
+			{ rootMargin: '400px 0px 400px 0px' }
+		);
+		observer.observe(node);
+		return {
+			destroy() {
+				observer.disconnect();
+			}
+		};
+	}
+
+	async function loadModDetail(modName: string) {
+		if (recommendationDetails[modName]) return;
+		try {
+			const res = await fetch(`/api/factorio-mods/${modName}`);
+			if (!res.ok) return;
+			const data = await res.json();
+			const latest = data.releases?.[data.releases.length - 1] ?? {};
+			recommendationDetails[modName] = {
+				name: modName,
+				title: data.title,
+				summary: data.summary,
+				description: data.description,
+				thumbnail: data.thumbnail,
+				owner: data.owner,
+				category: data.category,
+				tags: data.tags,
+				downloads_count: data.downloads_count,
+				updated_at: data.updated_at,
+				latest_release: { version: latest.version }
+			};
+		} catch {
+			// ignore failures, keep placeholder
+		}
+	}
+
+	function formatDate(dateString?: string): string {
+		if (!dateString) return 'N/A';
+		try {
+			const date = new Date(dateString);
+			const now = new Date();
+			const diffMs = now.getTime() - date.getTime();
+			const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+			const diffDays = Math.floor(diffHours / 24);
+
+			if (diffHours < 1) return 'Less than an hour ago';
+			if (diffHours < 24) return `${diffHours} hours ago`;
+			if (diffDays < 30) return `${diffDays} days ago`;
+			if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+			return `${Math.floor(diffDays / 365)} years ago`;
+		} catch {
+			return 'N/A';
+		}
+	}
+
+	function formatDownloads(count?: number): string {
+		if (!count) return '0';
+		if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+		if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
+		return count.toString();
+	}
+
+	// Map of optional dependency -> mods recommending it
+	const optionalDependencyMap = $derived(
+		(() => {
+			const map = new Map<string, string[]>();
+			const baseMods = new Set(['base', 'space-age', 'quality', 'elevated-rails']);
+
+			for (const mod of mods) {
+				if (!mod.enabled) continue;
+				for (const dep of parseOptionalDependencies(mod.dependencies)) {
+					if (baseMods.has(dep)) continue;
+					if (!map.has(dep)) {
+						map.set(dep, []);
+					}
+					const arr = map.get(dep)!;
+					if (!arr.includes(mod.name)) arr.push(mod.name);
+				}
+			}
+			return map;
+		})()
+	);
+
+	// Helper to parse conflicts from dependency string
+	function parseConflicts(dependencyString: string | null): string[] {
+		if (!dependencyString) return [];
+
+		try {
+			const deps = JSON.parse(dependencyString) as string[];
+			return deps
+				.map((dep) => {
+					const [raw] = dep.split(/>=|>|<=|<|=/);
+					let name = raw.trim();
+					if (name.startsWith('!')) {
+						return name.slice(1).trim();
+					}
+					return null;
+				})
+				.filter((d): d is string => Boolean(d));
+		} catch {
+			return [];
+		}
+	}
+
+	// Map of mod -> list of enabled mods that conflict with it
+	const conflictMap = $derived(
+		(() => {
+			const map = new Map<string, string[]>();
+			for (const mod of mods) {
+				if (!mod.enabled) continue;
+				for (const conf of parseConflicts(mod.dependencies)) {
+					if (!map.has(conf)) {
+						map.set(conf, []);
+					}
+					const arr = map.get(conf)!;
+					if (!arr.includes(mod.name)) arr.push(mod.name);
+				}
+			}
+			return map;
+		})()
+	);
 </script>
 
 <Tooltip.Provider>
 	<Card.Root>
 		<Card.Header>
-			<Card.CardAction>
+			<Card.CardAction class="flex flex-row-reverse items-center gap-2">
 				<form method="POST" action="?/refreshAllMods" use:enhance>
 					<Button type="submit" variant="outline" size="sm">
 						<RefreshCwIcon class="mr-2 h-4 w-4" />
 						Refresh All
 					</Button>
 				</form>
+
+				<Sheet.Root>
+					<Sheet.Trigger class={buttonVariants({ variant: 'outline', size: 'sm' })}>
+						<BookIcon class="mr-2 h-4 w-4" />
+						Recommendations
+					</Sheet.Trigger>
+					<Sheet.Content side="right" class="w-[800px] !max-w-[800px] sm:w-[800px]">
+						<Sheet.Header>
+							<Sheet.Title>Recommended Mods</Sheet.Title>
+							<Sheet.Description>Optional dependencies you may consider adding.</Sheet.Description>
+						</Sheet.Header>
+						<div class="space-y-6 overflow-y-auto p-4">
+							{#if optionalRecommendations.length === 0}
+								<p>No recommendations available.</p>
+							{:else}
+								{#each optionalRecommendations as modName (modName)}
+									<div
+										use:onVisible={modName}
+										class="flex gap-4 rounded-lg border p-4 transition-colors {conflictMap.get(
+											modName
+										)?.length
+											? 'bg-destructive/20 border-destructive'
+											: 'hover:bg-muted/50'}"
+									>
+										<!-- Thumbnail -->
+										<div class="flex-shrink-0">
+											{#if recommendationDetails[modName]?.thumbnail}
+												<img
+													src={`https://assets-mod.factorio.com${recommendationDetails[modName].thumbnail}`}
+													alt={recommendationDetails[modName].title || modName}
+													class="bg-muted h-20 w-20 rounded-lg object-cover"
+													loading="lazy"
+												/>
+											{:else}
+												<div class="bg-muted flex h-20 w-20 items-center justify-center rounded-lg">
+													<span class="text-muted-foreground text-xs">No Image</span>
+												</div>
+											{/if}
+										</div>
+
+										<!-- Mod Information -->
+										<div class="min-w-0 flex-1">
+											<!-- Title and Author -->
+											<div class="mb-1">
+												<a
+													href={`https://mods.factorio.com/mod/${modName}`}
+													class="text-foreground truncate text-lg font-semibold"
+													target="_blank"
+													rel="noopener noreferrer"
+													>{recommendationDetails[modName]?.title ?? modName}</a
+												>
+												{#if recommendationDetails[modName]?.owner}
+													<p class="text-muted-foreground flex items-center gap-1 text-sm">
+														<span>by</span>
+														<span class="text-accent font-medium"
+															>{recommendationDetails[modName].owner}</span
+														>
+													</p>
+												{/if}
+											</div>
+
+											<!-- Description -->
+											{#if recommendationDetails[modName]?.summary}
+												<p class="text-muted-foreground mb-3 line-clamp-2 text-sm">
+													{recommendationDetails[modName].summary}
+												</p>
+											{/if}
+
+											<!-- Metadata Row -->
+											<div
+												class="text-muted-foreground mb-2 flex flex-wrap items-center gap-4 text-xs"
+											>
+												{#if recommendationDetails[modName]?.category}
+													<div class="flex items-center gap-1">
+														<NutIcon class="h-3 w-3" />
+														<span class="capitalize">{recommendationDetails[modName].category}</span
+														>
+													</div>
+												{/if}
+												{#if recommendationDetails[modName]?.updated_at}
+													<div class="flex items-center gap-1">
+														<ClockIcon class="h-3 w-3" />
+														<span>{formatDate(recommendationDetails[modName].updated_at)}</span>
+													</div>
+												{/if}
+												{#if recommendationDetails[modName]?.latest_release?.version}
+													<div class="flex items-center gap-1">
+														<span class="text-green-500">🏷️</span>
+														<span>{recommendationDetails[modName].latest_release.version}</span>
+													</div>
+												{/if}
+												<div class="flex items-center gap-1">
+													<DownloadIcon class="h-3 w-3" />
+													<span
+														>{formatDownloads(
+															recommendationDetails[modName]?.downloads_count
+														)}</span
+													>
+												</div>
+											</div>
+
+											<!-- Conflict Badges -->
+											{#if (conflictMap.get(modName)?.length ?? 0) > 0}
+												<div class="mt-2 flex flex-wrap gap-1">
+													<span class="text-muted-foreground text-sm">Conflicts with:</span>
+													{#each conflictMap.get(modName)?.slice(0, 5) ?? [] as c (c)}
+														<Badge variant="destructive">{c}</Badge>
+													{/each}
+													{#if (conflictMap.get(modName)?.length ?? 0) > 5}
+														<span
+															class="bg-destructive text-destructive-foreground rounded-full px-2 py-0.5 text-xs"
+															>+{(conflictMap.get(modName)?.length ?? 0) - 5} more</span
+														>
+													{/if}
+												</div>
+											{/if}
+
+											<!-- Recommender Badges -->
+											{#if (optionalDependencyMap.get(modName)?.length ?? 0) > 0}
+												<div class="mt-2 flex flex-wrap gap-1">
+													<span class="text-muted-foreground text-sm">Recommended by:</span>
+													{#each optionalDependencyMap.get(modName)?.slice(0, 5) ?? [] as rec (rec)}
+														<Badge variant="outline">{rec}</Badge>
+													{/each}
+													{#if (optionalDependencyMap.get(modName)?.length ?? 0) > 5}
+														<span
+															class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs"
+															>+{(optionalDependencyMap.get(modName)?.length ?? 0) - 5} more</span
+														>
+													{/if}
+												</div>
+											{/if}
+										</div>
+
+										<!-- Action Button -->
+										<div class="flex flex-shrink-0 items-start">
+											<form method="POST" action="?/addMod" use:enhance>
+												<input type="hidden" name="modName" value={modName} />
+												<Button type="submit" size="sm" variant="success">
+													<PlusIcon class="mr-1 h-3 w-3" />
+													Add to List
+												</Button>
+											</form>
+										</div>
+									</div>
+								{/each}
+							{/if}
+						</div>
+					</Sheet.Content>
+				</Sheet.Root>
 			</Card.CardAction>
 			<Card.Title>Mods in {modlistName}</Card.Title>
 			<Card.Description>
@@ -466,7 +850,7 @@
 						<!-- Hide essential mods toggle -->
 						<label class="flex items-center gap-2 text-sm">
 							<input type="checkbox" bind:checked={hideEssential} />
-							Hide locked mods & dependencies
+							Hide locked mods
 						</label>
 					</div>
 
