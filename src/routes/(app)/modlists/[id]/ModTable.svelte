@@ -36,9 +36,10 @@
 	interface Props {
 		mods: Mod[];
 		modlistName: string;
+		conflictingMods: string[];
 	}
 
-	let { mods, modlistName }: Props = $props();
+	let { mods, modlistName, conflictingMods }: Props = $props();
 	let confirmDeleteId: string | null = $state(null);
 	let sorting = $state<SortingState>([]);
 	let columnFilters = $state<ColumnFiltersState>([]);
@@ -313,7 +314,13 @@
 							</Table.Header>
 							<Table.Body>
 								{#each table.getRowModel().rows as row (row.id)}
-									<Table.Row class={row.original.enabled ? '' : 'opacity-50'}>
+									<Table.Row
+										class="{row.original.enabled ? '' : 'opacity-50'}{conflictingMods.includes(
+											row.original.name
+										)
+											? ' bg-destructive/20 border-destructive'
+											: ''}"
+									>
 										{#each row.getVisibleCells() as cell (cell.id)}
 											<Table.Cell class="p-2">
 												<FlexRender

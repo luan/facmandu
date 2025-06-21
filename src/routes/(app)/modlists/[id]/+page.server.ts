@@ -101,15 +101,85 @@ export const load: PageServerLoad = async (event) => {
 		).catch(console.error);
 	}
 
+	// Dependency validation
+	const dependencyValidation = validateDependencies(processedMods);
+
 	return {
 		modlist: result[0].modlist,
 		mods: processedMods,
 		hasFactorioCredentials: !!(user?.factorioUsername && user?.factorioToken),
 		searchQuery: searchQuery || '',
 		searchResults,
-		searchError
+		searchError,
+		dependencyValidation
 	};
 };
+
+// Dependency validation function
+function validateDependencies(mods: any[]) {
+	const enabledMods = mods.filter((mod) => mod.enabled);
+	const enabledModNames = new Set(enabledMods.map((mod) => mod.name));
+	const missingDependencies: string[] = [];
+	const conflicts: Array<{ mod: string; conflictsWith: string }> = [];
+	const conflictingMods = new Set<string>();
+
+	// Parse dependency string and extract dependencies
+	function parseDependencies(
+		dependencyString: string | null
+	): Array<{ name: string; type: 'required' | 'optional' | 'conflict' }> {
+		if (!dependencyString) return [];
+
+		try {
+			const deps = JSON.parse(dependencyString);
+			return deps.map((dep: string) => {
+				const [name, _version] = dep.split(/>=|>/);
+				if (name.startsWith('!')) {
+					return { name: name.slice(1).trim(), type: 'conflict' as const };
+				} else if (name.startsWith('?') || name.startsWith('(?)')) {
+					return { name: name.slice(1).trim(), type: 'optional' as const };
+				} else if (name.startsWith('~')) {
+					return { name: name.slice(1).trim(), type: 'required' as const };
+				} else {
+					return { name: name.trim(), type: 'required' as const };
+				}
+			});
+		} catch {
+			return [];
+		}
+	}
+
+	// Check each enabled mod's dependencies
+	for (const mod of enabledMods) {
+		const dependencies = parseDependencies(mod.dependencies);
+
+		for (const dep of dependencies) {
+			if (dep.type === 'required') {
+				// Skip 'base' dependency as it's always present
+				const baseMods = new Set(['base', 'space-age', 'quality', 'elevated-rails']);
+				if (!baseMods.has(dep.name) && !enabledModNames.has(dep.name)) {
+					if (!missingDependencies.includes(dep.name)) {
+						missingDependencies.push(dep.name);
+					}
+				}
+			} else if (dep.type === 'conflict') {
+				if (enabledModNames.has(dep.name)) {
+					conflicts.push({
+						mod: mod.name,
+						conflictsWith: dep.name
+					});
+					conflictingMods.add(mod.name);
+					conflictingMods.add(dep.name);
+				}
+			}
+		}
+	}
+
+	return {
+		missingDependencies,
+		conflicts,
+		conflictingMods: Array.from(conflictingMods)
+	};
+}
 
 export const actions: Actions = {
 	toggleStatus: async (event) => {

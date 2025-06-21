@@ -5,6 +5,7 @@
 	import ModTable from './ModTable.svelte';
 	import CredentialsWarning from './CredentialsWarning.svelte';
 	import EditableModlistName from './EditableModlistName.svelte';
+	import DependencyValidation from './DependencyValidation.svelte';
 	import { enhance } from '$app/forms';
 	import { Button } from '$lib/components/ui/button';
 	import { TrashIcon } from '@lucide/svelte';
@@ -16,6 +17,7 @@
 	let searchResults = $derived(data.searchResults);
 	let searchQuery = $derived(data.searchQuery);
 	let searchError = $derived(data.searchError);
+	let dependencyValidation = $derived(data.dependencyValidation);
 
 	let showDeleteConfirm = $state(false);
 </script>
@@ -61,5 +63,13 @@
 		<CredentialsWarning />
 	{/if}
 
-	<ModTable {mods} modlistName={modlist?.name || ''} />
+	<DependencyValidation {dependencyValidation} {mods} />
+
+	<ModTable
+		{mods}
+		modlistName={modlist?.name || ''}
+		conflictingMods={[
+			...new Set(dependencyValidation.conflicts.flatMap((c) => [c.mod, c.conflictsWith]))
+		]}
+	/>
 </div>
