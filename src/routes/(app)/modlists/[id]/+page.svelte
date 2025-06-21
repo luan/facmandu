@@ -108,7 +108,7 @@
 	}
 </script>
 
-<Sidebar.Provider style="--sidebar-width: 620px;">
+<Sidebar.Provider cookieName="sidebar:filters" keyboardShortcut="g" style="--sidebar-width: 620px;">
 	<Portal to="#page-header">
 		<div class="flex items-center justify-between gap-4">
 			<EditableModlistName name={modlist?.name || ''} modlistId={modlist?.id || ''} />

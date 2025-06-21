@@ -7,7 +7,8 @@
 		SIDEBAR_COOKIE_MAX_AGE,
 		SIDEBAR_COOKIE_NAME,
 		SIDEBAR_WIDTH,
-		SIDEBAR_WIDTH_ICON
+		SIDEBAR_WIDTH_ICON,
+		SIDEBAR_KEYBOARD_SHORTCUT
 	} from './constants.js';
 	import { setSidebar } from './context.svelte.js';
 
@@ -15,13 +16,15 @@
 	function getInitialOpen() {
 		if (!browser) return true;
 
-		const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${SIDEBAR_COOKIE_NAME}=([^;]*)`));
+		const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${cookieName}=([^;]*)`));
 
 		return match ? match[1] === 'true' : true;
 	}
 
 	let {
 		ref = $bindable(null),
+		cookieName = SIDEBAR_COOKIE_NAME,
+		keyboardShortcut = SIDEBAR_KEYBOARD_SHORTCUT,
 		open = $bindable(getInitialOpen()),
 		onOpenChange = () => {},
 		class: className,
@@ -31,6 +34,8 @@
 	}: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
 		open?: boolean;
 		onOpenChange?: (open: boolean) => void;
+		cookieName?: string;
+		keyboardShortcut?: string;
 	} = $props();
 
 	const sidebar = setSidebar({
@@ -39,9 +44,10 @@
 			open = value;
 			onOpenChange(value);
 
-			// This sets the cookie to keep the sidebar state.
-			document.cookie = `${SIDEBAR_COOKIE_NAME}=${open}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
-		}
+			// Persist sidebar state using the provided cookie name so different providers don't conflict.
+			document.cookie = `${cookieName}=${open}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
+		},
+		keyboardShortcut
 	});
 </script>
 
