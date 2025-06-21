@@ -65,17 +65,33 @@
 
 		try {
 			const deps = JSON.parse(dependencyString) as string[];
-			return deps.map((dep) => {
-				const [name] = dep.split(/>=|>|<=|<|=/);
-				if (name.startsWith('!')) {
-					return name.slice(1).trim(); // conflict – still a dependency for visibility purposes
-				} else if (name.startsWith('?') || name.startsWith('(?)')) {
-					return name.slice(1).trim(); // optional
-				} else if (name.startsWith('~')) {
-					return name.slice(1).trim();
-				}
-				return name.trim();
-			});
+			return (
+				deps
+					.map((dep) => {
+						// Extract the raw name segment before any version specifier
+						const [raw] = dep.split(/>=|>|<=|<|=/);
+						let name = raw.trim();
+
+						// Conflicts (prefixed with '!') are treated as regular dependencies
+						if (name.startsWith('!')) {
+							return name.slice(1).trim();
+						}
+
+						// Ignore optional dependencies (prefixed with '?' or '(?)')
+						if (name.startsWith('?') || name.startsWith('(?)')) {
+							return null;
+						}
+
+						// Incompatibility (~) – treat as regular dependency
+						if (name.startsWith('~')) {
+							return name.slice(1).trim();
+						}
+
+						return name;
+					})
+					// Filter out null entries (optional dependencies)
+					.filter((d): d is string => Boolean(d))
+			);
 		} catch {
 			return [];
 		}
