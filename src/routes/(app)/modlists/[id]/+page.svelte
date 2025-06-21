@@ -12,6 +12,7 @@
 	import { subscribeToModlistUpdates } from '$lib/stores/realtime.svelte';
 	import { onMount, onDestroy } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
+	import * as Dialog from '$lib/components/ui/dialog';
 
 	let { data }: PageProps = $props();
 	let modlist = $derived(data.modlist);
@@ -30,9 +31,8 @@
 	let shareError = $state('');
 	let shareUsername = $state('');
 	let eventSource: EventSource | null = null;
-	let exportDialogOpen = $state(false);
 	let sessionToken = $derived(data.sessionToken);
-	let exportCommand = $state('');
+	let exportCopied = $state(false);
 
 	onMount(() => {
 		if (modlist?.id) {
@@ -79,12 +79,19 @@
 		await invalidateAll();
 	}
 
-	function openExportDialog() {
+	async function copyExportCommand() {
 		if (!modlist?.id) return;
-		// Build one-liner that fetches the generated script from backend and pipes to bash
 		const cookieName = 'auth-session';
-		exportCommand = `curl -H "Cookie: ${cookieName}=${sessionToken}" -sL "${location.origin}/api/modlists/${modlist.id}/export" | bash`;
-		exportDialogOpen = true;
+		const cmd = `curl -H "Cookie: ${cookieName}=${sessionToken}" -sL "${location.origin}/api/modlists/${modlist.id}/export" | bash`;
+		try {
+			await navigator.clipboard.writeText(cmd);
+			exportCopied = true;
+			setTimeout(() => {
+				exportCopied = false;
+			}, 2000);
+		} catch (err) {
+			console.error('Failed to copy export command', err);
+		}
 	}
 </script>
 
@@ -109,18 +116,68 @@
 				</div>
 			{:else}
 				{#if modlist?.owner === currentUserId}
+					<!-- Share Dialog -->
+					<Dialog.Root bind:open={shareDialogOpen}>
+						<Dialog.Trigger>
+							<Button type="button" variant="outline" size="sm">
+								<ShareIcon class="mr-2 h-4 w-4" />
+								Share
+							</Button>
+						</Dialog.Trigger>
+
+						<Dialog.Content class="w-[400px] p-6">
+							<Dialog.Header>
+								<Dialog.Title>Share Modlist</Dialog.Title>
+							</Dialog.Header>
+
+							{#if shareError}
+								<p class="text-destructive mb-2">{shareError}</p>
+							{/if}
+
+							<div class="mb-4 flex gap-2">
+								<input
+									class="flex-1 rounded-sm border bg-transparent px-2 py-1"
+									placeholder="Username"
+									bind:value={shareUsername}
+								/>
+								<Button size="sm" onclick={addCollaborator}>Add</Button>
+							</div>
+
+							<div class="max-h-40 space-y-2 overflow-y-auto">
+								{#each collaborators as c, i (i)}
+									<div class="flex items-center justify-between">
+										<span>{c.username}</span>
+										<Button
+											variant="destructive"
+											size="sm"
+											onclick={() => removeCollaborator(c.id)}
+										>
+											Remove
+										</Button>
+									</div>
+								{/each}
+							</div>
+
+							<Dialog.Footer class="mt-4 text-right">
+								<Dialog.Close>
+									<Button variant="outline" size="sm">Close</Button>
+								</Dialog.Close>
+							</Dialog.Footer>
+						</Dialog.Content>
+					</Dialog.Root>
+
+					<!-- Export Button: copies command to clipboard -->
 					<Button
 						type="button"
 						variant="outline"
 						size="sm"
-						onclick={() => (shareDialogOpen = true)}
+						onclick={copyExportCommand}
+						class={exportCopied ? 'animate-pulse' : ''}
 					>
-						<ShareIcon class="mr-2 h-4 w-4" />
-						Share
-					</Button>
-					<Button type="button" variant="outline" size="sm" onclick={openExportDialog}>
 						<DownloadIcon class="mr-2 h-4 w-4" />
-						Export
+						<span class="inline-block w-34 text-left">
+							{exportCopied ? 'Copied!' : 'Copy Export Command'}
+						</span>
 					</Button>
 				{/if}
 
@@ -155,58 +212,3 @@
 		]}
 	/>
 </div>
-
-<!-- Share Dialog -->
-{#if shareDialogOpen}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-		<div class="bg-background w-[400px] rounded-md p-6 dark:bg-neutral-900">
-			<h2 class="mb-4 text-lg font-semibold">Share Modlist</h2>
-			{#if shareError}
-				<p class="text-destructive mb-2">{shareError}</p>
-			{/if}
-			<div class="mb-4 flex gap-2">
-				<input
-					class="flex-1 rounded-sm border bg-transparent px-2 py-1"
-					placeholder="Username"
-					bind:value={shareUsername}
-				/>
-				<Button size="sm" onclick={addCollaborator}>Add</Button>
-			</div>
-
-			<div class="max-h-40 space-y-2 overflow-y-auto">
-				{#each collaborators as c, i (i)}
-					<div class="flex items-center justify-between">
-						<span>{c.username}</span>
-						<Button variant="destructive" size="sm" onclick={() => removeCollaborator(c.id)}>
-							Remove
-						</Button>
-					</div>
-				{/each}
-			</div>
-
-			<div class="mt-4 text-right">
-				<Button variant="outline" size="sm" onclick={() => (shareDialogOpen = false)}>Close</Button>
-			</div>
-		</div>
-	</div>
-{/if}
-
-<!-- Export Dialog -->
-{#if exportDialogOpen}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-		<div class="bg-background w-[400px] rounded-md p-6 dark:bg-neutral-900">
-			<h2 class="mb-4 text-lg font-semibold">Export Modlist</h2>
-			<div class="mb-4">
-				<textarea
-					class="flex-1 rounded-sm border bg-transparent px-2 py-1"
-					readonly
-					bind:value={exportCommand}
-				></textarea>
-			</div>
-			<div class="mt-4 text-right">
-				<Button variant="outline" size="sm" onclick={() => (exportDialogOpen = false)}>Close</Button
-				>
-			</div>
-		</div>
-	</div>
-{/if}
