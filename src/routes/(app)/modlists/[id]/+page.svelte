@@ -14,6 +14,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import LiveCursors from './LiveCursors.svelte';
+	import { browser } from '$app/environment';
 
 	let { data }: PageProps = $props();
 	let modlist = $derived(data.modlist);
@@ -68,11 +69,14 @@
 		}).catch(() => {});
 	}
 
-	const handlePointerMove = throttle((e: PointerEvent) => {
-		const x = e.clientX / window.innerWidth;
-		const y = e.clientY / window.innerHeight;
-		sendCursorPosition(x, y);
-	}, 80);
+	// Prevent SSR errors: only access window in browser context
+	const handlePointerMove = browser
+		? throttle((e: PointerEvent) => {
+				const x = e.clientX / window.innerWidth;
+				const y = e.clientY / window.innerHeight;
+				sendCursorPosition(x, y);
+			}, 80)
+		: () => {};
 
 	const cleanupStaleCursors = () => {
 		const now = Date.now();
@@ -128,7 +132,9 @@
 			unsubscribeRealtime();
 		}
 		eventSource?.close();
-		window.removeEventListener('pointermove', handlePointerMove);
+		if (browser) {
+			window.removeEventListener('pointermove', handlePointerMove);
+		}
 	});
 
 	function handleRealtimeUpdate() {
