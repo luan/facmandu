@@ -58,6 +58,54 @@
 		}
 	}
 
+	// Helper to parse dependency strings similar to server logic
+	function parseDependencies(dependencyString: string | null): string[] {
+		if (!dependencyString) return [];
+
+		try {
+			const deps = JSON.parse(dependencyString) as string[];
+			return deps.map((dep) => {
+				const [name] = dep.split(/>=|>/);
+				if (name.startsWith('!')) {
+					return name.slice(1).trim(); // conflict – still a dependency for visibility purposes
+				} else if (name.startsWith('?') || name.startsWith('(?)')) {
+					return name.slice(1).trim(); // optional
+				} else if (name.startsWith('~')) {
+					return name.slice(1).trim();
+				}
+				return name.trim();
+			});
+		} catch {
+			return [];
+		}
+	}
+
+	// Reactive set of mods that are dependencies of other enabled mods
+	const dependencySet = $derived(
+		(() => {
+			const deps = new Set<string>();
+			const baseMods = new Set(['base', 'space-age', 'quality', 'elevated-rails']);
+
+			for (const mod of mods) {
+				if (!mod.enabled) continue;
+				for (const dep of parseDependencies(mod.dependencies)) {
+					if (!baseMods.has(dep)) {
+						deps.add(dep);
+					}
+				}
+			}
+			return deps;
+		})()
+	);
+
+	// State to control hiding of dependency mods
+	let hideDependencies = $state(false);
+
+	// Filtered list based on hide toggle
+	const visibleMods = $derived(
+		hideDependencies ? mods.filter((m) => !dependencySet.has(m.name)) : mods
+	);
+
 	const columns: ColumnDef<Mod>[] = [
 		{
 			id: 'thumbnail',
@@ -83,7 +131,10 @@
 			},
 			cell: ({ row }) => {
 				const mod = row.original;
-				return renderComponent(StatusCell, { mod });
+				return renderComponent(StatusCell, {
+					mod,
+					isDependency: dependencySet.has(mod.name)
+				});
 			},
 			size: 80
 		},
@@ -237,7 +288,7 @@
 
 	const table = createSvelteTable({
 		get data() {
-			return mods;
+			return visibleMods;
 		},
 		columns,
 		getCoreRowModel: getCoreRowModel(),
@@ -311,6 +362,12 @@
 							oninput={(e) => table.getColumn('name')?.setFilterValue(e.currentTarget.value)}
 							class="max-w-sm"
 						/>
+
+						<!-- Hide dependencies toggle -->
+						<label class="flex items-center gap-2 text-sm">
+							<input type="checkbox" bind:checked={hideDependencies} />
+							Hide dependencies
+						</label>
 					</div>
 
 					<!-- Data Table -->

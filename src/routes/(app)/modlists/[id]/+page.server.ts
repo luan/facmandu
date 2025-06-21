@@ -225,10 +225,60 @@ export const actions: Actions = {
 		if (!modID) {
 			return fail(400);
 		}
-		const mod = await db.select().from(table.mod).where(eq(table.mod.id, modID)).get();
+		const mod = await db
+			.select({
+				id: table.mod.id,
+				name: table.mod.name,
+				enabled: table.mod.enabled,
+				modlist: table.mod.modlist
+			})
+			.from(table.mod)
+			.where(eq(table.mod.id, modID))
+			.get();
+
 		if (!mod) {
 			return fail(404);
 		}
+
+		// If we are attempting to disable this mod, ensure it is not a required dependency of another enabled mod
+		if (mod.enabled) {
+			// Fetch all enabled mods in the same modlist (excluding the target mod)
+			const enabledMods = await db
+				.select({ name: table.mod.name, dependencies: table.mod.dependencies })
+				.from(table.mod)
+				.where(and(eq(table.mod.modlist, mod.modlist), eq(table.mod.enabled, true)));
+
+			// Helper to parse dependencies (same logic as on client)
+			const parseDependencies = (dependencyString: string | null): string[] => {
+				if (!dependencyString) return [];
+				try {
+					const deps = JSON.parse(dependencyString) as string[];
+					return deps.map((dep) => {
+						const [name] = dep.split(/>=|>/);
+						if (name.startsWith('!')) {
+							return name.slice(1).trim();
+						} else if (name.startsWith('?') || name.startsWith('(?)')) {
+							return name.slice(1).trim();
+						} else if (name.startsWith('~')) {
+							return name.slice(1).trim();
+						}
+						return name.trim();
+					});
+				} catch {
+					return [];
+				}
+			};
+
+			const isRequired = enabledMods.some((m) => {
+				if (m.name === mod.name) return false;
+				return parseDependencies(m.dependencies).includes(mod.name);
+			});
+
+			if (isRequired) {
+				return fail(400, { message: 'Cannot disable a required dependency' });
+			}
+		}
+
 		await db
 			.update(table.mod)
 			.set({ enabled: !mod.enabled, updatedBy: event.locals.session.userId })

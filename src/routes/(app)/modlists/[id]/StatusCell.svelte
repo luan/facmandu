@@ -7,9 +7,14 @@
 
 	interface Props {
 		mod: Mod;
+		/**
+		 * Whether this mod is a dependency of another enabled mod.
+		 * If true and the mod is already enabled, it cannot be disabled.
+		 */
+		isDependency?: boolean;
 	}
 
-	let { mod }: Props = $props();
+	let { mod, isDependency = false }: Props = $props();
 
 	const handleToggle: SubmitFunction = () => {
 		return async ({ result, update }) => {
@@ -30,6 +35,8 @@
 		variant={mod.enabled ? 'default' : 'outline'}
 		size="sm"
 		class="h-6 px-2 text-xs"
+		disabled={mod.enabled && isDependency}
+		title={mod.enabled && isDependency ? 'Cannot disable required dependency' : undefined}
 	>
 		{mod.enabled ? 'On' : 'Off'}
 	</Button>
