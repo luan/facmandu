@@ -7,11 +7,12 @@
 
 <Sheet.Root bind:open>
 	<Sheet.Content side="right" class="flex w-full !max-w-[800px] flex-col sm:w-[800px]">
-		<Sheet.Header>
-			<Sheet.Title>{modName}</Sheet.Title>
-		</Sheet.Header>
 		{#if modName}
-			<iframe src={`https://mods.factorio.com/mod/${modName}`} class="h-full w-full flex-1" />
+			<iframe
+				src={`https://mods.factorio.com/mod/${modName}`}
+				title={`Preview of ${modName}`}
+				class="h-full w-full flex-1"
+			></iframe>
 		{/if}
 	</Sheet.Content>
 </Sheet.Root>
