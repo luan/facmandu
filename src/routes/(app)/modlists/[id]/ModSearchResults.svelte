@@ -192,7 +192,7 @@
 					<div class="mb-1">
 						<a
 							href={`https://mods.factorio.com/mod/${result.name}`}
-							class="text-foreground truncate text-left text-lg font-semibold"
+							class="text-foreground block min-w-0 truncate text-left text-lg font-semibold"
 							onclick={(e) => {
 								if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
 									e.preventDefault();
