@@ -20,9 +20,11 @@ A web application for managing Factorio mod lists with integration to the Factor
 ## Setup
 
 1. Clone the repository
-2. Install dependencies: `npm install`
-3. Set up your database URL in `.env`
-4. Push database schema: `npm run db:push`
+2. Install dependencies: `bun install`
+3. Configure your database in `.env`
+   - **SQLite (local development)**: `DATABASE_URL="file:./db.sqlite"`
+   - **Turso (production/remote)**: set `TURSO_CONNECTION_URL="libsql://<host>.turso.io"` and `TURSO_AUTH_TOKEN="<token>"`
+4. Push database schema: `bun run db:push`
 5. Configure your Factorio credentials in the settings page
 
 ## Developing
@@ -30,10 +32,10 @@ A web application for managing Factorio mod lists with integration to the Factor
 Start a development server:
 
 ```bash
-npm run dev
+bun run dev
 
 # or start the server and open the app in a new browser tab
-npm run dev -- --open
+bun run dev -- --open
 ```
 
 ## Database
@@ -42,13 +44,13 @@ The application uses Drizzle ORM with SQLite. Run database commands:
 
 ```bash
 # Push schema changes
-npm run db:push
+bun run db:push
 
 # Generate migrations
-npm run db:migrate
+bun run db:migrate
 
 # Open database studio
-npm run db:studio
+bun run db:studio
 ```
 
 ## Building
@@ -56,9 +58,41 @@ npm run db:studio
 To create a production version of your app:
 
 ```bash
-npm run build
+bun run build
 ```
 
-You can preview the production build with `npm run preview`.
+You can preview the production build with `bun run preview`.
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+## Deployment
+
+This project can be deployed anywhere Bun&nbsp;apps run. Two common approaches are Docker and Fly.io.
+
+### Docker
+
+```bash
+docker build -t factorio-manager .
+
+# SQLite (volume mount example)
+docker run -p 3000:3000 -v $(pwd)/data:/app/data \
+  -e DATABASE_URL="file:/app/data/db.sqlite" factorio-manager
+
+# Turso (libsql) example
+docker run -p 3000:3000 \
+  -e TURSO_CONNECTION_URL="libsql://<host>.turso.io" \
+  -e TURSO_AUTH_TOKEN="<token>" factorio-manager
+```
+
+### Fly.io
+
+```bash
+# Initial setup (one-time)
+fly launch --no-deploy
+
+# Set secrets for Turso if using it
+a fly secrets set TURSO_CONNECTION_URL="libsql://<host>.turso.io" TURSO_AUTH_TOKEN="<token>"
+
+# Deploy
+fly deploy
+```
+
+After deployment the application listens on port&nbsp;3000 by default.
