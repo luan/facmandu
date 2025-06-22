@@ -118,7 +118,7 @@
 </script>
 
 {#if searchResults.length > 0}
-	<div class="space-y-6 overflow-y-auto">
+	<div class="space-y-6">
 		{#each searchResults as result (result.name)}
 			<div class="hover:bg-muted/50 flex gap-4 rounded-lg border p-4 transition-colors">
 				<!-- Mod Thumbnail -->
