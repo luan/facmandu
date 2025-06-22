@@ -1,5 +1,5 @@
 import { eq, or } from 'drizzle-orm';
-import { fail, type Actions } from '@sveltejs/kit';
+import { fail, redirect, type Actions } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
 import { genID } from '$lib/server/db/ids';
@@ -83,7 +83,7 @@ export const actions: Actions = {
 
 export const load: PageServerLoad = async (event) => {
 	if (!event.locals.user) {
-		throw error(401, 'Unauthorized');
+		throw redirect(303, `/login?redirectTo=/`);
 	}
 
 	// Retrieve all modlists the user owns or collaborates on

@@ -8,7 +8,7 @@
 
 <div class="[--header-height:calc(--spacing(14))]">
 	<Sidebar.Provider open={data.sidebarOpen} class="flex flex-col">
-		<AppHeader username={data.user.username} />
+		<AppHeader username={data.user?.username ?? ''} />
 
 		<div class="flex flex-1">
 			<Sidebar.Root class="top-(--header-height) h-[calc(100svh-var(--header-height))]!">

@@ -39,20 +39,22 @@
 			</DropdownMenu.Root>
 		{/if}
 
-		<DropdownMenu.Root>
-			<DropdownMenu.Trigger class={buttonVariants({ variant: 'secondary' })}
-				><UserIcon />{username}
-				<ChevronDownIcon />
-			</DropdownMenu.Trigger>
-			<DropdownMenu.Content>
-				<DropdownMenu.Group>
-					<DropdownMenu.Item
-						><Button variant="ghost" href="/settings"><SettingsIcon />Settings</Button
-						></DropdownMenu.Item
-					>
-					<DropdownMenu.Item><LogoutLink /></DropdownMenu.Item>
-				</DropdownMenu.Group>
-			</DropdownMenu.Content>
-		</DropdownMenu.Root>
+		{#if username}
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger class={buttonVariants({ variant: 'secondary' })}
+					><UserIcon />{username}
+					<ChevronDownIcon />
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content>
+					<DropdownMenu.Group>
+						<DropdownMenu.Item
+							><Button variant="ghost" href="/settings"><SettingsIcon />Settings</Button
+							></DropdownMenu.Item
+						>
+						<DropdownMenu.Item><LogoutLink /></DropdownMenu.Item>
+					</DropdownMenu.Group>
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
+		{/if}
 	</div>
 </header>

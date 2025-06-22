@@ -20,16 +20,23 @@ type SearchResult = {
 };
 
 export const load: PageServerLoad = async (event) => {
-	if (!event.locals.session) {
-		return error(401, { message: 'unauthorized' });
+	// Determine if this modlist is public read-only
+	const modlistVisibility = await db
+		.select({ owner: table.modList.owner, publicRead: table.modList.publicRead })
+		.from(table.modList)
+		.where(eq(table.modList.id, event.params.id))
+		.get();
+
+	if (!modlistVisibility) {
+		return error(404, { message: 'modlist not found' });
 	}
 
-	// Check user has access to this modlist (owner or collaborator)
-	const hasAccess = await userHasModlistAccess(
-		event.locals.session.userId,
-		event.params.id as string
-	);
-	if (!hasAccess) {
+	let hasAccess = false;
+	if (event.locals.session) {
+		hasAccess = await userHasModlistAccess(event.locals.session.userId, event.params.id as string);
+	}
+
+	if (!hasAccess && !modlistVisibility.publicRead) {
 		return error(403, { message: 'Access denied' });
 	}
 
@@ -210,7 +217,7 @@ export const load: PageServerLoad = async (event) => {
 		dependencyValidation,
 		iceboxMods,
 		collaborators,
-		currentUserId: event.locals.session.userId,
+		currentUserId: event.locals.session?.userId,
 		sessionToken: event.cookies.get('auth-session'),
 		currentPage,
 		totalPages
@@ -644,6 +651,35 @@ export const actions: Actions = {
 			);
 
 		return { success: true };
+	},
+
+	// Toggle global read-only sharing
+	sharePublic: async (event) => {
+		const userId = await ensureModlistAccess(event, event.params.id as string);
+
+		const modlistId = event.params.id as string;
+
+		// Verify owner
+		const modlist = await db
+			.select({ owner: table.modList.owner })
+			.from(table.modList)
+			.where(eq(table.modList.id, modlistId))
+			.get();
+
+		if (!modlist || modlist.owner !== userId) {
+			return fail(403, { message: 'Only the owner can change public sharing' });
+		}
+
+		const formData = await event.request.formData();
+		const enabledStr = formData.get('enabled')?.toString() ?? 'false';
+		const enabled = enabledStr === 'true' || enabledStr === '1' || enabledStr === 'on';
+
+		await db
+			.update(table.modList)
+			.set({ publicRead: enabled })
+			.where(eq(table.modList.id, modlistId));
+
+		return { success: true, publicRead: enabled };
 	},
 
 	// Toggle the essential (locked) status of a mod

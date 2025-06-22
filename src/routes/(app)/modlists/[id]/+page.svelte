@@ -41,6 +41,9 @@
 	let sessionToken = $derived(data.sessionToken);
 	let exportCopied = $state(false);
 
+	// Public read-only sharing state
+	let isPublicRead = $derived(modlist?.publicRead ?? false);
+
 	type Viewer = {
 		id: string;
 		username: string;
@@ -226,6 +229,26 @@
 									{/each}
 								</div>
 
+								<!-- Public read-only toggle -->
+								<form
+									method="POST"
+									action="?/sharePublic"
+									use:enhance
+									class="mt-4 flex items-center gap-2"
+								>
+									<input
+										id="public-read"
+										type="checkbox"
+										name="enabled"
+										value="true"
+										bind:checked={isPublicRead}
+									/>
+									<label for="public-read" class="flex-1 text-sm"
+										>Make modlist public (read-only)</label
+									>
+									<Button size="sm" type="submit">Save</Button>
+								</form>
+
 								<Dialog.Footer class="mt-4 text-right">
 									<Dialog.Close>
 										<Button variant="outline" size="sm">Close</Button>
@@ -250,17 +273,17 @@
 								>
 							</DropdownMenu.Content>
 						</DropdownMenu.Root>
-					{/if}
 
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						onclick={() => (showDeleteConfirm = true)}
-					>
-						<TrashIcon class="mr-2 h-4 w-4" />
-						Delete Modlist
-					</Button>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							onclick={() => (showDeleteConfirm = true)}
+						>
+							<TrashIcon class="mr-2 h-4 w-4" />
+							Delete Modlist
+						</Button>
+					{/if}
 
 					<Sidebar.Trigger variant="ghost" size="sm" flipped>Filters</Sidebar.Trigger>
 				{/if}

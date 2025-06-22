@@ -27,7 +27,8 @@ export const modList = sqliteTable('modlist', {
 	owner: text('user_id')
 		.notNull()
 		.references(() => user.id, { onDelete: 'cascade' }),
-	name: text('name').notNull()
+	name: text('name').notNull(),
+	publicRead: integer('public_read', { mode: 'boolean' })
 });
 
 export type ModList = typeof modList.$inferSelect;
