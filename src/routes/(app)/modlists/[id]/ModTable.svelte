@@ -25,7 +25,6 @@
 	import ActionsCell from './ActionsCell.svelte';
 	import StatusCell from './StatusCell.svelte';
 	import CategoryCell from './CategoryCell.svelte';
-	import VersionCell from './VersionCell.svelte';
 	import DownloadsCell from './DownloadsCell.svelte';
 	import UpdatedCell from './UpdatedCell.svelte';
 	import SortableHeader from './SortableHeader.svelte';
@@ -135,7 +134,7 @@
 				});
 			},
 			sortingFn: statusSortingFn,
-			size: 80
+			size: 140
 		},
 		{
 			accessorKey: 'name',
@@ -152,6 +151,7 @@
 				const mod = row.original;
 				return renderComponent(ModInfoCell, {
 					mod: mod as unknown as Mod,
+					version: mod.version,
 					onOpenPreview: openModPreview
 				});
 			},
@@ -173,23 +173,6 @@
 				return renderComponent(CategoryCell, { category });
 			},
 			size: 120
-		},
-		{
-			accessorKey: 'version',
-			header: ({ header }) => {
-				const versionHeaderSnippet = createRawSnippet(() => ({
-					render: () => 'Version'
-				}));
-				return renderComponent(SortableHeader, {
-					header,
-					children: versionHeaderSnippet
-				});
-			},
-			cell: ({ row }) => {
-				const version = row.getValue('version') as string | null;
-				return renderComponent(VersionCell, { version });
-			},
-			size: 100
 		},
 		{
 			accessorKey: 'downloadsCount',

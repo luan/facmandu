@@ -5,10 +5,11 @@
 
 	interface Props {
 		mod: Mod;
+		version: string | null;
 		onOpenPreview?: (modName: string) => void;
 	}
 
-	let { mod, onOpenPreview }: Props = $props();
+	let { mod, version, onOpenPreview }: Props = $props();
 
 	let modPortalUrl = $derived(`https://mods.factorio.com/mod/${mod.name}`);
 
@@ -40,7 +41,12 @@
 				</Tooltip.Trigger>
 				<Tooltip.Content class="max-w-80">
 					<div class="space-y-2">
-						<p class="font-semibold">{mod.title || mod.name}</p>
+						<p class="font-semibold">
+							{mod.title || mod.name}
+							{#if version}
+								<span class="text-muted-foreground text-xs">({version})</span>
+							{/if}
+						</p>
 						<p class="text-sm">{mod.summary}</p>
 						<p class="text-muted-foreground text-xs">Click to view on Factorio Mod Portal</p>
 					</div>
