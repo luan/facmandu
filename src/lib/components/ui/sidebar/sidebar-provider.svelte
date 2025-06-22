@@ -14,11 +14,12 @@
 
 	// Determine the initial open state from the persisted cookie (client-side only)
 	function getInitialOpen() {
-		if (!browser) return true;
+		if (!browser) return false;
 
 		const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${cookieName}=([^;]*)`));
 
-		return match ? match[1] === 'true' : true;
+		// If no cookie is found, default to a collapsed (closed) sidebar.
+		return match ? match[1] === 'true' : false;
 	}
 
 	let {

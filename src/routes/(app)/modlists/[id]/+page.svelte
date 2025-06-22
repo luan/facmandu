@@ -44,6 +44,12 @@
 	// Public read-only sharing state
 	let isPublicRead = $derived(modlist?.publicRead ?? false);
 
+	// Determine if the current user is the owner or a collaborator
+	let isCollaborator = $derived(
+		modlist?.owner === currentUserId ||
+			(collaborators?.some((c) => c.id === currentUserId) ?? false)
+	);
+
 	type Viewer = {
 		id: string;
 		username: string;
@@ -160,7 +166,7 @@
 			<div class="flex items-center gap-3">
 				<EditableModlistName name={modlist?.name || ''} modlistId={modlist?.id || ''} />
 
-				{#if activeViewers.length}
+				{#if activeViewers.length && isCollaborator}
 					<div class="text-muted-foreground flex items-center gap-1 text-xs">
 						<span>Viewing:</span>
 						{#each activeViewers as viewer (viewer.id)}
