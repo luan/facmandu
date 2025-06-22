@@ -36,6 +36,13 @@
 	let sessionToken = $derived(data.sessionToken);
 	let exportCopied = $state(false);
 
+	type Viewer = {
+		id: string;
+		username: string;
+	};
+
+	let activeViewers = $state<Viewer[]>([]);
+
 	function handleRealtimeUpdate() {
 		// Invalidate all data to refresh from server
 		// This ensures we get the latest state including dependency validation
@@ -53,7 +60,9 @@
 			eventSource.onmessage = (ev) => {
 				try {
 					const payload = JSON.parse(ev.data);
-					if (payload.type !== 'ping') {
+					if (payload.type === 'presence-update' || payload.type === 'presence-init') {
+						activeViewers = payload.data.viewers || [];
+					} else if (payload.type !== 'ping') {
 						handleRealtimeUpdate();
 					}
 				} catch {
@@ -111,7 +120,18 @@
 <Sidebar.Provider cookieName="sidebar:filters" keyboardShortcut="g" style="--sidebar-width: 620px;">
 	<Portal to="#page-header">
 		<div class="flex items-center justify-between gap-4">
-			<EditableModlistName name={modlist?.name || ''} modlistId={modlist?.id || ''} />
+			<div class="flex items-center gap-3">
+				<EditableModlistName name={modlist?.name || ''} modlistId={modlist?.id || ''} />
+
+				{#if activeViewers.length}
+					<div class="text-muted-foreground flex items-center gap-1 text-xs">
+						<span>Viewing:</span>
+						{#each activeViewers as viewer (viewer.id)}
+							<span class="text-foreground font-medium">{viewer.username}</span>
+						{/each}
+					</div>
+				{/if}
+			</div>
 			<div class="flex items-center gap-2">
 				{#if showDeleteConfirm}
 					<div class="flex items-center gap-2">
