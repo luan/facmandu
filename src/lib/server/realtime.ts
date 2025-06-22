@@ -1,35 +1,38 @@
 import { EventEmitter } from 'events';
 
 // Ensure a single instance across hot reloads (important for dev)
-const getEmitter = (): EventEmitter => {
-	const globalKey = '__modlistRealtimeEmitter__';
-	// @ts-ignore
-	const globalAny = global as any;
-	if (!globalAny[globalKey]) {
-		globalAny[globalKey] = new EventEmitter();
-	}
-	return globalAny[globalKey] as EventEmitter;
+type GlobalWithEmitter = typeof global & {
+	__modlistRealtimeEmitter__?: EventEmitter;
 };
 
-const emitter = getEmitter();
+// Cast global to extended type to store a singleton emitter across reloads
+const globalWithEmitter = global as GlobalWithEmitter;
+
+function getEmitter(): EventEmitter {
+	const globalKey = '__modlistRealtimeEmitter__';
+	if (!globalWithEmitter[globalKey]) {
+		globalWithEmitter[globalKey] = new EventEmitter();
+	}
+	return globalWithEmitter[globalKey];
+}
 
 export interface ModlistServerEvent {
 	type: string;
-	data?: any;
+	data?: unknown;
 	timestamp: number;
 }
 
-export function publishModlistEvent(modlistId: string, type: string, data: any = {}): void {
+export function publishModlistEvent(modlistId: string, type: string, data: unknown = {}): void {
 	const payload: ModlistServerEvent = { type, data, timestamp: Date.now() };
-	emitter.emit(modlistId, JSON.stringify(payload));
+	getEmitter().emit(modlistId, JSON.stringify(payload));
 }
 
 export function addModlistListener(
 	modlistId: string,
 	listener: (payload: string) => void
 ): () => void {
-	emitter.on(modlistId, listener);
-	return () => emitter.off(modlistId, listener);
+	getEmitter().on(modlistId, listener);
+	return () => getEmitter().off(modlistId, listener);
 }
 
 // PRESENCE MANAGEMENT START

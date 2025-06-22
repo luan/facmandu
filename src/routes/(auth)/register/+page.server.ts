@@ -1,5 +1,4 @@
 import { hash } from '@node-rs/argon2';
-import { encodeBase32LowerCase } from '@oslojs/encoding';
 import { fail, redirect } from '@sveltejs/kit';
 import * as auth from '$lib/server/auth';
 import { db } from '$lib/server/db';
@@ -45,7 +44,8 @@ export const actions: Actions = {
 			const sessionToken = auth.generateSessionToken();
 			const session = await auth.createSession(sessionToken, userId);
 			auth.setSessionTokenCookie(event, sessionToken, session.expiresAt);
-		} catch (e) {
+		} catch (error) {
+			console.error('Register error:', error);
 			return fail(500, { message: 'An error has occurred' });
 		}
 

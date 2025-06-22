@@ -9,7 +9,8 @@ import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
 import { schema } from './schema';
 
-export const load: PageServerLoad = async (event) => {
+export const load: PageServerLoad = async (_event) => {
+	void _event;
 	const user = requireLogin();
 
 	// Get current user data including Factorio credentials
@@ -80,7 +81,8 @@ export const actions: Actions = {
 					message: 'Factorio credentials updated successfully!'
 				}
 			};
-		} catch (error) {
+		} catch (err) {
+			console.error('Update Factorio credentials error:', err);
 			return fail(500, {
 				form: {
 					...form,
@@ -92,7 +94,7 @@ export const actions: Actions = {
 };
 
 function requireLogin() {
-	const { locals, url } = getRequestEvent();
+	const { locals } = getRequestEvent();
 
 	if (!locals.user) {
 		throw new Error('User not authenticated');

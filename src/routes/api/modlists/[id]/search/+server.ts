@@ -59,7 +59,8 @@ export const GET: RequestHandler = async (event) => {
 		'trending'
 	] as const;
 	const sortAttribute =
-		sortAttrParam && validSortAttributes.includes(sortAttrParam as any)
+		sortAttrParam &&
+		validSortAttributes.includes(sortAttrParam as (typeof validSortAttributes)[number])
 			? (sortAttrParam as (typeof validSortAttributes)[number])
 			: 'last_updated_at';
 
@@ -97,7 +98,8 @@ export const GET: RequestHandler = async (event) => {
 		}
 
 		return json({ results, currentPage, totalPages });
-	} catch (err) {
+	} catch (error) {
+		console.error('Factorio search failed:', error);
 		return json({ message: 'search failed' }, { status: 500 });
 	}
 };

@@ -1,4 +1,3 @@
-import * as table from '$lib/server/db/schema';
 import { encodeBase32LowerCase } from '@oslojs/encoding';
 
 export function genID(prefix: string) {

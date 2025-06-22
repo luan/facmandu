@@ -7,7 +7,8 @@ import { superValidate } from 'sveltekit-superforms';
 import { zod } from 'sveltekit-superforms/adapters';
 import { formSchema } from './schema';
 
-export const load: PageServerLoad = async (event) => {
+export const load: PageServerLoad = async (_event) => {
+	void _event;
 	return {
 		form: await superValidate(zod(formSchema))
 	};
@@ -33,7 +34,7 @@ export const actions: Actions = {
 		let modlistJSON: ModListJSON;
 		try {
 			modlistJSON = JSON.parse(form.data.json);
-		} catch (e) {
+		} catch {
 			return fail(400, { message: 'Invalid JSON' });
 		}
 
@@ -50,7 +51,8 @@ export const actions: Actions = {
 						modlistJSON.mods.map((mod) => ({ id: genID('mod'), modlist: modlist.id, ...mod }))
 					);
 			});
-		} catch (e) {
+		} catch (error) {
+			console.error('Create modlist error:', error);
 			return fail(500, { message: 'An error has occurred' });
 		}
 		return redirect(302, '/');

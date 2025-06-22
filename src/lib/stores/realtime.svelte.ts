@@ -1,15 +1,17 @@
 import { browser } from '$app/environment';
 
+type RealtimeEventData = Record<string, unknown>;
+
 type RealtimeEvent = {
 	type: 'modlist-updated' | 'mod-toggled' | 'mod-added' | 'mod-removed' | 'modlist-name-updated';
 	modlistId: string;
-	data: any;
+	data: RealtimeEventData;
 	timestamp: number;
 };
 
 class RealtimeManager {
 	private broadcastChannel: BroadcastChannel | null = null;
-	private listeners: Map<string, Set<(data: any) => void>> = new Map();
+	private listeners: Map<string, Set<(data: RealtimeEventData) => void>> = new Map();
 	private storageKey = 'factorio-manager-realtime';
 
 	constructor() {
@@ -59,7 +61,7 @@ class RealtimeManager {
 		}
 	}
 
-	public subscribe(eventType: string, listener: (data: any) => void) {
+	public subscribe(eventType: string, listener: (data: RealtimeEventData) => void) {
 		if (!this.listeners.has(eventType)) {
 			this.listeners.set(eventType, new Set());
 		}
@@ -95,7 +97,7 @@ class RealtimeManager {
 			setTimeout(() => {
 				try {
 					localStorage.removeItem(this.storageKey);
-				} catch (error) {
+				} catch {
 					// Ignore errors when clearing storage
 				}
 			}, 100);
@@ -116,7 +118,10 @@ class RealtimeManager {
 export const realtimeManager = new RealtimeManager();
 
 // Convenience functions for common operations
-export function subscribeToModlistUpdates(modlistId: string, callback: (data: any) => void) {
+export function subscribeToModlistUpdates(
+	modlistId: string,
+	callback: (data: RealtimeEventData) => void
+) {
 	const unsubscribeFunctions = [
 		realtimeManager.subscribe(`modlist-updated:${modlistId}`, callback),
 		realtimeManager.subscribe(`mod-toggled:${modlistId}`, callback),
@@ -138,7 +143,7 @@ export function broadcastModToggled(modlistId: string, modId: string, enabled: b
 	});
 }
 
-export function broadcastModAdded(modlistId: string, mod: any) {
+export function broadcastModAdded(modlistId: string, mod: RealtimeEventData) {
 	realtimeManager.broadcast({
 		type: 'mod-added',
 		modlistId,
@@ -162,7 +167,7 @@ export function broadcastModlistNameUpdated(modlistId: string, name: string) {
 	});
 }
 
-export function broadcastModlistUpdated(modlistId: string, mods: any[]) {
+export function broadcastModlistUpdated(modlistId: string, mods: RealtimeEventData[]) {
 	realtimeManager.broadcast({
 		type: 'modlist-updated',
 		modlistId,

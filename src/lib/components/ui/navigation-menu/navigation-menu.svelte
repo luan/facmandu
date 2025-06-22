@@ -5,8 +5,9 @@
 	let {
 		ref = $bindable(null),
 		class: className,
+		children,
 		...restProps
-	}: NavigationMenuPrimitive.RootProps = $props();
+	}: NavigationMenuPrimitive.RootProps & { children?: () => unknown } = $props();
 </script>
 
 <NavigationMenuPrimitive.Root
@@ -14,5 +15,5 @@
 	class={cn('relative z-10 flex max-w-max flex-1 items-center justify-center', className)}
 	{...restProps}
 >
-	<slot />
+	{@render children?.()}
 </NavigationMenuPrimitive.Root>

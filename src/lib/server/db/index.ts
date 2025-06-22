@@ -34,11 +34,7 @@ export interface FactorioModInfo {
 	};
 }
 
-export async function fetchModInfo(
-	modName: string,
-	username?: string,
-	token?: string
-): Promise<FactorioModInfo | null> {
+export async function fetchModInfo(modName: string): Promise<FactorioModInfo | null> {
 	try {
 		const url = `https://mods.factorio.com/api/mods/${modName}/full`;
 		const response = await fetch(url);
@@ -57,14 +53,9 @@ export async function fetchModInfo(
 	}
 }
 
-export async function updateModCache(
-	modId: string,
-	modName: string,
-	username?: string,
-	token?: string
-): Promise<void> {
+export async function updateModCache(modId: string, modName: string): Promise<void> {
 	try {
-		const modInfo = await fetchModInfo(modName, username, token);
+		const modInfo = await fetchModInfo(modName);
 
 		if (!modInfo) {
 			// Update with fetch error
@@ -113,16 +104,12 @@ export async function updateModCache(
 	}
 }
 
-export async function refreshModsCache(
-	modlistId: string,
-	username?: string,
-	token?: string
-): Promise<void> {
+export async function refreshModsCache(modlistId: string): Promise<void> {
 	try {
 		const mods = await db.select().from(schema.mod).where(eq(schema.mod.modlist, modlistId));
 
 		// Update all mods in parallel
-		await Promise.all(mods.map((mod) => updateModCache(mod.id, mod.name, username, token)));
+		await Promise.all(mods.map((mod) => updateModCache(mod.id, mod.name)));
 	} catch (error) {
 		console.error('Error refreshing mods cache:', error);
 	}

@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { HTMLAttributes } from "svelte/elements";
-	import type { WithElementRef } from "bits-ui";
-	import { cn } from "$lib/utils.js";
+	import type { HTMLAttributes } from 'svelte/elements';
+	import type { WithElementRef } from 'bits-ui';
+	import { cn } from '$lib/utils.js';
 
 	let {
 		ref = $bindable(null),
@@ -14,7 +14,7 @@
 <tfoot
 	bind:this={ref}
 	data-slot="table-footer"
-	class={cn("bg-muted/50 border-t font-medium [&>tr]:last:border-b-0", className)}
+	class={cn('bg-muted/50 border-t font-medium [&>tr]:last:border-b-0', className)}
 	{...restProps}
 >
 	{@render children?.()}

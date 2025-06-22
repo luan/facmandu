@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { HTMLTableAttributes } from "svelte/elements";
-	import type { WithElementRef } from "bits-ui";
-	import { cn } from "$lib/utils.js";
+	import type { HTMLTableAttributes } from 'svelte/elements';
+	import type { WithElementRef } from 'bits-ui';
+	import { cn } from '$lib/utils.js';
 
 	let {
 		ref = $bindable(null),
@@ -15,7 +15,7 @@
 	<table
 		bind:this={ref}
 		data-slot="table"
-		class={cn("w-full caption-bottom text-sm", className)}
+		class={cn('w-full caption-bottom text-sm', className)}
 		{...restProps}
 	>
 		{@render children?.()}

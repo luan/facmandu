@@ -5,7 +5,6 @@ import type { LayoutServerLoad } from './$types';
 
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
-import { genID } from '$lib/server/db/ids';
 import { SIDEBAR_COOKIE_NAME } from '$lib/components/ui/sidebar/constants.js';
 
 export const load: LayoutServerLoad = async () => {
@@ -23,7 +22,8 @@ export const load: LayoutServerLoad = async () => {
 	const modListMap = new Map<string, typeof table.modList.$inferSelect>();
 	for (const row of modListRows) {
 		// When using joins, Drizzle returns an object with keys matching table names
-		const ml = (row as any).modlist ?? (row as any); // fallback if structure different
+		const mlCandidate = (row as unknown as { modlist?: typeof table.modList.$inferSelect }).modlist;
+		const ml = mlCandidate ?? (row as unknown as typeof table.modList.$inferSelect);
 		if (ml && !modListMap.has(ml.id)) {
 			modListMap.set(ml.id, ml);
 		}
