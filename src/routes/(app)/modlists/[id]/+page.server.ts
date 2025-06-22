@@ -518,6 +518,51 @@ export const actions: Actions = {
 		}
 	},
 
+	moveToIcebox: async (event) => {
+		if (!event.locals.session) {
+			return fail(401);
+		}
+
+		if (!(await userHasModlistAccess(event.locals.session.userId, event.params.id as string))) {
+			return fail(403);
+		}
+
+		const formData = await event.request.formData();
+		const modId = formData.get('modId')?.toString();
+
+		if (!modId) {
+			return fail(400, { message: 'Mod ID is required' });
+		}
+
+		try {
+			// Ensure the mod exists and belongs to this modlist
+			const mod = await db
+				.select({ enabled: table.mod.enabled, modlist: table.mod.modlist })
+				.from(table.mod)
+				.where(eq(table.mod.id, modId))
+				.get();
+
+			if (!mod) {
+				return fail(404, { message: 'Mod not found' });
+			}
+
+			// Only allow moving to icebox if the mod is currently disabled
+			if (mod.enabled) {
+				return fail(400, { message: 'Disable the mod before moving it to icebox' });
+			}
+
+			await db.update(table.mod).set({ icebox: true }).where(eq(table.mod.id, modId));
+
+			// Notify collaborators via SSE
+			publishModlistEvent(mod.modlist, 'modlist-updated', {});
+
+			return { success: true, modId };
+		} catch (error) {
+			console.error('Move to icebox error:', error);
+			return fail(500, { message: 'Failed to move mod to icebox' });
+		}
+	},
+
 	refreshMod: async (event) => {
 		if (!event.locals.session) {
 			return fail(401);
