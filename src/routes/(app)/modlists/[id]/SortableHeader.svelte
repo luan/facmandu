@@ -7,15 +7,21 @@
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		header: Header<any, unknown>;
 		children: Snippet;
+		hide?: boolean;
 	}
 
-	let { header, children }: Props = $props();
+	let { header, hide, children }: Props = $props();
 
 	function handleClick() {
 		header.column.getToggleSortingHandler()?.({} as Event);
 	}
 
 	let sortDirection = $derived(header.column.getIsSorted());
+	$effect(() => {
+		if (hide) {
+			header.column.toggleVisibility();
+		}
+	});
 </script>
 
 <button

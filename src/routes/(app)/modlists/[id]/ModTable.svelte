@@ -227,12 +227,14 @@
 		},
 		{
 			accessorKey: 'updatedBy',
+			enableHiding: true,
 			header: ({ header }) => {
 				const updatedByHeaderSnippet = createRawSnippet(() => ({
 					render: () => 'Enabled By'
 				}));
 				return renderComponent(SortableHeader, {
 					header,
+					hide: true,
 					children: updatedByHeaderSnippet
 				});
 			},

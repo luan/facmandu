@@ -47,22 +47,22 @@
 
 {#if isEssential}
 	<!-- Locked indicator -->
-	<div
-		class="flex flex-col items-center gap-1"
-		title={lockedByUser ? `Locked by ${lockedByUser.username}` : 'Locked mod'}
-	>
-		<LockIcon class="h-4 w-4 text-amber-500" />
-		{#if lockedByUser}
-			<div class="text-muted-foreground text-xs">(by {lockedByUser.username})</div>
-		{/if}
-	</div>
+	<Tooltip.Provider>
+		<Tooltip.Root>
+			<Tooltip.Trigger class="flex cursor-help items-center gap-1">
+				<LockIcon class="h-4 w-4 text-amber-500" />
+			</Tooltip.Trigger>
+			<Tooltip.Content>
+				<p>{lockedByUser ? `Locked by ${lockedByUser.username}` : 'Locked mod'}</p>
+			</Tooltip.Content>
+		</Tooltip.Root>
+	</Tooltip.Provider>
 {:else if isDependency}
-	<div class="flex flex-col items-center gap-1">
+	<div class="flex gap-1">
 		<Tooltip.Provider>
 			<Tooltip.Root>
-				<Tooltip.Trigger class="flex cursor-help flex-col items-center gap-1">
+				<Tooltip.Trigger class="flex cursor-help gap-1">
 					<PackageCheck class="h-4 w-4 text-amber-500" />
-					<div class="text-muted-foreground text-xs">(dependency)</div>
 				</Tooltip.Trigger>
 				<Tooltip.Content>
 					<p class="mb-1">Required by:</p>
@@ -76,12 +76,7 @@
 		</Tooltip.Provider>
 	</div>
 {:else}
-	<form
-		method="POST"
-		action="?/toggleStatus"
-		class="flex flex-col items-center gap-1"
-		use:enhance={handleToggle}
-	>
+	<form method="POST" action="?/toggleStatus" class="flex gap-1" use:enhance={handleToggle}>
 		<input type="hidden" name="modid" value={mod.id} />
 		<Button
 			type="submit"
