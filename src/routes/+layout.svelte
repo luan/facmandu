@@ -6,4 +6,7 @@
 </script>
 
 <ModeWatcher defaultMode="dark" />
+<svelte:head>
+	<title>Facmandu</title>
+</svelte:head>
 {@render children?.()}

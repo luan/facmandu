@@ -119,6 +119,10 @@
 	}
 </script>
 
+<svelte:head>
+	<title>{modlist?.name ? `${modlist.name} - Facmandu` : 'Facmandu'}</title>
+</svelte:head>
+
 <Sidebar.Provider cookieName="sidebar:filters" keyboardShortcut="g" style="--sidebar-width: 620px;">
 	<Portal to="#page-header">
 		<div class="flex items-center justify-between gap-4">
