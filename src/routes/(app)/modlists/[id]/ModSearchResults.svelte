@@ -36,9 +36,55 @@
 			modlist: string;
 			icebox?: boolean | null;
 		}>;
+		currentPage?: number;
+		totalPages?: number;
 	}
 
-	let { searchResults, currentMods }: Props = $props();
+	let { searchResults, currentMods, currentPage = 1, totalPages = 1 }: Props = $props();
+
+	// Reactive list for infinite loading
+	let allResults = $state([...searchResults]);
+	let loadingMore = $state(false);
+
+	// Extract modlist id from current URL (path format /modlists/<id>)
+	const modlistPathMatch = page.url.pathname.match(/\/modlists\/([^/]+)/);
+	const modlistId = modlistPathMatch ? modlistPathMatch[1] : null;
+
+	async function loadNextPage() {
+		if (loadingMore || currentPage >= totalPages || !modlistId) return;
+		loadingMore = true;
+		const params = new URLSearchParams(page.url.search);
+		params.set('page', String(currentPage + 1));
+		const res = await fetch(`/api/modlists/${modlistId}/search?${params.toString()}`);
+		if (res.ok) {
+			const data = (await res.json()) as {
+				results: ModResult[];
+				currentPage: number;
+				totalPages: number;
+			};
+			allResults = [...allResults, ...data.results];
+			currentPage = data.currentPage;
+			totalPages = data.totalPages;
+		}
+		loadingMore = false;
+	}
+
+	function observeSentinel(node: HTMLElement) {
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0].isIntersecting) {
+					loadNextPage();
+				}
+			},
+			{ rootMargin: '400px 0px' }
+		);
+		observer.observe(node);
+		return {
+			destroy() {
+				observer.disconnect();
+			}
+		};
+	}
 
 	// Add state for preview sheet
 	let previewOpen = $state(false);
@@ -108,9 +154,6 @@
 		return count.toString();
 	}
 
-	let clearSearchUrl = new URL(page.url);
-	clearSearchUrl.searchParams.delete('q');
-
 	function openModPreview(name: string) {
 		previewModName = name;
 		previewOpen = true;
@@ -123,9 +166,9 @@
 	});
 </script>
 
-{#if searchResults.length > 0}
+{#if allResults.length > 0}
 	<div class="space-y-6">
-		{#each searchResults as result (result.name)}
+		{#each allResults as result (result.name)}
 			<div class="hover:bg-muted/50 flex gap-4 rounded-lg border p-4 transition-colors">
 				<!-- Mod Thumbnail -->
 				<div class="flex-shrink-0">
@@ -252,6 +295,11 @@
 			</div>
 		{/each}
 	</div>
+	<!-- Sentinel for infinite scroll -->
+	<div use:observeSentinel class="h-1"></div>
+	{#if loadingMore}
+		<p class="text-muted-foreground py-4 text-center text-sm">Loading...</p>
+	{/if}
 {/if}
 
 <ModPreviewSheet bind:open={previewOpen} modName={previewModName} />

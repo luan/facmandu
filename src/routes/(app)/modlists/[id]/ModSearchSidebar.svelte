@@ -134,6 +134,9 @@
 			</div>
 		</div>
 
+		<!-- Reset to first page when new filters applied -->
+		<input type="hidden" name="page" value="1" />
+
 		<Button type="submit" variant="default">Apply Filters</Button>
 	</form>
 

@@ -28,6 +28,8 @@
 	let searchQuery = $derived(data.searchQuery);
 	let searchError = $derived(data.searchError);
 	let dependencyValidation = $derived(data.dependencyValidation);
+	let currentPage = $derived(data.currentPage);
+	let totalPages = $derived(data.totalPages);
 
 	let showDeleteConfirm = $state(false);
 	let unsubscribeRealtime: (() => void) | null = null;
@@ -265,7 +267,12 @@
 			<ModSearchSidebar {searchQuery} {searchError} />
 
 			{#if hasCredentials}
-				<ModSearchResults {searchResults} currentMods={[...mods, ...iceboxMods]} />
+				<ModSearchResults
+					{searchResults}
+					currentMods={[...mods, ...iceboxMods]}
+					{currentPage}
+					{totalPages}
+				/>
 			{:else}
 				<CredentialsWarning />
 			{/if}

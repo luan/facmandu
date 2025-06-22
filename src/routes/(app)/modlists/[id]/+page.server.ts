@@ -52,8 +52,16 @@ export const load: PageServerLoad = async (event) => {
 	const categoryFilter = event.url.searchParams.get('category');
 	const versionFilter = event.url.searchParams.get('version');
 	const tagFilters = event.url.searchParams.getAll('tag');
+
+	// Pagination parameters (defaults: page 1, page_size 30)
+	let currentPage = parseInt(event.url.searchParams.get('page') ?? '1', 10);
+	if (Number.isNaN(currentPage) || currentPage < 1) currentPage = 1;
+	const pageSize = parseInt(event.url.searchParams.get('page_size') ?? '30', 10);
+	const effectivePageSize = Number.isNaN(pageSize) || pageSize < 1 ? 30 : pageSize;
+
 	let searchResults: any[] = [];
 	let searchError: string | null = null;
+	let totalPages = 1;
 
 	if (
 		searchQuery &&
@@ -85,6 +93,10 @@ export const load: PageServerLoad = async (event) => {
 				exclude_category: ['internal']
 			};
 
+			// Pagination
+			requestBody.page = currentPage;
+			requestBody.page_size = effectivePageSize;
+
 			// Forward filter parameters directly to the Factorio search API when provided
 			if (categoryFilter) requestBody.category = categoryFilter;
 			if (versionFilter && versionFilter !== 'any') requestBody.factorio_version = versionFilter;
@@ -104,6 +116,16 @@ export const load: PageServerLoad = async (event) => {
 			} else {
 				const data = await response.json();
 				searchResults = data.results || [];
+
+				// Compute pagination info if available
+				if (typeof data.page_count === 'number') {
+					totalPages = data.page_count;
+				} else if (typeof data.result_count === 'number' && typeof data.page_size === 'number') {
+					totalPages = Math.max(1, Math.ceil(data.result_count / data.page_size));
+				} else {
+					// Fallback: assume there might be more pages if we received full page size
+					totalPages = searchResults.length === effectivePageSize ? currentPage + 1 : currentPage;
+				}
 
 				// Client-side filtering and sorting based on additional query params
 				const sortField = event.url.searchParams.get('sort');
@@ -195,7 +217,9 @@ export const load: PageServerLoad = async (event) => {
 		iceboxMods,
 		collaborators,
 		currentUserId: event.locals.session.userId,
-		sessionToken: event.cookies.get('auth-session')
+		sessionToken: event.cookies.get('auth-session'),
+		currentPage,
+		totalPages
 	};
 };
 
