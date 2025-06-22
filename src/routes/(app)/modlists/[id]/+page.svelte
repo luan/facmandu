@@ -8,7 +8,7 @@
 	import EditableModlistName from './EditableModlistName.svelte';
 	import DependencyValidation from './DependencyValidation.svelte';
 	import { enhance } from '$app/forms';
-	import { Button } from '$lib/components/ui/button';
+	import { Button, buttonVariants } from '$lib/components/ui/button';
 	import { DownloadIcon, ShareIcon, TrashIcon } from '@lucide/svelte';
 	import { subscribeToModlistUpdates } from '$lib/stores/realtime.svelte';
 	import { onMount, onDestroy } from 'svelte';
@@ -16,6 +16,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Portal } from 'bits-ui';
 	import type { Mod } from '$lib/server/db/schema';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 
 	let { data }: PageProps = $props();
 	let modlist = $derived(data.modlist);
@@ -105,7 +106,7 @@
 		await invalidateAll();
 	}
 
-	async function copyExportCommand() {
+	async function copyDownloadCommand() {
 		if (!modlist?.id) return;
 		const cookieName = 'auth-session';
 		const cmd = `curl -H "Cookie: ${cookieName}=${sessionToken}" -sL "${location.origin}/api/modlists/${modlist.id}/export" | bash`;
@@ -116,7 +117,32 @@
 				exportCopied = false;
 			}, 2000);
 		} catch (err) {
-			console.error('Failed to copy export command', err);
+			console.error('Failed to copy download command', err);
+		}
+	}
+
+	async function copyModlistJson() {
+		// Build a minimal mod-list.json with enabled mods only
+		if (!mods) return;
+		try {
+			const enabledMods = (mods as Mod[]).filter((m) => m.enabled);
+			const json = JSON.stringify(
+				{
+					mods: [
+						{ name: 'base', enabled: true },
+						...enabledMods.map((m) => ({ name: m.name, enabled: true }))
+					]
+				},
+				null,
+				2
+			);
+			await navigator.clipboard.writeText(json);
+			exportCopied = true;
+			setTimeout(() => {
+				exportCopied = false;
+			}, 2000);
+		} catch (err) {
+			console.error('Failed to copy mod-list.json', err);
 		}
 	}
 </script>
@@ -208,19 +234,22 @@
 							</Dialog.Content>
 						</Dialog.Root>
 
-						<!-- Export Button: copies command to clipboard -->
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							onclick={copyExportCommand}
-							class={exportCopied ? 'animate-pulse' : ''}
-						>
-							<DownloadIcon class="mr-2 h-4 w-4" />
-							<span class="inline-block w-34 text-left">
-								{exportCopied ? 'Copied!' : 'Copy Export Command'}
-							</span>
-						</Button>
+						<!-- Export dropdown -->
+						<DropdownMenu.Root>
+							<DropdownMenu.Trigger
+								class={buttonVariants({ variant: 'outline', size: 'sm' }) +
+									(exportCopied ? ' animate-pulse' : '')}
+							>
+								<DownloadIcon class="mr-2 h-4 w-4" />
+								Export
+							</DropdownMenu.Trigger>
+							<DropdownMenu.Content align="end">
+								<DropdownMenu.Item onclick={copyModlistJson}>Copy mod-list.json</DropdownMenu.Item>
+								<DropdownMenu.Item onclick={copyDownloadCommand}
+									>Copy download script</DropdownMenu.Item
+								>
+							</DropdownMenu.Content>
+						</DropdownMenu.Root>
 					{/if}
 
 					<Button
@@ -239,12 +268,7 @@
 		</div>
 	</Portal>
 
-	<!-- Main content and sidebar are placed side-by-side using the flex layout provided by Sidebar.Provider -->
 	<div class="flex h-[calc(100svh-var(--header-height))] min-w-0 flex-1 flex-col gap-4 px-4 py-4">
-		<!-- Icebox visualisation moved to IceboxSheet -->
-
-		<!-- Search results moved to sidebar -->
-
 		<DependencyValidation {dependencyValidation} {mods} />
 
 		<ModTable
