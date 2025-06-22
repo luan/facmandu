@@ -29,7 +29,13 @@
 
 	interface Props {
 		searchResults: ModResult[];
-		currentMods: Array<{ name: string; id: string; enabled: boolean | null; modlist: string }>;
+		currentMods: Array<{
+			name: string;
+			id: string;
+			enabled: boolean | null;
+			modlist: string;
+			icebox?: boolean | null;
+		}>;
 	}
 
 	let { searchResults, currentMods }: Props = $props();
@@ -225,13 +231,22 @@
 							</Button>
 						</form>
 					{:else}
-						<form method="POST" action="?/addMod" use:enhance={handleAddMod}>
-							<input type="hidden" name="modName" value={result.name} />
-							<Button type="submit" size="sm" variant="success">
-								<PlusIcon class="mr-1 h-3 w-3" />
-								Add to List
-							</Button>
-						</form>
+						<div class="flex gap-2">
+							<form method="POST" action="?/addMod" use:enhance={handleAddMod}>
+								<input type="hidden" name="modName" value={result.name} />
+								<Button type="submit" size="sm" variant="success">
+									<PlusIcon class="mr-1 h-3 w-3" />
+									Add to List
+								</Button>
+							</form>
+							<form method="POST" action="?/addIceboxMod" use:enhance>
+								<input type="hidden" name="modName" value={result.name} />
+								<Button type="submit" size="sm" variant="outline">
+									<PlusIcon class="mr-1 h-3 w-3" />
+									Icebox
+								</Button>
+							</form>
+						</div>
 					{/if}
 				</div>
 			</div>

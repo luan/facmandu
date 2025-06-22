@@ -30,14 +30,16 @@
 	import SortableHeader from './SortableHeader.svelte';
 	import ModPreviewSheet from './ModPreviewSheet.svelte';
 	import RecommendationSheet from './RecommendationSheet.svelte';
+	import IceboxSheet from './IceboxSheet.svelte';
 
 	interface Props {
 		mods: Array<Omit<Mod, 'updatedBy'> & { updatedBy: { id: string; username: string } | null }>;
 		modlistName: string;
 		conflictingMods: string[];
+		iceboxMods: Mod[];
 	}
 
-	let { mods, modlistName, conflictingMods }: Props = $props();
+	let { mods, modlistName, conflictingMods, iceboxMods }: Props = $props();
 	let confirmDeleteId: string | null = $state(null);
 	let sorting = $state<SortingState>([]);
 	let columnFilters = $state<ColumnFiltersState>([]);
@@ -434,6 +436,7 @@
 					</Button>
 				</form>
 				<RecommendationSheet {mods} />
+				<IceboxSheet {iceboxMods} />
 			</Card.CardAction>
 			<Card.Title>Mods in {modlistName}</Card.Title>
 			<Card.Description>

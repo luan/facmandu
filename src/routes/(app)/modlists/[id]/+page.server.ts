@@ -148,11 +148,15 @@ export const load: PageServerLoad = async (event) => {
 		};
 	});
 
+	// Separate mods into active list and icebox list
+	const iceboxMods = processedMods.filter((m) => m.icebox);
+	const activeMods = processedMods.filter((m) => !m.icebox);
+
 	// Background refresh for mods that haven't been cached recently (older than 1 hour)
 	const now = new Date();
 	const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
 
-	const modsNeedingRefresh = processedMods.filter(
+	const modsNeedingRefresh = activeMods.filter(
 		(mod) => !mod.lastFetched || mod.lastFetched < oneHourAgo
 	);
 
@@ -170,8 +174,8 @@ export const load: PageServerLoad = async (event) => {
 		).catch(console.error);
 	}
 
-	// Dependency validation
-	const dependencyValidation = validateDependencies(processedMods);
+	// Dependency validation only considers active mods
+	const dependencyValidation = validateDependencies(activeMods);
 
 	// Fetch collaborators
 	const collaborators = await db
@@ -182,12 +186,13 @@ export const load: PageServerLoad = async (event) => {
 
 	return {
 		modlist: result[0].modlist,
-		mods: processedMods,
+		mods: activeMods,
 		hasFactorioCredentials: !!(user?.factorioUsername && user?.factorioToken),
 		searchQuery: searchQuery || '',
 		searchResults,
 		searchError,
 		dependencyValidation,
+		iceboxMods,
 		collaborators,
 		currentUserId: event.locals.session.userId,
 		sessionToken: event.cookies.get('auth-session')
@@ -422,6 +427,56 @@ export const actions: Actions = {
 		} catch (error) {
 			console.error('Add mod error:', error);
 			return fail(500, { message: 'Failed to add mod' });
+		}
+	},
+
+	addIceboxMod: async (event) => {
+		if (!event.locals.session) {
+			return fail(401);
+		}
+
+		if (!(await userHasModlistAccess(event.locals.session.userId, event.params.id as string))) {
+			return fail(403);
+		}
+
+		const formData = await event.request.formData();
+		const modName = formData.get('modName')?.toString();
+		const modlistId = event.params.id;
+
+		if (!modName || !modlistId) {
+			return fail(400, { message: 'Mod name and modlist ID are required' });
+		}
+
+		try {
+			// Check if mod already exists in this modlist
+			const existingMod = await db
+				.select()
+				.from(table.mod)
+				.where(and(eq(table.mod.modlist, modlistId), eq(table.mod.name, modName)))
+				.get();
+
+			if (existingMod) {
+				return fail(400, { message: 'Mod already exists in this modlist' });
+			}
+
+			// Generate ID and add mod to icebox
+			const modId = crypto.randomUUID();
+			await db.insert(table.mod).values({
+				id: modId,
+				modlist: modlistId,
+				name: modName,
+				enabled: false,
+				icebox: true,
+				updatedBy: event.locals.session.userId
+			});
+
+			// Broadcast new icebox addition (optional)
+			publishModlistEvent(modlistId, 'icebox-added', { name: modName });
+
+			return { success: true, modName, message: `Added ${modName} to icebox` };
+		} catch (error) {
+			console.error('Add icebox mod error:', error);
+			return fail(500, { message: 'Failed to add mod to icebox' });
 		}
 	},
 
@@ -783,5 +838,45 @@ export const actions: Actions = {
 		});
 
 		return { success: true, modId: modID, newEssential };
+	},
+
+	// Activate a mod from icebox into the regular list
+	activateMod: async (event) => {
+		if (!event.locals.session) {
+			return fail(401);
+		}
+
+		if (!(await userHasModlistAccess(event.locals.session.userId, event.params.id as string))) {
+			return fail(403);
+		}
+
+		const formData = await event.request.formData();
+		const modId = formData.get('modId')?.toString();
+
+		if (!modId) {
+			return fail(400, { message: 'Mod ID is required' });
+		}
+
+		try {
+			// Ensure mod exists and belongs to modlist
+			const mod = await db
+				.select({ modlist: table.mod.modlist })
+				.from(table.mod)
+				.where(eq(table.mod.id, modId))
+				.get();
+
+			if (!mod) {
+				return fail(404, { message: 'Mod not found' });
+			}
+
+			await db.update(table.mod).set({ icebox: false }).where(eq(table.mod.id, modId));
+
+			publishModlistEvent(mod.modlist, 'icebox-activated', { modId });
+
+			return { success: true, modId };
+		} catch (error) {
+			console.error('Activate mod error:', error);
+			return fail(500, { message: 'Failed to activate mod' });
+		}
 	}
 };

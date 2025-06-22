@@ -15,10 +15,12 @@
 	import { invalidateAll } from '$app/navigation';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Portal } from 'bits-ui';
+	import type { Mod } from '$lib/server/db/schema';
 
 	let { data }: PageProps = $props();
 	let modlist = $derived(data.modlist);
 	let mods = $derived(data.mods);
+	let iceboxMods = $derived(data.iceboxMods as Array<Mod>);
 	let collaborators = $derived(data.collaborators);
 	let currentUserId = $derived(data.currentUserId);
 	let hasCredentials = $derived(data.hasFactorioCredentials);
@@ -233,12 +235,15 @@
 
 	<!-- Main content and sidebar are placed side-by-side using the flex layout provided by Sidebar.Provider -->
 	<div class="flex h-[calc(100svh-var(--header-height))] min-w-0 flex-1 flex-col gap-4 px-4 py-4">
+		<!-- Icebox visualisation moved to IceboxSheet -->
+
 		<!-- Search results moved to sidebar -->
 
 		<DependencyValidation {dependencyValidation} {mods} />
 
 		<ModTable
 			{mods}
+			{iceboxMods}
 			modlistName={modlist?.name || ''}
 			conflictingMods={[
 				...new Set(dependencyValidation.conflicts.flatMap((c) => [c.mod, c.conflictsWith]))
@@ -256,7 +261,7 @@
 			<ModSearchSidebar {searchQuery} {searchError} />
 
 			{#if hasCredentials}
-				<ModSearchResults {searchResults} currentMods={mods} />
+				<ModSearchResults {searchResults} currentMods={[...mods, ...iceboxMods]} />
 			{:else}
 				<CredentialsWarning />
 			{/if}
