@@ -1,8 +1,10 @@
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import { fail, type Actions } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
 import { genID } from '$lib/server/db/ids';
+import type { PageServerLoad } from './$types';
+import { error } from '@sveltejs/kit';
 
 export const actions: Actions = {
 	duplicate: async (event) => {
@@ -77,4 +79,65 @@ export const actions: Actions = {
 			return fail(500, { message: 'Failed to duplicate modlist' });
 		}
 	}
+};
+
+export const load: PageServerLoad = async (event) => {
+	if (!event.locals.user) {
+		throw error(401, 'Unauthorized');
+	}
+
+	// Retrieve all modlists the user owns or collaborates on
+	const modListRows = await db
+		.select()
+		.from(table.modList)
+		.leftJoin(table.modListCollaborator, eq(table.modListCollaborator.modlistId, table.modList.id))
+		.where(
+			or(
+				eq(table.modList.owner, event.locals.user.id),
+				eq(table.modListCollaborator.userId, event.locals.user.id)
+			)
+		);
+
+	// Deduplicate results coming from the join
+	const modListMap = new Map<string, typeof table.modList.$inferSelect>();
+	for (const row of modListRows) {
+		// Drizzle returns joined rows as objects keyed by table name
+		const mlCandidate = (row as unknown as { modlist?: typeof table.modList.$inferSelect }).modlist;
+		const ml = mlCandidate ?? (row as unknown as typeof table.modList.$inferSelect);
+		if (ml) {
+			modListMap.set(ml.id, ml);
+		}
+	}
+
+	const baseModLists = Array.from(modListMap.values());
+
+	// Build full details for each modlist (collaborators and enabled/total mod counts)
+	const modLists = await Promise.all(
+		baseModLists.map(async (ml) => {
+			// Fetch collaborators (usernames only)
+			const collaborators = await db
+				.select({ id: table.user.id, username: table.user.username })
+				.from(table.modListCollaborator)
+				.innerJoin(table.user, eq(table.user.id, table.modListCollaborator.userId))
+				.where(eq(table.modListCollaborator.modlistId, ml.id));
+
+			// Fetch mod enable/total counts
+			const mods = await db
+				.select({ enabled: table.mod.enabled })
+				.from(table.mod)
+				.where(eq(table.mod.modlist, ml.id));
+
+			const totalMods = mods.length;
+			const enabledCount = mods.filter((m) => m.enabled).length;
+
+			return {
+				...ml,
+				collaborators,
+				totalMods,
+				enabledCount
+			};
+		})
+	);
+
+	return { user: event.locals.user, modLists };
 };
