@@ -1,14 +1,7 @@
 <script lang="ts">
 	import LogoutLink from './LogoutLink.svelte';
 
-	import {
-		ChevronDownIcon,
-		HomeIcon,
-		MoonIcon,
-		SettingsIcon,
-		SunIcon,
-		UserIcon
-	} from '@lucide/svelte';
+	import { ChevronDownIcon, MoonIcon, SettingsIcon, SunIcon, UserIcon } from '@lucide/svelte';
 	import { resetMode, setMode } from 'mode-watcher';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Sidebar from '$lib/components/ui/sidebar';
@@ -21,7 +14,10 @@
 <header class="bg-background sticky top-0 z-50 flex w-full items-center border-b">
 	<div class="flex h-(--header-height) w-full items-center gap-2 px-4 py-2">
 		<Sidebar.Trigger />
-		<Button variant="ghost" href="/"><HomeIcon />Home</Button>
+		<Button variant="ghost" href="/">
+			<img src="/favicon.png" alt="Facmandu" class="h-12 w-12" />
+			Facmandu
+		</Button>
 
 		<div id="page-header" class="w-full"></div>
 		{#if false}
