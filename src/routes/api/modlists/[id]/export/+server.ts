@@ -73,12 +73,13 @@ export const GET: RequestHandler = async (event) => {
 		2
 	);
 
-	// Build list with resolved download paths
+	// Build list with resolved download paths (using server-side proxy approach)
 	const downloadUrls: string[] = [];
 	for (const m of mods) {
 		const path = await getReleaseDownloadPath(m.name, m.version);
 		if (!path) continue;
-		const url = `https://mods.factorio.com${path}?username=${user.factorioUsername}&token=${user.factorioToken}`;
+		// Use server-side proxy endpoint instead of exposing credentials
+		const url = `${event.url.origin}/api/modlists/${modlistId}/download/${encodeURIComponent(m.name)}/${encodeURIComponent(m.version || 'latest')}`;
 		downloadUrls.push(url);
 	}
 

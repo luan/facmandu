@@ -93,26 +93,21 @@
 		eventSource?.close();
 	});
 
-	async function addCollaborator() {
-		shareError = '';
-		if (!shareUsername.trim()) return;
-		const fd = new FormData();
-		fd.append('username', shareUsername.trim());
-		const res = await fetch('?/shareAdd', { method: 'POST', body: fd });
-		if (res.ok) {
-			shareUsername = '';
-			await invalidateAll();
-		} else {
-			const data = await res.json().catch(() => ({}));
-			shareError = data?.message || 'Failed to share';
-		}
-	}
+	function removeCollaborator(userId: string) {
+		// Create and submit a form for removing collaborator
+		const form = document.createElement('form');
+		form.method = 'POST';
+		form.action = '?/shareRemove';
 
-	async function removeCollaborator(userId: string) {
-		const fd = new FormData();
-		fd.append('userId', userId);
-		await fetch('?/shareRemove', { method: 'POST', body: fd });
-		await invalidateAll();
+		const input = document.createElement('input');
+		input.type = 'hidden';
+		input.name = 'userId';
+		input.value = userId;
+
+		form.appendChild(input);
+		document.body.appendChild(form);
+		form.submit();
+		document.body.removeChild(form);
 	}
 
 	async function copyDownloadCommand() {
@@ -211,14 +206,33 @@
 									<p class="text-destructive mb-2">{shareError}</p>
 								{/if}
 
-								<div class="mb-4 flex gap-2">
+								<form
+									id="share-form"
+									method="POST"
+									action="?/shareAdd"
+									class="mb-4 flex gap-2"
+									use:enhance={() => {
+										shareError = '';
+										return async ({ result }) => {
+											if (result.type === 'success') {
+												shareUsername = '';
+												await invalidateAll();
+											} else if (result.type === 'failure') {
+												shareError =
+													(result.data as { message?: string })?.message || 'Failed to share';
+											}
+										};
+									}}
+								>
 									<input
+										name="username"
 										class="flex-1 rounded-sm border bg-transparent px-2 py-1"
 										placeholder="Username"
 										bind:value={shareUsername}
+										required
 									/>
-									<Button size="sm" onclick={addCollaborator}>Add</Button>
-								</div>
+									<Button type="submit" size="sm">Add</Button>
+								</form>
 
 								<div class="max-h-40 space-y-2 overflow-y-auto">
 									{#each collaborators as c, i (i)}

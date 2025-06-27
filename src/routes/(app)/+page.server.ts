@@ -4,7 +4,7 @@ import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
 import { genID } from '$lib/server/db/ids';
 import type { PageServerLoad } from './$types';
-import { error } from '@sveltejs/kit';
+// import { error } from '@sveltejs/kit';
 
 export const actions: Actions = {
 	duplicate: async (event) => {
