@@ -1,4 +1,4 @@
-import { eq, or } from 'drizzle-orm';
+import { eq, or, inArray } from 'drizzle-orm';
 import { fail, redirect, type Actions } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
@@ -111,33 +111,65 @@ export const load: PageServerLoad = async (event) => {
 
 	const baseModLists = Array.from(modListMap.values());
 
-	// Build full details for each modlist (collaborators and enabled/total mod counts)
-	const modLists = await Promise.all(
-		baseModLists.map(async (ml) => {
-			// Fetch collaborators (usernames only)
-			const collaborators = await db
-				.select({ id: table.user.id, username: table.user.username })
-				.from(table.modListCollaborator)
-				.innerJoin(table.user, eq(table.user.id, table.modListCollaborator.userId))
-				.where(eq(table.modListCollaborator.modlistId, ml.id));
+	// Batch fetch collaborators and mod counts to avoid N+1 queries
+	const modlistIds = baseModLists.map((ml) => ml.id);
 
-			// Fetch mod enable/total counts
-			const mods = await db
-				.select({ enabled: table.mod.enabled })
-				.from(table.mod)
-				.where(eq(table.mod.modlist, ml.id));
+	// Batch fetch all collaborators for all modlists
+	const allCollaborators =
+		modlistIds.length > 0
+			? await db
+					.select({
+						modlistId: table.modListCollaborator.modlistId,
+						id: table.user.id,
+						username: table.user.username
+					})
+					.from(table.modListCollaborator)
+					.innerJoin(table.user, eq(table.user.id, table.modListCollaborator.userId))
+					.where(inArray(table.modListCollaborator.modlistId, modlistIds))
+			: [];
 
-			const totalMods = mods.length;
-			const enabledCount = mods.filter((m) => m.enabled).length;
+	// Group collaborators by modlist ID
+	const collaboratorsByModlist = new Map<string, Array<{ id: string; username: string }>>();
+	for (const collab of allCollaborators) {
+		if (!collaboratorsByModlist.has(collab.modlistId)) {
+			collaboratorsByModlist.set(collab.modlistId, []);
+		}
+		collaboratorsByModlist.get(collab.modlistId)!.push({
+			id: collab.id,
+			username: collab.username
+		});
+	}
 
-			return {
-				...ml,
-				collaborators,
-				totalMods,
-				enabledCount
-			};
-		})
-	);
+	// Batch fetch all mod counts for all modlists
+	const allMods =
+		modlistIds.length > 0
+			? await db
+					.select({
+						modlistId: table.mod.modlist,
+						enabled: table.mod.enabled
+					})
+					.from(table.mod)
+					.where(inArray(table.mod.modlist, modlistIds))
+			: [];
+
+	// Group and count mods by modlist ID
+	const modCountsByModlist = new Map<string, { total: number; enabled: number }>();
+	for (const mod of allMods) {
+		if (!modCountsByModlist.has(mod.modlistId)) {
+			modCountsByModlist.set(mod.modlistId, { total: 0, enabled: 0 });
+		}
+		const counts = modCountsByModlist.get(mod.modlistId)!;
+		counts.total++;
+		if (mod.enabled) counts.enabled++;
+	}
+
+	// Build full details for each modlist using the batched data
+	const modLists = baseModLists.map((ml) => ({
+		...ml,
+		collaborators: collaboratorsByModlist.get(ml.id) || [],
+		totalMods: modCountsByModlist.get(ml.id)?.total || 0,
+		enabledCount: modCountsByModlist.get(ml.id)?.enabled || 0
+	}));
 
 	return { user: event.locals.user, modLists };
 };

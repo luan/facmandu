@@ -1,6 +1,7 @@
 import type { RequestHandler } from '@sveltejs/kit';
+import { factorioApiLimiter } from '$lib/server/rate-limiter';
 
-export const GET: RequestHandler = async ({ params, fetch }) => {
+export const GET: RequestHandler = async ({ params }) => {
 	const { name } = params;
 	if (!name) {
 		return new Response(JSON.stringify({ error: 'Mod name is required' }), {
@@ -18,7 +19,15 @@ export const GET: RequestHandler = async ({ params, fetch }) => {
 	}
 
 	try {
-		const upstream = await fetch(`https://mods.factorio.com/api/mods/${name}/full`);
+		const upstream = await factorioApiLimiter.fetch(
+			`https://mods.factorio.com/api/mods/${name}/full`,
+			{
+				signal: AbortSignal.timeout(30000), // 30 second timeout
+				headers: {
+					'User-Agent': 'FactorioManager/1.0'
+				}
+			}
+		);
 		const body = await upstream.text();
 
 		// Only forward successful responses and specific error codes
@@ -27,7 +36,7 @@ export const GET: RequestHandler = async ({ params, fetch }) => {
 				status: upstream.status,
 				headers: {
 					'Content-Type': 'application/json',
-					'Cache-Control': 'public, max-age=60'
+					'Cache-Control': 'public, max-age=1800, s-maxage=3600' // 30 min browser, 1 hour CDN
 				}
 			});
 		} else {

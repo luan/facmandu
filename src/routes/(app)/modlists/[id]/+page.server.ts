@@ -1,5 +1,5 @@
 import { db } from '$lib/server/db';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, like, isNotNull } from 'drizzle-orm';
 import * as table from '$lib/server/db/schema';
 import { updateModCache, refreshModsCache, userHasModlistAccess } from '$lib/server/db';
 import { publishModlistEvent } from '$lib/server/realtime';
@@ -7,6 +7,7 @@ import type { PageServerLoad } from './$types';
 import { error, fail, redirect, type Actions } from '@sveltejs/kit';
 import { parseDependencies, validateDependencies } from '$lib/server/services/dependencies';
 import { ensureModlistAccess } from '$lib/server/guards';
+import { factorioApiLimiter } from '$lib/server/rate-limiter';
 
 type SearchResult = {
 	name: string;
@@ -106,10 +107,12 @@ export const load: PageServerLoad = async (event) => {
 			if (versionFilter && versionFilter !== 'any') requestBody.factorio_version = versionFilter;
 			if (tagFilters.length > 0) requestBody.tag = tagFilters;
 
-			const response = await fetch(searchUrl, {
+			const response = await factorioApiLimiter.fetch(searchUrl, {
 				method: 'POST',
+				signal: AbortSignal.timeout(45000), // 45 second timeout for search
 				headers: {
-					'Content-Type': 'application/json'
+					'Content-Type': 'application/json',
+					'User-Agent': 'FactorioManager/1.0'
 				},
 				body: JSON.stringify(requestBody)
 			});
@@ -226,7 +229,9 @@ export const load: PageServerLoad = async (event) => {
 
 export const actions: Actions = {
 	toggleStatus: async (event) => {
-		const userId = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		if (!accessResult.success) return accessResult.error;
+		const userId = accessResult.userId;
 
 		const formData = await event.request.formData();
 		const modID = formData.get('modid')?.toString();
@@ -256,13 +261,23 @@ export const actions: Actions = {
 		}
 
 		if (mod.enabled) {
-			// Fetch all enabled mods in the same modlist (excluding the target mod)
-			const enabledMods = await db
+			// Optimized dependency check: only fetch mods that might depend on this mod
+			// Use SQL LIKE to search for the mod name in dependencies JSON
+			const dependentMods = await db
 				.select({ name: table.mod.name, dependencies: table.mod.dependencies })
 				.from(table.mod)
-				.where(and(eq(table.mod.modlist, mod.modlist), eq(table.mod.enabled, true)));
+				.where(
+					and(
+						eq(table.mod.modlist, mod.modlist),
+						eq(table.mod.enabled, true),
+						isNotNull(table.mod.dependencies),
+						// SQL LIKE to quickly filter mods that might contain this dependency
+						like(table.mod.dependencies, `%"${mod.name}"%`)
+					)
+				);
 
-			const isRequired = enabledMods.some((m) => {
+			// Only parse dependencies for mods that potentially depend on this mod
+			const isRequired = dependentMods.some((m) => {
 				if (m.name === mod.name) return false;
 				return parseDependencies(m.dependencies).some(
 					(d) => d.name === mod.name && d.type !== 'optional'
@@ -286,7 +301,9 @@ export const actions: Actions = {
 	},
 
 	addMod: async (event) => {
-		const userId = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		if (!accessResult.success) return accessResult.error;
+		const userId = accessResult.userId;
 
 		const formData = await event.request.formData();
 		const modName = formData.get('modName')?.toString();
@@ -332,7 +349,9 @@ export const actions: Actions = {
 	},
 
 	addIceboxMod: async (event) => {
-		const userId = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		if (!accessResult.success) return accessResult.error;
+		const userId = accessResult.userId;
 
 		const formData = await event.request.formData();
 		const modName = formData.get('modName')?.toString();
@@ -376,7 +395,8 @@ export const actions: Actions = {
 	},
 
 	removeMod: async (event) => {
-		await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		if (!accessResult.success) return accessResult.error;
 
 		const formData = await event.request.formData();
 		const modName = formData.get('modName')?.toString();
@@ -408,7 +428,8 @@ export const actions: Actions = {
 	},
 
 	moveToIcebox: async (event) => {
-		await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		if (!accessResult.success) return accessResult.error;
 
 		const formData = await event.request.formData();
 		const modId = formData.get('modId')?.toString();
@@ -437,7 +458,7 @@ export const actions: Actions = {
 			await db.update(table.mod).set({ icebox: true }).where(eq(table.mod.id, modId));
 
 			// Notify collaborators via SSE
-			publishModlistEvent(mod.modlist, 'modlist-updated', {});
+			publishModlistEvent(mod.modlist, 'mod-moved-to-icebox', { modId });
 
 			return { success: true, modId };
 		} catch (error) {
@@ -447,7 +468,8 @@ export const actions: Actions = {
 	},
 
 	refreshMod: async (event) => {
-		await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		if (!accessResult.success) return accessResult.error;
 
 		const formData = await event.request.formData();
 		const modId = formData.get('modId')?.toString();
@@ -469,7 +491,8 @@ export const actions: Actions = {
 	},
 
 	refreshAllMods: async (event) => {
-		await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		if (!accessResult.success) return accessResult.error;
 
 		const modlistId = event.params.id;
 
@@ -489,7 +512,9 @@ export const actions: Actions = {
 	},
 
 	updateModlistName: async (event) => {
-		const userId = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		if (!accessResult.success) return accessResult.error;
+		const userId = accessResult.userId;
 
 		const formData = await event.request.formData();
 		const newName = formData.get('name')?.toString()?.trim();
@@ -528,7 +553,9 @@ export const actions: Actions = {
 	},
 
 	deleteModlist: async (event) => {
-		const userId = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		if (!accessResult.success) return accessResult.error;
+		const userId = accessResult.userId;
 
 		const modlistId = event.params.id;
 
@@ -560,7 +587,9 @@ export const actions: Actions = {
 	},
 
 	shareAdd: async (event) => {
-		const userId = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		if (!accessResult.success) return accessResult.error;
+		const userId = accessResult.userId;
 
 		const modlistId = event.params.id as string;
 
@@ -620,7 +649,9 @@ export const actions: Actions = {
 	},
 
 	shareRemove: async (event) => {
-		const userId = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		if (!accessResult.success) return accessResult.error;
+		const userId = accessResult.userId;
 
 		const modlistId = event.params.id as string;
 		const formData = await event.request.formData();
@@ -655,7 +686,9 @@ export const actions: Actions = {
 
 	// Toggle global read-only sharing
 	sharePublic: async (event) => {
-		const userId = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		if (!accessResult.success) return accessResult.error;
+		const userId = accessResult.userId;
 
 		const modlistId = event.params.id as string;
 
@@ -684,7 +717,9 @@ export const actions: Actions = {
 
 	// Toggle the essential (locked) status of a mod
 	toggleEssential: async (event) => {
-		const userId = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		if (!accessResult.success) return accessResult.error;
+		const userId = accessResult.userId;
 
 		const formData = await event.request.formData();
 		const modID = formData.get('modid')?.toString();
@@ -732,7 +767,8 @@ export const actions: Actions = {
 
 	// Activate a mod from icebox into the regular list
 	activateMod: async (event) => {
-		await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		if (!accessResult.success) return accessResult.error;
 
 		const formData = await event.request.formData();
 		const modId = formData.get('modId')?.toString();

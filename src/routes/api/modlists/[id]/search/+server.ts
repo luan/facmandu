@@ -4,6 +4,7 @@ import * as table from '$lib/server/db/schema';
 import { json } from '@sveltejs/kit';
 import { userHasModlistAccess } from '$lib/server/db';
 import { eq } from 'drizzle-orm';
+import { factorioApiLimiter } from '$lib/server/rate-limiter';
 
 export const GET: RequestHandler = async (event) => {
 	// Verify user session
@@ -80,9 +81,13 @@ export const GET: RequestHandler = async (event) => {
 	if (tagFilters.length > 0) requestBody.tag = tagFilters;
 
 	try {
-		const resp = await fetch('https://mods.factorio.com/api/search', {
+		const resp = await factorioApiLimiter.fetch('https://mods.factorio.com/api/search', {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
+			signal: AbortSignal.timeout(45000), // 45 second timeout for search (can be slower)
+			headers: {
+				'Content-Type': 'application/json',
+				'User-Agent': 'FactorioManager/1.0'
+			},
 			body: JSON.stringify(requestBody)
 		});
 		if (!resp.ok) {
@@ -97,7 +102,14 @@ export const GET: RequestHandler = async (event) => {
 			totalPages = Math.max(1, Math.ceil(data.result_count / data.page_size));
 		}
 
-		return json({ results, currentPage, totalPages });
+		return json(
+			{ results, currentPage, totalPages },
+			{
+				headers: {
+					'Cache-Control': 'private, max-age=300' // 5 minute cache for search results
+				}
+			}
+		);
 	} catch (error) {
 		console.error('Factorio search failed:', error);
 		return json({ message: 'search failed' }, { status: 500 });

@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import * as table from '$lib/server/db/schema';
 import { userHasModlistAccess } from '$lib/server/db';
 import type { RequestHandler } from './$types';
+import { factorioApiLimiter } from '$lib/server/rate-limiter';
 
 interface ReleaseInfo {
 	version: string;
@@ -16,7 +17,12 @@ async function getReleaseDownloadPath(modName: string, version: string): Promise
 			return null;
 		}
 
-		const res = await fetch(`https://mods.factorio.com/api/mods/${modName}`);
+		const res = await factorioApiLimiter.fetch(`https://mods.factorio.com/api/mods/${modName}`, {
+			signal: AbortSignal.timeout(30000), // 30 second timeout
+			headers: {
+				'User-Agent': 'FactorioManager/1.0'
+			}
+		});
 		if (!res.ok) return null;
 		const data = (await res.json()) as { releases: ReleaseInfo[] };
 		if (!data?.releases?.length) return null;
@@ -87,7 +93,12 @@ export const GET: RequestHandler = async (event) => {
 	try {
 		// Proxy the download request with credentials
 		const downloadUrl = `https://mods.factorio.com${downloadPath}?username=${user.factorioUsername}&token=${user.factorioToken}`;
-		const response = await fetch(downloadUrl);
+		const response = await factorioApiLimiter.fetch(downloadUrl, {
+			signal: AbortSignal.timeout(60000), // 60 second timeout for downloads (larger files)
+			headers: {
+				'User-Agent': 'FactorioManager/1.0'
+			}
+		});
 
 		if (!response.ok) {
 			return new Response('Failed to download mod', { status: response.status });

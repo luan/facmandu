@@ -10,7 +10,7 @@
 	import { enhance } from '$app/forms';
 	import { Button, buttonVariants } from '$lib/components/ui/button';
 	import { DownloadIcon, ShareIcon, TrashIcon } from '@lucide/svelte';
-	import { subscribeToModlistUpdates } from '$lib/stores/realtime.svelte';
+	import { realtimeManager } from '$lib/stores/realtime.svelte';
 	import { onMount, onDestroy } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import * as Dialog from '$lib/components/ui/dialog';
@@ -57,16 +57,150 @@
 
 	let activeViewers = $state<Viewer[]>([]);
 
-	function handleRealtimeUpdate() {
-		// Invalidate all data to refresh from server
-		// This ensures we get the latest state including dependency validation
+	function handleRealtimeUpdate(
+		eventType?: string,
+		eventData?: { modId?: string; enabled?: boolean; essential?: boolean; name?: string } | null
+	) {
+		// Optimized: only update the specific changes instead of full page reload
+		if (eventType === 'mod-toggled' && eventData?.modId && eventData?.enabled !== undefined) {
+			const modIndex = mods.findIndex((m) => m.id === eventData.modId);
+			if (modIndex !== -1) {
+				mods[modIndex] = { ...mods[modIndex], enabled: eventData.enabled };
+				mods = [...mods];
+				return;
+			}
+		} else if (
+			eventType === 'mod-essential-toggled' &&
+			eventData?.modId &&
+			eventData?.essential !== undefined
+		) {
+			const modIndex = mods.findIndex((m) => m.id === eventData.modId);
+			if (modIndex !== -1) {
+				mods[modIndex] = { ...mods[modIndex], essential: eventData.essential };
+				mods = [...mods];
+				return;
+			}
+		} else if (eventType === 'icebox-activated' && eventData?.modId) {
+			const modIndex = mods.findIndex((m) => m.id === eventData.modId);
+			if (modIndex !== -1) {
+				mods[modIndex] = { ...mods[modIndex], icebox: false };
+				mods = [...mods];
+				return;
+			}
+		} else if (eventType === 'mod-moved-to-icebox' && eventData?.modId) {
+			const modIndex = mods.findIndex((m) => m.id === eventData.modId);
+			if (modIndex !== -1) {
+				mods[modIndex] = { ...mods[modIndex], icebox: true };
+				mods = [...mods];
+				return;
+			}
+		} else if (eventType === 'mod-removed' && eventData?.name) {
+			const modIndex = mods.findIndex((m) => m.name === eventData.name);
+			if (modIndex !== -1) {
+				mods.splice(modIndex, 1);
+				mods = [...mods];
+				return;
+			}
+		} else if (eventType === 'mod-added' && eventData?.name) {
+			// For mod-added, we need fresh data from server since we don't have full mod object
+			// But we can show optimistic update
+			const tempMod = {
+				id: `temp-${Date.now()}`,
+				name: eventData.name,
+				enabled: true,
+				icebox: false,
+				essential: false,
+				// Other properties will be filled when cache is updated
+				title: eventData.name,
+				summary: null,
+				description: null,
+				category: null,
+				tags: null,
+				thumbnail: null,
+				downloadsCount: null,
+				lastUpdated: null,
+				version: null,
+				factorioVersion: null,
+				dependencies: null,
+				lastFetched: null,
+				fetchError: null,
+				updatedBy: null,
+				modlist: modlist?.id || ''
+			};
+			mods = [...mods, tempMod];
+			// Schedule a proper refresh after a short delay to get real data
+			setTimeout(() => invalidateAll(), 2000);
+			return;
+		} else if (eventType === 'icebox-added' && eventData?.name) {
+			// Similar optimistic update for icebox
+			const tempMod = {
+				id: `temp-icebox-${Date.now()}`,
+				name: eventData.name,
+				enabled: false,
+				icebox: true,
+				essential: false,
+				title: eventData.name,
+				summary: null,
+				description: null,
+				category: null,
+				tags: null,
+				thumbnail: null,
+				downloadsCount: null,
+				lastUpdated: null,
+				version: null,
+				factorioVersion: null,
+				dependencies: null,
+				lastFetched: null,
+				fetchError: null,
+				updatedBy: null,
+				modlist: modlist?.id || ''
+			};
+			mods = [...mods, tempMod];
+			setTimeout(() => invalidateAll(), 2000);
+			return;
+		}
+
+		// Fallback to full reload for other types of updates
 		invalidateAll();
 	}
 
 	// Realtime updates without live cursor payloads
 	onMount(() => {
 		if (modlist?.id) {
-			unsubscribeRealtime = subscribeToModlistUpdates(modlist.id, handleRealtimeUpdate);
+			// Subscribe to individual event types with specific handlers
+			const unsubscribers = [
+				realtimeManager.subscribe(`mod-toggled:${modlist.id}`, (data) =>
+					handleRealtimeUpdate('mod-toggled', data)
+				),
+				realtimeManager.subscribe(`mod-essential-toggled:${modlist.id}`, (data) =>
+					handleRealtimeUpdate('mod-essential-toggled', data)
+				),
+				realtimeManager.subscribe(`modlist-updated:${modlist.id}`, (data) =>
+					handleRealtimeUpdate('modlist-updated', data)
+				),
+				realtimeManager.subscribe(`mod-added:${modlist.id}`, (data) =>
+					handleRealtimeUpdate('mod-added', data)
+				),
+				realtimeManager.subscribe(`mod-removed:${modlist.id}`, (data) =>
+					handleRealtimeUpdate('mod-removed', data)
+				),
+				realtimeManager.subscribe(`modlist-name-updated:${modlist.id}`, (data) =>
+					handleRealtimeUpdate('modlist-name-updated', data)
+				),
+				realtimeManager.subscribe(`icebox-added:${modlist.id}`, (data) =>
+					handleRealtimeUpdate('icebox-added', data)
+				),
+				realtimeManager.subscribe(`icebox-activated:${modlist.id}`, (data) =>
+					handleRealtimeUpdate('icebox-activated', data)
+				),
+				realtimeManager.subscribe(`mod-moved-to-icebox:${modlist.id}`, (data) =>
+					handleRealtimeUpdate('mod-moved-to-icebox', data)
+				)
+			];
+
+			unsubscribeRealtime = () => {
+				unsubscribers.forEach((unsub) => unsub());
+			};
 
 			const url = `/api/modlists/${modlist.id}/events`;
 			eventSource = new EventSource(url);
@@ -77,7 +211,7 @@
 					if (payload.type === 'presence-update' || payload.type === 'presence-init') {
 						activeViewers = payload.data.viewers || [];
 					} else if (payload.type !== 'ping') {
-						handleRealtimeUpdate();
+						handleRealtimeUpdate(payload.type, payload.data);
 					}
 				} catch {
 					handleRealtimeUpdate();

@@ -1,22 +1,28 @@
 import { fail, type RequestEvent } from '@sveltejs/kit';
 import { userHasModlistAccess } from '$lib/server/db';
 
+type AccessResult =
+	| { success: true; userId: string }
+	| { success: false; error: ReturnType<typeof fail> };
+
 /**
  * Ensures a request comes from an authenticated user that has access to the given modlist.
- * If the user is not authenticated, returns a 401 response. If they don't have access,
- * returns a 403 response. Otherwise returns the user ID for further use.
+ * Returns either success with userId or failure with appropriate error response.
  */
-export async function ensureModlistAccess(event: RequestEvent, modlistId: string): Promise<string> {
+export async function ensureModlistAccess(
+	event: RequestEvent,
+	modlistId: string
+): Promise<AccessResult> {
 	if (!event.locals.session) {
-		throw fail(401);
+		return { success: false, error: fail(401) };
 	}
 
 	const { userId } = event.locals.session;
 
 	const allowed = await userHasModlistAccess(userId, modlistId);
 	if (!allowed) {
-		throw fail(403);
+		return { success: false, error: fail(403) };
 	}
 
-	return userId;
+	return { success: true, userId };
 }
