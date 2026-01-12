@@ -5,7 +5,7 @@ import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
 import type { Actions, PageServerLoad } from './$types';
 import { superValidate } from 'sveltekit-superforms';
-import { zod } from 'sveltekit-superforms/adapters';
+import { zod as zod4 } from 'sveltekit-superforms/adapters';
 import { registerSchema } from './schema';
 import { genID } from '$lib/server/db/ids';
 
@@ -14,23 +14,23 @@ export const load: PageServerLoad = async (event) => {
 		return redirect(302, '/');
 	}
 	return {
-		form: await superValidate(zod(registerSchema))
+		form: await superValidate(zod4(registerSchema as any))
 	};
 };
 
 export const actions: Actions = {
 	default: async (event) => {
-		const form = await superValidate(event, zod(registerSchema));
+		const form = await superValidate(event, zod4(registerSchema as any));
 		if (!form.valid) {
 			return fail(400, {
 				form
 			});
 		}
-		const username = form.data.username;
-		const password = form.data.password;
+		const username = (form.data as any).username as string;
+		const password = (form.data as any).password as string;
 
 		const userId = genID('user');
-		const passwordHash = await hash(password, {
+		const passwordHash = await hash(password as string | Uint8Array, {
 			// recommended minimum parameters
 			memoryCost: 19456,
 			timeCost: 2,
@@ -39,7 +39,9 @@ export const actions: Actions = {
 		});
 
 		try {
-			await db.insert(table.user).values({ id: userId, username, passwordHash });
+			await db
+				.insert(table.user)
+				.values({ id: userId, username: username as string, passwordHash: passwordHash as string });
 
 			const sessionToken = auth.generateSessionToken();
 			const session = await auth.createSession(sessionToken, userId);

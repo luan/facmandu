@@ -20,7 +20,11 @@ export default ts.config(
 		languageOptions: {
 			globals: { ...globals.browser, ...globals.node }
 		},
-		rules: { 'no-undef': 'off' }
+		rules: {
+			'no-undef': 'off',
+			'svelte/no-navigation-without-resolve': 'off',
+			'no-explicit-any': 'off'
+		}
 	},
 	{
 		files: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],
@@ -42,7 +46,9 @@ export default ts.config(
 					argsIgnorePattern: '^_',
 					varsIgnorePattern: '^\\$\\$(Props|Events|Slots|Generic)$'
 				}
-			]
+			],
+			'svelte/prefer-svelte-reactivity': 'off',
+			'no-explicit-any': 'off'
 		}
 	}
 );

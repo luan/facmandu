@@ -4,9 +4,20 @@
 	import Button from '$lib/components/ui/button/button.svelte';
 	import { buttonVariants } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
-	import { BookIcon, ClockIcon, DownloadIcon, NutIcon, PlusIcon } from '@lucide/svelte';
+	import {
+		BookIcon,
+		ChevronDownIcon,
+		ChevronUpIcon,
+		ClockIcon,
+		DownloadIcon,
+		NutIcon,
+		PlusIcon,
+		UndoIcon,
+		XIcon
+	} from '@lucide/svelte';
 	import type { Mod } from '$lib/server/db/schema';
 	import ModPreviewSheet from './ModPreviewSheet.svelte';
+	import { createRejectedRecommendationsStore } from '$lib/stores/rejected-recommendations.svelte';
 
 	// Props: list of mods in current modlist
 	interface Props {
@@ -14,6 +25,20 @@
 	}
 
 	let { mods }: Props = $props();
+
+	// ----------------- State -----------------
+	const modlistId = $derived(mods[0]?.modlist || '');
+	const rejectedStore = $derived(createRejectedRecommendationsStore(modlistId));
+	let notInterestedExpanded = $state(false);
+	let sheetOpen = $state(false);
+	let frozenMods = $state<typeof mods>([]);
+	let scrollContainer = $state<HTMLElement | null>(null);
+
+	$effect(() => {
+		if (!sheetOpen) {
+			frozenMods = mods;
+		}
+	});
 
 	// ----------------- Recommendation Logic -----------------
 	// Helper to parse optional dependency strings ("?" or "(?)" prefix)
@@ -77,7 +102,7 @@
 			const deps = new Set<string>();
 			const baseMods = new Set(['base', 'space-age', 'quality', 'elevated-rails']);
 
-			for (const mod of mods) {
+			for (const mod of frozenMods) {
 				if (!mod.enabled) continue;
 				for (const dep of parseOptionalDependencies(mod.dependencies)) {
 					if (!baseMods.has(dep)) {
@@ -92,11 +117,20 @@
 	// Recommendations are optional dependencies not already present in the mod list
 	const optionalRecommendations = $derived(
 		(() => {
-			const existing = new Set(mods.map((m) => m.name));
+			const existing = new Set(frozenMods.map((m) => m.name));
 			return Array.from(optionalDependencySet)
 				.filter((name) => !existing.has(name))
 				.sort((a, b) => a.localeCompare(b));
 		})()
+	);
+
+	// Split recommendations into active and rejected sections
+	const activeRecommendations = $derived(
+		optionalRecommendations.filter((name) => !rejectedStore.isRejected(name))
+	);
+
+	const rejectedRecommendations = $derived(
+		optionalRecommendations.filter((name) => rejectedStore.isRejected(name))
 	);
 
 	// Map of optional dependency -> mods recommending it
@@ -105,7 +139,7 @@
 			const map = new Map<string, string[]>();
 			const baseMods = new Set(['base', 'space-age', 'quality', 'elevated-rails']);
 
-			for (const mod of mods) {
+			for (const mod of frozenMods) {
 				if (!mod.enabled) continue;
 				for (const dep of parseOptionalDependencies(mod.dependencies)) {
 					if (baseMods.has(dep)) continue;
@@ -124,7 +158,7 @@
 	const conflictMap = $derived(
 		(() => {
 			const map = new Map<string, string[]>();
-			for (const mod of mods) {
+			for (const mod of frozenMods) {
 				if (!mod.enabled) continue;
 				for (const conf of parseConflicts(mod.dependencies)) {
 					if (!map.has(conf)) {
@@ -244,9 +278,52 @@
 			previewModName = null;
 		}
 	});
+
+	// ----------------- Rejection handling -----------------
+	function rejectRecommendation(modName: string) {
+		const savedScroll = scrollContainer?.scrollTop ?? 0;
+		rejectedStore.reject(modName);
+		requestAnimationFrame(() => {
+			if (scrollContainer) {
+				scrollContainer.scrollTop = savedScroll;
+			}
+		});
+	}
+
+	function undoReject(modName: string) {
+		const savedScroll = scrollContainer?.scrollTop ?? 0;
+		rejectedStore.unreject(modName);
+		requestAnimationFrame(() => {
+			if (scrollContainer) {
+				scrollContainer.scrollTop = savedScroll;
+			}
+		});
+	}
+
+	function handleModAdded(modName: string) {
+		const savedScroll = scrollContainer?.scrollTop ?? 0;
+		frozenMods = [
+			...frozenMods,
+			{
+				id: `temp-${Date.now()}`,
+				modlist: modlistId,
+				name: modName,
+				enabled: true,
+				icebox: false,
+				essential: false,
+				dependencies: null,
+				updatedBy: null
+			}
+		];
+		requestAnimationFrame(() => {
+			if (scrollContainer) {
+				scrollContainer.scrollTop = savedScroll;
+			}
+		});
+	}
 </script>
 
-<Sheet.Root>
+<Sheet.Root bind:open={sheetOpen}>
 	<Sheet.Trigger class={buttonVariants({ variant: 'outline', size: 'sm' })}>
 		<BookIcon class="mr-2 h-4 w-4" />
 		Recommendations
@@ -258,11 +335,11 @@
 			<Sheet.Description>Optional dependencies you may consider adding.</Sheet.Description>
 		</Sheet.Header>
 
-		<div class="space-y-6 overflow-y-auto p-4">
-			{#if optionalRecommendations.length === 0}
+		<div bind:this={scrollContainer} class="space-y-6 overflow-y-auto p-4">
+			{#if activeRecommendations.length === 0 && rejectedRecommendations.length === 0}
 				<p>No recommendations available.</p>
 			{:else}
-				{#each optionalRecommendations as modName (modName)}
+				{#each activeRecommendations as modName (modName)}
 					<div
 						use:onVisible={modName}
 						class="flex gap-4 rounded-lg border p-4 transition-colors {conflictMap.get(modName)
@@ -378,18 +455,139 @@
 							{/if}
 						</div>
 
-						<!-- Action Button -->
-						<div class="flex flex-shrink-0 items-start">
-							<form method="POST" action="?/addMod" use:enhance>
+						<!-- Action Buttons -->
+						<div class="flex flex-shrink-0 flex-col items-end gap-2">
+							<form
+								method="POST"
+								action="?/addMod"
+								use:enhance={() => {
+									return async ({ result }) => {
+										if (result.type === 'success') {
+											handleModAdded(modName);
+										}
+									};
+								}}
+							>
 								<input type="hidden" name="modName" value={modName} />
 								<Button type="submit" size="sm" variant="success">
 									<PlusIcon class="mr-1 h-3 w-3" />
 									Add to List
 								</Button>
 							</form>
+							<Button
+								type="button"
+								size="sm"
+								variant="outline"
+								class="text-muted-foreground hover:text-foreground hover:bg-transparent"
+								onclick={() => rejectRecommendation(modName)}
+							>
+								<XIcon class="mr-1 h-3 w-3" />
+								Not Interested
+							</Button>
 						</div>
 					</div>
 				{/each}
+
+				<!-- Not Interested Section -->
+				{#if rejectedRecommendations.length > 0}
+					<div class="border-muted-foreground/20 mt-8 border-t pt-6">
+						<button
+							type="button"
+							class="text-muted-foreground hover:text-foreground mb-4 flex w-full items-center justify-between text-sm font-medium"
+							onclick={() => (notInterestedExpanded = !notInterestedExpanded)}
+						>
+							<div class="flex items-center gap-2">
+								<span>Not Interested</span>
+								<Badge variant="outline" class="text-xs">{rejectedRecommendations.length}</Badge>
+							</div>
+							{#if notInterestedExpanded}
+								<ChevronUpIcon class="h-4 w-4" />
+							{:else}
+								<ChevronDownIcon class="h-4 w-4" />
+							{/if}
+						</button>
+
+						{#if notInterestedExpanded}
+							<div class="space-y-4">
+								{#each rejectedRecommendations as modName (modName)}
+									<div
+										use:onVisible={modName}
+										class="bg-muted/30 flex gap-4 rounded-lg border p-4 opacity-60 transition-opacity hover:opacity-100"
+									>
+										<!-- Thumbnail -->
+										<div class="flex-shrink-0">
+											{#if recommendationDetails[modName]?.thumbnail}
+												<img
+													src={`https://assets-mod.factorio.com${recommendationDetails[modName].thumbnail}`}
+													alt={recommendationDetails[modName].title || modName}
+													class="bg-muted h-20 w-20 rounded-lg object-cover"
+													loading="lazy"
+												/>
+											{:else}
+												<div class="bg-muted flex h-20 w-20 items-center justify-center rounded-lg">
+													<span class="text-muted-foreground text-xs">No Image</span>
+												</div>
+											{/if}
+										</div>
+
+										<!-- Mod Information -->
+										<div class="min-w-0 flex-1">
+											<!-- Title & Author -->
+											<div class="mb-1">
+												<a
+													href={`https://mods.factorio.com/mod/${modName}`}
+													class="text-foreground truncate text-left text-lg font-semibold"
+													onclick={(e) => {
+														if (
+															e.button === 0 &&
+															!e.metaKey &&
+															!e.ctrlKey &&
+															!e.shiftKey &&
+															!e.altKey
+														) {
+															e.preventDefault();
+															openModPreview(modName);
+														}
+													}}
+												>
+													{recommendationDetails[modName]?.title ?? modName}
+												</a>
+												{#if recommendationDetails[modName]?.owner}
+													<p class="text-muted-foreground flex items-center gap-1 text-sm">
+														<span>by</span>
+														<span class="text-accent font-medium"
+															>{recommendationDetails[modName].owner}</span
+														>
+													</p>
+												{/if}
+											</div>
+
+											<!-- Description -->
+											{#if recommendationDetails[modName]?.summary}
+												<p class="text-muted-foreground mb-3 line-clamp-2 text-sm">
+													{recommendationDetails[modName].summary}
+												</p>
+											{/if}
+										</div>
+
+										<!-- Undo Button -->
+										<div class="flex flex-shrink-0 items-start">
+											<Button
+												type="button"
+												size="sm"
+												variant="outline"
+												onclick={() => undoReject(modName)}
+											>
+												<UndoIcon class="mr-1 h-3 w-3" />
+												Undo
+											</Button>
+										</div>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				{/if}
 			{/if}
 		</div>
 	</Sheet.Content>

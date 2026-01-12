@@ -41,6 +41,26 @@ export const load: PageServerLoad = async (event) => {
 		return error(403, { message: 'Access denied' });
 	}
 
+	let hasFactorioCredentials = false;
+	let factorioUsername: string | null = null;
+	let factorioToken: string | null = null;
+	if (event.locals.session) {
+		const user = await db
+			.select({
+				factorioUsername: table.user.factorioUsername,
+				factorioToken: table.user.factorioToken
+			})
+			.from(table.user)
+			.where(eq(table.user.id, event.locals.session.userId))
+			.get();
+
+		if (user?.factorioUsername && user?.factorioToken) {
+			hasFactorioCredentials = true;
+			factorioUsername = user.factorioUsername;
+			factorioToken = user.factorioToken;
+		}
+	}
+
 	const result = await db
 		.select({
 			modlist: table.modList,
@@ -97,6 +117,11 @@ export const load: PageServerLoad = async (event) => {
 				sort_attribute: sortAttribute,
 				exclude_category: ['internal']
 			};
+
+			if (hasFactorioCredentials && factorioUsername && factorioToken) {
+				requestBody.username = factorioUsername;
+				requestBody.token = factorioToken;
+			}
 
 			// Pagination
 			requestBody.page = currentPage;
@@ -213,7 +238,7 @@ export const load: PageServerLoad = async (event) => {
 	return {
 		modlist: result[0].modlist,
 		mods: activeMods,
-		hasFactorioCredentials: false,
+		hasFactorioCredentials,
 		searchQuery: searchQuery || '',
 		searchResults,
 		searchError,

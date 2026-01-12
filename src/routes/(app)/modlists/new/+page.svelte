@@ -2,15 +2,15 @@
 	import { PlusIcon } from '@lucide/svelte';
 	import * as Form from '$lib/components/ui/form';
 	import { Input } from '$lib/components/ui/input';
-	import { superForm, type Infer, type SuperValidated } from 'sveltekit-superforms';
-	import { zodClient } from 'sveltekit-superforms/adapters';
+	import { superForm, type Infer, type SuperValidated } from 'sveltekit-superforms/client';
+	import { zodClient as zod4Client } from 'sveltekit-superforms/adapters';
 	import { formSchema, type FormSchema } from './schema';
 	import { Textarea } from '$lib/components/ui/textarea';
 
 	let { data }: { data: { form: SuperValidated<Infer<FormSchema>> } } = $props();
 
 	const form = superForm(data.form, {
-		validators: zodClient(formSchema)
+		validators: zod4Client(formSchema as any)
 	});
 
 	const { form: formData, enhance, message } = form;

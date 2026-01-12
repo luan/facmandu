@@ -46,6 +46,10 @@
 	let allResults = $state([...searchResults]);
 	let loadingMore = $state(false);
 
+	$effect(() => {
+		allResults = [...searchResults];
+	});
+
 	// Extract modlist id from current URL (path format /modlists/<id>)
 	const modlistPathMatch = page.url.pathname.match(/\/modlists\/([^/]+)/);
 	const modlistId = modlistPathMatch ? modlistPathMatch[1] : null;

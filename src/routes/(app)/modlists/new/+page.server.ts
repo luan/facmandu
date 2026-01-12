@@ -4,7 +4,7 @@ import * as table from '$lib/server/db/schema';
 import { genID } from '$lib/server/db/ids';
 import type { Actions, PageServerLoad } from './$types';
 import { superValidate } from 'sveltekit-superforms';
-import { zod } from 'sveltekit-superforms/adapters';
+import { zod as zod4 } from 'sveltekit-superforms/adapters';
 import { formSchema } from './schema';
 
 export const load: PageServerLoad = async (event) => {
@@ -13,7 +13,7 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	return {
-		form: await superValidate(zod(formSchema))
+		form: await superValidate(zod4(formSchema as any))
 	};
 };
 
@@ -27,16 +27,17 @@ export const actions: Actions = {
 			return fail(401, { message: 'Unauthorized' });
 		}
 
-		const form = await superValidate(event, zod(formSchema));
+		const form = await superValidate(event, zod4(formSchema as any));
 		if (!form.valid) {
 			return fail(400, {
 				form
 			});
 		}
-		const name = form.data.name;
+		const formData = form.data as any;
+		const name = formData.name as string;
 		let modlistJSON: ModListJSON;
 		try {
-			modlistJSON = JSON.parse(form.data.json);
+			modlistJSON = JSON.parse(formData.json as string);
 		} catch {
 			return fail(400, { message: 'Invalid JSON' });
 		}

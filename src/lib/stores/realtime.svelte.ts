@@ -131,8 +131,8 @@ class RealtimeManager {
 
 		// Group events by type and modlist for efficient processing
 		const eventGroups = new Map<string, RealtimeEvent[]>();
-		
-		eventsToProcess.forEach(event => {
+
+		eventsToProcess.forEach((event) => {
 			const key = `${event.type}:${event.modlistId}`;
 			if (!eventGroups.has(key)) {
 				eventGroups.set(key, []);
@@ -141,12 +141,10 @@ class RealtimeManager {
 		});
 
 		// Send batched events
-		eventGroups.forEach((events, key) => {
+		eventGroups.forEach((events) => {
 			if (events.length === 1) {
-				// Single event - send as normal
 				this.sendEvent(events[0]);
 			} else {
-				// Multiple events of same type - send as batch
 				this.sendBatchedEvent(events);
 			}
 		});
@@ -178,7 +176,7 @@ class RealtimeManager {
 			modlistId: events[0].modlistId,
 			data: {
 				batch: true,
-				events: events.map(e => e.data)
+				events: events.map((e) => e.data)
 			},
 			timestamp: Date.now()
 		};
@@ -192,10 +190,10 @@ class RealtimeManager {
 			clearTimeout(this.batchTimeout);
 			this.batchTimeout = null;
 		}
-		
+
 		// Flush any remaining events
 		this.flushEventQueue();
-		
+
 		if (this.broadcastChannel) {
 			this.broadcastChannel.close();
 		}

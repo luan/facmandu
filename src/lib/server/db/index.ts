@@ -17,10 +17,7 @@ if (env.TURSO_AUTH_TOKEN) {
 const client = createClient({
 	...clientConfig,
 	// Enable connection pooling
-	syncUrl: clientConfig.url,
-	// Pool configuration
-	connectionTimeout: 30000, // 30 seconds
-	requestTimeout: 15000 // 15 seconds per request
+	syncUrl: clientConfig.url
 });
 
 export const db = drizzle(client, { schema });

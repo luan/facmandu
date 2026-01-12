@@ -3,7 +3,7 @@ import { fail } from '@sveltejs/kit';
 import { getRequestEvent } from '$app/server';
 import type { Actions, PageServerLoad } from './$types';
 import { superValidate } from 'sveltekit-superforms';
-import { zod } from 'sveltekit-superforms/adapters';
+import { zod as zod4 } from 'sveltekit-superforms/adapters';
 
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
@@ -18,19 +18,19 @@ export const load: PageServerLoad = async (_event) => {
 
 	return {
 		user: currentUser || null,
-		form: await superValidate(zod(schema))
+		form: await superValidate(zod4(schema as any))
 	};
 };
 
 export const actions: Actions = {
 	updateFactorioCredentials: async (event) => {
-		const form = await superValidate(event, zod(schema));
+		const form = await superValidate(event, zod4(schema as any));
 		if (!form.valid) {
 			return fail(400, { form });
 		}
 
 		const user = requireLogin();
-		const { factorioUsername, factorioPassword } = form.data;
+		const { factorioUsername, factorioPassword } = form.data as any;
 
 		try {
 			// Call Factorio API to get token
@@ -69,8 +69,8 @@ export const actions: Actions = {
 			await db
 				.update(table.user)
 				.set({
-					factorioUsername: factorioUsername,
-					factorioToken: token[0],
+					factorioUsername: factorioUsername as string,
+					factorioToken: token[0] as string,
 					factorioTokenUpdatedAt: new Date()
 				})
 				.where(eq(table.user.id, user.id));

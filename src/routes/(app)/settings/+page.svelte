@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { superForm, type Infer, type SuperValidated } from 'sveltekit-superforms/client';
-	import { zodClient } from 'sveltekit-superforms/adapters';
+	import { zodClient as zod4Client } from 'sveltekit-superforms/adapters';
 	import { schema, type Schema } from './schema';
 	import * as Form from '$lib/components/ui/form';
 	import * as Card from '$lib/components/ui/card';
@@ -10,7 +10,7 @@
 	let { data }: { data: { form: SuperValidated<Infer<Schema>> } } = $props();
 
 	const form = superForm(data.form, {
-		validators: zodClient(schema)
+		validators: zod4Client(schema as any)
 	});
 
 	const { form: formData, enhance, message } = form;

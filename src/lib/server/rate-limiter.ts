@@ -37,8 +37,8 @@ class RateLimiter {
 		// Check for existing pending request (deduplication)
 		const existing = this.pendingRequests.get(key);
 		if (existing && Date.now() - existing.timestamp < 30000) {
-			// 30 second deduplication window
-			return existing.promise;
+			// 30 second deduplication window - clone to allow multiple consumers
+			return existing.promise.then((response) => response.clone());
 		}
 
 		return new Promise<Response>((resolve, reject) => {

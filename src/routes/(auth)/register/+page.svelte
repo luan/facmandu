@@ -2,8 +2,8 @@
 	import { UserPlusIcon } from '@lucide/svelte';
 	import * as Form from '$lib/components/ui/form';
 	import { Input } from '$lib/components/ui/input';
-	import { superForm, type Infer, type SuperValidated } from 'sveltekit-superforms';
-	import { zodClient } from 'sveltekit-superforms/adapters';
+	import { superForm, type Infer, type SuperValidated } from 'sveltekit-superforms/client';
+	import { zodClient as zod4Client } from 'sveltekit-superforms/adapters';
 	import { registerSchema, type RegisterSchema } from './schema';
 	import * as Card from '$lib/components/ui/card';
 	import { page } from '$app/state';
@@ -11,7 +11,7 @@
 	let { data }: { data: { form: SuperValidated<Infer<RegisterSchema>> } } = $props();
 
 	const form = superForm(data.form, {
-		validators: zodClient(registerSchema)
+		validators: zod4Client(registerSchema as any)
 	});
 
 	const { form: formData, enhance, message } = form;

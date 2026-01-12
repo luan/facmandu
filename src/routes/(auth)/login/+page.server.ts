@@ -6,7 +6,7 @@ import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
 import type { Actions, PageServerLoad } from './$types';
 import { superValidate } from 'sveltekit-superforms';
-import { zod } from 'sveltekit-superforms/adapters';
+import { zod as zod4 } from 'sveltekit-superforms/adapters';
 import { loginSchema } from './schema';
 
 export const load: PageServerLoad = async (event) => {
@@ -14,20 +14,20 @@ export const load: PageServerLoad = async (event) => {
 		return redirect(302, '/');
 	}
 	return {
-		form: await superValidate(zod(loginSchema))
+		form: await superValidate(zod4(loginSchema as any))
 	};
 };
 
 export const actions: Actions = {
 	default: async (event) => {
-		const form = await superValidate(event, zod(loginSchema));
+		const form = await superValidate(event, zod4(loginSchema as any));
 		if (!form.valid) {
 			return fail(400, {
 				form
 			});
 		}
-		const username = form.data.username;
-		const password = form.data.password;
+		const username = (form.data as any).username as string;
+		const password = (form.data as any).password as string;
 		const redirectTo = event.url.searchParams.get('redirectTo');
 
 		const results = await db.select().from(table.user).where(eq(table.user.username, username));
@@ -37,7 +37,7 @@ export const actions: Actions = {
 			return fail(400, { form: { ...form, message: 'Incorrect username or password' } });
 		}
 
-		const validPassword = await verify(existingUser.passwordHash, password, {
+		const validPassword = await verify(existingUser.passwordHash as string, password, {
 			memoryCost: 19456,
 			timeCost: 2,
 			outputLen: 32,
