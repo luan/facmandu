@@ -1,104 +1,119 @@
+import { error, fail } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
-import { fail } from '@sveltejs/kit';
-import { getRequestEvent } from '$app/server';
-import type { Actions, PageServerLoad } from './$types';
-import { superValidate } from 'sveltekit-superforms';
-import { zod as zod4 } from 'sveltekit-superforms/adapters';
-
+import { authenticationForm } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
+import type { Actions, PageServerLoad } from './$types';
 import { schema } from './schema';
 
-export const load: PageServerLoad = async (_event) => {
-	void _event;
-	const user = requireLogin();
-
-	// Get current user data including Factorio credentials
-	const currentUser = await db.select().from(table.user).where(eq(table.user.id, user.id)).get();
-
+export const load: PageServerLoad = async ({ locals }) => {
+	if (!locals.user) error(401, 'Sign in to manage your account');
+	const account = await db
+		.select({ username: table.user.factorioUsername, connected: table.user.factorioTokenUpdatedAt })
+		.from(table.user)
+		.where(eq(table.user.id, locals.user.id))
+		.get();
+	const preferences = await db
+		.select({
+			key: table.user.typesafeApiKey,
+			codexSubject: table.user.codexSubject,
+			metaSubject: table.user.metaSubject,
+			copilotSubject: table.user.copilotSubject
+		})
+		.from(table.user)
+		.where(eq(table.user.id, locals.user.id))
+		.get();
 	return {
-		user: currentUser || null,
-		form: await superValidate(zod4(schema as any))
+		account,
+		typesafeConnected: Boolean(preferences?.key),
+		codexConnected: Boolean(preferences?.codexSubject),
+		metaConnected: Boolean(preferences?.metaSubject),
+		copilotConnected: Boolean(preferences?.copilotSubject)
 	};
 };
 
+const providerKeys = {
+	codex: { subject: 'codexSubject', credentials: 'codexCredentials' },
+	meta: { subject: 'metaSubject', credentials: 'metaCredentials' },
+	copilot: { subject: 'copilotSubject', credentials: 'copilotCredentials' }
+} as const;
+
+type ProviderPatch = Pick<
+	typeof table.user.$inferInsert,
+	| 'codexSubject'
+	| 'codexCredentials'
+	| 'metaSubject'
+	| 'metaCredentials'
+	| 'copilotSubject'
+	| 'copilotCredentials'
+>;
+
+function disconnectProvider(provider: keyof typeof providerKeys, displayName: string) {
+	return async ({ request, locals }: { request: Request; locals: App.Locals }) => {
+		if (!locals.user) error(401, 'Sign in to manage your account');
+		const form = await authenticationForm(request);
+		if (form.get('disconnect') === 'true') {
+			// Passwordless accounts need another sign-in method before disconnecting.
+			const account = await db
+				.select({
+					passwordHash: table.user.passwordHash,
+					codexSubject: table.user.codexSubject,
+					metaSubject: table.user.metaSubject,
+					copilotSubject: table.user.copilotSubject
+				})
+				.from(table.user)
+				.where(eq(table.user.id, locals.user.id))
+				.get();
+			const subjects = {
+				codex: account?.codexSubject,
+				meta: account?.metaSubject,
+				copilot: account?.copilotSubject
+			} as const;
+			const remaining = (Object.keys(subjects) as (keyof typeof subjects)[]).filter(
+				(name) => name !== provider && subjects[name]
+			);
+			if (!account?.passwordHash.startsWith('$argon2') && !remaining.length)
+				return fail(400, { success: false, message: `${displayName} is your only sign-in method` });
+			const patch = {
+				[providerKeys[provider].subject]: null,
+				[providerKeys[provider].credentials]: null
+			} as unknown as ProviderPatch;
+			await db.update(table.user).set(patch).where(eq(table.user.id, locals.user.id));
+			return { success: true, message: `${displayName} disconnected` };
+		}
+		return fail(400, { success: false, message: 'Choose a model in the feature you want to use' });
+	};
+}
+
 export const actions: Actions = {
-	updateFactorioCredentials: async (event) => {
-		const form = await superValidate(event, zod4(schema as any));
-		if (!form.valid) {
-			return fail(400, { form });
-		}
-
-		const user = requireLogin();
-		const { factorioUsername, factorioPassword } = form.data as any;
-
-		try {
-			// Call Factorio API to get token
-			const response = await fetch('https://auth.factorio.com/api-login', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/x-www-form-urlencoded'
-				},
-				body: new URLSearchParams({
-					username: factorioUsername,
-					password: factorioPassword
-				})
-			});
-
-			if (!response.ok) {
-				return fail(400, {
-					form: {
-						...form,
-						message: 'Invalid Factorio credentials. Please check your username and password.'
-					}
-				});
-			}
-
-			const token = await response.json();
-
-			if (!Array.isArray(token) || token.length === 0) {
-				return fail(400, {
-					form: {
-						...form,
-						message: 'Invalid response from Factorio API'
-					}
-				});
-			}
-
-			// Update user with Factorio credentials
-			await db
-				.update(table.user)
-				.set({
-					factorioUsername: factorioUsername as string,
-					factorioToken: token[0] as string,
-					factorioTokenUpdatedAt: new Date()
-				})
-				.where(eq(table.user.id, user.id));
-
-			return {
-				form: {
-					...form,
-					message: 'Factorio credentials updated successfully!'
-				}
-			};
-		} catch (err) {
-			console.error('Update Factorio credentials error:', err);
-			return fail(500, {
-				form: {
-					...form,
-					message: 'Failed to update Factorio credentials. Please try again.'
-				}
-			});
-		}
+	codex: disconnectProvider('codex', 'Codex'),
+	meta: disconnectProvider('meta', 'Muse'),
+	copilot: disconnectProvider('copilot', 'Copilot'),
+	typesafe: async ({ request, locals }) => {
+		if (!locals.user) error(401, 'Sign in to manage your account');
+		const form = await authenticationForm(request);
+		const key = String(form.get('key') ?? '').trim();
+		if (form.get('remove') !== 'true' && (!key || key.length > 4096 || /\s/.test(key)))
+			return fail(400, { success: false, message: 'Enter a valid TypeSafe API key' });
+		await db
+			.update(table.user)
+			.set({ typesafeApiKey: form.get('remove') === 'true' ? null : key })
+			.where(eq(table.user.id, locals.user.id));
+		return {
+			success: true,
+			message: form.get('remove') === 'true' ? 'TypeSafe key removed' : 'TypeSafe key saved'
+		};
+	},
+	updateFactorioCredentials: async ({ request, locals }) => {
+		if (!locals.user) error(401, 'Sign in to manage your account');
+		const parsed = schema.safeParse(Object.fromEntries(await authenticationForm(request)));
+		if (!parsed.success)
+			return fail(400, { message: parsed.error.issues[0]?.message ?? 'Invalid settings' });
+		const { factorioUsername, factorioToken } = parsed.data;
+		await db
+			.update(table.user)
+			.set({ factorioUsername, factorioToken, factorioTokenUpdatedAt: new Date() })
+			.where(eq(table.user.id, locals.user.id));
+		return { success: true, message: 'Factorio token saved' };
 	}
 };
-
-function requireLogin() {
-	const { locals } = getRequestEvent();
-
-	if (!locals.user) {
-		throw new Error('User not authenticated');
-	}
-
-	return locals.user;
-}

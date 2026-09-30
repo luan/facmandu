@@ -1,54 +1,20 @@
-import type { RequestHandler } from '@sveltejs/kit';
-import { factorioApiLimiter } from '$lib/server/rate-limiter';
+import { json, type RequestHandler } from '@sveltejs/kit';
+import { validModName } from '$lib/server/mod-names';
+import { getPortalMod } from '$lib/server/portal-cache';
 
 export const GET: RequestHandler = async ({ params }) => {
 	const { name } = params;
-	if (!name) {
-		return new Response(JSON.stringify({ error: 'Mod name is required' }), {
-			status: 400,
-			headers: { 'Content-Type': 'application/json' }
-		});
-	}
-
-	// Validate mod name format to prevent SSRF attacks
-	if (!/^[a-zA-Z0-9_-]+$/.test(name) || name.length > 100) {
-		return new Response(JSON.stringify({ error: 'Invalid mod name format' }), {
-			status: 400,
-			headers: { 'Content-Type': 'application/json' }
-		});
-	}
-
+	if (!name || !validModName(name)) return json({ error: 'Invalid mod name' }, { status: 400 });
 	try {
-		const upstream = await factorioApiLimiter.fetch(
-			`https://mods.factorio.com/api/mods/${name}/full`,
-			{
-				signal: AbortSignal.timeout(30000), // 30 second timeout
-				headers: {
-					'User-Agent': 'FactorioManager/1.0'
-				}
-			}
-		);
-		const body = await upstream.text();
-
-		// Only forward successful responses and specific error codes
-		if (upstream.status === 200 || upstream.status === 404) {
-			return new Response(body, {
-				status: upstream.status,
-				headers: {
-					'Content-Type': 'application/json',
-					'Cache-Control': 'public, max-age=1800, s-maxage=3600' // 30 min browser, 1 hour CDN
-				}
-			});
-		} else {
-			return new Response(JSON.stringify({ error: 'Mod not found or unavailable' }), {
-				status: 404,
-				headers: { 'Content-Type': 'application/json' }
-			});
-		}
+		const result = await getPortalMod(name, true);
+		if (result.warning)
+			return json({ error: 'Current mod metadata could not be verified' }, { status: 503 });
+		return result.data
+			? json(result.data, {
+					headers: { 'Cache-Control': 'public, no-cache', 'X-Metadata-Cache': result.source }
+				})
+			: json({ error: 'Mod not found' }, { status: 404 });
 	} catch {
-		return new Response(JSON.stringify({ error: 'Failed to fetch mod information' }), {
-			status: 500,
-			headers: { 'Content-Type': 'application/json' }
-		});
+		return json({ error: 'Mod portal temporarily unavailable' }, { status: 503 });
 	}
 };

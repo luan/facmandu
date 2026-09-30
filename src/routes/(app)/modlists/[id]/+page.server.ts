@@ -1,26 +1,50 @@
-import { db } from '$lib/server/db';
-import { eq, and, like, isNotNull } from 'drizzle-orm';
+import { error, fail, isActionFailure, redirect } from '@sveltejs/kit';
+import { and, eq, getTableColumns, isNotNull, isNull, or } from 'drizzle-orm';
+import {
+	compareVersions,
+	inspectDependencies,
+	isBundledMod,
+	supportsFactorio
+} from '$lib/dependencies';
+import { listOwnerKey } from '$lib/server/accounts';
+import { db, userHasModlistAccess } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
-import { updateModCache, refreshModsCache, userHasModlistAccess } from '$lib/server/db';
-import { publishModlistEvent } from '$lib/server/realtime';
-import type { PageServerLoad } from './$types';
-import { error, fail, redirect, type Actions } from '@sveltejs/kit';
-import { parseDependencies, validateDependencies } from '$lib/server/services/dependencies';
 import { ensureModlistAccess } from '$lib/server/guards';
-import { factorioApiLimiter } from '$lib/server/rate-limiter';
+import { modMetadataValues } from '$lib/server/mod-metadata';
+import { validModName } from '$lib/server/mod-names';
+import { repairProgress, startModlistRepair } from '$lib/server/modlist-repair';
+import { getPortalMod } from '$lib/server/portal-cache';
+import { publishModlistEvent } from '$lib/server/realtime';
+import { parseDependencies, validateDependencies } from '$lib/server/services/dependencies';
+import type { Actions, PageServerLoad } from './$types';
 
-type SearchResult = {
-	name: string;
-	title: string;
-	/** Owner/author username of the mod */
-	owner: string;
-	downloads_count?: number;
-	updated_at?: string;
-	created_at?: string;
-	[key: string]: unknown;
-};
+const { description: _description, tags: _tags, ...modColumns } = getTableColumns(table.mod);
+
+async function requiredByEnabledMod(modlistId: string, modName: string): Promise<boolean> {
+	const dependentMods = await db
+		.select({ name: table.mod.name, dependencies: table.mod.dependencies })
+		.from(table.mod)
+		.where(
+			and(
+				eq(table.mod.modlist, modlistId),
+				eq(table.mod.enabled, true),
+				or(isNull(table.mod.icebox), eq(table.mod.icebox, false)),
+				isNotNull(table.mod.dependencies)
+			)
+		);
+	return dependentMods.some(
+		(mod) =>
+			mod.name !== modName &&
+			(inspectDependencies(mod.dependencies).errors.length > 0 ||
+				parseDependencies(mod.dependencies).some(
+					(dep) => dep.name === modName && dep.type === 'required'
+				))
+	);
+}
 
 export const load: PageServerLoad = async (event) => {
+	event.depends('app:modlist');
+	const { canManageServer } = await event.parent();
 	// Determine if this modlist is public read-only
 	const modlistVisibility = await db
 		.select({ owner: table.modList.owner, publicRead: table.modList.publicRead })
@@ -34,7 +58,7 @@ export const load: PageServerLoad = async (event) => {
 
 	let hasAccess = false;
 	if (event.locals.session) {
-		hasAccess = await userHasModlistAccess(event.locals.session.userId, event.params.id as string);
+		hasAccess = await userHasModlistAccess(event.locals.session.userId, event.params.id);
 	}
 
 	if (!hasAccess && !modlistVisibility.publicRead) {
@@ -42,8 +66,6 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	let hasFactorioCredentials = false;
-	let factorioUsername: string | null = null;
-	let factorioToken: string | null = null;
 	if (event.locals.session) {
 		const user = await db
 			.select({
@@ -56,177 +78,47 @@ export const load: PageServerLoad = async (event) => {
 
 		if (user?.factorioUsername && user?.factorioToken) {
 			hasFactorioCredentials = true;
-			factorioUsername = user.factorioUsername;
-			factorioToken = user.factorioToken;
 		}
 	}
 
 	const result = await db
 		.select({
 			modlist: table.modList,
-			mod: table.mod,
+			mod: modColumns,
 			updatedBy: {
 				id: table.user.id,
 				username: table.user.username
 			}
 		})
 		.from(table.modList)
-		.rightJoin(table.mod, eq(table.modList.id, table.mod.modlist))
+		.leftJoin(table.mod, eq(table.modList.id, table.mod.modlist))
 		.leftJoin(table.user, eq(table.mod.updatedBy, table.user.id))
 		.where(eq(table.modList.id, event.params.id));
-	if (result.length === 0) {
+	const list = result[0]?.modlist;
+	if (!list) {
 		return error(404, { message: 'modlist not found' });
 	}
 
-	// Handle search query and filter parameters from URL
-	const searchQuery = event.url.searchParams.get('q');
-	const categoryFilter = event.url.searchParams.get('category');
-	const versionFilter = event.url.searchParams.get('version');
-	const tagFilters = event.url.searchParams.getAll('tag');
-
-	// Pagination parameters (defaults: page 1, page_size 30)
-	let currentPage = parseInt(event.url.searchParams.get('page') ?? '1', 10);
-	if (Number.isNaN(currentPage) || currentPage < 1) currentPage = 1;
-	const pageSize = parseInt(event.url.searchParams.get('page_size') ?? '30', 10);
-	const effectivePageSize = Number.isNaN(pageSize) || pageSize < 1 ? 30 : pageSize;
-
-	let searchResults: SearchResult[] = [];
-	let searchError: string | null = null;
-	let totalPages = 1;
-
-	if (searchQuery && searchQuery.trim().length > 0) {
-		try {
-			const searchUrl = 'https://mods.factorio.com/api/search';
-			// Determine desired sort attribute for Factorio API
-			const sortAttrParam = event.url.searchParams.get('sort_attr');
-			const validSortAttributes = [
-				'relevancy',
-				'most_downloads',
-				'last_updated_at',
-				'trending'
-			] as const;
-			const sortAttribute =
-				sortAttrParam &&
-				validSortAttributes.includes(sortAttrParam as (typeof validSortAttributes)[number])
-					? (sortAttrParam as (typeof validSortAttributes)[number])
-					: 'last_updated_at';
-
-			const requestBody: Record<string, unknown> = {
-				query: searchQuery.trim(),
-				show_deprecated: false,
-				sort_attribute: sortAttribute,
-				exclude_category: ['internal']
-			};
-
-			if (hasFactorioCredentials && factorioUsername && factorioToken) {
-				requestBody.username = factorioUsername;
-				requestBody.token = factorioToken;
-			}
-
-			// Pagination
-			requestBody.page = currentPage;
-			requestBody.page_size = effectivePageSize;
-
-			// Forward filter parameters directly to the Factorio search API when provided
-			if (categoryFilter) requestBody.category = categoryFilter;
-			if (versionFilter && versionFilter !== 'any') requestBody.factorio_version = versionFilter;
-			if (tagFilters.length > 0) requestBody.tag = tagFilters;
-
-			const response = await factorioApiLimiter.fetch(searchUrl, {
-				method: 'POST',
-				signal: AbortSignal.timeout(45000), // 45 second timeout for search
-				headers: {
-					'Content-Type': 'application/json',
-					'User-Agent': 'FactorioManager/1.0'
-				},
-				body: JSON.stringify(requestBody)
-			});
-
-			if (!response.ok) {
-				console.error('Factorio API error:', response.status, response.statusText);
-				searchError = 'Failed to search mods';
-			} else {
-				const data = await response.json();
-				searchResults = data.results || [];
-
-				// Compute pagination info if available
-				if (typeof data.page_count === 'number') {
-					totalPages = data.page_count;
-				} else if (typeof data.result_count === 'number' && typeof data.page_size === 'number') {
-					totalPages = Math.max(1, Math.ceil(data.result_count / data.page_size));
-				} else {
-					// Fallback: assume there might be more pages if we received full page size
-					totalPages = searchResults.length === effectivePageSize ? currentPage + 1 : currentPage;
-				}
-
-				// Client-side filtering and sorting based on additional query params
-				const sortField = event.url.searchParams.get('sort');
-				const sortOrder = event.url.searchParams.get('order') ?? 'desc';
-
-				if (sortField) {
-					searchResults.sort((a: SearchResult, b: SearchResult) => {
-						const getSortValue = (obj: SearchResult): number | string => {
-							switch (sortField) {
-								case 'downloads':
-									return obj.downloads_count || 0;
-								case 'updated':
-									return new Date(obj.updated_at || 0).getTime();
-								case 'created':
-									return new Date(obj.created_at || 0).getTime();
-								default:
-									return obj.title ?? obj.name ?? '';
-							}
-						};
-						const av = getSortValue(a);
-						const bv = getSortValue(b);
-						if (av === bv) return 0;
-						let cmp: number;
-						if (typeof av === 'number' && typeof bv === 'number') {
-							cmp = av - bv;
-						} else {
-							cmp = String(av).localeCompare(String(bv));
-						}
-						return sortOrder === 'asc' ? cmp : -cmp;
-					});
-				}
-			}
-		} catch (error) {
-			console.error('Search error:', error);
-			searchError = 'Failed to search mods';
-		}
-	}
-
 	// Process mods and convert timestamps to proper Date objects
-	const processedMods = result.map((r) => {
+	const processedMods = result.flatMap((r) => {
 		const mod = r.mod;
-		return {
-			...mod,
-			lastUpdated: mod.lastUpdated ? new Date(mod.lastUpdated) : null,
-			lastFetched: mod.lastFetched ? new Date(mod.lastFetched) : null,
-			updatedBy: r.updatedBy
-		};
+		if (!mod || mod.name === 'base') return [];
+		return [
+			{
+				...mod,
+				lastUpdated: mod.lastUpdated ? new Date(mod.lastUpdated) : null,
+				lastFetched: mod.lastFetched ? new Date(mod.lastFetched) : null,
+				updatedBy: r.updatedBy
+			}
+		];
 	});
 
 	// Separate mods into active list and icebox list
 	const iceboxMods = processedMods.filter((m) => m.icebox);
 	const activeMods = processedMods.filter((m) => !m.icebox);
 
-	// Background refresh for mods that haven't been cached recently (older than 1 hour)
-	const now = new Date();
-	const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-
-	const modsNeedingRefresh = activeMods.filter(
-		(mod) => !mod.lastFetched || mod.lastFetched < oneHourAgo
-	);
-
-	if (modsNeedingRefresh.length > 0) {
-		Promise.all(modsNeedingRefresh.map((mod) => updateModCache(mod.id, mod.name))).catch(
-			console.error
-		);
-	}
-
 	// Dependency validation only considers active mods
-	const dependencyValidation = validateDependencies(activeMods);
+	const dependencyValidation = validateDependencies(activeMods, list.factorioVersion);
 
 	// Fetch collaborators
 	const collaborators = await db
@@ -236,25 +128,22 @@ export const load: PageServerLoad = async (event) => {
 		.where(eq(table.modListCollaborator.modlistId, event.params.id));
 
 	return {
-		modlist: result[0].modlist,
+		canManageServer,
+		curationAvailable: hasAccess && Boolean((await listOwnerKey(event.params.id))?.apiKey),
+		modlist: list,
 		mods: activeMods,
 		hasFactorioCredentials,
-		searchQuery: searchQuery || '',
-		searchResults,
-		searchError,
 		dependencyValidation,
+		repair: hasAccess ? repairProgress(event.params.id) : null,
 		iceboxMods,
 		collaborators,
-		currentUserId: event.locals.session?.userId,
-		sessionToken: event.cookies.get('auth-session'),
-		currentPage,
-		totalPages
+		currentUserId: event.locals.session?.userId
 	};
 };
 
-export const actions: Actions = {
+const modlistActions: Actions = {
 	toggleStatus: async (event) => {
-		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id);
 		if (!accessResult.success) return accessResult.error;
 		const userId = accessResult.userId;
 
@@ -272,7 +161,7 @@ export const actions: Actions = {
 				modlist: table.mod.modlist
 			})
 			.from(table.mod)
-			.where(eq(table.mod.id, modID))
+			.where(and(eq(table.mod.id, modID), eq(table.mod.modlist, event.params.id)))
 			.get();
 
 		if (!mod) {
@@ -281,35 +170,12 @@ export const actions: Actions = {
 
 		// If we are attempting to disable this mod, ensure it is not an essential mod and
 		// not a required dependency of another enabled mod
-		if (mod.essential) {
+		if (mod.enabled && mod.essential) {
 			return fail(400, { message: 'Cannot disable an essential mod' });
 		}
 
 		if (mod.enabled) {
-			// Optimized dependency check: only fetch mods that might depend on this mod
-			// Use SQL LIKE to search for the mod name in dependencies JSON
-			const dependentMods = await db
-				.select({ name: table.mod.name, dependencies: table.mod.dependencies })
-				.from(table.mod)
-				.where(
-					and(
-						eq(table.mod.modlist, mod.modlist),
-						eq(table.mod.enabled, true),
-						isNotNull(table.mod.dependencies),
-						// SQL LIKE to quickly filter mods that might contain this dependency
-						like(table.mod.dependencies, `%"${mod.name}"%`)
-					)
-				);
-
-			// Only parse dependencies for mods that potentially depend on this mod
-			const isRequired = dependentMods.some((m) => {
-				if (m.name === mod.name) return false;
-				return parseDependencies(m.dependencies).some(
-					(d) => d.name === mod.name && d.type !== 'optional'
-				);
-			});
-
-			if (isRequired) {
+			if (await requiredByEnabledMod(mod.modlist, mod.name)) {
 				return fail(400, { message: 'Cannot disable a required dependency' });
 			}
 		}
@@ -317,7 +183,7 @@ export const actions: Actions = {
 		await db
 			.update(table.mod)
 			.set({ enabled: !mod.enabled, updatedBy: userId })
-			.where(eq(table.mod.id, modID));
+			.where(and(eq(table.mod.id, modID), eq(table.mod.modlist, event.params.id)));
 
 		// Notify collaborators via SSE
 		publishModlistEvent(mod.modlist, 'mod-toggled', { modId: modID, enabled: !mod.enabled });
@@ -326,7 +192,7 @@ export const actions: Actions = {
 	},
 
 	addMod: async (event) => {
-		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id);
 		if (!accessResult.success) return accessResult.error;
 		const userId = accessResult.userId;
 
@@ -337,6 +203,7 @@ export const actions: Actions = {
 		if (!modName || !modlistId) {
 			return fail(400, { message: 'Mod name and modlist ID are required' });
 		}
+		if (!validModName(modName)) return fail(400, { message: 'Invalid mod name' });
 
 		try {
 			// Check if mod already exists in this modlist
@@ -347,7 +214,14 @@ export const actions: Actions = {
 				.get();
 
 			if (existingMod) {
-				return fail(400, { message: 'Mod already exists in this modlist' });
+				if (!existingMod.icebox)
+					return fail(400, { message: 'Mod already exists in this modlist' });
+				await db
+					.update(table.mod)
+					.set({ enabled: true, icebox: false, updatedBy: userId })
+					.where(and(eq(table.mod.id, existingMod.id), eq(table.mod.modlist, modlistId)));
+				publishModlistEvent(modlistId, 'icebox-activated', { modId: existingMod.id });
+				return { success: true, modId: existingMod.id };
 			}
 
 			// Generate ID and add mod
@@ -360,13 +234,10 @@ export const actions: Actions = {
 				updatedBy: userId
 			});
 
-			// Fetch mod information from API in background
-			updateModCache(modId, modName);
-
 			// Broadcast new mod addition
 			publishModlistEvent(modlistId, 'mod-added', { name: modName });
 
-			return { success: true, message: `Added ${modName} to modlist` };
+			return { success: true, modName, message: `Added ${modName} to modlist` };
 		} catch (error) {
 			console.error('Add mod error:', error);
 			return fail(500, { message: 'Failed to add mod' });
@@ -374,7 +245,7 @@ export const actions: Actions = {
 	},
 
 	addIceboxMod: async (event) => {
-		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id);
 		if (!accessResult.success) return accessResult.error;
 		const userId = accessResult.userId;
 
@@ -385,6 +256,7 @@ export const actions: Actions = {
 		if (!modName || !modlistId) {
 			return fail(400, { message: 'Mod name and modlist ID are required' });
 		}
+		if (!validModName(modName)) return fail(400, { message: 'Invalid mod name' });
 
 		try {
 			// Check if mod already exists in this modlist
@@ -420,7 +292,7 @@ export const actions: Actions = {
 	},
 
 	removeMod: async (event) => {
-		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id);
 		if (!accessResult.success) return accessResult.error;
 
 		const formData = await event.request.formData();
@@ -432,6 +304,16 @@ export const actions: Actions = {
 		}
 
 		try {
+			const mod = await db
+				.select({ essential: table.mod.essential })
+				.from(table.mod)
+				.where(and(eq(table.mod.modlist, modlistId), eq(table.mod.name, modName)))
+				.get();
+			if (!mod) return fail(404, { message: 'Mod not found in this modlist' });
+			if (mod.essential) return fail(400, { message: 'Cannot remove an essential mod' });
+			if (await requiredByEnabledMod(modlistId, modName)) {
+				return fail(400, { message: 'Cannot remove a required dependency' });
+			}
 			// Find and remove the mod from this modlist
 			const deletedMod = await db
 				.delete(table.mod)
@@ -445,7 +327,7 @@ export const actions: Actions = {
 			// Broadcast removal
 			publishModlistEvent(modlistId, 'mod-removed', { name: modName });
 
-			return { success: true, message: `Removed ${modName} from modlist` };
+			return { success: true, modName, message: `Removed ${modName} from modlist` };
 		} catch (error) {
 			console.error('Remove mod error:', error);
 			return fail(500, { message: 'Failed to remove mod' });
@@ -453,7 +335,7 @@ export const actions: Actions = {
 	},
 
 	moveToIcebox: async (event) => {
-		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id);
 		if (!accessResult.success) return accessResult.error;
 
 		const formData = await event.request.formData();
@@ -468,7 +350,7 @@ export const actions: Actions = {
 			const mod = await db
 				.select({ enabled: table.mod.enabled, modlist: table.mod.modlist })
 				.from(table.mod)
-				.where(eq(table.mod.id, modId))
+				.where(and(eq(table.mod.id, modId), eq(table.mod.modlist, event.params.id)))
 				.get();
 
 			if (!mod) {
@@ -480,7 +362,10 @@ export const actions: Actions = {
 				return fail(400, { message: 'Disable the mod before moving it to icebox' });
 			}
 
-			await db.update(table.mod).set({ icebox: true }).where(eq(table.mod.id, modId));
+			await db
+				.update(table.mod)
+				.set({ icebox: true })
+				.where(and(eq(table.mod.id, modId), eq(table.mod.modlist, event.params.id)));
 
 			// Notify collaborators via SSE
 			publishModlistEvent(mod.modlist, 'mod-moved-to-icebox', { modId });
@@ -492,31 +377,84 @@ export const actions: Actions = {
 		}
 	},
 
+	setModVersion: async (event) => {
+		const access = await ensureModlistAccess(event, event.params.id);
+		if (!access.success) return access.error;
+		const form = await event.request.formData();
+		const modId = form.get('modId')?.toString() ?? '';
+		const version = form.get('version')?.toString() ?? '';
+		if (compareVersions(version, version) === null)
+			return fail(400, { message: 'Choose a valid release.' });
+		const item = await db
+			.select()
+			.from(table.mod)
+			.where(and(eq(table.mod.id, modId), eq(table.mod.modlist, event.params.id)))
+			.get();
+		if (!item) return fail(404, { message: 'Mod not found.' });
+		if (isBundledMod(item.name))
+			return fail(400, { message: 'Bundled mods use the installed Factorio version.' });
+		let metadata: Awaited<ReturnType<typeof getPortalMod>>;
+		try {
+			metadata = await getPortalMod(item.name, true);
+		} catch {
+			return fail(503, { message: 'Release metadata is temporarily unavailable. Try again.' });
+		}
+		if (metadata.warning)
+			return fail(503, { message: 'Current release metadata could not be verified. Try again.' });
+		const info = metadata.data;
+		const release = info?.releases.find((candidate) => candidate.version === version);
+		if (!info || !release)
+			return fail(400, { message: 'This release is unavailable. Refresh metadata and try again.' });
+		if (inspectDependencies(JSON.stringify(release.info_json.dependencies)).errors.length)
+			return fail(400, { message: 'This release has invalid dependency metadata.' });
+		const result = await db.transaction(async (tx) => {
+			const list = await tx
+				.select()
+				.from(table.modList)
+				.where(eq(table.modList.id, event.params.id))
+				.get();
+			if (!list) return fail(404, { message: 'List not found.' });
+			if (!supportsFactorio(release.info_json.factorio_version, list.factorioVersion))
+				return fail(400, {
+					message: `This release requires Factorio ${release.info_json.factorio_version}; the list targets ${list.factorioVersion}.`
+				});
+			const updated = await tx
+				.update(table.mod)
+				.set({ ...modMetadataValues(info, release, metadata.fetchedAt), updatedBy: access.userId })
+				.where(and(eq(table.mod.id, modId), eq(table.mod.modlist, event.params.id)))
+				.returning({ id: table.mod.id });
+			return updated.length
+				? { success: true }
+				: fail(404, { message: 'Mod was removed while loading its releases.' });
+		});
+		if (!isActionFailure(result)) publishModlistEvent(event.params.id, 'mod-updated', { modId });
+		return result;
+	},
+
 	refreshMod: async (event) => {
-		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id);
 		if (!accessResult.success) return accessResult.error;
 
 		const formData = await event.request.formData();
 		const modId = formData.get('modId')?.toString();
-		const modName = formData.get('modName')?.toString();
-
-		if (!modId || !modName) {
-			return fail(400, { message: 'Mod ID and name are required' });
+		if (!modId) {
+			return fail(400, { message: 'Mod ID is required' });
 		}
+		const mod = await db
+			.select({ name: table.mod.name })
+			.from(table.mod)
+			.where(and(eq(table.mod.id, modId), eq(table.mod.modlist, event.params.id)))
+			.get();
+		if (!mod) return fail(404, { message: 'Mod not found in this modlist' });
 
-		try {
-			// Update mod cache
-			await updateModCache(modId, modName);
-
-			return { success: true, message: `Refreshed ${modName} information` };
-		} catch (error) {
-			console.error('Refresh mod error:', error);
-			return fail(500, { message: 'Failed to refresh mod information' });
-		}
+		startModlistRepair(event.params.id, accessResult.userId, {
+			refreshNames: [mod.name]
+		});
+		return { success: true, message: `Updating ${mod.name}` };
 	},
 
 	refreshAllMods: async (event) => {
-		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id);
 		if (!accessResult.success) return accessResult.error;
 
 		const modlistId = event.params.id;
@@ -525,19 +463,25 @@ export const actions: Actions = {
 			return fail(400, { message: 'Modlist ID is required' });
 		}
 
-		try {
-			// Refresh all mods in the list
-			await refreshModsCache(modlistId);
+		startModlistRepair(modlistId, accessResult.userId, { refresh: true });
+		return { success: true, message: 'Updating mods' };
+	},
 
-			return { success: true, message: 'Refreshed all mod information' };
-		} catch (error) {
-			console.error('Refresh all mods error:', error);
-			return fail(500, { message: 'Failed to refresh mod information' });
-		}
+	setFactorioVersion: async (event) => {
+		const access = await ensureModlistAccess(event, event.params.id);
+		if (!access.success) return access.error;
+		const version = (await event.request.formData()).get('version');
+		if (typeof version !== 'string' || !/^\d{1,2}\.\d{1,2}$/u.test(version))
+			return fail(400, { message: 'Invalid Factorio version' });
+		await db
+			.update(table.modList)
+			.set({ factorioVersion: version })
+			.where(eq(table.modList.id, event.params.id));
+		return { success: true };
 	},
 
 	updateModlistName: async (event) => {
-		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id);
 		if (!accessResult.success) return accessResult.error;
 		const userId = accessResult.userId;
 
@@ -546,7 +490,7 @@ export const actions: Actions = {
 		const modlistId = event.params.id;
 
 		if (!newName || !modlistId) {
-			return fail(400, { message: 'Modlist name and ID are required' });
+			return fail(400, { message: 'Enter a name for this list' });
 		}
 
 		if (newName.length < 1 || newName.length > 100) {
@@ -578,7 +522,7 @@ export const actions: Actions = {
 	},
 
 	deleteModlist: async (event) => {
-		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id);
 		if (!accessResult.success) return accessResult.error;
 		const userId = accessResult.userId;
 
@@ -602,21 +546,22 @@ export const actions: Actions = {
 
 			// Delete the modlist (mods will be cascade deleted)
 			await db.delete(table.modList).where(eq(table.modList.id, modlistId));
+			publishModlistEvent(modlistId, 'modlist-deleted');
 		} catch (error) {
 			console.error('Delete modlist error:', error);
 			return fail(500, { message: 'Failed to delete modlist' });
 		}
 
 		// Redirect after successful deletion (outside try-catch to avoid catching the redirect)
-		return redirect(302, '/');
+		return redirect(303, '/modlists');
 	},
 
 	shareAdd: async (event) => {
-		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id);
 		if (!accessResult.success) return accessResult.error;
 		const userId = accessResult.userId;
 
-		const modlistId = event.params.id as string;
+		const modlistId = event.params.id;
 
 		const formData = await event.request.formData();
 		const username = formData.get('username')?.toString()?.trim();
@@ -674,11 +619,11 @@ export const actions: Actions = {
 	},
 
 	shareRemove: async (event) => {
-		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id);
 		if (!accessResult.success) return accessResult.error;
 		const userId = accessResult.userId;
 
-		const modlistId = event.params.id as string;
+		const modlistId = event.params.id;
 		const formData = await event.request.formData();
 		const userIdToRemove = formData.get('userId')?.toString();
 
@@ -705,17 +650,18 @@ export const actions: Actions = {
 					eq(table.modListCollaborator.userId, userIdToRemove)
 				)
 			);
+		publishModlistEvent(modlistId, 'access-revoked', { userId: userIdToRemove });
 
 		return { success: true };
 	},
 
 	// Toggle global read-only sharing
 	sharePublic: async (event) => {
-		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id);
 		if (!accessResult.success) return accessResult.error;
 		const userId = accessResult.userId;
 
-		const modlistId = event.params.id as string;
+		const modlistId = event.params.id;
 
 		// Verify owner
 		const modlist = await db
@@ -736,13 +682,14 @@ export const actions: Actions = {
 			.update(table.modList)
 			.set({ publicRead: enabled })
 			.where(eq(table.modList.id, modlistId));
+		publishModlistEvent(modlistId, 'visibility-changed', { publicRead: enabled });
 
 		return { success: true, publicRead: enabled };
 	},
 
 	// Toggle the essential (locked) status of a mod
 	toggleEssential: async (event) => {
-		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id);
 		if (!accessResult.success) return accessResult.error;
 		const userId = accessResult.userId;
 
@@ -761,7 +708,7 @@ export const actions: Actions = {
 				modlist: table.mod.modlist
 			})
 			.from(table.mod)
-			.where(eq(table.mod.id, modID))
+			.where(and(eq(table.mod.id, modID), eq(table.mod.modlist, event.params.id)))
 			.get();
 
 		if (!mod) {
@@ -777,9 +724,10 @@ export const actions: Actions = {
 			.set({
 				essential: newEssential,
 				enabled: newEssential ? true : mod.enabled,
+				...(newEssential ? { icebox: false } : {}),
 				updatedBy: userId
 			})
-			.where(eq(table.mod.id, modID));
+			.where(and(eq(table.mod.id, modID), eq(table.mod.modlist, event.params.id)));
 
 		// Notify collaborators via SSE
 		publishModlistEvent(mod.modlist, 'mod-essential-toggled', {
@@ -792,7 +740,7 @@ export const actions: Actions = {
 
 	// Activate a mod from icebox into the regular list
 	activateMod: async (event) => {
-		const accessResult = await ensureModlistAccess(event, event.params.id as string);
+		const accessResult = await ensureModlistAccess(event, event.params.id);
 		if (!accessResult.success) return accessResult.error;
 
 		const formData = await event.request.formData();
@@ -807,14 +755,17 @@ export const actions: Actions = {
 			const mod = await db
 				.select({ modlist: table.mod.modlist })
 				.from(table.mod)
-				.where(eq(table.mod.id, modId))
+				.where(and(eq(table.mod.id, modId), eq(table.mod.modlist, event.params.id)))
 				.get();
 
 			if (!mod) {
 				return fail(404, { message: 'Mod not found' });
 			}
 
-			await db.update(table.mod).set({ icebox: false }).where(eq(table.mod.id, modId));
+			await db
+				.update(table.mod)
+				.set({ icebox: false, enabled: true, updatedBy: accessResult.userId })
+				.where(and(eq(table.mod.id, modId), eq(table.mod.modlist, event.params.id)));
 
 			publishModlistEvent(mod.modlist, 'icebox-activated', { modId });
 
@@ -825,3 +776,31 @@ export const actions: Actions = {
 		}
 	}
 };
+
+const repairActions = new Set([
+	'addMod',
+	'addIceboxMod',
+	'toggleStatus',
+	'toggleEssential',
+	'activateMod',
+	'removeMod',
+	'moveToIcebox',
+	'setFactorioVersion',
+	'setModVersion'
+]);
+export const actions: Actions = Object.fromEntries(
+	Object.entries(modlistActions).map(([name, action]) => [
+		name,
+		async (event) => {
+			const result = await action(event);
+			if (
+				!isActionFailure(result) &&
+				repairActions.has(name) &&
+				event.locals.session &&
+				event.params.id
+			)
+				startModlistRepair(event.params.id, event.locals.session.userId, { changed: true });
+			return result;
+		}
+	])
+);

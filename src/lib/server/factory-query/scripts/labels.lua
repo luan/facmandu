@@ -1,0 +1,177 @@
+-- AI Agent Bridge - scripts/labels.lua
+-- Author: bits-orio
+-- License: MIT
+--
+-- Force labels: what players call a force (docs/design/phase3-spec.md,
+-- "Force labels"). A team mod knows that "team-1" is Team Ace; the companion
+-- does not, and a player must never read team-1 for a team they know as
+-- Team Ace. Any remote interface exposing a zero-argument `force_labels_v1`
+-- returning { [force_name] = label } is a labels provider, found by scan
+-- like every other probe and never stored. The swap happens at the edges:
+-- the service turns labels into force names in the question, the renderer
+-- here turns force names back into labels, and the model never learns the
+-- mapping or pays a token for it.
+
+local PROBE_FN = "force_labels_v1"
+local LABEL_LIMIT = 64
+
+local richtext = require("scripts.richtext")
+
+local M = {}
+
+--- Sorted names of every interface exposing the probe.
+function M.provider_names()
+  local names = {}
+  for iface_name, functions in pairs(remote.interfaces) do
+    if functions[PROBE_FN] then names[#names + 1] = iface_name end
+  end
+  table.sort(names)
+  return names
+end
+
+--- A label as plain text: rich text tags stripped, control characters and
+--- runs of spaces collapsed, clipped.
+local function plain(label)
+  if type(label) ~= "string" then return nil end
+  local text = label:gsub("%[[^%[%]]*%]", ""):gsub("%c+", " "):gsub("%s+", " ")
+  text = text:match("^%s*(.-)%s*$")
+  if text == "" then return nil end
+  if #text > LABEL_LIMIT then text = text:sub(1, LABEL_LIMIT) end
+  return text
+end
+
+--- A label as it renders: its own colour and font tags kept, every other
+--- tag stripped. A team mod colours a team's name the way the team chose,
+--- and stripping that meant the companion never once printed a team name in
+--- its colour; the colours players saw were tags the model had written
+--- itself, which is what blew an answer past its byte budget. Only color
+--- and font survive: a label is not a place for a gps, an img or a link a
+--- provider might slip in, and those never make it past here.
+local function rich(label)
+  if type(label) ~= "string" then return nil end
+  local text = label:gsub("%[([^%[%]]*)%]", function(tag)
+    if tag:sub(1, 6) == "color=" or tag:sub(1, 5) == "font=" or tag == "/color" or tag == "/font" then
+      return "[" .. tag .. "]"
+    end
+    return ""
+  end)
+  text = text:gsub("%c+", " "):gsub("%s+", " "):match("^%s*(.-)%s*$")
+  if text == "" then return nil end
+  -- The same LABEL_LIMIT plain() applies, measured on the words alone. A
+  -- label past it is matched by its clipped plain form, so the coloured form
+  -- has to show those same words: the plain, clipped text, with no colour
+  -- span for a clip to tear.
+  local words = text:gsub("%[[^%[%]]*%]", "")
+  if #words > LABEL_LIMIT then return plain(label) end
+  return text
+end
+
+-- The rendering form of each label, filled beside the plain map on every
+-- scan and read only by decorate.
+local rich_by_force = {}
+
+--- { [force_name] = label } merged over every provider; the first provider
+--- by interface name wins a force two of them label. Forces the game does
+--- not have are dropped.
+function M.map()
+  local out = {}
+  for _, iface_name in ipairs(M.provider_names()) do
+    local answered, labels = pcall(remote.call, iface_name, PROBE_FN)
+    if answered and type(labels) == "table" then
+      for force_name, label in pairs(labels) do
+        local text = plain(label)
+        if type(force_name) == "string" and text and out[force_name] == nil and game.forces[force_name] then
+          out[force_name] = text
+          rich_by_force[force_name] = rich(label) or text
+        end
+      end
+    elseif not answered then
+      log("[ai-agent-bridge] force labels provider " .. iface_name .. " failed: " .. tostring(labels))
+    end
+  end
+  return out
+end
+
+-- One scan per tick: a rendered table asks once per cell, and the answer
+-- cannot change inside a tick. A plain Lua local, never storage, and the
+-- same on every peer because the providers are.
+local cache, cache_tick = nil, nil
+
+function M.cached_map()
+  if cache_tick ~= game.tick then
+    rich_by_force = {}
+    cache, cache_tick = M.map(), game.tick
+  end
+  return cache
+end
+
+--- Only force names that are not plain words are swapped in rendered text:
+--- "team-1" is, "player" is not, or "the player" in every answer would come
+--- out as a label. The service applies the same rule on the way in.
+function M.substitutable(force_name)
+  return type(force_name) == "string" and force_name:find("[%d%-_]") ~= nil
+end
+
+--- A force name outside any tag becomes its label in the team's colour;
+--- inside an open colour or font span it becomes the plain label, so one
+--- span never nests another. The plain label text itself, when a model
+--- copied it out of a tool result rather than writing the force name, is
+--- swapped for the coloured form the same way: the player reads the coloured
+--- name either way, and a model copying a label no longer turns a team's
+--- colour off, which is what "tell me the team names" did on the rig.
+local function decorate_plain(text, map, depth)
+  local out = text
+  -- Copied labels first, while the chunk is still bare text: a coloured
+  -- label inserted by the force-name pass below contains this same plain
+  -- text, and scanning for it afterwards wrapped the label a second time,
+  -- [color=..][color=..]Team Losers[/color][/color], which is what the first
+  -- version of this pass did.
+  if depth == 0 then
+    for force_name, label in pairs(map) do
+      local coloured = rich_by_force[force_name]
+      if coloured and coloured ~= label and M.substitutable(force_name) then
+        local at = 1
+        while true do
+          local s_, e_ = out:find(label, at, true)
+          if not s_ then break end
+          local before, after = out:sub(s_ - 1, s_ - 1), out:sub(e_ + 1, e_ + 1)
+          if not before:find("[%w%-_]") and not after:find("[%w%-_]") then
+            out = out:sub(1, s_ - 1) .. coloured .. out:sub(e_ + 1)
+            at = s_ + #coloured
+          else
+            at = e_ + 1
+          end
+        end
+      end
+    end
+  end
+  return (out:gsub("%f[%w%-_]([%w][%w%-_]*)%f[^%w%-_]", function(word)
+    local label = map[word]
+    if label and M.substitutable(word) then
+      if depth > 0 then return label end
+      return rich_by_force[word] or label
+    end
+    return word
+  end))
+end
+
+--- `text` with every bare force name outside a tag replaced by what
+--- players call that force, in the colour the team mod gave it.
+function M.decorate(text)
+  if type(text) ~= "string" or text == "" then return text end
+  local map = M.cached_map()
+  if next(map) == nil then return text end
+  return richtext.map_outside_tags(text, function(chunk, depth) return decorate_plain(chunk, map, depth or 0) end)
+end
+
+--- The same as an array of { name, label } sorted by name: the `labels` op.
+function M.all()
+  local rows = {}
+  for force_name, label in pairs(M.map()) do
+    rows[#rows + 1] = { name = force_name, label = label }
+  end
+  table.sort(rows, function(x, y) return x.name < y.name end)
+  return rows
+end
+
+return M

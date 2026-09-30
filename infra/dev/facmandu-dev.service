@@ -1,0 +1,19 @@
+[Unit]
+Description=Facmandu Vite development server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/luan/src/facmandu
+UnsetEnvironment=TYPESAFE_API_KEY FACMANDU_TYPESAFE_API_KEY
+Environment=NODE_ENV=development
+Environment=FACMANDU_DEV_HOST=factorio.luan.sh
+Environment=FACMANDU_DEV_ENV_DIR=/home/luan/.local/share/facmandu-app
+ExecStart=/usr/bin/bun --no-env-file --env-file=/home/luan/.local/share/facmandu-app/.env run dev
+Restart=on-failure
+RestartSec=3
+UMask=0077
+
+[Install]
+WantedBy=default.target

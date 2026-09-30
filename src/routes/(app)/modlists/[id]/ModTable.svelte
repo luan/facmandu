@@ -1,396 +1,85 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import { modDependencyGraph } from '$lib/mod-dependency-tree';
+	import ModDependencyTree from './ModDependencyTree.svelte';
+	import { isBundledMod, parseDependencies, supportsFactorio } from '$lib/dependencies';
 	import Button from '$lib/components/ui/button/button.svelte';
-	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
-	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { Input } from '$lib/components/ui/input';
-	import { RefreshCwIcon } from '@lucide/svelte';
-	import type { Mod } from '$lib/server/db/schema';
-	import {
-		type ColumnDef,
-		type ColumnFiltersState,
-		type SortingState,
-		type VisibilityState,
-		type SortingFn,
-		getCoreRowModel,
-		getFilteredRowModel,
-		getSortedRowModel
-	} from '@tanstack/table-core';
-	import { createSvelteTable, FlexRender, renderComponent } from '$lib/components/ui/data-table';
-	import { createRawSnippet } from 'svelte';
+	import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@lucide/svelte';
+	import type { ModSummary } from '$lib/server/db/schema';
 	import ThumbnailCell from './ThumbnailCell.svelte';
 	import ModInfoCell from './ModInfoCell.svelte';
-	import TagsCell from './TagsCell.svelte';
 	import ActionsCell from './ActionsCell.svelte';
 	import StatusCell from './StatusCell.svelte';
-	import CategoryCell from './CategoryCell.svelte';
-	import DownloadsCell from './DownloadsCell.svelte';
-	import UpdatedCell from './UpdatedCell.svelte';
-	import SortableHeader from './SortableHeader.svelte';
 	import ModPreviewSheet from './ModPreviewSheet.svelte';
-	import RecommendationSheet from './RecommendationSheet.svelte';
-	import IceboxSheet from './IceboxSheet.svelte';
 
 	interface Props {
-		mods: Array<Omit<Mod, 'updatedBy'> & { updatedBy: { id: string; username: string } | null }>;
-		modlistName: string;
+		mods: Array<Omit<ModSummary, 'updatedBy'> & { updatedBy: { id: string; username: string } | null }>;
+		factorioVersion: string;
 		conflictingMods: string[];
-		iceboxMods: Mod[];
+		readOnly?: boolean;
 	}
 
-	let { mods, modlistName, conflictingMods, iceboxMods }: Props = $props();
+	let { mods, factorioVersion, conflictingMods, readOnly = false }: Props = $props();
 	let confirmDeleteId: string | null = $state(null);
-	let sorting = $state<SortingState>([]);
-	let columnFilters = $state<ColumnFiltersState>([]);
-	let columnVisibility = $state<VisibilityState>({});
+	let sort = $state<'name' | 'status'>('name');
+	let descending = $state(false);
+	let query = $state('');
+	let view = $state<'table' | 'tree'>('table');
+	const graph = $derived(modDependencyGraph(mods));
+	let page = $state(0);
+	const pageSize = 20;
 	let previewOpen = $state(false);
 	let previewModName = $state<string | null>(null);
+	const previewMod = $derived(mods.find((mod) => mod.name === previewModName));
 
-	// Derive the table row type from the `mods` prop to keep types in sync
 	type RowMod = Props['mods'][number];
-
-	// State to control hiding of essential mods and their dependencies
 	let hideEssential = $state(false);
-
-	// State to control hiding of dependency mods
 	let hideDependencies = $state(false);
-
-	// Filtered list based on hide toggle
-	const visibleMods = $derived(
-		(() => {
-			return mods.filter((m) => {
-				// Exclude locked (essential) mods and their dependencies when requested
-				if (hideEssential && (essentialSet.has(m.name) || lockedDependencySet.has(m.name))) {
-					return false;
-				}
-
-				// Exclude regular dependency mods when requested (this should apply even when hideEssential is active)
-				if (hideDependencies && dependencySet.has(m.name)) {
-					return false;
-				}
-
-				return true;
-			});
-		})()
-	);
-
-	// Helper to rank a mod's status for sorting purposes
-	function statusRank(mod: RowMod): number {
-		if (mod.essential) return 3; // Locked
-		if (dependencySet.has(mod.name)) return 2; // Dependency
-		return mod.enabled ? 1 : 0; // Enabled / Disabled
-	}
-
-	// Custom sorting function that considers locked and dependency states
-	const statusSortingFn: SortingFn<RowMod> = (rowA, rowB) => {
-		const rankDiff = statusRank(rowA.original) - statusRank(rowB.original);
-		if (rankDiff !== 0) return rankDiff;
-
-		// Same status rank — if locked (essential) compare who locked it
-		if (rowA.original.essential && rowB.original.essential) {
-			const userA = (rowA.original.updatedBy as { username?: string } | null)?.username ?? '';
-			const userB = (rowB.original.updatedBy as { username?: string } | null)?.username ?? '';
-			return userA.localeCompare(userB);
-		}
-
-		// Fallback: alphabetical by mod name for stable ordering
-		return rowA.original.name.localeCompare(rowB.original.name);
-	};
-
-	const columns: ColumnDef<RowMod>[] = [
-		{
-			id: 'thumbnail',
-			header: '',
-			cell: ({ row }) => {
-				const mod = row.original;
-				return renderComponent(ThumbnailCell, { mod: mod as unknown as Mod });
-			},
-			enableSorting: false,
-			size: 60
-		},
-		{
-			accessorKey: 'enabled',
-			id: 'status',
-			header: ({ header }) => {
-				const statusHeaderSnippet = createRawSnippet(() => ({
-					render: () => 'Status'
-				}));
-				return renderComponent(SortableHeader, {
-					header,
-					children: statusHeaderSnippet
-				});
-			},
-			cell: ({ row }) => {
-				const mod = row.original;
-				const lockedByUser = row.getValue('updatedBy') as {
-					id: string;
-					username: string;
-				} | null;
-				return renderComponent(StatusCell, {
-					mod: mod as unknown as Mod,
-					isDependency: dependencySet.has(mod.name),
-					isEssential: essentialSet.has(mod.name),
-					lockedByUser,
-					requiredBy: dependencyMap.get(mod.name) ?? []
-				});
-			},
-			sortingFn: statusSortingFn,
-			size: 140
-		},
-		{
-			accessorKey: 'name',
-			header: ({ header }) => {
-				const modHeaderSnippet = createRawSnippet(() => ({
-					render: () => 'Mod'
-				}));
-				return renderComponent(SortableHeader, {
-					header,
-					children: modHeaderSnippet
-				});
-			},
-			cell: ({ row }) => {
-				const mod = row.original;
-				return renderComponent(ModInfoCell, {
-					mod: mod as unknown as Mod,
-					version: mod.version,
-					onOpenPreview: openModPreview
-				});
-			},
-			minSize: 160
-		},
-		{
-			accessorKey: 'category',
-			header: ({ header }) => {
-				const categoryHeaderSnippet = createRawSnippet(() => ({
-					render: () => 'Category'
-				}));
-				return renderComponent(SortableHeader, {
-					header,
-					children: categoryHeaderSnippet
-				});
-			},
-			cell: ({ row }) => {
-				const category = row.getValue('category') as string | null;
-				return renderComponent(CategoryCell, { category });
-			},
-			size: 120
-		},
-		{
-			accessorKey: 'downloadsCount',
-			header: ({ header }) => {
-				const downloadsHeaderSnippet = createRawSnippet(() => ({
-					render: () => 'Downloads'
-				}));
-				return renderComponent(SortableHeader, {
-					header,
-					children: downloadsHeaderSnippet
-				});
-			},
-			cell: ({ row }) => {
-				const downloads = row.getValue('downloadsCount') as number | null;
-				return renderComponent(DownloadsCell, { downloads });
-			},
-			size: 100
-		},
-		{
-			accessorKey: 'lastUpdated',
-			header: ({ header }) => {
-				const updatedHeaderSnippet = createRawSnippet(() => ({
-					render: () => 'Updated'
-				}));
-				return renderComponent(SortableHeader, {
-					header,
-					children: updatedHeaderSnippet
-				});
-			},
-			cell: ({ row }) => {
-				const lastUpdated = row.getValue('lastUpdated') as Date | null;
-				return renderComponent(UpdatedCell, { lastUpdated });
-			},
-			size: 100
-		},
-		{
-			accessorKey: 'updatedBy',
-			enableHiding: true,
-			header: ({ header }) => {
-				const updatedByHeaderSnippet = createRawSnippet(() => ({
-					render: () => 'Enabled By'
-				}));
-				return renderComponent(SortableHeader, {
-					header,
-					hide: true,
-					children: updatedByHeaderSnippet
-				});
-			},
-			cell: ({ row }) => {
-				const updatedBy = row.getValue('updatedBy') as {
-					id: string;
-					username: string;
-				} | null;
-				return updatedBy?.username || '-';
-			},
-			size: 100
-		},
-		{
-			accessorKey: 'tags',
-			header: 'Tags',
-			cell: ({ row }) => {
-				const mod = row.original;
-				return renderComponent(TagsCell, { mod: mod as unknown as Mod });
-			},
-			enableSorting: false,
-			size: 150
-		},
-		{
-			id: 'actions',
-			header: 'Actions',
-			cell: ({ row }) => {
-				const mod = row.original;
-				return renderComponent(ActionsCell, {
-					mod: mod as unknown as Mod,
-					confirmDeleteId,
-					onDeleteClick: handleDeleteClick
-				});
-			},
-			enableSorting: false,
-			size: 100
-		}
-	];
-
-	const table = createSvelteTable({
-		get data() {
-			return visibleMods;
-		},
-		columns,
-		getCoreRowModel: getCoreRowModel(),
-		getSortedRowModel: getSortedRowModel(),
-		getFilteredRowModel: getFilteredRowModel(),
-		onSortingChange: (updater) => {
-			if (typeof updater === 'function') {
-				sorting = updater(sorting);
-			} else {
-				sorting = updater;
+ let issuesOnly = $state(false);
+ const incompatible = (mod: RowMod) => !!mod.enabled && !isBundledMod(mod.name) && !!mod.factorioVersion && !supportsFactorio(mod.factorioVersion, factorioVersion);
+	const filtered = $derived.by(() => {
+		const needle = query.trim().toLocaleLowerCase();
+		return mods.filter((mod) =>
+ (!issuesOnly || incompatible(mod) || !!mod.fetchError || conflicts.has(mod.name) || (mod.enabled && (mod.dependencies === null || !mod.version))) &&
+			(!hideEssential || (!mod.essential && !lockedDependencySet.has(mod.name))) &&
+			(view === 'tree' || !hideDependencies || !dependencyMap.has(mod.name)) &&
+			(!needle || `${mod.name} ${mod.title ?? ''}`.toLocaleLowerCase().includes(needle))
+		).sort((a, b) => {
+			let order = sort === 'status' ? statusRank(a) - statusRank(b) : 0;
+			if (!order && sort === 'status' && a.essential && b.essential) {
+				order = (a.updatedBy?.username ?? '').localeCompare(b.updatedBy?.username ?? '');
 			}
-		},
-		onColumnFiltersChange: (updater) => {
-			if (typeof updater === 'function') {
-				columnFilters = updater(columnFilters);
-			} else {
-				columnFilters = updater;
-			}
-		},
-		onColumnVisibilityChange: (updater) => {
-			if (typeof updater === 'function') {
-				columnVisibility = updater(columnVisibility);
-			} else {
-				columnVisibility = updater;
-			}
-		},
-		state: {
-			get sorting() {
-				return sorting;
-			},
-			get columnFilters() {
-				return columnFilters;
-			},
-			get columnVisibility() {
-				return columnVisibility;
-			}
-		}
+			order ||= (a.title || a.name).localeCompare(b.title || b.name) || a.name.localeCompare(b.name);
+			return descending ? -order : order;
+		});
 	});
-
-	// Helper to parse dependency strings similar to server logic
-	function parseDependencies(dependencyString: string | null): string[] {
-		if (!dependencyString) return [];
-
-		try {
-			const deps = JSON.parse(dependencyString) as string[];
-			return (
-				deps
-					.map((dep) => {
-						// Extract the raw name segment before any version specifier
-						const [raw] = dep.split(/>=|>|<=|<|=/);
-						let name = raw.trim();
-
-						// Skip conflicts entirely
-						if (name.startsWith('!')) {
-							return null;
-						}
-
-						// Ignore optional dependencies (prefixed with '?' or '(?)')
-						if (name.startsWith('?') || name.startsWith('(?)')) {
-							return null;
-						}
-
-						// Incompatibility (~) – treat as regular dependency
-						if (name.startsWith('~')) {
-							return name.slice(1).trim();
-						}
-
-						return name;
-					})
-					// Filter out null entries (optional dependencies)
-					.filter((d): d is string => Boolean(d))
-			);
-		} catch {
-			return [];
-		}
+	const pageCount = $derived(Math.max(1, Math.ceil(filtered.length / pageSize)));
+	const currentPage = $derived(Math.min(page, pageCount - 1));
+	const rows = $derived(filtered.slice(currentPage * pageSize, (currentPage + 1) * pageSize));
+	const conflicts = $derived(new Set(conflictingMods));
+	function statusRank(mod: RowMod) {
+		return mod.essential ? 3 : dependencyMap.has(mod.name) ? 2 : mod.enabled ? 1 : 0;
+	}
+	function toggleSort(column: typeof sort) {
+		descending = sort === column ? !descending : false;
+		sort = column;
+		page = 0;
 	}
 
-	// Reactive set of mods that are dependencies of other enabled mods
-	const dependencySet = $derived(
-		(() => {
-			const deps = new Set<string>();
-			const baseMods = new Set(['base', 'space-age', 'quality', 'elevated-rails']);
+	const requiredDependencies = (encoded: string | null) =>
+		parseDependencies(encoded).filter((dep) => dep.type === 'required').map((dep) => dep.name);
 
-			for (const mod of mods) {
-				if (!mod.enabled) continue;
-				for (const dep of parseDependencies(mod.dependencies)) {
-					if (!baseMods.has(dep)) {
-						deps.add(dep);
-					}
-				}
-			}
-			return deps;
-		})()
-	);
-
-	// Map of dependencies -> list of mods that require them
-	const dependencyMap = $derived(
-		(() => {
-			const map = new Map<string, string[]>();
-			const baseMods = new Set(['base', 'space-age', 'quality', 'elevated-rails']);
-
-			for (const mod of mods) {
-				if (!mod.enabled) continue;
-				for (const dep of parseDependencies(mod.dependencies)) {
-					if (baseMods.has(dep)) continue;
-					if (!map.has(dep)) {
-						map.set(dep, []);
-					}
-					const arr = map.get(dep)!;
-					if (!arr.includes(mod.name)) {
-						arr.push(mod.name);
-					}
-				}
-			}
-			return map;
-		})()
-	);
-
-	// Set of mods explicitly marked as essential
-	const essentialSet = $derived(new Set(mods.filter((m) => m.essential).map((m) => m.name)));
+	const dependencyMap = $derived(graph.requiredBy);
 
 	// Dependencies that stem specifically from locked (essential) mods
 	const lockedDependencySet = $derived(
 		(() => {
 			const deps = new Set<string>();
-			const baseMods = new Set(['base', 'space-age', 'quality', 'elevated-rails']);
 			for (const mod of mods) {
 				if (!mod.essential) continue;
-				for (const dep of parseDependencies(mod.dependencies)) {
-					if (!baseMods.has(dep)) {
+				for (const dep of requiredDependencies(mod.dependencies)) {
+					if (!isBundledMod(dep)) {
 						deps.add(dep);
 					}
 				}
@@ -424,100 +113,79 @@
 	});
 </script>
 
-<Tooltip.Provider>
-	<ModPreviewSheet bind:open={previewOpen} modName={previewModName} />
-	<Card.Root>
-		<Card.Header>
-			<Card.CardAction class="flex flex-row-reverse items-center gap-2">
-				<form method="POST" action="?/refreshAllMods" use:enhance>
-					<Button type="submit" variant="outline" size="sm">
-						<RefreshCwIcon class="mr-2 h-4 w-4" />
-						Refresh All
-					</Button>
-				</form>
-				<RecommendationSheet {mods} />
-				<IceboxSheet {iceboxMods} />
-			</Card.CardAction>
-			<Card.Title>Mods in {modlistName}</Card.Title>
-			<Card.Description>
-				{mods.length} mod{mods.length !== 1 ? 's' : ''} in this list
-			</Card.Description>
-		</Card.Header>
-		<Card.Content>
+
+	<ModPreviewSheet bind:open={previewOpen} modName={previewModName} modId={previewMod?.id} selectedVersion={previewMod?.version} {factorioVersion} {readOnly} />
+	<div>
+		<div class="p-4">
 			{#if mods.length === 0}
 				<div class="py-8 text-center">
 					<p>No mods in this list yet.</p>
-					<p class="text-sm">Use the search above to add mods.</p>
+					<p class="text-muted-foreground text-sm">Use Add mods in the header to find your first mod.</p>
 				</div>
 			{:else}
 				<div class="space-y-4">
 					<!-- Filters -->
-					<div class="flex items-center gap-4">
-						<Input
-							placeholder="Filter mods..."
-							value={table.getColumn('name')?.getFilterValue() as string}
-							onchange={(e) => table.getColumn('name')?.setFilterValue(e.currentTarget.value)}
-							oninput={(e) => table.getColumn('name')?.setFilterValue(e.currentTarget.value)}
-							class="max-w-sm"
-						/>
+					<div class="flex flex-wrap items-center gap-4">
+						<Input aria-label="Filter mods" placeholder="Filter mods…" bind:value={query} oninput={() => { page = 0; }} class="max-w-sm" />
 
-						<!-- Hide dependencies toggle -->
+						<label class="flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={issuesOnly} onchange={() => { page = 0; }} />Show issues only</label>
+{#if view === 'table'}
 						<label class="flex items-center gap-2 text-sm">
-							<input type="checkbox" bind:checked={hideDependencies} />
+							<input type="checkbox" bind:checked={hideDependencies} onchange={() => { page = 0; }} />
 							Hide dependencies
 						</label>
 
+						{/if}
 						<!-- Hide essential mods toggle -->
 						<label class="flex items-center gap-2 text-sm">
-							<input type="checkbox" bind:checked={hideEssential} />
+							<input type="checkbox" bind:checked={hideEssential} onchange={() => { page = 0; }} />
 							Hide locked mods
 						</label>
+<div class="ml-auto flex shrink-0">
+						<Button variant={view === 'table' ? 'default' : 'outline'} size="sm" aria-pressed={view === 'table'} onclick={() => { view = 'table'; }}>Table</Button>
+						<Button variant={view === 'tree' ? 'default' : 'outline'} size="sm" aria-pressed={view === 'tree'} onclick={() => { view = 'tree'; }}>Dependency tree</Button>
+					</div>
 					</div>
 
-					<!-- Data Table -->
+					{#if view === 'tree'}
+						<ModDependencyTree {mods} matches={new Set(filtered.map((mod) => mod.name))} filtering={!!query.trim() || issuesOnly || hideEssential} onOpenPreview={openModPreview} />
+					{:else}
 					<div class="rounded-md border">
 						<Table.Root>
-							<Table.Header>
-								{#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
-									<Table.Row>
-										{#each headerGroup.headers as header (header.id)}
-											<Table.Head class="p-2" style="width: {header.getSize()}px;">
-												{#if !header.isPlaceholder}
-													<FlexRender
-														content={header.column.columnDef.header}
-														context={header.getContext()}
-													/>
-												{/if}
-											</Table.Head>
-										{/each}
-									</Table.Row>
+							<Table.Header><Table.Row>
+								<Table.Head class="w-12"><span class="sr-only">Thumbnail</span></Table.Head>
+								{#each [{ key: 'status', label: 'Status' }, { key: 'name', label: 'Mod' }] as column (column.key)}
+									<Table.Head class={column.key === 'status' ? 'w-20' : ''} aria-sort={sort === column.key ? descending ? 'descending' : 'ascending' : 'none'}>
+										<button type="button" class="flex items-center gap-1 py-2 hover:text-foreground" onclick={() => toggleSort(column.key === 'status' ? 'status' : 'name')}>
+											{column.label}{#if sort !== column.key}<ChevronsUpDownIcon class="h-3 w-3" />{:else if descending}<ArrowDownIcon class="h-3 w-3" />{:else}<ArrowUpIcon class="h-3 w-3" />{/if}
+										</button>
+									</Table.Head>
 								{/each}
-							</Table.Header>
+								{#if !readOnly}<Table.Head class="w-28">Actions</Table.Head>{/if}
+							</Table.Row></Table.Header>
 							<Table.Body>
-								{#each table.getRowModel().rows as row (row.id)}
-									<Table.Row
-										class="{row.original.enabled ? '' : 'opacity-50'}{conflictingMods.includes(
-											row.original.name
-										)
-											? ' bg-destructive/20 border-destructive'
-											: ''}"
-										data-mod-id={row.original.id}
-									>
-										{#each row.getVisibleCells() as cell (cell.id)}
-											<Table.Cell class="p-2">
-												<FlexRender
-													content={cell.column.columnDef.cell}
-													context={cell.getContext()}
-												/>
-											</Table.Cell>
-										{/each}
+								{#each rows as mod (mod.id)}
+									<Table.Row class={`${mod.enabled ? '' : 'opacity-50'} ${conflicts.has(mod.name) ? 'bg-destructive/20 border-destructive' : ''}`} data-mod-id={mod.id}>
+										<Table.Cell class="p-2"><ThumbnailCell {mod} /></Table.Cell>
+										<Table.Cell class="p-2"><StatusCell {mod} isDependency={dependencyMap.has(mod.name)} isEssential={mod.essential ?? false} {readOnly} lockedByUser={mod.updatedBy} requiredBy={(dependencyMap.get(mod.name) ?? []).map((parent) => parent.title || parent.name)} /></Table.Cell>
+										<Table.Cell class="p-2"><ModInfoCell {mod} requiredBy={graph.dependents.get(mod.name) ?? []} version={mod.version} onOpenPreview={openModPreview} />{#if incompatible(mod)}<p class="mt-1 text-xs text-amber-500">Requires Factorio {mod.factorioVersion} · list targets {factorioVersion}</p>{/if}</Table.Cell>
+										{#if !readOnly}<Table.Cell class="p-2"><ActionsCell {mod} {confirmDeleteId} onDeleteClick={handleDeleteClick} /></Table.Cell>{/if}
 									</Table.Row>
+								{:else}
+									<Table.Row><Table.Cell colspan={readOnly ? 3 : 4} class="py-8 text-center text-muted-foreground">No mods match these filters.</Table.Cell></Table.Row>
 								{/each}
 							</Table.Body>
 						</Table.Root>
 					</div>
+					<div class="flex items-center justify-between gap-4 text-sm" aria-live="polite">
+						<span class="text-muted-foreground">{filtered.length} mod{filtered.length === 1 ? '' : 's'}{pageCount > 1 ? ` · Page ${currentPage + 1} of ${pageCount}` : ''}</span>
+						{#if pageCount > 1}<div class="flex gap-2">
+							<Button variant="outline" size="sm" disabled={currentPage === 0} onclick={() => { page = currentPage - 1; }}><ChevronLeftIcon class="size-4" />Previous</Button>
+							<Button variant="outline" size="sm" disabled={currentPage + 1 >= pageCount} onclick={() => { page = currentPage + 1; }}>Next<ChevronRightIcon class="size-4" /></Button>
+						</div>{/if}
+					</div>
+					{/if}
 				</div>
 			{/if}
-		</Card.Content>
-	</Card.Root>
-</Tooltip.Provider>
+		</div>
+	</div>

@@ -1,12 +1,15 @@
 <script lang="ts">
 	import '../app.css';
-	import { ModeWatcher } from 'mode-watcher';
+	import * as Tooltip from '$lib/components/ui/tooltip';
+	import { Toaster } from 'svelte-sonner';
 
 	let { children } = $props();
 </script>
 
-<ModeWatcher defaultMode="dark" />
 <svelte:head>
 	<title>Facmandu</title>
 </svelte:head>
-{@render children?.()}
+<Tooltip.Provider delayDuration={200} skipDelayDuration={300}>
+	{@render children?.()}
+</Tooltip.Provider>
+<Toaster theme="dark" richColors closeButton />

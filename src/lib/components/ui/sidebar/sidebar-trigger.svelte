@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
+	import Button from '$lib/components/ui/button/tooltip-button.svelte';
 	import { cn } from '$lib/utils.js';
 	import PanelLeftIcon from '@lucide/svelte/icons/panel-left';
 	import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close';
@@ -12,8 +12,13 @@
 		flipped = $bindable(false),
 		class: className,
 		onclick,
+		children,
+		variant = 'ghost',
+		tooltip = 'Toggle sidebar',
+		size = children ? 'sm' : 'icon',
 		...restProps
-	}: ComponentProps<typeof Button> & {
+	}: Omit<ComponentProps<typeof Button>, 'tooltip'> & {
+		tooltip?: string;
 		onclick?: (e: MouseEvent) => void;
 		flipped?: boolean;
 	} = $props();
@@ -22,11 +27,12 @@
 </script>
 
 <Button
+	{tooltip}
 	data-sidebar="trigger"
 	data-slot="sidebar-trigger"
-	variant="ghost"
-	size="icon"
-	class={cn('size-7', className)}
+	{variant}
+	{size}
+	class={cn(children ? 'gap-2' : 'size-7', className)}
 	type="button"
 	onclick={(e) => {
 		onclick?.(e);
@@ -45,5 +51,5 @@
 	{:else}
 		<PanelLeftIcon />
 	{/if}
-	<span class="sr-only">Toggle Sidebar</span>
+	{#if children}{@render children()}{:else}<span class="sr-only">Toggle Sidebar</span>{/if}
 </Button>

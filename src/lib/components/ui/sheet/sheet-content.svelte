@@ -1,7 +1,7 @@
 <script lang="ts" module>
 	import { tv, type VariantProps } from 'tailwind-variants';
 	export const sheetVariants = tv({
-		base: 'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500',
+		base: 'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:duration-150 data-[state=open]:duration-150 motion-reduce:animate-none',
 		variants: {
 			side: {
 				top: 'data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 h-auto border-b',
@@ -21,6 +21,7 @@
 </script>
 
 <script lang="ts">
+	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { Dialog as SheetPrimitive } from 'bits-ui';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { Snippet } from 'svelte';
@@ -50,11 +51,14 @@
 		{...restProps}
 	>
 		{@render children?.()}
+		<Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}
 		<SheetPrimitive.Close
+			{...props}
 			class="ring-offset-background focus-visible:ring-ring absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none"
 		>
 			<XIcon class="size-4" />
 			<span class="sr-only">Close</span>
 		</SheetPrimitive.Close>
+		{/snippet}</Tooltip.Trigger><Tooltip.Content>Close</Tooltip.Content></Tooltip.Root>
 	</SheetPrimitive.Content>
 </SheetPrimitive.Portal>

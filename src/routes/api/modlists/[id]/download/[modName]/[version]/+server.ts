@@ -1,45 +1,11 @@
-import { db } from '$lib/server/db';
-import { eq } from 'drizzle-orm';
+import { createReadStream } from 'node:fs';
+import { Readable } from 'node:stream';
+import { and, eq, isNull, or } from 'drizzle-orm';
+import { db, userHasModlistAccess } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
-import { userHasModlistAccess } from '$lib/server/db';
+import { modArchive } from '$lib/server/mod-downloads';
+import { getPortalMod } from '$lib/server/portal-cache';
 import type { RequestHandler } from './$types';
-import { factorioApiLimiter } from '$lib/server/rate-limiter';
-
-interface ReleaseInfo {
-	version: string;
-	download_url: string;
-}
-
-async function getReleaseDownloadPath(modName: string, version: string): Promise<string | null> {
-	try {
-		// Validate mod name format to prevent injection
-		if (!/^[a-zA-Z0-9_-]+$/.test(modName) || modName.length > 100) {
-			return null;
-		}
-
-		const res = await factorioApiLimiter.fetch(`https://mods.factorio.com/api/mods/${modName}`, {
-			signal: AbortSignal.timeout(30000), // 30 second timeout
-			headers: {
-				'User-Agent': 'FactorioManager/1.0'
-			}
-		});
-		if (!res.ok) return null;
-		const data = (await res.json()) as { releases: ReleaseInfo[] };
-		if (!data?.releases?.length) return null;
-
-		let release: ReleaseInfo | undefined;
-		if (version && version !== 'latest') {
-			release = data.releases.find((r) => r.version === version);
-		}
-		if (!release) {
-			// fallback to latest
-			release = data.releases[data.releases.length - 1];
-		}
-		return release?.download_url ?? null;
-	} catch {
-		return null;
-	}
-}
 
 export const GET: RequestHandler = async (event) => {
 	// Require authentication
@@ -48,8 +14,8 @@ export const GET: RequestHandler = async (event) => {
 	}
 
 	const modlistId = event.params.id as string;
-	const modName = decodeURIComponent(event.params.modName as string);
-	const version = decodeURIComponent(event.params.version as string);
+	const modName = event.params.modName;
+	const version = event.params.version;
 
 	// Access control (owner or collaborator)
 	const hasAccess = await userHasModlistAccess(event.locals.session.userId, modlistId);
@@ -59,10 +25,15 @@ export const GET: RequestHandler = async (event) => {
 
 	// Verify the mod is actually in this modlist and enabled
 	const modInList = await db
-		.select({ name: table.mod.name })
+		.select({ name: table.mod.name, version: table.mod.version })
 		.from(table.mod)
 		.where(
-			eq(table.mod.modlist, modlistId) && eq(table.mod.name, modName) && eq(table.mod.enabled, true)
+			and(
+				eq(table.mod.modlist, modlistId),
+				eq(table.mod.name, modName),
+				eq(table.mod.enabled, true),
+				or(isNull(table.mod.icebox), eq(table.mod.icebox, false))
+			)
 		)
 		.get();
 
@@ -80,42 +51,39 @@ export const GET: RequestHandler = async (event) => {
 		.where(eq(table.user.id, event.locals.session.userId))
 		.get();
 
-	if (!user?.factorioUsername || !user?.factorioToken) {
-		return new Response('User does not have Factorio credentials configured', { status: 422 });
-	}
-
-	// Get the download path from Factorio API
-	const downloadPath = await getReleaseDownloadPath(modName, version);
-	if (!downloadPath) {
-		return new Response('Mod release not found', { status: 404 });
-	}
-
 	try {
-		// Proxy the download request with credentials
-		const downloadUrl = `https://mods.factorio.com${downloadPath}?username=${user.factorioUsername}&token=${user.factorioToken}`;
-		const response = await factorioApiLimiter.fetch(downloadUrl, {
-			signal: AbortSignal.timeout(60000), // 60 second timeout for downloads (larger files)
-			headers: {
-				'User-Agent': 'FactorioManager/1.0'
+		const { data } = await getPortalMod(modName);
+		const selected = version === 'latest' ? modInList.version : version;
+		const release = data?.releases.find((item) => item.version === selected);
+		if (!release)
+			return new Response('Selected mod release is unavailable; repair this list first', {
+				status: 422
+			});
+		const archive = await modArchive(
+			modName,
+			release,
+			user?.factorioUsername && user.factorioToken
+				? {
+						username: user.factorioUsername,
+						token: user.factorioToken
+					}
+				: null
+		);
+		return new Response(
+			Readable.toWeb(createReadStream(archive.path)) as ReadableStream<Uint8Array>,
+			{
+				headers: {
+					'Content-Type': 'application/zip',
+					'Content-Length': String(archive.size),
+					'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(`${modName}_${release.version}.zip`)}`,
+					'X-Factorio-Mod-Version': release.version,
+					'Cache-Control':
+						version === 'latest' ? 'private, no-cache' : 'private, max-age=31536000, immutable'
+				}
 			}
-		});
-
-		if (!response.ok) {
-			return new Response('Failed to download mod', { status: response.status });
-		}
-
-		// Stream the response back to the client
-		return new Response(response.body, {
-			status: response.status,
-			headers: {
-				'Content-Type': response.headers.get('Content-Type') || 'application/octet-stream',
-				'Content-Length': response.headers.get('Content-Length') || '',
-				'Content-Disposition':
-					response.headers.get('Content-Disposition') || `attachment; filename="${modName}.zip"`
-			}
-		});
-	} catch (error) {
-		console.error('Download proxy error:', error);
-		return new Response('Download failed', { status: 500 });
+		);
+	} catch (cause) {
+		console.error('Mod download failed:', cause instanceof Error ? cause.message : 'unknown error');
+		return new Response('Could not prepare the mod download', { status: 502 });
 	}
 };

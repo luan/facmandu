@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { SettingsIcon } from '@lucide/svelte';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import * as Card from '$lib/components/ui/card';
 </script>
@@ -11,7 +12,7 @@
 		</Card.Description>
 	</Card.Header>
 	<Card.Content>
-		<Button variant="outline" onclick={() => (window.location.href = '/settings')}>
+		<Button variant="outline" href="/settings"><SettingsIcon class="size-4" />
 			Go to Settings
 		</Button>
 	</Card.Content>

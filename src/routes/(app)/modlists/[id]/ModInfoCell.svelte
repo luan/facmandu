@@ -1,70 +1,38 @@
 <script lang="ts">
+	import { bundledModTitle, isBundledMod } from '$lib/dependencies';
 	import * as Tooltip from '$lib/components/ui/tooltip';
-	import type { Mod } from '$lib/server/db/schema';
+	import type { ModSummary } from '$lib/server/db/schema';
 	import { ExternalLinkIcon } from '@lucide/svelte';
 
 	interface Props {
-		mod: Mod;
+		mod: Omit<ModSummary, 'updatedBy'>;
 		version: string | null;
 		onOpenPreview?: (modName: string) => void;
+		showRelationships?: boolean;
+		requiredBy?: { name: string; title: string | null; enabled: boolean | null }[];
 	}
 
-	let { mod, version, onOpenPreview }: Props = $props();
-
-	let modPortalUrl = $derived(`https://mods.factorio.com/mod/${mod.name}`);
-
-	function handleClick(event: MouseEvent) {
-		// Ignore non-primary clicks or clicks with modifier keys to allow default browser behaviors
-		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-			return;
-		}
-
-		event.preventDefault();
-		onOpenPreview?.(mod.name);
-	}
+	let { mod, version, onOpenPreview, requiredBy = [], showRelationships = true }: Props = $props();
 </script>
 
-<div class="space-y-1">
-	<div class="font-medium">
-		{#if mod.summary}
-			<Tooltip.Root>
-				<Tooltip.Trigger class="text-left">
-					<a
-						href={modPortalUrl}
-						rel="noopener noreferrer"
-						class="hover:text-primary inline-flex items-center gap-1 hover:underline"
-						onclick={handleClick}
-					>
-						{mod.title || mod.name}
-						<ExternalLinkIcon class="h-3 w-3 opacity-60" />
-					</a>
-				</Tooltip.Trigger>
-				<Tooltip.Content class="max-w-80">
-					<div class="space-y-2">
-						<p class="font-semibold">
-							{mod.title || mod.name}
-							{#if version}
-								<span class="text-muted-foreground text-xs">({version})</span>
-							{/if}
-						</p>
-						<p class="text-sm">{mod.summary}</p>
-						<p class="text-muted-foreground text-xs">Click to view on Factorio Mod Portal</p>
-					</div>
-				</Tooltip.Content>
-			</Tooltip.Root>
-		{:else}
-			<a
-				href={modPortalUrl}
-				rel="noopener noreferrer"
-				class="hover:text-primary inline-flex items-center gap-1 hover:underline"
-				onclick={handleClick}
-			>
-				{mod.title || mod.name}
-				<ExternalLinkIcon class="h-3 w-3 opacity-60" />
-			</a>
-		{/if}
+<div class="min-w-0">
+	<div class="flex items-center gap-2">
+		{#if isBundledMod(mod.name)}<span class="font-medium">{bundledModTitle(mod.name)}</span>{:else}<button type="button" class="text-primary truncate text-left font-medium hover:underline" onclick={() => onOpenPreview?.(mod.name)}>
+			{mod.title || mod.name}
+		</button>{/if}
+		{#if version && !isBundledMod(mod.name)}<span class="shrink-0 text-xs tabular-nums text-muted-foreground">v{version}</span>{/if}
+		{#if !isBundledMod(mod.name)}<Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<a {...props} href={`https://mods.factorio.com/mod/${encodeURIComponent(mod.name)}`} target="_blank" rel="noopener noreferrer" aria-label={`Open ${mod.name} on Factorio Mod Portal`} class="text-muted-foreground hover:text-foreground shrink-0">
+			<ExternalLinkIcon class="h-3.5 w-3.5" />
+		</a>{/snippet}</Tooltip.Trigger><Tooltip.Content>Factorio Mod Portal</Tooltip.Content></Tooltip.Root>{/if}
 	</div>
-	{#if mod.title && mod.title !== mod.name}
-		<div class="text-muted-foreground text-xs">({mod.name})</div>
+	<p class="text-muted-foreground truncate text-xs">{mod.name}{mod.category ? ` · ${mod.category}` : ''}</p>
+	{#if showRelationships && requiredBy.length}
+		<p class="mt-1 text-xs text-muted-foreground">Required by {#each requiredBy.slice(0, 3) as parent, index (parent.name)}{#if index > 0}, {/if}<button type="button" class="text-primary hover:underline" onclick={() => onOpenPreview?.(parent.name)}>{parent.title || parent.name}</button>{#if !parent.enabled} (disabled){/if}{/each}</p>
+		{#if requiredBy.length > 3}
+			<details class="text-xs text-muted-foreground">
+				<summary class="cursor-pointer hover:text-foreground">{requiredBy.length - 3} more</summary>
+				<p class="mt-1">{#each requiredBy.slice(3) as parent, index (parent.name)}{#if index > 0}, {/if}<button type="button" class="text-primary hover:underline" onclick={() => onOpenPreview?.(parent.name)}>{parent.title || parent.name}</button>{#if !parent.enabled} (disabled){/if}{/each}</p>
+			</details>
+		{/if}
 	{/if}
 </div>

@@ -1,163 +1,72 @@
-import { db } from '$lib/server/db';
-import { eq, and } from 'drizzle-orm';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { Readable } from 'node:stream';
+import { error, json } from '@sveltejs/kit';
+import { and, eq, isNull, or } from 'drizzle-orm';
+import { db, userHasModlistAccess } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
-import { userHasModlistAccess } from '$lib/server/db';
-import type { RequestHandler } from './$types';
+import { exportPath, exportProgress, prepareExport } from '$lib/server/mod-export';
+import type { RequestEvent, RequestHandler } from './$types';
 
-interface ReleaseInfo {
-	version: string;
-	download_url: string;
+async function authorize(event: RequestEvent) {
+	const userId = event.locals.session?.userId;
+	if (!userId) error(401, 'Sign in to export mods');
+	if (!(await userHasModlistAccess(userId, event.params.id)))
+		error(403, 'You cannot export this list');
+	return userId;
 }
 
-async function getReleaseDownloadPath(
-	modName: string,
-	version: string | null | undefined
-): Promise<string | null> {
+export const POST: RequestHandler = async (event) => {
+	const userId = await authorize(event);
+	const [mods, user] = await Promise.all([
+		db
+			.select({ name: table.mod.name, version: table.mod.version, enabled: table.mod.enabled })
+			.from(table.mod)
+			.where(
+				and(
+					eq(table.mod.modlist, event.params.id),
+					or(isNull(table.mod.icebox), eq(table.mod.icebox, false))
+				)
+			),
+		db
+			.select({ username: table.user.factorioUsername, token: table.user.factorioToken })
+			.from(table.user)
+			.where(eq(table.user.id, userId))
+			.get()
+	]);
 	try {
-		const res = await fetch(`https://mods.factorio.com/api/mods/${modName}`);
-		if (!res.ok) return null;
-		const data = (await res.json()) as { releases: ReleaseInfo[] };
-		if (!data?.releases?.length) return null;
-		let release: ReleaseInfo | undefined;
-		if (version) {
-			release = data.releases.find((r) => r.version === version);
-		}
-		if (!release) {
-			// fallback to latest
-			release = data.releases[data.releases.length - 1];
-		}
-		return release?.download_url ?? null;
-	} catch {
-		return null;
+		const progress = await prepareExport(
+			event.params.id,
+			mods,
+			user?.username && user.token ? { username: user.username, token: user.token } : null
+		);
+		return json(progress, { status: progress.state === 'running' ? 202 : 200 });
+	} catch (cause) {
+		error(422, cause instanceof Error ? cause.message : 'Could not prepare mod bundle');
 	}
-}
+};
 
 export const GET: RequestHandler = async (event) => {
-	// Require authentication
-	if (!event.locals.session) {
-		return new Response('Unauthorized', { status: 401 });
-	}
-
-	const modlistId = event.params.id as string;
-
-	// Access control (owner or collaborator)
-	const hasAccess = await userHasModlistAccess(event.locals.session.userId, modlistId);
-	if (!hasAccess) {
-		return new Response('Forbidden', { status: 403 });
-	}
-
-	// Fetch enabled mods for this modlist
-	const mods = await db
-		.select({ name: table.mod.name, version: table.mod.version })
-		.from(table.mod)
-		.where(and(eq(table.mod.modlist, modlistId), eq(table.mod.enabled, true)));
-
-	const user = await db
-		.select({
-			factorioUsername: table.user.factorioUsername,
-			factorioToken: table.user.factorioToken
-		})
-		.from(table.user)
-		.where(eq(table.user.id, event.locals.session.userId))
-		.get();
-	if (!user) {
-		return new Response('User does not have a factorio account set', { status: 422 });
-	}
-
-	// Build mod-list.json content (base + enabled mods)
-	const modlistJson = JSON.stringify(
+	await authorize(event);
+	const id = event.url.searchParams.get('download') ?? event.url.searchParams.get('job');
+	if (!id || !/^[a-f0-9]{64}$/u.test(id)) error(400, 'Invalid export');
+	// Each export hash includes its list, and access is checked again for every download.
+	const progress = exportProgress(id);
+	if (!progress || progress.listId !== event.params.id)
+		error(404, 'Prepare this export again to restore its download link');
+	if (event.url.searchParams.has('job')) return json(progress);
+	if (progress.state !== 'done') error(409, 'This export is not ready');
+	const file = await stat(exportPath(id)).catch(() => null);
+	if (!file) error(404, 'Prepare this export again');
+	return new Response(
+		Readable.toWeb(createReadStream(exportPath(id))) as ReadableStream<Uint8Array>,
 		{
-			mods: [{ name: 'base', enabled: true }, ...mods.map((m) => ({ name: m.name, enabled: true }))]
-		},
-		null,
-		2
-	);
-
-	// Build list with resolved download paths (using server-side proxy approach)
-	const downloadUrls: string[] = [];
-	for (const m of mods) {
-		const path = await getReleaseDownloadPath(m.name, m.version);
-		if (!path) continue;
-		// Use server-side proxy endpoint instead of exposing credentials
-		const url = `${event.url.origin}/api/modlists/${modlistId}/download/${encodeURIComponent(m.name)}/${encodeURIComponent(m.version || 'latest')}`;
-		downloadUrls.push(url);
-	}
-
-	const downloadLines = downloadUrls.join('\n');
-
-	// Assemble shell script that leverages aria2 for concurrent downloads with a built-in TUI progress display
-	const script = `
-#!/usr/bin/env bash
-set -euo pipefail
-
-# If aria2c is missing, try to install it using the best method available on the
-# current platform. We cover the most common package managers on macOS, Linux
-# (Debian/Ubuntu, Fedora/RHEL, Arch) and Windows (Git-Bash with Chocolatey or
-# Winget). When none are available we bail out with a helpful message.
-
-if ! command -v aria2c &>/dev/null; then
-  os="$(uname -s)"
-  echo "aria2c not found. Attempting to install for $os…" >&2
-
-  install_ok=false
-
-  case "$os" in
-    Darwin)
-      if command -v brew &>/dev/null; then
-        brew install aria2 && install_ok=true
-      fi
-      ;;
-
-    Linux)
-      if command -v apt-get &>/dev/null; then
-        sudo apt-get update && sudo apt-get install -y aria2 && install_ok=true
-      elif command -v dnf &>/dev/null; then
-        sudo dnf install -y aria2 && install_ok=true
-      elif command -v pacman &>/dev/null; then
-        sudo pacman -Sy --noconfirm aria2 && install_ok=true
-      fi
-      ;;
-
-    MINGW*|MSYS*)
-      # Git-Bash on Windows
-      if command -v choco &>/dev/null; then
-        choco install -y aria2 && install_ok=true
-      elif command -v winget &>/dev/null; then
-        winget install --id=aria2 -e --silent && install_ok=true
-      fi
-      ;;
-  esac
-
-  if ! $install_ok; then
-    echo "Automatic installation failed. Please install 'aria2' manually and re-run this script." >&2
-    exit 1
-  fi
-fi
-
-# Create the Factorio mod-list.json file
-cat > mod-list.json <<'EOF'
-${modlistJson}
-EOF
-
-# Write the list of download URLs to a temporary file
-cat > downloads.txt <<'URLS'
-${downloadLines}
-URLS
-
-echo "Starting mod downloads (using aria2)..."
-aria2c --enable-color=true \
-       --console-log-level=error \
-       --show-console-readout=true \
-       --summary-interval=0 \
-       --max-concurrent-downloads=8 \
-       --continue=true \
-       -i downloads.txt
-`;
-
-	return new Response(script, {
-		headers: {
-			'Content-Type': 'text/plain; charset=utf-8',
-			'Cache-Control': 'no-store'
+			headers: {
+				'Content-Type': 'application/gzip',
+				'Content-Disposition': 'attachment; filename="facmandu-mods.tar.gz"',
+				'Content-Length': String(file.size),
+				'Cache-Control': 'no-store'
+			}
 		}
-	});
+	);
 };

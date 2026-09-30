@@ -1,5 +1,5 @@
+import type { createClient } from '@libsql/client';
 import { defineConfig } from 'drizzle-kit';
-import { createClient } from '@libsql/client';
 
 const connectionUrl = process.env.TURSO_CONNECTION_URL || process.env.DATABASE_URL;
 if (!connectionUrl) throw new Error('TURSO_CONNECTION_URL or DATABASE_URL must be set');

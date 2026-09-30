@@ -1,9 +1,11 @@
 <script lang="ts">
+	import { PackageIcon } from '@lucide/svelte';
+	import { modThumbnailUrl } from '$lib/utils';
 	import * as Tooltip from '$lib/components/ui/tooltip';
-	import type { Mod } from '$lib/server/db/schema';
+	import type { ModSummary } from '$lib/server/db/schema';
 
 	interface Props {
-		mod: Mod;
+		mod: Omit<ModSummary, 'updatedBy'>;
 	}
 
 	let { mod }: Props = $props();
@@ -13,7 +15,7 @@
 	<Tooltip.Root>
 		<Tooltip.Trigger>
 			<img
-				src={`https://assets-mod.factorio.com${mod.thumbnail}`}
+				src={modThumbnailUrl(mod.thumbnail)}
 				alt={mod.title || mod.name}
 				class="m-auto h-8 w-8 rounded object-cover {mod.enabled ? '' : 'grayscale'}"
 				loading="lazy"
@@ -21,7 +23,7 @@
 		</Tooltip.Trigger>
 		<Tooltip.Content>
 			<img
-				src={`https://assets-mod.factorio.com${mod.thumbnail}`}
+				src={modThumbnailUrl(mod.thumbnail)}
 				alt={mod.title || mod.name}
 				class="h-32 w-32 rounded object-cover {mod.enabled ? '' : 'grayscale'}"
 				loading="lazy"
@@ -34,6 +36,6 @@
 			? ''
 			: 'grayscale'}"
 	>
-		<span class="text-[10px]">📦</span>
+		<PackageIcon class="size-4 text-muted-foreground" />
 	</div>
 {/if}

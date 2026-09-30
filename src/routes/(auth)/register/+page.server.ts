@@ -1,57 +1,56 @@
 import { hash } from '@node-rs/argon2';
 import { fail, redirect } from '@sveltejs/kit';
+import { AccountError, createInvitedAccount } from '$lib/server/accounts';
 import * as auth from '$lib/server/auth';
-import { db } from '$lib/server/db';
-import * as table from '$lib/server/db/schema';
-import type { Actions, PageServerLoad } from './$types';
-import { superValidate } from 'sveltekit-superforms';
-import { zod as zod4 } from 'sveltekit-superforms/adapters';
-import { registerSchema } from './schema';
 import { genID } from '$lib/server/db/ids';
+import type { Actions, PageServerLoad } from './$types';
+import { registerSchema } from './schema';
 
-export const load: PageServerLoad = async (event) => {
-	if (event.locals.user) {
-		return redirect(302, '/');
-	}
-	return {
-		form: await superValidate(zod4(registerSchema as any))
-	};
+export const load: PageServerLoad = ({ locals }) => {
+	if (locals.user) redirect(303, '/');
 };
 
 export const actions: Actions = {
 	default: async (event) => {
-		const form = await superValidate(event, zod4(registerSchema as any));
-		if (!form.valid) {
+		const input = Object.fromEntries(await auth.authenticationForm(event.request));
+		const parsed = registerSchema.safeParse(input);
+		const username = typeof input.username === 'string' ? input.username.slice(0, 31) : '';
+		if (!parsed.success)
 			return fail(400, {
-				form
+				username,
+				message: parsed.error.issues[0]?.message ?? 'Invalid account details'
+			});
+		const attempt = auth.beginAuthentication(event.getClientAddress());
+		if (!attempt.allowed) {
+			event.setHeaders({ 'Retry-After': String(attempt.retryAfter) });
+			return fail(429, {
+				username,
+				message: `Too many attempts. Try again in ${attempt.retryAfter} seconds.`
 			});
 		}
-		const username = (form.data as any).username as string;
-		const password = (form.data as any).password as string;
-
-		const userId = genID('user');
-		const passwordHash = await hash(password as string | Uint8Array, {
-			// recommended minimum parameters
-			memoryCost: 19456,
-			timeCost: 2,
-			outputLen: 32,
-			parallelism: 1
-		});
-
 		try {
-			await db
-				.insert(table.user)
-				.values({ id: userId, username: username as string, passwordHash: passwordHash as string });
-
-			const sessionToken = auth.generateSessionToken();
-			const session = await auth.createSession(sessionToken, userId);
-			auth.setSessionTokenCookie(event, sessionToken, session.expiresAt);
-		} catch (error) {
-			console.error('Register error:', error);
-			return fail(500, { message: 'An error has occurred' });
+			const passwordHash = await hash(parsed.data.password, {
+				memoryCost: 19456,
+				timeCost: 2,
+				outputLen: 32,
+				parallelism: 1
+			});
+			let user: { id: string };
+			try {
+				user = await createInvitedAccount(
+					{ id: genID('user'), username: parsed.data.username, passwordHash },
+					parsed.data.invite
+				);
+			} catch (cause) {
+				if (cause instanceof AccountError) return fail(400, { username, message: cause.message });
+				throw cause;
+			}
+			const token = auth.generateSessionToken();
+			const session = await auth.createSession(token, user.id);
+			auth.setSessionTokenCookie(event, token, session.expiresAt);
+			redirect(303, auth.safeRedirectTo(event.url.searchParams.get('redirectTo')));
+		} finally {
+			attempt.release();
 		}
-
-		const redirectTo = event.url.searchParams.get('redirectTo');
-		return redirect(302, redirectTo || '/');
 	}
 };

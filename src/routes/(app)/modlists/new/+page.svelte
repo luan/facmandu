@@ -1,50 +1,47 @@
 <script lang="ts">
+ import { toast } from 'svelte-sonner';
 	import { PlusIcon } from '@lucide/svelte';
-	import * as Form from '$lib/components/ui/form';
+	import { enhance } from '$app/forms';
 	import { Input } from '$lib/components/ui/input';
-	import { superForm, type Infer, type SuperValidated } from 'sveltekit-superforms/client';
-	import { zodClient as zod4Client } from 'sveltekit-superforms/adapters';
-	import { formSchema, type FormSchema } from './schema';
+	import { Button } from '$lib/components/ui/button';
 	import { Textarea } from '$lib/components/ui/textarea';
+	import type { PageProps } from './$types';
+	let { form }: PageProps = $props();
+	let pending = $state(false);
 
-	let { data }: { data: { form: SuperValidated<Infer<FormSchema>> } } = $props();
-
-	const form = superForm(data.form, {
-		validators: zod4Client(formSchema as any)
-	});
-
-	const { form: formData, enhance, message } = form;
+	let imported = $state('');
 </script>
-
-<div class="flex h-[calc(100svh-var(--header-height))] w-full flex-col gap-4 px-48 py-4">
-	<h1>Create new mod list</h1>
-	<form method="POST" class="flex h-full flex-col gap-4" use:enhance>
-		<p class="text-red-500">{$message}</p>
-		<Form.Field {form} name="name">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>Name</Form.Label>
-					<Input {...props} bind:value={$formData.name} />
-				{/snippet}
-			</Form.Control>
-			<Form.Description />
-			<Form.FieldErrors />
-		</Form.Field>
-		<Form.Field {form} name="json">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>modlist.json</Form.Label>
-					<Textarea {...props} bind:value={$formData.json} class="h-120 resize-none font-mono" />
-				{/snippet}
-			</Form.Control>
-			<Form.Description />
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<div class="h-full"></div>
-		<Form.Button>
-			<PlusIcon />
-			Create</Form.Button
-		>
+<svelte:head><title>New mod list · Facmandu</title></svelte:head>
+<div class="workbench !max-w-2xl flex flex-col gap-4">
+	<header class="window-title"><a href="/modlists" class="text-sm text-muted-foreground hover:underline">Mod library</a><h1 class="mt-2 text-xl font-semibold">Create a mod list</h1></header>
+	<form method="POST" class="factory-panel p-4" aria-busy={pending} use:enhance={() => {
+		pending = true;
+		return async ({ result, update }) => {
+			try {
+				if (result.type === 'error') toast.error(result.error.message ?? 'Could not create the list. Try again.');
+				else await update({ reset: false });
+			} finally { pending = false; }
+		};
+	}}>
+		<fieldset disabled={pending} class="grid gap-4">
+			<div class="grid gap-2"><label for="list-name" class="text-sm font-medium">Name</label><Input id="list-name" name="name" required maxlength={100} placeholder="My factory" value={form && 'name' in form ? form.name : ''} /></div>
+			<div class="grid gap-2"><label for="factorio-version" class="text-sm font-medium">Factorio version</label><select id="factorio-version" name="factorioVersion" class="rounded-md border bg-background px-3 py-2" value={form && 'factorioVersion' in form ? form.factorioVersion : '2.1'}><option value="2.1">2.1</option><option value="2.0">2.0</option><option value="1.1">1.1</option><option value="1.0">1.0</option></select><p class="text-sm text-muted-foreground">Dependencies and mod versions will be resolved for this version.</p></div>
+			<details class="rounded-md border p-4">
+				<summary class="cursor-pointer text-sm font-medium">Import an existing mod-list.json (optional)</summary>
+				<div class="mt-4 grid gap-3">
+					<label for="import-file" class="text-sm">Choose a file</label>
+					<input id="import-file" type="file" accept=".json,application/json" class="text-sm" onchange={async (event) => {
+						const file = event.currentTarget.files?.[0];
+						if (!file) return;
+						if (file.size > 1_000_000) { toast.error('Import files must be smaller than 1 MB'); return; }
+						try { imported = await file.text();  } catch { toast.error('Could not read the file'); }
+					}} />
+					<label for="import-json" class="text-sm">Or paste JSON</label>
+					<Textarea id="import-json" name="json" bind:value={imported} class="min-h-48 font-mono text-sm" placeholder={'{"mods":[{"name":"example","enabled":true}]}'} maxlength={1000000} />
+					<p class="text-sm text-muted-foreground">Versions from the file are preserved when compatible. Missing metadata and dependencies are filled in automatically.</p>
+				</div>
+			</details>
+			<div class="flex items-center gap-4"><Button type="submit"><PlusIcon class="size-4" />{pending ? 'Creating…' : 'Create mod list'}</Button><a href="/modlists" class="text-sm hover:underline">Cancel</a></div>
+		</fieldset>
 	</form>
 </div>

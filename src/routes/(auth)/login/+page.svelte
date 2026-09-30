@@ -1,64 +1,43 @@
 <script lang="ts">
+ import ProviderLogin from '$lib/components/ProviderLogin.svelte';
 	import { LogInIcon } from '@lucide/svelte';
-	import * as Form from '$lib/components/ui/form';
-	import { Input } from '$lib/components/ui/input';
-	import { superForm, type Infer, type SuperValidated } from 'sveltekit-superforms/client';
-	import { zodClient as zod4Client } from 'sveltekit-superforms/adapters';
-	import { loginSchema, type LoginSchema } from './schema';
-	import * as Card from '$lib/components/ui/card';
+	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
-
-	let { data }: { data: { form: SuperValidated<Infer<LoginSchema>> } } = $props();
-
-	const form = superForm(data.form, {
-		validators: zod4Client(loginSchema as any)
-	});
-
-	const { form: formData, enhance, message } = form;
-	const redirectTo = page.url.searchParams.get('redirectTo');
+	import { Input } from '$lib/components/ui/input';
+	import { Button } from '$lib/components/ui/button';
+	import * as Card from '$lib/components/ui/card';
+	import type { PageProps } from './$types';
+	let { form }: PageProps = $props();
+	let pending = $state(false);
+	let requestError = $state('');
+	const redirectQuery = $derived(page.url.searchParams.get('redirectTo') ? `?${new URLSearchParams({ redirectTo: page.url.searchParams.get('redirectTo') ?? '/' })}` : '');
 </script>
 
-<div class="flex h-screen w-full items-center justify-center px-4">
+<svelte:head><title>Log in · Facmandu</title></svelte:head>
+<div class="flex min-h-svh w-full items-center justify-center p-4">
 	<Card.Root class="mx-auto w-full max-w-sm">
-		<Card.Header>
-			<Card.Title class="text-2xl">Login</Card.Title>
-			<Card.Description>Enter your credentials below to login</Card.Description>
-		</Card.Header>
+		<Card.Header><Card.Title class="text-2xl">Log in</Card.Title><Card.Description>Welcome back to Facmandu.</Card.Description></Card.Header>
 		<Card.Content>
-			<form method="POST" class="grid gap-4" use:enhance>
-				<input type="hidden" name="redirectTo" value={redirectTo} />
-				<Form.Field {form} name="username">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>Username</Form.Label>
-							<Input {...props} bind:value={$formData.username} />
-						{/snippet}
-					</Form.Control>
-					<Form.Description />
-					<Form.FieldErrors />
-				</Form.Field>
-
-				<Form.Field {form} name="password">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>Password</Form.Label>
-							<Input {...props} bind:value={$formData.password} type="password" />
-						{/snippet}
-					</Form.Control>
-					<Form.Description />
-					<Form.FieldErrors />
-				</Form.Field>
-
-				<Form.Button class="w-full">
-					<LogInIcon />
-					Login</Form.Button
-				>
-				<p class="text-red-500">{$message}</p>
+			<form method="POST" use:enhance={() => {
+				pending = true; requestError = '';
+				return async ({ result, update }) => {
+					try {
+						if (result.type === 'error') requestError = result.error.message ?? 'Could not submit. Try again.';
+						else await update({ reset: false });
+					} finally { pending = false; }
+				};
+			}} aria-busy={pending}>
+				<fieldset disabled={pending} class="grid gap-3">
+				<label for="username" class="text-sm font-medium">Username</label>
+				<Input id="username" name="username" autocomplete="username" required minlength={2} maxlength={50} value={form?.username ?? ''}  aria-describedby="form-message" />
+				<label for="password" class="text-sm font-medium">Password</label>
+				<Input id="password" name="password" type="password" autocomplete="current-password" required minlength={1} maxlength={1024} aria-describedby="form-message" />
+				<p id="form-message" role="alert" class="text-sm text-destructive">{requestError || form?.message || ''}</p>
+				<Button type="submit" class="w-full"><LogInIcon class="size-4" />{pending ? 'Please wait…' : "Log in"}</Button>
+				</fieldset>
 			</form>
-			<div class="mt-4 text-center text-sm">
-				Don't have an account?
-				<a href="/register?redirectTo={redirectTo}" class="underline"> Sign up </a>
-			</div>
+ <div class="mt-4 grid gap-3 border-t border-border pt-4"><ProviderLogin provider="codex" name="Codex" issuer="OpenAI" /><ProviderLogin provider="meta" name="Muse" issuer="Meta" /><ProviderLogin provider="copilot" name="Copilot" issuer="GitHub" /></div>
+			<p class="mt-4 text-center text-sm">New to Facmandu? <a href="/register{redirectQuery}" class="underline">Create an account</a></p>
 		</Card.Content>
 	</Card.Root>
 </div>

@@ -1,50 +1,49 @@
-import { eq, or } from 'drizzle-orm';
 import { redirect } from '@sveltejs/kit';
-import { getRequestEvent } from '$app/server';
-import type { LayoutServerLoad } from './$types';
+import { eq, getTableColumns, or } from 'drizzle-orm';
+import { SIDEBAR_COOKIE_NAME } from '$lib/components/ui/sidebar/constants.js';
 
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
-import { SIDEBAR_COOKIE_NAME } from '$lib/components/ui/sidebar/constants.js';
+import { canManageServer, listServers } from '$lib/server/servers';
+import type { LayoutServerLoad } from './$types';
 
-export const load: LayoutServerLoad = async () => {
-	const { cookies, locals, url } = getRequestEvent();
+export const load: LayoutServerLoad = async ({ cookies, locals, url, depends }) => {
+	depends('app:library');
 
 	// If user is logged in, behave as before
 	if (locals.user) {
 		const user = locals.user;
 
-		const modListRows = await db
-			.select()
-			.from(table.modList)
-			.leftJoin(
-				table.modListCollaborator,
-				eq(table.modListCollaborator.modlistId, table.modList.id)
-			)
-			.where(or(eq(table.modList.owner, user.id), eq(table.modListCollaborator.userId, user.id)));
-
-		const modListMap = new Map<string, typeof table.modList.$inferSelect>();
-		for (const row of modListRows) {
-			const mlCandidate = (row as unknown as { modlist?: typeof table.modList.$inferSelect })
-				.modlist;
-			const ml = mlCandidate ?? (row as unknown as typeof table.modList.$inferSelect);
-			if (ml && !modListMap.has(ml.id)) {
-				modListMap.set(ml.id, ml);
-			}
-		}
+		const [modLists, servers] = await Promise.all([
+			db
+				.selectDistinct(getTableColumns(table.modList))
+				.from(table.modList)
+				.leftJoin(
+					table.modListCollaborator,
+					eq(table.modListCollaborator.modlistId, table.modList.id)
+				)
+				.where(or(eq(table.modList.owner, user.id), eq(table.modListCollaborator.userId, user.id))),
+			listServers(user.id)
+		]);
 
 		const sidebarCookie = cookies.get(SIDEBAR_COOKIE_NAME);
 		const sidebarOpen = sidebarCookie === undefined ? true : sidebarCookie === 'true';
 
-		return { user, modLists: Array.from(modListMap.values()), sidebarOpen };
+		return {
+			user,
+			modLists,
+			sidebarOpen,
+			canManageServer: canManageServer(user.id),
+			servers
+		};
 	}
 
 	// User not logged in – allow access only if visiting a public modlist
 	const pathname = url.pathname;
 	const match = pathname.match(/^\/modlists\/([^/]+)/);
 
-	if (match) {
-		const modlistId = match[1];
+	const modlistId = match?.[1];
+	if (modlistId) {
 		const publicRow = await db
 			.select({ publicRead: table.modList.publicRead })
 			.from(table.modList)
@@ -54,10 +53,10 @@ export const load: LayoutServerLoad = async () => {
 		if (publicRow?.publicRead) {
 			const sidebarCookie = cookies.get(SIDEBAR_COOKIE_NAME);
 			const sidebarOpen = sidebarCookie === undefined ? true : sidebarCookie === 'true';
-			return { user: null, modLists: [], sidebarOpen };
+			return { user: null, modLists: [], sidebarOpen, canManageServer: false, servers: [] };
 		}
 	}
 
 	// Otherwise redirect to login
-	return redirect(303, `/login?redirectTo=${pathname}`);
+	return redirect(303, `/login?redirectTo=${encodeURIComponent(pathname + url.search)}`);
 };

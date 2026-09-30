@@ -1,4 +1,4 @@
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'node:events';
 
 // Ensure a single instance across hot reloads (important for dev)
 type GlobalWithEmitter = typeof global & {

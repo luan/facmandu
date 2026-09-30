@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { cn, type WithElementRef } from '$lib/utils.js';
 	import { browser } from '$app/environment';
+	import { afterNavigate } from '$app/navigation';
 	import type { HTMLAttributes } from 'svelte/elements';
 	import {
 		SIDEBAR_COOKIE_MAX_AGE,
@@ -46,15 +48,17 @@
 			onOpenChange(value);
 
 			// Persist sidebar state using the provided cookie name so different providers don't conflict.
+			// biome-ignore lint/suspicious/noDocumentCookie: Cookie Store is not supported in all target browsers.
 			document.cookie = `${cookieName}=${open}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
 		},
-		keyboardShortcut
+		keyboardShortcut: untrack(() => keyboardShortcut)
 	});
+	afterNavigate(() => sidebar.setOpenMobile(false));
 </script>
 
 <svelte:window onkeydown={sidebar.handleShortcutKeydown} />
 
-<Tooltip.Provider delayDuration={0}>
+<Tooltip.Provider delayDuration={200}>
 	<div
 		data-slot="sidebar-wrapper"
 		style="--sidebar-width: {SIDEBAR_WIDTH}; --sidebar-width-icon: {SIDEBAR_WIDTH_ICON}; {style}"

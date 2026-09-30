@@ -1,5 +1,14 @@
 import type { Handle } from '@sveltejs/kit';
+import { building } from '$app/environment';
 import * as auth from '$lib/server/auth.js';
+import { initializeDatabase } from '$lib/server/db';
+import { startFactoryWatchSampler } from '$lib/server/factory-watches';
+
+// The hook module loads with the web process, including before its first request.
+if (!building)
+	void initializeDatabase()
+		.then(startFactoryWatchSampler)
+		.catch((cause) => console.error('Factory watch startup failed:', cause));
 
 const handleAuth: Handle = async ({ event, resolve }) => {
 	const sessionToken = event.cookies.get(auth.sessionCookieName);
@@ -29,21 +38,8 @@ const handleSecurity: Handle = async ({ event, resolve }) => {
 	// Add security headers
 	response.headers.set('X-Content-Type-Options', 'nosniff');
 	response.headers.set('X-Frame-Options', 'DENY');
-	response.headers.set('X-XSS-Protection', '1; mode=block');
 	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
 	response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-
-	// Content Security Policy
-	const csp = [
-		"default-src 'self'",
-		"script-src 'self' 'unsafe-inline'",
-		"style-src 'self' 'unsafe-inline'",
-		"img-src 'self' data: https:",
-		'frame-src https://mods.factorio.com',
-		"connect-src 'self'"
-	].join('; ');
-
-	response.headers.set('Content-Security-Policy', csp);
 
 	// HSTS for HTTPS
 	if (event.url.protocol === 'https:') {
@@ -54,6 +50,8 @@ const handleSecurity: Handle = async ({ event, resolve }) => {
 };
 
 export const handle: Handle = async ({ event, resolve }) => {
+	await initializeDatabase();
+	startFactoryWatchSampler();
 	// Chain the handlers
 	return handleSecurity({ event, resolve: (event) => handleAuth({ event, resolve }) });
 };

@@ -1,16 +1,16 @@
 <script lang="ts">
-	import { browser } from '$app/environment';
+	import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import Input from '$lib/components/ui/input/input.svelte';
 	import Button from '$lib/components/ui/button/button.svelte';
-	import { SearchIcon } from '@lucide/svelte';
+	import { SearchIcon, FilterIcon } from '@lucide/svelte';
 
 	interface Props {
-		searchError: string | null;
-		searchQuery?: string;
+		factorioVersion: string;
 	}
 
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	let { searchError, searchQuery: _searchQuery }: Props = $props();
+	let { factorioVersion }: Props = $props();
 
 	// Available filter options
 	const categories = [
@@ -46,7 +46,7 @@
 		'cheats'
 	];
 
-	const versions = ['any', '2.0', '1.1', '1.0', '0.18', '0.17', '0.16', '0.15', '0.14', '0.13'];
+	const versions = ['any', '2.1', '2.0', '1.1', '1.0', '0.18', '0.17', '0.16', '0.15', '0.14', '0.13'];
 
 	// Sorting options matching Factorio API
 	const sortOptions = [
@@ -56,26 +56,34 @@
 		{ value: 'trending', label: 'Trending' }
 	];
 
-	const initialParams = browser ? new URLSearchParams(location.search) : new URLSearchParams();
-	let q = $state(initialParams.get('q') || '');
-	let category = $state(initialParams.get('category') || '');
-	let version = $state(initialParams.get('version') || 'any');
-	let selectedTags = $state(new Set<string>(initialParams.getAll('tag')));
-	let sortAttr = $state(initialParams.get('sort_attr') || 'last_updated_at');
-
-	// No reactive subscription; values remain until navigation refresh.
+	let q = $state('');
+ let category = $state('');
+ let version = $state('');
+ let selectedTags = $state<string[]>([]);
+ let sortAttr = $state('relevancy');
+ $effect(() => {
+  const params = page.url.searchParams;
+  q = params.get('q') || '';
+  category = params.get('category') || '';
+  version = params.get('version') || factorioVersion;
+  selectedTags = params.getAll('tag');
+  sortAttr = params.get('sort_attr') || 'relevancy';
+ });
 </script>
 
 <div class="flex flex-col gap-4">
-	<form method="GET" class="flex flex-col gap-4">
+	<form method="GET" class="flex flex-col gap-4" onsubmit={(event) => { event.preventDefault(); const query = new URLSearchParams(); for (const [key, value] of new FormData(event.currentTarget)) if (typeof value === 'string') query.append(key, value); void goto(`${page.url.pathname}?${query}`, { keepFocus: true, noScroll: true }); }}>
 		<!-- Text search -->
 		<div class="flex items-center gap-2">
-			<Input name="q" placeholder="Search mods..." bind:value={q} class="flex-1" />
-			<Button type="submit" variant="outline" size="icon">
+			<Input name="q" aria-label="Search mods" maxlength={200} placeholder="Search mods..." bind:value={q} class="flex-1" />
+			<TooltipButton type="submit" variant="outline" size="icon" tooltip="Search">
 				<SearchIcon class="h-4 w-4" />
-			</Button>
+			</TooltipButton>
 		</div>
 
+		<details class="border-border rounded-md border p-3">
+			<summary class="cursor-pointer text-sm font-medium">Search filters</summary>
+			<div class="mt-4 flex flex-col gap-4">
 		<!-- Category filter -->
 		<div>
 			<label for="category-select" class="mb-1 block text-sm font-medium">Category</label>
@@ -127,7 +135,7 @@
 			<div class="flex max-h-48 flex-wrap gap-2 overflow-auto rounded border p-2">
 				{#each tags as t (t)}
 					<label class="flex items-center gap-1 text-xs capitalize">
-						<input type="checkbox" name="tag" value={t} checked={selectedTags.has(t)} />
+						<input type="checkbox" name="tag" value={t} checked={selectedTags.includes(t)} onchange={(event) => { selectedTags = event.currentTarget.checked ? [...selectedTags, t] : selectedTags.filter((tag) => tag !== t); }} />
 						{t.replace(/-/g, ' ')}
 					</label>
 				{/each}
@@ -137,10 +145,9 @@
 		<!-- Reset to first page when new filters applied -->
 		<input type="hidden" name="page" value="1" />
 
-		<Button type="submit" variant="default">Apply Filters</Button>
+		<Button type="submit" variant="default"><FilterIcon class="size-4" />Apply Filters</Button>
+			</div>
+		</details>
 	</form>
 
-	{#if searchError}
-		<p class="text-destructive text-sm">{searchError}</p>
-	{/if}
 </div>

@@ -12,6 +12,7 @@
 		isActive = false,
 		...restProps
 	}: WithElementRef<HTMLAnchorAttributes> & {
+		href: string;
 		child?: Snippet<[{ props: Record<string, unknown> }]>;
 		size?: 'sm' | 'md';
 		isActive?: boolean;
@@ -37,6 +38,7 @@
 {#if child}
 	{@render child({ props: mergedProps })}
 {:else}
+	<!-- biome-ignore lint/a11y/useValidAnchor: href is required in props and forwarded through mergedProps. -->
 	<a bind:this={ref} {...mergedProps}>
 		{@render children?.()}
 	</a>

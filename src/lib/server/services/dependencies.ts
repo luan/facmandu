@@ -1,82 +1,90 @@
+import {
+	inspectDependencies,
+	isBundledMod,
+	satisfiesVersion,
+	supportsFactorio
+} from '$lib/dependencies';
 import type { Mod } from '$lib/server/db/schema';
 
-export type DependencyKind = 'required' | 'optional' | 'conflict';
-export interface ParsedDependency {
-	name: string;
-	type: DependencyKind;
-}
+export { parseDependencies } from '$lib/dependencies';
 
-/**
- * Parse the `info.json` dependency list coming from Factorio mods.
- * The list is stored as JSON-encoded strings in the DB. Each string can contain
- * version constraints and prefixes that mark optional/conflict dependencies.
- */
-export function parseDependencies(dependencyString: string | null): ParsedDependency[] {
-	if (!dependencyString) return [];
-
-	let rawDeps: string[];
-	try {
-		rawDeps = JSON.parse(dependencyString);
-	} catch {
-		return [];
-	}
-
-	return rawDeps.map((raw) => {
-		// Strip version constraints so we only keep the name & prefix information
-		let [name] = raw.split(/>=|>|<=|<|=/);
-		name = name.trim();
-
-		let type: DependencyKind = 'required';
-
-		if (name.startsWith('!')) {
-			name = name.slice(1).trim();
-			type = 'conflict';
-		} else if (name.startsWith('?') || name.startsWith('(?)')) {
-			name = name.replace(/^\(\?\)|^\?/, '').trim();
-			type = 'optional';
-		} else if (name.startsWith('~')) {
-			// Factorio treats "incompatibility" (~) similarly to required for activation
-			name = name.slice(1).trim();
-			type = 'required';
-		}
-
-		return { name, type };
-	});
-}
-
-export function validateDependencies(mods: Pick<Mod, 'name' | 'enabled' | 'dependencies'>[]): {
+export function validateDependencies(
+	mods: (Pick<Mod, 'name' | 'enabled' | 'dependencies' | 'version'> & {
+		factorioVersion?: string | null;
+	})[],
+	factorioVersion?: string
+): {
+	compatibilityIssues: { mod: string; actual: string; target: string }[];
 	missingDependencies: string[];
 	conflicts: { mod: string; conflictsWith: string }[];
 	conflictingMods: string[];
+	metadataErrors: { mod: string; message: string }[];
+	versionIssues: { mod: string; dependency: string; requirement: string; actual: string | null }[];
 } {
 	const enabledMods = mods.filter((m) => m.enabled);
-	const enabledSet = new Set(enabledMods.map((m) => m.name));
-
-	const baseMods = new Set(['base', 'space-age', 'quality', 'elevated-rails']);
-
-	const missingDeps: string[] = [];
+	const enabledByName = new Map(enabledMods.map((m) => [m.name, m]));
+	const missingDeps = new Set<string>();
 	const conflicts: { mod: string; conflictsWith: string }[] = [];
 	const conflicting = new Set<string>();
+	const compatibilityIssues: { mod: string; actual: string; target: string }[] = [];
+	const metadataErrors: { mod: string; message: string }[] = [];
+	const versionIssues: {
+		mod: string;
+		dependency: string;
+		requirement: string;
+		actual: string | null;
+	}[] = [];
 
 	for (const mod of enabledMods) {
-		for (const dep of parseDependencies(mod.dependencies)) {
-			if (dep.type === 'required') {
-				if (!baseMods.has(dep.name) && !enabledSet.has(dep.name)) {
-					if (!missingDeps.includes(dep.name)) missingDeps.push(dep.name);
-				}
-			} else if (dep.type === 'conflict') {
-				if (enabledSet.has(dep.name)) {
-					conflicts.push({ mod: mod.name, conflictsWith: dep.name });
-					conflicting.add(mod.name);
-					conflicting.add(dep.name);
-				}
+		if (!isBundledMod(mod.name)) {
+			if (mod.dependencies === null)
+				metadataErrors.push({ mod: mod.name, message: 'Dependency metadata is missing' });
+			if (
+				factorioVersion &&
+				mod.factorioVersion &&
+				!supportsFactorio(mod.factorioVersion, factorioVersion)
+			)
+				compatibilityIssues.push({
+					mod: mod.name,
+					actual: mod.factorioVersion,
+					target: factorioVersion
+				});
+		}
+		const parsed = inspectDependencies(mod.dependencies);
+		for (const message of parsed.errors) metadataErrors.push({ mod: mod.name, message });
+		for (const dep of parsed.dependencies) {
+			const installed = enabledByName.get(dep.name);
+			if (dep.type === 'required' && !isBundledMod(dep.name) && !installed) {
+				missingDeps.add(dep.name);
+			}
+			if (dep.type === 'conflict' && installed) {
+				conflicts.push({ mod: mod.name, conflictsWith: dep.name });
+				conflicting.add(mod.name);
+				conflicting.add(dep.name);
+			}
+			// Bundled versions belong to the server installation and are checked when reviewing an apply.
+			if (
+				dep.version &&
+				!isBundledMod(dep.name) &&
+				installed &&
+				!satisfiesVersion(installed.version ?? '', dep.version)
+			) {
+				versionIssues.push({
+					mod: mod.name,
+					dependency: dep.name,
+					requirement: `${dep.version.operator} ${dep.version.version}`,
+					actual: installed.version
+				});
 			}
 		}
 	}
 
 	return {
-		missingDependencies: missingDeps,
+		compatibilityIssues,
+		missingDependencies: [...missingDeps],
 		conflicts,
-		conflictingMods: Array.from(conflicting)
+		conflictingMods: [...conflicting],
+		metadataErrors,
+		versionIssues
 	};
 }

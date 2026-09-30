@@ -1,14 +1,15 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { toast } from 'svelte-sonner';
+	import { invalidate } from '$app/navigation';
 	import Button from '$lib/components/ui/button/button.svelte';
-	import type { Mod } from '$lib/server/db/schema';
-	import { broadcastModToggled } from '$lib/stores/realtime.svelte';
+	import type { ModSummary } from '$lib/server/db/schema';
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import { LockIcon, PackageCheck } from '@lucide/svelte';
+	import { LockIcon, PackageCheck, CheckIcon, MinusIcon, LoaderCircleIcon } from '@lucide/svelte';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 
 	interface Props {
-		mod: Mod;
+		mod: Omit<ModSummary, 'updatedBy'>;
 		/**
 		 * Whether this mod is a dependency of another enabled mod.
 		 * If true and the mod is already enabled, it cannot be disabled.
@@ -16,6 +17,7 @@
 		isDependency?: boolean;
 		/** Whether mod is marked essential */
 		isEssential?: boolean;
+		readOnly?: boolean;
 		/** User who locked this mod (i.e., set it as essential) */
 		lockedByUser?: {
 			id: string;
@@ -29,64 +31,58 @@
 		mod,
 		isDependency = false,
 		isEssential = false,
+		readOnly = false,
 		lockedByUser = null,
 		requiredBy = []
 	}: Props = $props();
 
-	const handleToggle: SubmitFunction = () => {
+	let pending = $state(false);
+	const handleToggle: SubmitFunction = ({ cancel }) => {
+		if (pending) { cancel(); return; }
+		pending = true;
 		return async ({ result, update }) => {
-			if (result.type === 'success' && result.data?.success) {
-				// Broadcast the change to other tabs
-				broadcastModToggled(mod.modlist, mod.id, result.data.newStatus);
-			}
-			// Always update the current tab
-			await update();
+			try {
+				await update({ invalidateAll: false });
+				if (result.type === 'success') await invalidate('app:modlist');
+				else toast.error(result.type === 'failure' ? String(result.data?.message || 'Could not change mod status') : 'Could not change mod status');
+			} finally { pending = false; }
 		};
 	};
 </script>
 
-{#if isEssential}
-	<!-- Locked indicator -->
-	<Tooltip.Provider>
-		<Tooltip.Root>
-			<Tooltip.Trigger class="flex cursor-help items-center gap-1">
-				<LockIcon class="h-4 w-4 text-amber-500" />
-			</Tooltip.Trigger>
-			<Tooltip.Content>
-				<p>{lockedByUser ? `Locked by ${lockedByUser.username}` : 'Locked mod'}</p>
-			</Tooltip.Content>
-		</Tooltip.Root>
-	</Tooltip.Provider>
-{:else if isDependency}
-	<div class="flex gap-1">
-		<Tooltip.Provider>
-			<Tooltip.Root>
-				<Tooltip.Trigger class="flex cursor-help gap-1">
-					<PackageCheck class="h-4 w-4 text-amber-500" />
-				</Tooltip.Trigger>
-				<Tooltip.Content>
-					<p class="mb-1">Required by:</p>
-					<ul class="ml-4 list-disc">
-						{#each requiredBy as name (name)}
-							<li>{name}</li>
-						{/each}
-					</ul>
-				</Tooltip.Content>
-			</Tooltip.Root>
-		</Tooltip.Provider>
-	</div>
+{#if isEssential && mod.enabled}
+	<Tooltip.Root>
+		<Tooltip.Trigger class="flex size-7 items-center justify-center text-amber-500" aria-label={`${mod.name} is locked`}>
+			<LockIcon class="size-4" />
+		</Tooltip.Trigger>
+		<Tooltip.Content><p>{lockedByUser ? `Locked by ${lockedByUser.username}` : 'Locked'}</p></Tooltip.Content>
+	</Tooltip.Root>
+{:else if isDependency && mod.enabled}
+	<Tooltip.Root>
+		<Tooltip.Trigger class="flex size-7 items-center justify-center text-amber-500" aria-label={`${mod.name} is required by another mod`}>
+			<PackageCheck class="size-4" />
+		</Tooltip.Trigger>
+		<Tooltip.Content><p class="mb-1">Required by:</p><ul class="list-inside list-disc">{#each requiredBy as name (name)}<li>{name}</li>{/each}</ul></Tooltip.Content>
+	</Tooltip.Root>
+{:else if readOnly}
+	<Tooltip.Root>
+		<Tooltip.Trigger class="flex size-7 items-center justify-center" aria-label={`${mod.name} is ${mod.enabled ? 'enabled' : 'disabled'}`}>
+			{#if mod.enabled}<CheckIcon class="size-4" />{:else}<MinusIcon class="size-4" />{/if}
+		</Tooltip.Trigger>
+		<Tooltip.Content>{mod.enabled ? 'Enabled' : 'Disabled'}</Tooltip.Content>
+	</Tooltip.Root>
 {:else}
-	<form method="POST" action="?/toggleStatus" class="flex gap-1" use:enhance={handleToggle}>
+	<form method="POST" action="?/toggleStatus" use:enhance={handleToggle}>
 		<input type="hidden" name="modid" value={mod.id} />
-		<Button
-			type="submit"
-			variant={mod.enabled ? 'default' : 'outline'}
-			size="sm"
-			class="h-6 px-2 text-xs"
-			disabled={mod.enabled && isDependency}
-			title={mod.enabled && isDependency ? 'Cannot disable required dependency' : undefined}
-		>
-			{mod.enabled ? 'On' : 'Off'}
-		</Button>
+		<Tooltip.Root>
+			<Tooltip.Trigger>
+				{#snippet child({ props })}
+					<Button {...props} type="submit" variant={mod.enabled ? 'default' : 'outline'} size="icon" class="size-7" aria-label={`${mod.enabled ? 'Disable' : 'Enable'} ${mod.name}`} aria-pressed={!!mod.enabled} aria-busy={pending} disabled={pending}>
+						{#if pending}<LoaderCircleIcon class="size-4 animate-spin motion-reduce:animate-none" />{:else if mod.enabled}<CheckIcon class="size-4" />{:else}<MinusIcon class="size-4" />{/if}
+					</Button>
+				{/snippet}
+			</Tooltip.Trigger>
+			<Tooltip.Content>{mod.enabled ? 'Enabled' : 'Disabled'}</Tooltip.Content>
+		</Tooltip.Root>
 	</form>
 {/if}

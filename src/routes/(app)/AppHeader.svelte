@@ -1,57 +1,41 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import LogoutLink from './LogoutLink.svelte';
+	import Activity from './Activity.svelte';
+	import FactoryWatches from './FactoryWatches.svelte';
 
-	import { ChevronDownIcon, MoonIcon, SettingsIcon, SunIcon, UserIcon } from '@lucide/svelte';
-	import { resetMode, setMode } from 'mode-watcher';
+	import { ChevronDownIcon, SettingsIcon, UserIcon, ServerIcon, LibraryIcon, ShieldIcon } from '@lucide/svelte';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import * as Sidebar from '$lib/components/ui/sidebar';
 
-	import Button, { buttonVariants } from '$lib/components/ui/button/button.svelte';
+	import { buttonVariants } from '$lib/components/ui/button/button.svelte';
 
-	let { username } = $props();
+	let { username, servers, lists, canManageServer, isAdmin }: { isAdmin: boolean; canManageServer: boolean; username: string; servers: { id: string; name: string }[]; lists: { id: string; name: string }[] } = $props();
 </script>
 
-<header class="bg-background sticky top-0 z-50 flex w-full items-center border-b">
-	<div class="flex h-(--header-height) w-full items-center gap-2 px-4 py-2">
-		<Sidebar.Trigger />
-		<Button variant="ghost" href="/">
-			<img src="/favicon.png" alt="Facmandu" class="h-12 w-12" />
-			Facmandu
-		</Button>
-
-		<div id="page-header" class="w-full"></div>
-		{#if false}
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger class={buttonVariants({ variant: 'secondary', size: 'icon' })}>
-					<SunIcon
-						class="h-[1.2rem] w-[1.2rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90"
-					/>
-					<MoonIcon
-						class="absolute h-[1.2rem] w-[1.2rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0"
-					/>
-					<span class="sr-only">Toggle theme</span>
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end">
-					<DropdownMenu.Item onclick={() => setMode('light')}>Light</DropdownMenu.Item>
-					<DropdownMenu.Item onclick={() => setMode('dark')}>Dark</DropdownMenu.Item>
-					<DropdownMenu.Item onclick={() => resetMode()}>System</DropdownMenu.Item>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
-		{/if}
+<header class="app-header">
+	<div class="flex min-h-14 w-full flex-wrap items-center gap-3 px-3 sm:px-5">
+		<a href="/" class="app-brand" aria-label="Facmandu home"><img src="/favicon.webp" width="36" height="36" alt="" /><span>Facmandu</span></a>
+		<nav class="app-navigation order-3 w-full sm:order-none sm:w-auto" aria-label="Main navigation">
+			{#if canManageServer}<a href="/servers" aria-current={page.url.pathname.startsWith('/servers') ? 'page' : undefined}><ServerIcon class="size-4" />Servers</a>{/if}
+			<a href="/modlists" aria-current={page.url.pathname.startsWith('/modlists') ? 'page' : undefined}><LibraryIcon class="size-4" />Mod library</a>
+		</nav>
+		<div class="flex-1"></div>
 
 		{#if username}
+			{#if canManageServer}<FactoryWatches {servers} />{/if}
+			<Activity {servers} {lists} />
 			<DropdownMenu.Root>
-				<DropdownMenu.Trigger class={buttonVariants({ variant: 'secondary' })}
-					><UserIcon />{username}
-					<ChevronDownIcon />
+				<DropdownMenu.Trigger class={buttonVariants({ variant: 'secondary' })} aria-label={username}
+					><UserIcon /><span class="hidden sm:inline">{username}</span>
+					<ChevronDownIcon class="hidden sm:block" />
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Content>
 					<DropdownMenu.Group>
-						<DropdownMenu.Item
-							><Button variant="ghost" href="/settings"><SettingsIcon />Settings</Button
-							></DropdownMenu.Item
-						>
-						<DropdownMenu.Item><LogoutLink /></DropdownMenu.Item>
+						<DropdownMenu.Item>
+							{#snippet child({ props })}<a {...props} href="/settings"><SettingsIcon />Settings</a>{/snippet}
+						</DropdownMenu.Item>
+						{#if isAdmin}<DropdownMenu.Item>{#snippet child({ props })}<a {...props} href="/admin"><ShieldIcon />Administration</a>{/snippet}</DropdownMenu.Item>{/if}
+						<LogoutLink />
 					</DropdownMenu.Group>
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>

@@ -1,596 +1,175 @@
 <script lang="ts">
-	import * as Sheet from '$lib/components/ui/sheet';
+	import * as Tooltip from '$lib/components/ui/tooltip';
+	import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
+	import { modThumbnailUrl } from '$lib/utils';
 	import { enhance } from '$app/forms';
-	import Button from '$lib/components/ui/button/button.svelte';
-	import { buttonVariants } from '$lib/components/ui/button';
-	import { Badge } from '$lib/components/ui/badge';
-	import {
-		BookIcon,
-		ChevronDownIcon,
-		ChevronUpIcon,
-		ClockIcon,
-		DownloadIcon,
-		NutIcon,
-		PlusIcon,
-		UndoIcon,
-		XIcon
-	} from '@lucide/svelte';
-	import type { Mod } from '$lib/server/db/schema';
-	import ModPreviewSheet from './ModPreviewSheet.svelte';
+	import { invalidate } from '$app/navigation';
+	import { untrack } from 'svelte';
+	import { toast } from 'svelte-sonner';
+	import { MessageSquareIcon, PlusIcon, UndoIcon, EyeOffIcon, EyeIcon, RefreshCwIcon, ChevronLeftIcon, ChevronRightIcon, PackageIcon, LinkIcon, LoaderCircleIcon } from '@lucide/svelte';
+	import * as Sheet from '$lib/components/ui/sheet';
+	import { Button } from '$lib/components/ui/button';
+	import { recommendationCandidates, recommendationRelease, recommendationPriority, recommendationPageSize, type RecommendationMod } from '$lib/recommendations';
+	import type { RecommendationRating } from '$lib/recommendation-ranking';
+	import type { PortalMod } from '$lib/server/portal-cache';
 	import { createRejectedRecommendationsStore } from '$lib/stores/rejected-recommendations.svelte';
+	import ModPreviewSheet from './ModPreviewSheet.svelte';
 
-	// Props: list of mods in current modlist
-	interface Props {
-		mods: Array<Omit<Mod, 'updatedBy'> & { updatedBy: { id: string; username: string } | null }>;
-	}
-
-	let { mods }: Props = $props();
-
-	// ----------------- State -----------------
-	const modlistId = $derived(mods[0]?.modlist || '');
-	const rejectedStore = $derived(createRejectedRecommendationsStore(modlistId));
-	let notInterestedExpanded = $state(false);
-	let sheetOpen = $state(false);
-	let frozenMods = $state<typeof mods>([]);
-	let scrollContainer = $state<HTMLElement | null>(null);
-
-	$effect(() => {
-		if (!sheetOpen) {
-			frozenMods = mods;
-		}
-	});
-
-	// ----------------- Recommendation Logic -----------------
-	// Helper to parse optional dependency strings ("?" or "(?)" prefix)
-	function parseOptionalDependencies(dependencyString: string | null): string[] {
-		if (!dependencyString) return [];
-
-		try {
-			const deps = JSON.parse(dependencyString) as string[];
-			return deps
-				.map((dep) => {
-					const [raw] = dep.split(/>=|>|<=|<|=/);
-					let name = raw.trim();
-
-					if (name.startsWith('(?)')) {
-						name = name.slice(3).trim();
-					} else if (name.startsWith('?')) {
-						name = name.slice(1).trim();
-					} else {
-						return null;
-					}
-
-					if (!name || name.startsWith('!')) return null;
-
-					if (name.startsWith('~')) {
-						return name.slice(1).trim();
-					}
-
-					return name;
-				})
-				.filter((d): d is string => Boolean(d));
-		} catch {
-			return [];
-		}
-	}
-
-	// Helper to parse conflicts from dependency string (! prefix)
-	function parseConflicts(dependencyString: string | null): string[] {
-		if (!dependencyString) return [];
-
-		try {
-			const deps = JSON.parse(dependencyString) as string[];
-			return deps
-				.map((dep) => {
-					const [raw] = dep.split(/>=|>|<=|<|=/);
-					let name = raw.trim();
-					if (name.startsWith('!')) {
-						return name.slice(1).trim();
-					}
-					return null;
-				})
-				.filter((d): d is string => Boolean(d));
-		} catch {
-			return [];
-		}
-	}
-
-	// ----------------- Derived data -----------------
-	// Set of optional dependencies across all enabled mods
-	const optionalDependencySet = $derived(
-		(() => {
-			const deps = new Set<string>();
-			const baseMods = new Set(['base', 'space-age', 'quality', 'elevated-rails']);
-
-			for (const mod of frozenMods) {
-				if (!mod.enabled) continue;
-				for (const dep of parseOptionalDependencies(mod.dependencies)) {
-					if (!baseMods.has(dep)) {
-						deps.add(dep);
-					}
-				}
-			}
-			return deps;
-		})()
-	);
-
-	// Recommendations are optional dependencies not already present in the mod list
-	const optionalRecommendations = $derived(
-		(() => {
-			const existing = new Set(frozenMods.map((m) => m.name));
-			return Array.from(optionalDependencySet)
-				.filter((name) => !existing.has(name))
-				.sort((a, b) => a.localeCompare(b));
-		})()
-	);
-
-	// Split recommendations into active and rejected sections
-	const activeRecommendations = $derived(
-		optionalRecommendations.filter((name) => !rejectedStore.isRejected(name))
-	);
-
-	const rejectedRecommendations = $derived(
-		optionalRecommendations.filter((name) => rejectedStore.isRejected(name))
-	);
-
-	// Map of optional dependency -> mods recommending it
-	const optionalDependencyMap = $derived(
-		(() => {
-			const map = new Map<string, string[]>();
-			const baseMods = new Set(['base', 'space-age', 'quality', 'elevated-rails']);
-
-			for (const mod of frozenMods) {
-				if (!mod.enabled) continue;
-				for (const dep of parseOptionalDependencies(mod.dependencies)) {
-					if (baseMods.has(dep)) continue;
-					if (!map.has(dep)) {
-						map.set(dep, []);
-					}
-					const arr = map.get(dep)!;
-					if (!arr.includes(mod.name)) arr.push(mod.name);
-				}
-			}
-			return map;
-		})()
-	);
-
-	// Map of mod -> list of enabled mods that conflict with it
-	const conflictMap = $derived(
-		(() => {
-			const map = new Map<string, string[]>();
-			for (const mod of frozenMods) {
-				if (!mod.enabled) continue;
-				for (const conf of parseConflicts(mod.dependencies)) {
-					if (!map.has(conf)) {
-						map.set(conf, []);
-					}
-					const arr = map.get(conf)!;
-					if (!arr.includes(mod.name)) arr.push(mod.name);
-				}
-			}
-			return map;
-		})()
-	);
-
-	// ----------------- Fetching mod details -----------------
-	interface ModDetail {
-		name: string;
-		title?: string;
-		summary?: string;
-		description?: string;
-		thumbnail?: string;
-		owner?: string;
-		category?: string;
-		tags?: string[];
-		downloads_count?: number;
-		updated_at?: string;
-		latest_release?: { version?: string };
-	}
-
-	let recommendationDetails = $state<Record<string, ModDetail>>({});
-
-	const PREFETCH_COUNT = 12;
-	$effect(() => {
-		for (const name of optionalRecommendations.slice(0, PREFETCH_COUNT)) {
-			loadModDetail(name);
-		}
-	});
-
-	function onVisible(node: HTMLElement, modName: string) {
-		if (recommendationDetails[modName]) return; // already loaded
-		const observer = new IntersectionObserver(
-			(entries) => {
-				if (entries[0].isIntersecting) {
-					loadModDetail(modName);
-					observer.disconnect();
-				}
-			},
-			{ rootMargin: '400px 0px 400px 0px' }
-		);
-		observer.observe(node);
-		return {
-			destroy() {
-				observer.disconnect();
-			}
-		};
-	}
-
-	async function loadModDetail(modName: string) {
-		if (recommendationDetails[modName]) return;
-		try {
-			const res = await fetch(`/api/factorio-mods/${modName}`);
-			if (!res.ok) return;
-			const data = await res.json();
-			const latest = data.releases?.[data.releases.length - 1] ?? {};
-			recommendationDetails[modName] = {
-				name: modName,
-				title: data.title,
-				summary: data.summary,
-				description: data.description,
-				thumbnail: data.thumbnail,
-				owner: data.owner,
-				category: data.category,
-				tags: data.tags,
-				downloads_count: data.downloads_count,
-				updated_at: data.updated_at,
-				latest_release: { version: latest.version }
-			};
-		} catch {
-			// ignore failures
-		}
-	}
-
-	function formatDate(dateString?: string): string {
-		if (!dateString) return 'N/A';
-		try {
-			const date = new Date(dateString);
-			const now = new Date();
-			const diffMs = now.getTime() - date.getTime();
-			const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-			const diffDays = Math.floor(diffHours / 24);
-
-			if (diffHours < 1) return 'Less than an hour ago';
-			if (diffHours < 24) return `${diffHours} hours ago`;
-			if (diffDays < 30) return `${diffDays} days ago`;
-			if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
-			return `${Math.floor(diffDays / 365)} years ago`;
-		} catch {
-			return 'N/A';
-		}
-	}
-
-	function formatDownloads(count?: number): string {
-		if (!count) return '0';
-		if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-		if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
-		return count.toString();
-	}
-
-	// preview state
+	let { mods, modlistId, factorioVersion, curationAvailable, canEdit, open = $bindable(false) }: { mods: (RecommendationMod & { title?: string | null; version?: string | null; summary?: string | null; lastFetched?: Date | null })[]; modlistId: string; factorioVersion: string; curationAvailable: boolean; canEdit: boolean; open?: boolean } = $props();
+	let page = $state(0);
+	let showDismissed = $state(false);
+	let details = $state<Record<string, PortalMod | null>>({});
+	let errors = $state<Record<string, string>>({});
+	let scores = $state<Record<string, RecommendationRating>>({});
+	let scoreContexts = $state<Record<string, string>>({});
+	let ranking = $state(false);
+	let rankingAttempt = $state(0);
+	let rankingMessage = $state<{ error: boolean; message: string } | null>(null);
+	let retry = $state(0);
+	let adding = $state<string | null>(null);
 	let previewOpen = $state(false);
-	let previewModName = $state<string | null>(null);
-	function openModPreview(name: string) {
-		previewModName = name;
-		previewOpen = true;
-	}
+	let previewName = $state<string | null>(null);
+	const rejected = $derived(createRejectedRecommendationsStore(modlistId));
+ $effect(() => { const preferences = rejected; if (open && canEdit) void untrack(() => preferences.load(true)); });
+	const listContext = $derived(JSON.stringify([modlistId, factorioVersion, mods.filter((mod) => mod.enabled).map((mod) => [mod.name, mod.dependencies, mod.version, mod.summary, mod.lastFetched])]));
+	// Keep recent choices bounded; restore removes a choice from future ranking requests.
+	const dismissedNames = $derived([...rejected.rejected].slice(-40).sort());
+	const context = $derived(JSON.stringify([listContext, dismissedNames]));
+	$effect(() => { void listContext; scores = {}; scoreContexts = {}; rankingMessage = null; });
+	const candidates = $derived(recommendationCandidates(mods));
+	const modTitles = $derived(new Map(mods.map((mod) => [mod.name, mod.title || mod.name])));
+	const visible = $derived(showDismissed
+		? [...rejected.rejected].sort().map((name) => candidates.find((candidate) => candidate.name === name) ?? { name, recommendedBy: [], requirements: [] })
+		: candidates.filter((candidate) => !rejected.isRejected(candidate.name)));
+	const pageCount = $derived(Math.max(1, Math.ceil(visible.length / recommendationPageSize)));
+	const currentPage = $derived(Math.min(page, pageCount - 1));
+	// Score sorting must not change which candidates are fetched or ranked.
+	const pageCandidates = $derived(visible.slice(currentPage * recommendationPageSize, (currentPage + 1) * recommendationPageSize));
+	const rows = $derived(pageCandidates.toSorted((a, b) => recommendationPriority(scores[b.name]) - recommendationPriority(scores[a.name])));
+	const checking = $derived(pageCandidates.filter((candidate) => details[candidate.name] === undefined).length);
+	const compatibleNames = $derived(pageCandidates.filter((candidate) => details[candidate.name] && recommendationRelease(details[candidate.name]?.releases ?? [], candidate, mods, factorioVersion)).map((candidate) => candidate.name));
+	const dismissed = $derived(rejected.rejected.size);
+
 	$effect(() => {
-		if (!previewOpen) {
-			previewModName = null;
+		if (!open) return;
+		void retry;
+		const names = pageCandidates.map((candidate) => candidate.name);
+		const controller = new AbortController();
+		for (const name of names) {
+			if (untrack(() => details[name] !== undefined)) continue;
+			void fetch(`/api/factorio-mods/${encodeURIComponent(name)}`, { signal: controller.signal }).then(async (response) => {
+				if (!response.ok) throw new Error(response.status === 404 ? 'No longer on the mod portal' : 'Metadata unavailable');
+				const detail: PortalMod = await response.json();
+				if (!controller.signal.aborted) details[name] = detail;
+			}).catch((cause) => {
+				if (!controller.signal.aborted) { details[name] = null; errors[name] = cause instanceof Error ? cause.message : 'Metadata unavailable'; }
+			});
 		}
+		return () => controller.abort();
 	});
 
-	// ----------------- Rejection handling -----------------
-	function rejectRecommendation(modName: string) {
-		const savedScroll = scrollContainer?.scrollTop ?? 0;
-		rejectedStore.reject(modName);
-		requestAnimationFrame(() => {
-			if (scrollContainer) {
-				scrollContainer.scrollTop = savedScroll;
-			}
-		});
-	}
-
-	function undoReject(modName: string) {
-		const savedScroll = scrollContainer?.scrollTop ?? 0;
-		rejectedStore.unreject(modName);
-		requestAnimationFrame(() => {
-			if (scrollContainer) {
-				scrollContainer.scrollTop = savedScroll;
-			}
-		});
-	}
-
-	function handleModAdded(modName: string) {
-		const savedScroll = scrollContainer?.scrollTop ?? 0;
-		frozenMods = [
-			...frozenMods,
-			{
-				id: `temp-${Date.now()}`,
-				modlist: modlistId,
-				name: modName,
-				enabled: true,
-				icebox: false,
-				essential: false,
-				dependencies: null,
-				updatedBy: null
-			}
-		];
-		requestAnimationFrame(() => {
-			if (scrollContainer) {
-				scrollContainer.scrollTop = savedScroll;
-			}
-		});
-	}
+	$effect(() => {
+		const rankingContext = context;
+		const feedback = dismissedNames;
+		void rankingAttempt;
+		ranking = false;
+		rankingMessage = null;
+		if (!open || showDismissed || !curationAvailable || !rejected.loaded || checking) return;
+		const names = compatibleNames;
+		if (!names.length || untrack(() => names.every((name) => scores[name] && scoreContexts[name] === rankingContext))) return;
+		const controller = new AbortController();
+		ranking = true;
+		const timer = setTimeout(() => { void (async () => {
+			try {
+				const response = await fetch(`/api/modlists/${modlistId}/recommendations`, {
+					method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ names, dismissed: feedback }),
+					signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)])
+				});
+				const result: { scores?: typeof scores; message?: string; warning?: string } = await response.json().catch(() => { throw new Error('Ranking is unavailable. Please retry.'); });
+				if (controller.signal.aborted || rankingContext !== context) return;
+				if (!response.ok) throw new Error(result.message || 'Could not rank recommendations');
+				if (!Object.keys(result.scores ?? {}).length) throw new Error('No rankings returned.');
+				scores = { ...scores, ...result.scores };
+				scoreContexts = { ...scoreContexts, ...Object.fromEntries(Object.keys(result.scores ?? {}).map((name) => [name, rankingContext])) };
+				if (result.warning) rankingMessage = { error: false, message: result.warning };
+			} catch (cause) {
+				if (!controller.signal.aborted) rankingMessage = { error: true, message: cause instanceof Error && cause.name === 'TimeoutError' ? 'Ranking timed out.' : cause instanceof Error ? cause.message : 'Could not rank recommendations' };
+			} finally { if (!controller.signal.aborted) ranking = false; }
+		})(); }, 300);
+		return () => { clearTimeout(timer); controller.abort(); };
+	});
 </script>
-
-<Sheet.Root bind:open={sheetOpen}>
-	<Sheet.Trigger class={buttonVariants({ variant: 'outline', size: 'sm' })}>
-		<BookIcon class="mr-2 h-4 w-4" />
-		Recommendations
-	</Sheet.Trigger>
-
-	<Sheet.Content side="right" class="w-[800px] !max-w-[800px] sm:w-[800px]">
-		<Sheet.Header>
-			<Sheet.Title>Recommended Mods</Sheet.Title>
-			<Sheet.Description>Optional dependencies you may consider adding.</Sheet.Description>
-		</Sheet.Header>
-
-		<div bind:this={scrollContainer} class="space-y-6 overflow-y-auto p-4">
-			{#if activeRecommendations.length === 0 && rejectedRecommendations.length === 0}
-				<p>No recommendations available.</p>
-			{:else}
-				{#each activeRecommendations as modName (modName)}
-					<div
-						use:onVisible={modName}
-						class="flex gap-4 rounded-lg border p-4 transition-colors {conflictMap.get(modName)
-							?.length
-							? 'bg-destructive/20 border-destructive'
-							: 'hover:bg-muted/50'}"
-					>
-						<!-- Thumbnail -->
-						<div class="flex-shrink-0">
-							{#if recommendationDetails[modName]?.thumbnail}
-								<img
-									src={`https://assets-mod.factorio.com${recommendationDetails[modName].thumbnail}`}
-									alt={recommendationDetails[modName].title || modName}
-									class="bg-muted h-20 w-20 rounded-lg object-cover"
-									loading="lazy"
-								/>
-							{:else}
-								<div class="bg-muted flex h-20 w-20 items-center justify-center rounded-lg">
-									<span class="text-muted-foreground text-xs">No Image</span>
-								</div>
-							{/if}
+<Sheet.Root bind:open>
+	<Sheet.Content side="right" class="flex w-full flex-col sm:!max-w-[52rem]">
+		<Sheet.Header class="border-b pr-12 pb-4"><Sheet.Title>Recommended mods</Sheet.Title><Sheet.Description>Factorio {factorioVersion}</Sheet.Description></Sheet.Header>
+		<div class="flex flex-wrap items-center justify-between gap-2 px-4">
+			<Button variant="ghost" size="sm" onclick={() => { showDismissed = !showDismissed; page = 0; }}>{#if showDismissed}<EyeIcon class="size-4" />{:else}<EyeOffIcon class="size-4" />{/if}{showDismissed ? 'Show recommendations' : `Dismissed (${dismissed})`}</Button>
+			<div class="text-xs text-muted-foreground" aria-live="polite">
+				{#if checking}<span role="status">Checking {checking} mods…</span>
+				{:else if ranking}<span role="status" class="inline-flex items-center gap-2"><LoaderCircleIcon class="size-3.5 animate-spin motion-reduce:animate-none" />Ranking…</span>{/if}
+			</div>
+		</div>
+		{#if !curationAvailable}<p class="px-4 text-sm text-muted-foreground">Ranking needs the list owner’s TypeSafe key in account settings.</p>{/if}
+		{#if rankingMessage}<div class="flex items-center gap-3 px-4 text-sm" role={rankingMessage.error ? 'alert' : 'status'}><p class="text-muted-foreground">{rankingMessage.message}</p>{#if rankingMessage.error}<Button variant="outline" size="sm" onclick={() => rankingAttempt++}><RefreshCwIcon class="size-4" />Retry ranking</Button>{/if}</div>{/if}
+		<div class="min-h-0 flex-1 divide-y overflow-y-auto px-4">
+			{#each rows as candidate (candidate.name)}
+				{@const detail = details[candidate.name]}
+				{@const score = scores[candidate.name]}
+				{@const release = detail && recommendationRelease(detail.releases, candidate, mods, factorioVersion)}
+				<article class="grid grid-cols-[4rem_minmax(0,1fr)] gap-4 py-5 sm:grid-cols-[5rem_minmax(0,1fr)_7rem]" aria-label={detail?.title || candidate.name}>
+					<button type="button" class="self-start overflow-hidden rounded border bg-muted focus-visible:outline-2 focus-visible:outline-ring" aria-label={`Preview ${detail?.title || candidate.name}`} onclick={() => { previewName = candidate.name; previewOpen = true; }}>
+						{#if detail?.thumbnail}<img src={modThumbnailUrl(detail.thumbnail)} alt="" class="aspect-square w-full object-contain" loading="lazy" />{:else}<span class="flex aspect-square items-center justify-center"><PackageIcon class="size-8 text-muted-foreground" /></span>{/if}
+					</button>
+					<div class="min-w-0">
+						<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+							<h3 class="min-w-0 text-base font-semibold"><button type="button" class="text-left break-words hover:text-primary hover:underline" onclick={() => { previewName = candidate.name; previewOpen = true; }}>{detail?.title || candidate.name}</button></h3>
+							{#if release}<span class="shrink-0 text-xs tabular-nums text-muted-foreground">v{release.version}</span>{/if}
 						</div>
-
-						<!-- Mod Information -->
-						<div class="min-w-0 flex-1">
-							<!-- Title & Author -->
-							<div class="mb-1">
-								<a
-									href={`https://mods.factorio.com/mod/${modName}`}
-									class="text-foreground truncate text-left text-lg font-semibold"
-									onclick={(e) => {
-										if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
-											e.preventDefault();
-											openModPreview(modName);
-										}
-									}}
-								>
-									{recommendationDetails[modName]?.title ?? modName}
-								</a>
-								{#if recommendationDetails[modName]?.owner}
-									<p class="text-muted-foreground flex items-center gap-1 text-sm">
-										<span>by</span>
-										<span class="text-accent font-medium"
-											>{recommendationDetails[modName].owner}</span
-										>
-									</p>
-								{/if}
-							</div>
-
-							<!-- Description -->
-							{#if recommendationDetails[modName]?.summary}
-								<p class="text-muted-foreground mb-3 line-clamp-2 text-sm">
-									{recommendationDetails[modName].summary}
-								</p>
-							{/if}
-
-							<!-- Metadata -->
-							<div class="text-muted-foreground mb-2 flex flex-wrap items-center gap-4 text-xs">
-								{#if recommendationDetails[modName]?.category}
-									<div class="flex items-center gap-1">
-										<NutIcon class="h-3 w-3" />
-										<span class="capitalize">{recommendationDetails[modName].category}</span>
-									</div>
-								{/if}
-								{#if recommendationDetails[modName]?.updated_at}
-									<div class="flex items-center gap-1">
-										<ClockIcon class="h-3 w-3" />
-										<span>{formatDate(recommendationDetails[modName].updated_at)}</span>
-									</div>
-								{/if}
-								{#if recommendationDetails[modName]?.latest_release?.version}
-									<div class="flex items-center gap-1">
-										<span class="text-green-500">🏷️</span>
-										<span>{recommendationDetails[modName].latest_release.version}</span>
-									</div>
-								{/if}
-								<div class="flex items-center gap-1">
-									<DownloadIcon class="h-3 w-3" />
-									<span>{formatDownloads(recommendationDetails[modName]?.downloads_count)}</span>
-								</div>
-							</div>
-
-							<!-- Conflict Badges -->
-							{#if (conflictMap.get(modName)?.length ?? 0) > 0}
-								<div class="mt-2 flex flex-wrap gap-1">
-									<span class="text-muted-foreground text-sm">Conflicts with:</span>
-									{#each conflictMap.get(modName)?.slice(0, 5) ?? [] as c (c)}
-										<Badge variant="destructive">{c}</Badge>
-									{/each}
-									{#if (conflictMap.get(modName)?.length ?? 0) > 5}
-										<span
-											class="bg-destructive text-destructive-foreground rounded-full px-2 py-0.5 text-xs"
-										>
-											+{(conflictMap.get(modName)?.length ?? 0) - 5} more
-										</span>
-									{/if}
-								</div>
-							{/if}
-
-							<!-- Recommender Badges -->
-							{#if (optionalDependencyMap.get(modName)?.length ?? 0) > 0}
-								<div class="mt-2 flex flex-wrap gap-1">
-									<span class="text-muted-foreground text-sm">Recommended by:</span>
-									{#each optionalDependencyMap.get(modName)?.slice(0, 5) ?? [] as rec (rec)}
-										<Badge variant="outline">{rec}</Badge>
-									{/each}
-									{#if (optionalDependencyMap.get(modName)?.length ?? 0) > 5}
-										<span class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">
-											+{(optionalDependencyMap.get(modName)?.length ?? 0) - 5} more
-										</span>
-									{/if}
-								</div>
-							{/if}
-						</div>
-
-						<!-- Action Buttons -->
-						<div class="flex flex-shrink-0 flex-col items-end gap-2">
-							<form
-								method="POST"
-								action="?/addMod"
-								use:enhance={() => {
-									return async ({ result }) => {
-										if (result.type === 'success') {
-											handleModAdded(modName);
-										}
-									};
-								}}
-							>
-								<input type="hidden" name="modName" value={modName} />
-								<Button type="submit" size="sm" variant="success">
-									<PlusIcon class="mr-1 h-3 w-3" />
-									Add to List
-								</Button>
-							</form>
-							<Button
-								type="button"
-								size="sm"
-								variant="outline"
-								class="text-muted-foreground hover:text-foreground hover:bg-transparent"
-								onclick={() => rejectRecommendation(modName)}
-							>
-								<XIcon class="mr-1 h-3 w-3" />
-								Not Interested
-							</Button>
-						</div>
-					</div>
-				{/each}
-
-				<!-- Not Interested Section -->
-				{#if rejectedRecommendations.length > 0}
-					<div class="border-muted-foreground/20 mt-8 border-t pt-6">
-						<button
-							type="button"
-							class="text-muted-foreground hover:text-foreground mb-4 flex w-full items-center justify-between text-sm font-medium"
-							onclick={() => (notInterestedExpanded = !notInterestedExpanded)}
-						>
-							<div class="flex items-center gap-2">
-								<span>Not Interested</span>
-								<Badge variant="outline" class="text-xs">{rejectedRecommendations.length}</Badge>
-							</div>
-							{#if notInterestedExpanded}
-								<ChevronUpIcon class="h-4 w-4" />
-							{:else}
-								<ChevronDownIcon class="h-4 w-4" />
-							{/if}
-						</button>
-
-						{#if notInterestedExpanded}
-							<div class="space-y-4">
-								{#each rejectedRecommendations as modName (modName)}
-									<div
-										use:onVisible={modName}
-										class="bg-muted/30 flex gap-4 rounded-lg border p-4 opacity-60 transition-opacity hover:opacity-100"
-									>
-										<!-- Thumbnail -->
-										<div class="flex-shrink-0">
-											{#if recommendationDetails[modName]?.thumbnail}
-												<img
-													src={`https://assets-mod.factorio.com${recommendationDetails[modName].thumbnail}`}
-													alt={recommendationDetails[modName].title || modName}
-													class="bg-muted h-20 w-20 rounded-lg object-cover"
-													loading="lazy"
-												/>
-											{:else}
-												<div class="bg-muted flex h-20 w-20 items-center justify-center rounded-lg">
-													<span class="text-muted-foreground text-xs">No Image</span>
-												</div>
-											{/if}
-										</div>
-
-										<!-- Mod Information -->
-										<div class="min-w-0 flex-1">
-											<!-- Title & Author -->
-											<div class="mb-1">
-												<a
-													href={`https://mods.factorio.com/mod/${modName}`}
-													class="text-foreground truncate text-left text-lg font-semibold"
-													onclick={(e) => {
-														if (
-															e.button === 0 &&
-															!e.metaKey &&
-															!e.ctrlKey &&
-															!e.shiftKey &&
-															!e.altKey
-														) {
-															e.preventDefault();
-															openModPreview(modName);
-														}
-													}}
-												>
-													{recommendationDetails[modName]?.title ?? modName}
-												</a>
-												{#if recommendationDetails[modName]?.owner}
-													<p class="text-muted-foreground flex items-center gap-1 text-sm">
-														<span>by</span>
-														<span class="text-accent font-medium"
-															>{recommendationDetails[modName].owner}</span
-														>
-													</p>
-												{/if}
-											</div>
-
-											<!-- Description -->
-											{#if recommendationDetails[modName]?.summary}
-												<p class="text-muted-foreground mb-3 line-clamp-2 text-sm">
-													{recommendationDetails[modName].summary}
-												</p>
-											{/if}
-										</div>
-
-										<!-- Undo Button -->
-										<div class="flex flex-shrink-0 items-start">
-											<Button
-												type="button"
-												size="sm"
-												variant="outline"
-												onclick={() => undoReject(modName)}
-											>
-												<UndoIcon class="mr-1 h-3 w-3" />
-												Undo
-											</Button>
-										</div>
-									</div>
-								{/each}
+						{#if score}
+							<div class="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs leading-normal tabular-nums">
+								<Tooltip.Root><Tooltip.Trigger class="font-semibold text-primary" aria-label={`Recommendation score: ${score.score.toFixed(1)} out of 10`}>{score.score.toFixed(1)} / 10</Tooltip.Trigger><Tooltip.Content>Gameplay fit 45% · Added value 35% · Integration 20%. Confidence carries more weight than score.</Tooltip.Content></Tooltip.Root>
+								<Tooltip.Root><Tooltip.Trigger class="text-muted-foreground">{Math.round(score.confidence * 100)}% confidence</Tooltip.Trigger><Tooltip.Content>Lowest confidence across the three ratings. Measures certainty of the rating, not whether you’ll like the mod.</Tooltip.Content></Tooltip.Root>
 							</div>
 						{/if}
+						{#if detail?.summary}<p class="mt-2 text-sm leading-relaxed text-foreground/85">{detail.summary}</p>{/if}
+						{#if score}
+							<details class="group mt-3 text-xs">
+								<summary class="flex cursor-pointer list-none items-center gap-1.5 text-primary [&::-webkit-details-marker]:hidden"><ChevronRightIcon class="size-3.5 shrink-0 group-open:rotate-90" />Why this mod</summary>
+								<dl class="mt-2 space-y-3 border-l border-primary/30 pl-3">
+									{#each score.dimensions as dimension (dimension.label)}
+										<div><dt class="flex flex-wrap items-baseline justify-between gap-2"><span class="font-medium">{dimension.label}</span><span class="tabular-nums">{dimension.score.toFixed(1)} / 10 <span class="ml-2 text-muted-foreground">{Math.round(dimension.confidence * 100)}%</span></span></dt><dd class="mt-1 text-muted-foreground">{dimension.assessment}</dd></div>
+									{/each}
+								</dl>
+							</details>
+						{/if}
+						{#if candidate.recommendedBy.length}<details class="group mt-3 text-xs">
+							<summary class="flex cursor-pointer list-none items-start gap-1.5 text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden"><ChevronRightIcon class="mt-0.5 size-3.5 shrink-0 group-open:rotate-90" /><span>{candidate.recommendedBy.length} enabled {candidate.recommendedBy.length === 1 ? 'mod lists' : 'mods list'} this as an optional dependency</span></summary>
+							<ul class="mt-2 grid gap-2 pl-5 sm:grid-cols-2">
+								{#each candidate.recommendedBy as name (name)}<li class="min-w-0"><button type="button" class="inline-flex items-start gap-1.5 text-left text-primary hover:underline" onclick={() => { previewName = name; previewOpen = true; }}><LinkIcon class="mt-0.5 size-3.5 shrink-0" /><span class="break-words">{modTitles.get(name) || name}</span></button></li>{/each}
+							</ul>
+						</details>{/if}
+						{#if detail === undefined}<p class="mt-3 text-xs text-muted-foreground">Checking compatibility…</p>
+						{:else if errors[candidate.name]}<p class="mt-3 text-xs text-destructive">{errors[candidate.name]}</p>
+						{:else if !release}<p class="mt-3 text-xs text-amber-500">No compatible Factorio {factorioVersion} release</p>{/if}
 					</div>
-				{/if}
-			{/if}
+					<div class="col-span-2 flex items-start justify-end sm:col-span-1 sm:col-start-3 sm:row-start-1">
+						<div class="flex flex-wrap gap-2 sm:w-full sm:flex-col">
+							{#if errors[candidate.name]}<Button variant="outline" size="sm" onclick={() => { delete details[candidate.name]; delete errors[candidate.name]; retry++; }}><RefreshCwIcon class="size-4" />Retry</Button>{/if}
+							{#if showDismissed}<Button variant="ghost" size="sm" disabled={!canEdit || rejected.pending} onclick={() => void rejected.unreject(candidate.name)}><UndoIcon class="size-4" />Restore</Button>{:else}
+
+								<form method="POST" action="?/addMod" use:enhance={({ cancel }) => {
+									if (adding) { cancel(); return; } adding = candidate.name;
+									return async ({ result, update }) => { try { await update({ invalidateAll: false }); if (result.type === 'success') await invalidate('app:modlist'); else toast.error(result.type === 'failure' ? String(result.data?.message || 'Could not add mod') : 'Could not add mod'); } finally { adding = null; } };
+								}}><input type="hidden" name="modName" value={candidate.name} /><TooltipButton type="submit" size="sm" class="w-full" aria-label={`Add ${detail?.title || candidate.name}`} tooltip={!canEdit ? 'Read-only list' : adding ? 'Adding mod' : detail === undefined ? 'Checking compatibility' : errors[candidate.name] || (!release ? `No compatible Factorio ${factorioVersion} release` : 'Add mod')} disabled={!canEdit || !release || adding !== null}>{#if adding === candidate.name}<LoaderCircleIcon class="size-4 animate-spin motion-reduce:animate-none" />{:else}<PlusIcon class="size-4" />{/if}{adding === candidate.name ? 'Adding…' : 'Add'}</TooltipButton></form>
+						<TooltipButton variant="outline" size="sm" disabled={!canEdit} tooltip={canEdit ? 'Explain fit' : 'Read-only list'} onclick={() => { open = false; window.dispatchEvent(new CustomEvent('facmandu-explain', { detail: candidate.name })); }}><MessageSquareIcon class="size-4" />Explain fit</TooltipButton>
+								<Button variant="ghost" size="sm" aria-label={`Dismiss ${detail?.title || candidate.name}`} disabled={!canEdit || rejected.pending} onclick={() => void rejected.reject(candidate.name)}><EyeOffIcon class="size-4" />Dismiss</Button>
+							{/if}
+						</div>
+					</div>
+				</article>
+			{:else}<p class="py-8 text-center text-sm text-muted-foreground">{showDismissed ? 'No dismissed recommendations.' : 'No recommendations for this list.'}</p>{/each}
 		</div>
+		{#if pageCount > 1}<div class="flex items-center justify-between border-t p-4 text-sm"><span>Page {currentPage + 1} of {pageCount}</span><div class="flex gap-2"><Button variant="outline" size="sm" disabled={currentPage === 0} onclick={() => { page = currentPage - 1; }}><ChevronLeftIcon class="size-4" />Previous</Button><Button variant="outline" size="sm" disabled={currentPage + 1 >= pageCount} onclick={() => { page = currentPage + 1; }}>Next<ChevronRightIcon class="size-4" /></Button></div></div>{/if}
 	</Sheet.Content>
 </Sheet.Root>
-
-<ModPreviewSheet bind:open={previewOpen} modName={previewModName} />
+<ModPreviewSheet bind:open={previewOpen} modName={previewName} {factorioVersion} />
