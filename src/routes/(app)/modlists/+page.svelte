@@ -9,7 +9,7 @@
 	let copying = $state<string | null>(null);
  let query = $state('');
  const lists = $derived(data.modLists.filter(list => `${list.name} ${list.collaborators.map(person => person.username).join(' ')}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())));
-	
+
 </script>
 <svelte:head><title>Mod library · Facmandu</title></svelte:head>
 
@@ -26,7 +26,7 @@
 							{#if data.canManageServer}<TooltipButton href={`/servers?list=${list.id}`} tooltip="Apply to server" aria-label={`Apply ${list.name} to a server`} variant="ghost" size="icon"><ServerIcon class="size-4" /></TooltipButton>{/if}
 							<form method="POST" action="?/duplicate" use:enhance={({cancel}) => {
 								if (copying) { cancel(); return; }
-								copying = list.id; 
+								copying = list.id;
 								return async ({ update, result }) => {
 									try {
 										if (result.type === 'error') toast.error('Could not duplicate this list. Try again.');

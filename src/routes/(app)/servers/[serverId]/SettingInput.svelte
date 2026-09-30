@@ -7,6 +7,7 @@
  type Color = { r: number; g: number; b: number; a?: number };
  let {
   id,
+  labelledBy,
   value = $bindable(),
   onchange,
   min,
@@ -18,6 +19,7 @@
   disabled = false
  }: {
   id: string;
+  labelledBy?: string;
   value: unknown;
   onchange?: (value: unknown) => void;
   min?: number;
@@ -44,7 +46,7 @@
  function replaceItem(index: number, next: string) { if (Array.isArray(value)) update(value.map((item, i) => i === index ? next : item)); }
 </script>
 {#if typeof value === 'boolean'}
- <input {id} type="checkbox" checked={value} {disabled} onchange={(event) => update(event.currentTarget.checked)} class="size-4 accent-primary" />
+ <input {id} aria-labelledby={labelledBy} type="checkbox" checked={value} {disabled} onchange={(event) => update(event.currentTarget.checked)} class="size-4 accent-primary" />
 {:else if Array.isArray(value) && value.every((item) => typeof item === 'string')}
  <div class="flex flex-wrap items-center gap-2">
  {#each value as item, index (index)}
@@ -56,13 +58,13 @@
  <TooltipButton tooltip={`Add ${label}`} variant="outline" size="icon" {disabled} onclick={addItem}><PlusIcon class="size-4" /></TooltipButton>
  </div>
 {:else if isColor(value)}
- <div class="flex flex-wrap gap-2">
+ <fieldset aria-labelledby={labelledBy} aria-label={labelledBy ? undefined : label} class="flex flex-wrap gap-2">
   {#each (['r', 'g', 'b', 'a'] as const) as channel (channel)}
    <label class="flex items-center gap-1 text-xs uppercase">{channel}
     <input id={`${id}-${channel}`} aria-label={`${label} ${channel}`} class={`${inputClass} w-20`} type="number" step="any" min="0" required {disabled} value={value[channel] ?? 1} oninput={(event) => setColorChannel(value as Color, channel, event.currentTarget.valueAsNumber)} />
    </label>
   {/each}
- </div>
+ </fieldset>
 {:else if value !== null && typeof value === 'object' && !Array.isArray(value)}
  <div class="flex flex-wrap gap-x-5 gap-y-2">
  {#each Object.entries(value) as [key, entry] (key)}
@@ -70,10 +72,10 @@
  {/each}
  </div>
 {:else if (typeof value === 'string' || typeof value === 'number') && allowed?.length}
- <select {id} class={inputClass} value={String(value)} {disabled} onchange={(event) => update(typeof value === 'number' ? Number(event.currentTarget.value) : event.currentTarget.value)}>
+ <select {id} aria-labelledby={labelledBy} class={inputClass} value={String(value)} {disabled} onchange={(event) => update(typeof value === 'number' ? Number(event.currentTarget.value) : event.currentTarget.value)}>
   {#if !allowed.some((option) => option === value)}<option value={String(value)}>{allowedLabels?.[String(value)] ?? value} (current)</option>{/if}
   {#each allowed as option (option)}<option value={String(option)}>{allowedLabels?.[String(option)] ?? option}</option>{/each}
  </select>
 {:else}
- <input {id} class={inputClass} type={typeof value === 'number' ? 'number' : 'text'} required={typeof value === 'number'} step={typeof value === 'number' ? type === 'int-setting' ? '1' : 'any' : undefined} min={typeof value === 'number' ? min : undefined} max={typeof value === 'number' ? max : undefined} {disabled} value={String(value ?? '')} oninput={(event) => update(typeof value === 'number' ? event.currentTarget.valueAsNumber : event.currentTarget.value)} />
+ <input {id} aria-labelledby={labelledBy} class={inputClass} type={typeof value === 'number' ? 'number' : 'text'} required={typeof value === 'number'} step={typeof value === 'number' ? type === 'int-setting' ? '1' : 'any' : undefined} min={typeof value === 'number' ? min : undefined} max={typeof value === 'number' ? max : undefined} {disabled} value={String(value ?? '')} oninput={(event) => update(typeof value === 'number' ? event.currentTarget.valueAsNumber : event.currentTarget.value)} />
 {/if}

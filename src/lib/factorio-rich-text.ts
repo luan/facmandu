@@ -39,7 +39,8 @@ function prototypeTag(body: string): PrototypeRef | null {
 	const match = /^(item|fluid|entity|technology|recipe|img)=(.+)$/u.exec(body);
 	if (!match?.[1] || !match[2]) return null;
 	const value = match[2];
-	const ref = match[1] === 'img' ? /^(item|fluid|entity|technology|recipe)\/(.+)$/u.exec(value) : null;
+	const ref =
+		match[1] === 'img' ? /^(item|fluid|entity|technology|recipe)\/(.+)$/u.exec(value) : null;
 	const kind = (ref?.[1] ?? match[1]) as PrototypeRef['kind'];
 	const name = ref?.[2] ?? value;
 	if (!iconKinds.some((candidate) => candidate === kind) || !/^[a-zA-Z0-9_.-]{1,200}$/u.test(name))
@@ -60,7 +61,7 @@ export function parseFactorioRichText(source: string): RichTextPart[] {
 			previous.text += text;
 		else parts.push({ kind: 'text', text, color, bold });
 	};
-	for (const match of source.matchAll(/\[([^\[\]\n]{1,256})\]/gu)) {
+	for (const match of source.matchAll(/\[([^[\]\n]{1,256})\]/gu)) {
 		const index = match.index ?? position;
 		append(source.slice(position, index));
 		position = index + match[0].length;

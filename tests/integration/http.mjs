@@ -37,7 +37,11 @@ await writeFile(
 	'#!/bin/sh\nprintf "ActiveState=inactive\\nSubState=dead\\n"\n',
 	{ mode: 0o755 }
 );
-await writeFile(join(directory, 'bin/xvfb-run'), '#!/bin/sh\n[ "$1" = "-a" ] && shift\nexec "$@"\n', { mode: 0o755 });
+await writeFile(
+	join(directory, 'bin/xvfb-run'),
+	'#!/bin/sh\n[ "$1" = "-a" ] && shift\nexec "$@"\n',
+	{ mode: 0o755 }
+);
 const longName = 'long-mod-name-'.padEnd(100, 'x');
 const archive = Buffer.from('immutable fixture archive bytes');
 const sha1 = createHash('sha1').update(archive).digest('hex');
@@ -1709,16 +1713,29 @@ try {
 	}
 	const engine = join(machineDirs[0], 'versions/stable/2.1.20/bin/x64/factorio');
 	const nativeData = join(machineDirs[0], 'versions/stable/2.1.20/data');
-	await writeFile(join(nativeData, 'map-settings.example.json'), JSON.stringify({
-		pollution: { enabled: true, diffusion_ratio: 0.02 },
-		enemy_evolution: { enabled: true, time_factor: 0.000004 },
-		enemy_expansion: { min_expansion_cooldown: 14400, max_expansion_cooldown: 216000, settler_group_min_size: 5, settler_group_max_size: 20 }
-	}));
+	await writeFile(
+		join(nativeData, 'map-settings.example.json'),
+		JSON.stringify({
+			pollution: { enabled: true, diffusion_ratio: 0.02 },
+			enemy_evolution: { enabled: true, time_factor: 0.000004 },
+			enemy_expansion: {
+				min_expansion_cooldown: 14400,
+				max_expansion_cooldown: 216000,
+				settler_group_min_size: 5,
+				settler_group_max_size: 20
+			}
+		})
+	);
 	await writeFile(join(nativeData, 'map-gen-settings.example.json'), '{}');
-	await writeFile(join(nativeData, 'fixture-map-catalog.json'), JSON.stringify({
-		'autoplace-control': { 'iron-ore': { name: 'iron-ore', category: 'resource', richness: true } },
-		'map-gen-presets': { default: { name: 'default', default: { default: true, order: 'a' } } }
-	}));
+	await writeFile(
+		join(nativeData, 'fixture-map-catalog.json'),
+		JSON.stringify({
+			'autoplace-control': {
+				'iron-ore': { name: 'iron-ore', category: 'resource', richness: true }
+			},
+			'map-gen-presets': { default: { name: 'default', default: { default: true, order: 'a' } } }
+		})
+	);
 	const createFixture = `#!/bin/sh
 config=''
 operation=''
@@ -1754,29 +1771,65 @@ done
 	assert.equal((await request(mapGenerationPath)).status, 401);
 	assert.equal((await request(mapGenerationPath, { cookie: cookies.stranger })).status, 403);
 	const generationCatalog = await json(mapGenerationPath, { cookie: cookies.owner });
-	assert.deepEqual(generationCatalog.resources.map((resource) => resource.name), ['iron-ore']);
+	assert.deepEqual(
+		generationCatalog.resources.map((resource) => resource.name),
+		['iron-ore']
+	);
 	assert.equal(generationCatalog.presets[0].name, 'default');
-	assert.equal((await fetch(`${appUrl}${mapGenerationPath}/preview`, {
-		method: 'POST', headers: { Origin: origin, Cookie: cookies.owner, 'content-type': 'application/json' }, body: '{'
-	})).status, 400);
+	assert.equal(
+		(
+			await fetch(`${appUrl}${mapGenerationPath}/preview`, {
+				method: 'POST',
+				headers: { Origin: origin, Cookie: cookies.owner, 'content-type': 'application/json' },
+				body: '{'
+			})
+		).status,
+		400
+	);
 	for (const body of [{ settings: { seed: -1 } }, { settings: {} }])
-		assert.equal((await request(`${mapGenerationPath}/preview`, { cookie: cookies.owner, method: 'POST', body })).status, 400);
+		assert.equal(
+			(
+				await request(`${mapGenerationPath}/preview`, {
+					cookie: cookies.owner,
+					method: 'POST',
+					body
+				})
+			).status,
+			400
+		);
 	for (const expansion of [{ minCooldown: 300000 }, { maxGroupSize: 2 }]) {
 		const response = await request(`${mapGenerationPath}/preview`, {
-			cookie: cookies.owner, method: 'POST', body: { settings: { seed: 12345, expansion } }
+			cookie: cookies.owner,
+			method: 'POST',
+			body: { settings: { seed: 12345, expansion } }
 		});
 		assert.equal(response.status, 400);
 		assert.match(await response.text(), /Minimum expansion/);
 	}
-	for (const worldGeneration of ['{', JSON.stringify({ seed: -1 }), JSON.stringify({ filename: '../outside.zip' })]) {
-		await action(`${serverPath}?/manage`, cookies.owner, {
-			operation: 'createSave', name: 'invalid-world.zip', worldGeneration
-		}, 400);
+	for (const worldGeneration of [
+		'{',
+		JSON.stringify({ seed: -1 }),
+		JSON.stringify({ filename: '../outside.zip' })
+	]) {
+		await action(
+			`${serverPath}?/manage`,
+			cookies.owner,
+			{
+				operation: 'createSave',
+				name: 'invalid-world.zip',
+				worldGeneration
+			},
+			400
+		);
 	}
 	await action(`${serverPath}?/manage`, cookies.owner, {
 		operation: 'createSave',
 		name: 'new-world.zip',
-		worldGeneration: JSON.stringify({ seed: 12345, peacefulMode: true, evolution: { enabled: false } })
+		worldGeneration: JSON.stringify({
+			seed: 12345,
+			peacefulMode: true,
+			evolution: { enabled: false }
+		})
 	});
 	assert.equal((await saveOutcome()).state, 'done');
 	const appliedMapGen = await readState(0, 'versions/stable/2.1.20/applied-map-gen.json');
@@ -1805,7 +1858,12 @@ done
 	assert.equal((await saveOutcome()).state, 'error');
 	assert.deepEqual(await readdir(join(machineDirs[0], 'saves')), ['new-world.zip']);
 	assert.deepEqual(await readdir(join(machineDirs[0], 'downloads')), []);
-	assert.deepEqual((await readdir(join(machineDirs[0], 'map-generation-cache'))).filter((entry) => entry.startsWith('.run-')), []);
+	assert.deepEqual(
+		(await readdir(join(machineDirs[0], 'map-generation-cache'))).filter((entry) =>
+			entry.startsWith('.run-')
+		),
+		[]
+	);
 	await action(`${serverPath}?/manage`, cookies.owner, { operation: 'selectSave', name: '' });
 	await action(`${serverPath}?/manage`, cookies.owner, {
 		operation: 'deleteSave',

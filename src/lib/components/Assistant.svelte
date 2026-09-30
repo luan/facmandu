@@ -166,7 +166,7 @@
    if (!response.ok) { const data = await response.json(); throw new Error(data.message ?? 'Could not send message'); }
    accepted = true;
    const reader = response.body?.getReader(); if (!reader) throw new Error('No response stream');
-   
+
    const decoder = new TextDecoder(); let buffer = '';
    for (;;) { const { done, value } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true });
     let newline = buffer.indexOf('\n');

@@ -440,7 +440,9 @@
 	[data-slot="sheet-content"] article:hover {
 		background: #ffffff05;
 	}
-	input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not([type="submit"]),
+	input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not(
+		[type="submit"]
+	),
 	textarea,
 	select {
 		border-radius: 0;

@@ -139,7 +139,9 @@ export const actions: Actions = {
 					}
 					const settings = worldGenerationSchema.safeParse(input);
 					if (!settings.success)
-						return fail(400, { message: settings.error.issues[0]?.message ?? 'Invalid map settings' });
+						return fail(400, {
+							message: settings.error.issues[0]?.message ?? 'Invalid map settings'
+						});
 					startSaveCreation(server, name, release, settings.data);
 					background = true;
 					return { success: true };

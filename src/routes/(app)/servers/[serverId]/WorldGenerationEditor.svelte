@@ -155,7 +155,8 @@
  <input type="hidden" name="name" value={name.trim().endsWith('.zip') ? name.trim() : `${name.trim()}.zip`} />
  <input type="hidden" name="worldGeneration" value={signature} />
  <!-- svelte-ignore a11y_no_noninteractive_tabindex (The scroll region needs focus for keyboard scrolling.) -->
- <div role="region" aria-label="World generation settings" tabindex="0" class="world-body min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+ <!-- biome-ignore lint/a11y/noNoninteractiveTabindex: The scroll region must support keyboard scrolling. -->
+ <section aria-label="World generation settings" tabindex="0" class="world-body min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
  <div class="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(17rem,1fr)]">
   <div class="world-settings min-w-0 space-y-5">
    <section class="space-y-3">
@@ -239,7 +240,7 @@
    </div>
   </aside>
  </div>
- </div>
+ </section>
  <div class="world-footer flex shrink-0 justify-end border-t border-border bg-background px-4 py-3 sm:px-6"><TooltipButton tooltip={createReason || settingsError || 'Create save'} type="submit" disabled={!!createReason || !name.trim() || settings.seed === undefined || !validation.success || catalogLoading || !!catalogError}><CheckIcon class="size-4" />Create save</TooltipButton></div>
 </form>
 

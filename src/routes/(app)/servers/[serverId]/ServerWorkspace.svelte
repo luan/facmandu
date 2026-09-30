@@ -330,7 +330,7 @@
 		<Card.Root>
 			<Card.Header>
 				<Card.Title class="flex items-center justify-between gap-2">Apply a mod list{#if repairingList}<span role="status" aria-label="Checking mods"><LoaderCircleIcon class="size-4 animate-spin" /></span>{/if}</Card.Title>
-				
+
 			</Card.Header>
 			<Card.Content class="space-y-5">
 				<form method="GET" action={base} onsubmit={(event) => { event.preventDefault(); const fields = new FormData(event.currentTarget); const query = new URLSearchParams(); for (const [key, value] of fields) if (typeof value === 'string') query.set(key, value); void goto(`${base}?${query}`); }} class="flex flex-wrap items-end gap-3">
@@ -570,12 +570,13 @@
           <button id={`mod-settings-nav-${mod.name}`} type="button" role="tab" aria-controls="mod-settings-panel" aria-selected={selectedModTab === mod.name} tabindex={selectedModTab === mod.name ? 0 : -1} onclick={() => { selectedModTab = mod.name; }} class={`flex w-full items-center gap-2.5 border-l-2 px-2.5 py-2.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${selectedModTab === mod.name ? 'border-primary bg-primary/10 text-primary' : 'border-transparent hover:bg-muted/70'}`}>
            <span class="flex size-8 shrink-0 items-center justify-center bg-background/40">{#if mod.thumbnail}<img src={modThumbnailUrl(mod.thumbnail)} alt="" loading="lazy" class="size-full object-contain" />{:else}<PackageIcon class="size-5 text-muted-foreground" />{/if}</span>
            <span class="min-w-0 flex-1 break-words font-medium">{mod.title || mod.name}</span>
-           {#if dirty}<span class="size-1.5 shrink-0 rounded-full bg-primary" aria-label="Unsaved changes"></span>{/if}
+           {#if dirty}<span class="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true"></span><span class="sr-only">Unsaved changes</span>{/if}
           </button>
          {/each}
         </div>
        {/if}
       </aside>
+      <!-- biome-ignore lint/a11y/noNoninteractiveTabindex: A tab panel is a keyboard focus destination. -->
       <div id="mod-settings-panel" tabindex="0" role="tabpanel" aria-labelledby={selectedSettingsMod ? 'mod-settings-title' : undefined} aria-label={selectedSettingsMod ? undefined : 'Mod settings'} class="flex min-h-0 min-w-0 flex-col focus-visible:outline focus-visible:outline-ring">
        {#if catalogLoading}
         <div class="min-h-72 space-y-7 p-5" role="status"><span class="sr-only">Reading mod settings</span><div class="h-5 w-48 animate-pulse bg-muted" aria-hidden="true"></div>{#each [1, 2, 3, 4] as row (row)}<div class="grid gap-3 sm:grid-cols-2" aria-hidden="true"><div class="h-4 w-40 animate-pulse bg-muted"></div><div class="h-8 animate-pulse bg-muted"></div></div>{/each}</div>
@@ -600,10 +601,10 @@
              {@const value = saved?.value ?? def.default}
              <div class="grid gap-2 lg:grid-cols-[minmax(10rem,1fr)_minmax(0,1fr)] lg:items-center">
               <div class="min-w-0">
-               <div class="flex items-start gap-1.5"><label for={`modsetting-${selectedModTab}-${def.name}`} class="min-w-0 break-words text-sm font-medium"><FactorioRichText text={def.label || def.name.replaceAll(/[-_]/gu, ' ')} serverId={data.server.id} /></label>{#if def.description}<SettingHelp label={def.label || def.name.replaceAll(/[-_]/gu, ' ')} description={def.description} serverId={data.server.id} />{/if}</div>
+               <div class="flex items-start gap-1.5"><span id={`modsetting-label-${selectedModTab}-${def.name}`} class="min-w-0 break-words text-sm font-medium"><FactorioRichText text={def.label || def.name.replaceAll(/[-_]/gu, ' ')} serverId={data.server.id} /></span>{#if def.description}<SettingHelp label={def.label || def.name.replaceAll(/[-_]/gu, ' ')} description={def.description} serverId={data.server.id} />{/if}</div>
                <p class="break-words text-xs text-muted-foreground">{formatModDefault(def)}</p>
               </div>
-              {#if value !== null}<SettingInput id={`modsetting-${selectedModTab}-${def.name}`} {value} min={def.minimum} max={def.maximum} allowed={def.allowed} allowedLabels={def.allowedLabels} label={def.label} type={def.type} disabled={pending || serverBusy || !canEditModSetting(def)} onchange={(next) => setModValue(def, next)} />{:else}<span class="text-xs text-muted-foreground">Default unavailable</span>{/if}
+              {#if value !== null}<SettingInput id={`modsetting-${selectedModTab}-${def.name}`} labelledBy={`modsetting-label-${selectedModTab}-${def.name}`} {value} min={def.minimum} max={def.maximum} allowed={def.allowed} allowedLabels={def.allowedLabels} label={def.label} type={def.type} disabled={pending || serverBusy || !canEditModSetting(def)} onchange={(next) => setModValue(def, next)} />{:else}<span class="text-xs text-muted-foreground">Default unavailable</span>{/if}
              </div>
             {/each}
            </section>

@@ -8,7 +8,7 @@
  import type { PageProps } from './$types';
  let { data, form }: PageProps = $props();
  let pending = $state(false);
- 
+
  let copied = $state(false);
  const submit: SubmitFunction = () => {
   pending = true;  copied = false;

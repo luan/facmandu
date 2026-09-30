@@ -4,7 +4,9 @@ import { parseFactorioRichText } from '../src/lib/factorio-rich-text';
 
 test('keeps localized text and nested Factorio formatting without markup', () => {
 	assert.deepEqual(
-		parseFactorioRichText('Before\n[color=red]Red [font=default-bold]bold[/font] red[/color] after'),
+		parseFactorioRichText(
+			'Before\n[color=red]Red [font=default-bold]bold[/font] red[/color] after'
+		),
 		[
 			{ kind: 'text', text: 'Before\n', color: undefined, bold: false },
 			{ kind: 'text', text: 'Red ', color: '#f87171', bold: false },
@@ -36,8 +38,13 @@ test('recognizes prototype references and strips unsafe or unsupported tags', ()
 			bold: false
 		}
 	]);
-	assert.equal(parts.filter((part) => part.kind === 'text').map((part) => part.text).join(''),
-		'  safe text shown <script>');
+	assert.equal(
+		parts
+			.filter((part) => part.kind === 'text')
+			.map((part) => part.text)
+			.join(''),
+		'  safe text shown <script>'
+	);
 	assert.ok(parts.every((part) => !part.color && !part.bold));
 });
 

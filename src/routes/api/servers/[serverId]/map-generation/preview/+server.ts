@@ -8,7 +8,8 @@ import type { RequestHandler } from './$types';
 export const POST: RequestHandler = async ({ locals, params, request }) => {
 	if (!locals.user) error(401, 'Sign in');
 	const server = await requireServer(locals.user.id, params.serverId);
-	if (Number(request.headers.get('content-length') ?? 0) > 16_384) error(413, 'Map settings are too large');
+	if (Number(request.headers.get('content-length') ?? 0) > 16_384)
+		error(413, 'Map settings are too large');
 	let body: unknown;
 	try {
 		const reader = request.body?.getReader();
@@ -31,11 +32,13 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	if (!parsed.success) error(400, 'Invalid map settings');
 	try {
 		const png = await mapGenerationPreview(server, parsed.data);
-		return new Response(new Uint8Array(png), { headers: {
-			'Content-Type': 'image/png',
-			'Cache-Control': 'private, no-cache',
-			'X-Content-Type-Options': 'nosniff'
-		} });
+		return new Response(new Uint8Array(png), {
+			headers: {
+				'Content-Type': 'image/png',
+				'Cache-Control': 'private, no-cache',
+				'X-Content-Type-Options': 'nosniff'
+			}
+		});
 	} catch (cause) {
 		if (cause instanceof ServerError) error(cause.status, cause.message);
 		throw cause;

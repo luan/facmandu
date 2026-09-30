@@ -6,7 +6,7 @@
  const available = $derived(allowZero ? choices : choices.slice(1));
  const effective = $derived(value ?? defaultValue ?? 1);
  const percent = $derived(Number((effective * 100).toPrecision(12)));
- const position = $derived(available.reduce((best, choice, index) => Math.abs(choice - effective) < Math.abs(available[best]! - effective) ? index : best, 0));
+ const position = $derived(available.reduce((best, choice, index) => Math.abs(choice - effective) < Math.abs((available[best] ?? 1) - effective) ? index : best, 0));
 </script>
 {#snippet bar(filled: boolean)}
  <svg class="bar-cap" viewBox={filled ? '73 80 8 8' : '56 72 8 8'} preserveAspectRatio="none" aria-hidden="true"><image href="/ui/factorio-gui.png" width="597" height="1220" /></svg>
