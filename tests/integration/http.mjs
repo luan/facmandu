@@ -242,7 +242,16 @@ const fixture = createServer(async (request, response) => {
 				assistantToolOutputs.push({ callId: item.call_id, output: item.output });
 			codexMenus.push({
 				request: currentRequest,
-				tools: body.tools?.map((tool) => tool.name) ?? [],
+				// Responses can anchor newly loaded tools in the input transcript.
+				// Observe both forms so this checks the model's complete tool menu.
+				tools: [
+					...(body.tools ?? []),
+					...body.input.flatMap((item) =>
+						item.type === 'additional_tools' || item.type === 'tool_search_output'
+							? (item.tools ?? [])
+							: []
+					)
+				].map((tool) => tool.name),
 				parallelToolCalls: body.parallel_tool_calls
 			});
 			if (currentRequest.includes('fixture-fresh-chat'))
