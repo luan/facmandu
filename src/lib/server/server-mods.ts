@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { copyFile, mkdir, readdir, rename, unlink } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, rename, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { ManagedServer } from './db/schema';
@@ -37,10 +37,13 @@ export async function serverModInventory(
 	] as const) {
 		const directory = join(server.directory, folder);
 		for (const entry of await readdir(directory, { withFileTypes: true }).catch(() => [])) {
+			const kind = entry.isSymbolicLink()
+				? await stat(join(directory, entry.name)).catch(() => null)
+				: entry;
 			const match = /^(.+)_(\d+\.\d+\.\d+)\.zip$/u.exec(entry.name);
-			if (entry.isFile() && match?.[1] && match[2] && validModName(match[1]))
+			if (kind?.isFile() && match?.[1] && match[2] && validModName(match[1]))
 				result[match[1]] = [...(result[match[1]] ?? []), match[2]];
-			if (folder === 'mods' && entry.isDirectory()) {
+			if (folder === 'mods' && kind?.isDirectory()) {
 				const info = z
 					.object({ name: z.string(), version: z.string() })
 					.safeParse(await readJson(join(directory, entry.name, 'info.json')).catch(() => null));

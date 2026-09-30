@@ -442,6 +442,8 @@ export async function mapGenerationPreview(
 		.digest('hex');
 	const cache = join(server.directory, 'map-generation-cache', 'previews');
 	const ready = join(cache, `${key}.png`);
+	const inProgress = previewsInProgress.get(key);
+	if (inProgress !== undefined) return inProgress;
 	try {
 		return await readFile(ready);
 	} catch (cause) {
@@ -479,7 +481,13 @@ export async function mapGenerationPreview(
 				if ((await fingerprint(server)) !== initialFingerprint)
 					throw new ServerError(409, 'Server mods changed during preview');
 				await mkdir(cache, { recursive: true });
-				await writeFile(ready, png, { mode: 0o600 });
+				const temporary = `${ready}.${randomUUID()}.tmp`;
+				try {
+					await writeFile(temporary, png, { mode: 0o600 });
+					await rename(temporary, ready);
+				} finally {
+					await rm(temporary, { force: true });
+				}
 				const entries = await Promise.all(
 					(await readdir(cache))
 						.filter((name) => name.endsWith('.png'))
