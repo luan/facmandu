@@ -1,5 +1,5 @@
 import { error, fail } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNotNull, ne, or, sql } from 'drizzle-orm';
 import { authenticationForm } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
@@ -53,32 +53,30 @@ function disconnectProvider(provider: keyof typeof providerKeys, displayName: st
 		if (!locals.user) error(401, 'Sign in to manage your account');
 		const form = await authenticationForm(request);
 		if (form.get('disconnect') === 'true') {
-			// Passwordless accounts need another sign-in method before disconnecting.
-			const account = await db
-				.select({
-					passwordHash: table.user.passwordHash,
-					codexSubject: table.user.codexSubject,
-					metaSubject: table.user.metaSubject,
-					copilotSubject: table.user.copilotSubject
-				})
-				.from(table.user)
-				.where(eq(table.user.id, locals.user.id))
-				.get();
-			const subjects = {
-				codex: account?.codexSubject,
-				meta: account?.metaSubject,
-				copilot: account?.copilotSubject
-			} as const;
-			const remaining = (Object.keys(subjects) as (keyof typeof subjects)[]).filter(
-				(name) => name !== provider && subjects[name]
-			);
-			if (!account?.passwordHash.startsWith('$argon2') && !remaining.length)
-				return fail(400, { success: false, message: `${displayName} is your only sign-in method` });
+			// Evaluate remaining sign-in methods in the same statement that removes one.
+			const remaining = (Object.keys(providerKeys) as (keyof typeof providerKeys)[])
+				.filter((name) => name !== provider)
+				.map((name) => {
+					const subject = table.user[providerKeys[name].subject];
+					return and(isNotNull(subject), ne(subject, ''));
+				});
 			const patch = {
 				[providerKeys[provider].subject]: null,
 				[providerKeys[provider].credentials]: null
 			} as unknown as ProviderPatch;
-			await db.update(table.user).set(patch).where(eq(table.user.id, locals.user.id));
+			const disconnected = await db
+				.update(table.user)
+				.set(patch)
+				.where(
+					and(
+						eq(table.user.id, locals.user.id),
+						or(sql`substr(${table.user.passwordHash}, 1, 7) = '$argon2'`, ...remaining)
+					)
+				)
+				.returning({ id: table.user.id })
+				.get();
+			if (!disconnected)
+				return fail(400, { success: false, message: `${displayName} is your only sign-in method` });
 			return { success: true, message: `${displayName} disconnected` };
 		}
 		return fail(400, { success: false, message: 'Choose a model in the feature you want to use' });

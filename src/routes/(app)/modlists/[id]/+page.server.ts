@@ -1,5 +1,5 @@
 import { error, fail, isActionFailure, redirect } from '@sveltejs/kit';
-import { and, eq, getTableColumns, isNotNull, isNull, or } from 'drizzle-orm';
+import { and, eq, getTableColumns, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import {
 	compareVersions,
 	inspectDependencies,
@@ -180,10 +180,21 @@ const modlistActions: Actions = {
 			}
 		}
 
-		await db
+		const updated = await db
 			.update(table.mod)
 			.set({ enabled: !mod.enabled, updatedBy: userId })
-			.where(and(eq(table.mod.id, modID), eq(table.mod.modlist, event.params.id)));
+			.where(
+				and(
+					eq(table.mod.id, modID),
+					eq(table.mod.modlist, event.params.id),
+					mod.enabled === null ? isNull(table.mod.enabled) : eq(table.mod.enabled, mod.enabled),
+					...(mod.enabled ? [or(isNull(table.mod.essential), eq(table.mod.essential, false))] : [])
+				)
+			)
+			.returning({ id: table.mod.id })
+			.get();
+		if (!updated)
+			return fail(409, { message: 'Mod changed while updating. Refresh and try again.' });
 
 		// Notify collaborators via SSE
 		publishModlistEvent(mod.modlist, 'mod-toggled', { modId: modID, enabled: !mod.enabled });
@@ -317,11 +328,17 @@ const modlistActions: Actions = {
 			// Find and remove the mod from this modlist
 			const deletedMod = await db
 				.delete(table.mod)
-				.where(and(eq(table.mod.modlist, modlistId), eq(table.mod.name, modName)))
+				.where(
+					and(
+						eq(table.mod.modlist, modlistId),
+						eq(table.mod.name, modName),
+						or(isNull(table.mod.essential), eq(table.mod.essential, false))
+					)
+				)
 				.returning();
 
 			if (deletedMod.length === 0) {
-				return fail(404, { message: 'Mod not found in this modlist' });
+				return fail(409, { message: 'Mod changed while removing. Refresh and try again.' });
 			}
 
 			// Broadcast removal
@@ -362,10 +379,21 @@ const modlistActions: Actions = {
 				return fail(400, { message: 'Disable the mod before moving it to icebox' });
 			}
 
-			await db
+			const updated = await db
 				.update(table.mod)
 				.set({ icebox: true })
-				.where(and(eq(table.mod.id, modId), eq(table.mod.modlist, event.params.id)));
+				.where(
+					and(
+						eq(table.mod.id, modId),
+						eq(table.mod.modlist, event.params.id),
+						eq(table.mod.enabled, false),
+						or(isNull(table.mod.essential), eq(table.mod.essential, false))
+					)
+				)
+				.returning({ id: table.mod.id })
+				.get();
+			if (!updated)
+				return fail(409, { message: 'Mod changed while updating. Refresh and try again.' });
 
 			// Notify collaborators via SSE
 			publishModlistEvent(mod.modlist, 'mod-moved-to-icebox', { modId });
@@ -719,15 +747,27 @@ const modlistActions: Actions = {
 		const newEssential = !mod.essential;
 
 		// If making essential, also ensure the mod is enabled
-		await db
+		const updated = await db
 			.update(table.mod)
 			.set({
 				essential: newEssential,
-				enabled: newEssential ? true : mod.enabled,
+				enabled: newEssential ? true : sql`${table.mod.enabled}`,
 				...(newEssential ? { icebox: false } : {}),
 				updatedBy: userId
 			})
-			.where(and(eq(table.mod.id, modID), eq(table.mod.modlist, event.params.id)));
+			.where(
+				and(
+					eq(table.mod.id, modID),
+					eq(table.mod.modlist, event.params.id),
+					mod.essential
+						? eq(table.mod.essential, true)
+						: or(isNull(table.mod.essential), eq(table.mod.essential, false))
+				)
+			)
+			.returning({ id: table.mod.id })
+			.get();
+		if (!updated)
+			return fail(409, { message: 'Mod changed while updating. Refresh and try again.' });
 
 		// Notify collaborators via SSE
 		publishModlistEvent(mod.modlist, 'mod-essential-toggled', {
