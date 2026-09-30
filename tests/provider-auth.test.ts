@@ -3,8 +3,9 @@ import { afterAll, mock, test } from 'bun:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import type { OAuthAuth, OAuthCredential } from '@earendil-works/pi-ai';
+import { normalizeContext, type OAuthAuth, type OAuthCredential } from '@earendil-works/pi-ai';
 import { createClient } from '@libsql/client';
+import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/libsql';
 import { user } from '../src/lib/server/db/schema';
 
@@ -32,6 +33,53 @@ if (process.env.FACMANDU_PROVIDER_TEST_CHILD !== '1') {
 	afterAll(() => client.close());
 	mock.module('$env/dynamic/private', () => ({ env: {} }));
 	mock.module('../src/lib/server/db', () => ({ db }));
+	const codexRequests: { key: string; url: string; headers?: HeadersInit }[] = [];
+	const codexCatalog = {
+		models: [
+			{
+				slug: 'gpt-6.1-sol',
+				display_name: 'GPT-6.1-Sol',
+				visibility: 'list',
+				priority: 0,
+				supported_reasoning_levels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'].map(
+					(effort) => ({ effort })
+				),
+				default_reasoning_level: 'medium',
+				context_window: 272_000,
+				input_modalities: ['text', 'image']
+			},
+			{
+				slug: 'future-model',
+				display_name: 'Future model',
+				visibility: 'list',
+				priority: 2,
+				supported_reasoning_levels: [{ effort: 'ultra' }],
+				default_reasoning_level: 'ultra',
+				context_window: 128_000
+			},
+			{
+				slug: 'hidden-model',
+				display_name: 'Hidden model',
+				visibility: 'hide',
+				supported_reasoning_levels: [{ effort: 'medium' }],
+				default_reasoning_level: 'medium',
+				context_window: 128_000
+			}
+		]
+	};
+	mock.module('../src/lib/server/portal-cache', () => ({
+		cachedPortalRequest: async (
+			key: string,
+			url: string,
+			schema: { parse: (input: unknown) => unknown },
+			_options: unknown,
+			request: { headers?: HeadersInit }
+		) => {
+			codexRequests.push({ key, url, headers: request.headers });
+			return { data: await Promise.resolve(schema.parse(codexCatalog)) };
+		}
+	}));
+	const { codexModels, codexProvider } = await import('../src/lib/server/codex');
 	const { createProviderAuth } = await import('../src/lib/server/provider-auth');
 	const { metaIdentity } = await import('../src/lib/server/meta');
 	const { copilotModels, copilotModelAuth } = await import('../src/lib/server/copilot');
@@ -141,6 +189,74 @@ if (process.env.FACMANDU_PROVIDER_TEST_CHILD !== '1') {
 			.get();
 		assert.equal(account?.subject, 'meta:owner@example.com');
 		assert.equal(JSON.parse(account?.credentials ?? '{}').access, 'verified-key');
+	});
+
+	test('Codex discovers Sol 6.1 per account and retains SDK capabilities and valid efforts', async () => {
+		const access = (accountId: string) =>
+			`header.${Buffer.from(
+				JSON.stringify({
+					sub: 'openai-owner',
+					iss: 'https://auth.openai.com',
+					exp: Math.floor(expires / 1000),
+					'https://api.openai.com/auth': { chatgpt_account_id: accountId }
+				})
+			).toString('base64url')}.signature`;
+		const saveCredential = (accountId: string) =>
+			db
+				.update(user)
+				.set({
+					codexSubject: 'openai-owner',
+					codexCredentials: JSON.stringify({
+						type: 'oauth',
+						access: access(accountId),
+						refresh: 'fake-refresh',
+						expires
+					})
+				})
+				.where(eq(user.id, 'owner'));
+		await saveCredential('workspace-a');
+		const models = await codexModels('owner');
+		assert.deepEqual(
+			models.map((model) => model.id),
+			['gpt-6.1-sol']
+		);
+		const model = models[0];
+		assert.ok(model);
+		assert.equal(model.name, 'GPT-6.1 Sol');
+		assert.deepEqual(model.efforts, ['low', 'medium', 'high', 'xhigh', 'max']);
+		assert.equal(model.defaultEffort, 'medium');
+		assert.equal(model.thinkingLevelMap?.off, null);
+		assert.equal(model.thinkingLevelMap?.minimal, null);
+		assert.equal(model.compat?.supportsMidConvoSystemMessages, true);
+		assert.ok(model.inputLimits?.images?.resize);
+		assert.equal(model.contextWindow, 272_000);
+		assert.equal(model.maxTokens, 128_000);
+		assert.equal(model.cost.input, 0);
+		const request = codexRequests.at(-1);
+		assert.ok(request);
+		assert.equal(new URL(request.url).searchParams.get('client_version'), '0.159.2');
+		assert.equal(new Headers(request.headers).get('ChatGPT-Account-Id'), 'workspace-a');
+		assert.ok(request.key.includes('workspace-a'));
+		await saveCredential('workspace-b');
+		await codexModels('owner');
+		assert.notEqual(codexRequests.at(-1)?.key, request.key);
+
+		// Inspect the real SDK serialization and stop before any request reaches OpenAI.
+		let captured: unknown;
+		const response = await codexProvider
+			.streamSimple(model, normalizeContext({ messages: [] }), {
+				apiKey: access('workspace-a'),
+				reasoning: 'max',
+				transport: 'sse',
+				onPayload: (payload) => {
+					captured = payload;
+					throw new Error('fixture stops before network');
+				}
+			})
+			.result();
+		assert.equal(response.stopReason, 'error');
+		assert.match(response.errorMessage ?? '', /fixture stops before network/u);
+		assert.equal((captured as { reasoning?: { effort?: string } }).reasoning?.effort, 'max');
 	});
 
 	test('Copilot exposes only enabled models and preserves the account endpoint', async () => {

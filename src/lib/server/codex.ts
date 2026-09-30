@@ -6,7 +6,8 @@ import { cachedPortalRequest } from './portal-cache';
 import { createProviderAuth } from './provider-auth';
 
 export const codexProvider = openaiCodexProvider();
-const effortSchema = z.enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+const effortValues = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+const effortSchema = z.enum(effortValues);
 export type CodexModel = Model<'openai-codex-responses'> & {
 	efforts: ThinkingLevel[];
 	defaultEffort: ThinkingLevel;
@@ -36,43 +37,57 @@ export async function codexModels(userId: string): Promise<CodexModel[]> {
 	const accountId = claims['https://api.openai.com/auth'].chatgpt_account_id;
 	// Match Codex's catalog protocol; cache by individual and workspace, never across accounts.
 	const { data } = await cachedPortalRequest(
-		`codex-models:v2:${userId}:${subject}:${accountId}`,
-		'https://chatgpt.com/backend-api/codex/models?client_version=0.158.0',
+		`codex-models:v3:${userId}:${subject}:${accountId}`,
+		'https://chatgpt.com/backend-api/codex/models?client_version=0.159.2',
 		modelCatalogSchema,
 		{ maxAgeMs: 3_600_000 },
 		{ headers: { Authorization: `Bearer ${access}`, 'ChatGPT-Account-Id': accountId } }
 	);
 	if (!data) throw new Error('Codex model list unavailable');
+	const sdkModels = new Map(codexProvider.getModels().map((model) => [model.id, model]));
 	return data.models
 		.filter((model) => model.visibility === 'list')
 		.sort((a, b) => a.priority - b.priority)
-		.map((model) => {
+		.flatMap((model) => {
 			// Pi supports up to max; expose only efforts this transport can actually send.
 			const efforts = model.supported_reasoning_levels.flatMap((item) => {
 				const parsed = effortSchema.safeParse(item.effort);
 				return parsed.success ? [parsed.data] : [];
 			});
+			// Do not offer a model when its catalog has no effort this transport supports.
+			if (!efforts.length) return [];
+			const known = sdkModels.get(model.slug);
 			const preferred = effortSchema.safeParse(model.default_reasoning_level);
 			const defaultEffort =
 				preferred.success && efforts.includes(preferred.data)
 					? preferred.data
 					: (efforts[0] ?? 'medium');
-			return {
-				id: model.slug,
-				name: model.display_name.replace(/^GPT-(\d+(?:\.\d+)?)-/, 'GPT-$1 '),
-				api: 'openai-codex-responses',
-				provider: codexProvider.id,
-				baseUrl: codexProvider.baseUrl ?? 'https://chatgpt.com/backend-api',
-				reasoning: true,
-				efforts,
-				defaultEffort,
-				thinkingLevelMap: Object.fromEntries(efforts.map((effort) => [effort, effort])),
-				input: model.input_modalities,
-				contextWindow: model.context_window,
-				maxTokens: Math.min(128_000, model.context_window),
-				// Codex subscription requests have no API-token price in this catalog.
-				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-			};
+			return [
+				{
+					// Keep protocol capabilities and image limits from the current SDK while
+					// account availability, priorities and reasoning levels stay catalog-driven.
+					...known,
+					id: model.slug,
+					name: model.display_name.replace(/^GPT-(\d+(?:\.\d+)?)-/, 'GPT-$1 '),
+					api: 'openai-codex-responses',
+					provider: codexProvider.id,
+					baseUrl: codexProvider.baseUrl ?? 'https://chatgpt.com/backend-api',
+					reasoning: true,
+					efforts,
+					defaultEffort,
+					thinkingLevelMap: {
+						off: null,
+						...Object.fromEntries(
+							effortValues.map((effort) => [effort, efforts.includes(effort) ? effort : null])
+						)
+					},
+					input: model.input_modalities,
+					contextWindow: model.context_window,
+					maxTokens: Math.min(known?.maxTokens ?? 128_000, model.context_window),
+					// Codex subscription requests have no API-token price in this catalog.
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+				}
+			];
 		});
 }
 const oauth = (() => {

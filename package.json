@@ -44,8 +44,8 @@
 		"vite": "^8.3.1"
 	},
 	"dependencies": {
-		"@earendil-works/pi-ai": "0.87.1",
-		"@flue/runtime": "2.1.1",
+		"@earendil-works/pi-ai": "0.99.1",
+		"@flue/runtime": "2.2.2",
 		"@libsql/client": "^0.18.0",
 		"@node-rs/argon2": "^2.2.1",
 		"@oslojs/crypto": "^1.0.1",
@@ -63,6 +63,6 @@
 		"esbuild": "0.28.2",
 		"picomatch": "4.0.7",
 		"ws": "8.21.3",
-		"@earendil-works/pi-ai": "0.87.1"
+		"@earendil-works/pi-ai": "0.99.1"
 	}
 }

@@ -179,7 +179,7 @@ const fixture = createServer(async (request, response) => {
 			});
 		}
 		if (key === '/codex/backend-api/codex/models') {
-			assert.equal(url.searchParams.get('client_version'), '0.158.0');
+			assert.equal(url.searchParams.get('client_version'), '0.159.2');
 			assert.equal(request.headers['chatgpt-account-id'], 'shared-workspace');
 			return send({
 				models: [
