@@ -1,6 +1,7 @@
 <script lang="ts">
  import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
  import Prompt from '$lib/components/Prompt.svelte';
+ import { AssistantVoice, idleVoice } from '$lib/assistant-voice';
  import FactoryResultView from '$lib/components/FactoryResult.svelte';
  import { serverAssistantPlanSchema, type FactoryResult, type AssistantMod } from '$lib/assistant-results';
  import { modThumbnailUrl } from '$lib/utils';
@@ -8,7 +9,7 @@
  import AssistantMessage from '$lib/components/AssistantMessage.svelte';
  import { onDestroy, onMount, tick, untrack } from 'svelte';
  import { invalidate } from '$app/navigation';
- import { RefreshCwIcon, MessageSquareIcon, CheckIcon, LoaderCircleIcon, PackageIcon, PlusIcon, XIcon, ChevronRightIcon } from '@lucide/svelte';
+ import { RefreshCwIcon, MessageSquareIcon, CheckIcon, LoaderCircleIcon, PackageIcon, PlusIcon, XIcon, ChevronRightIcon, MicIcon, MicOffIcon, PhoneOffIcon } from '@lucide/svelte';
  import { Button, buttonVariants } from '$lib/components/ui/button';
  import * as Sheet from '$lib/components/ui/sheet';
  let { listId, serverId }: { listId?: string; serverId?: string } = $props();
@@ -20,6 +21,7 @@
  let compacted = $state(false);
  async function selectChat(id: string) {
   if (inProgress) return;
+  voice.stop();
   chat = id; turns = []; plans = []; combineablePlanIds = []; selectedMods = []; selectedTurn = ''; prompt = ''; error = ''; refreshError = ''; text = ''; activePrompt = ''; activeMods = []; activeResults = []; loading = true;
   await refresh(true, true);
  }
@@ -46,6 +48,9 @@
   finally { olderLoading = false; }
  }
 
+ let voiceState = $state({ ...idleVoice });
+ const voice = new AssistantVoice({ change: state => voiceState = state, request: ask });
+ $effect(() => { listId; serverId; if (!open) voice.stop(); return () => voice.stop(); });
  let open = $state(false); let prompt = $state(''); let busy = $state(false); let progress = $state(''); let text = $state(''); let error = $state(''); let refreshError = $state('');
  let turns = $state<{ id: string; prompt: string; answer: string; state: string; mods: AssistantMod[]; results?: FactoryResult[]; plans?: ModlistPlan[] }[]>([]);
   const inProgress = $derived(busy || turns.some(turn => turn.state === 'running'));
@@ -157,9 +162,15 @@
  }
  async function send() {
   if (inProgress || loading || !prompt.trim()) return;
+  const message = prompt; prompt = '';
+  try { await ask(message); } catch { if (!prompt) prompt = message; }
+ }
+ async function ask(message: string): Promise<string> {
+  if (inProgress || loading) throw new Error('The assistant is still working. Wait for its response, then ask again.');
   followOutput = true; busy = true; error = ''; text = ''; activeMods = []; activeResults = []; progress = 'Reading request…'; controller = new AbortController();
   const previousPlanId = plans[0]?.id;
-  const message = prompt; activePrompt = message; prompt = '';
+  activePrompt = message;
+  const requestController = controller;
   let accepted = false;
   try {
    const response = await fetch(endpoint, { method: 'POST', headers: { Accept: 'application/json' }, body: new URLSearchParams({ chat, prompt: message, model, effort }), signal: controller.signal });
@@ -172,7 +183,9 @@
     let newline = buffer.indexOf('\n');
     while (newline >= 0) { const event = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1); if (event.compacted) compacted = true; if (event.results) activeResults = event.results; if (event.mods) activeMods = event.mods; if (event.delta) text += event.delta; if (event.progress) progress = event.progress; if (event.answer) text = event.answer; if (event.error) error = event.error; newline = buffer.indexOf('\n'); }
    }
-  } catch (cause) { error = controller.signal.aborted ? 'Stopped' : cause instanceof SyntaxError ? 'The response was interrupted. Retry.' : cause instanceof Error ? cause.message : 'Request failed'; if (!text && !prompt) prompt = message; }
+   if (error) throw new Error(error);
+   return text;
+  } catch (cause) { error = requestController.signal.aborted ? 'Stopped' : cause instanceof SyntaxError ? 'The response was interrupted. Retry.' : cause instanceof Error ? cause.message : 'Request failed'; throw new Error(error); }
   finally { busy = false; controller = undefined; progress = ''; if (!accepted) { text = ''; activePrompt = ''; activeMods = []; activeResults = []; } await refresh(); if (!serverId && plans[0]?.applied && plans[0].id !== previousPlanId) await invalidate('app:modlist'); }
  }
  async function apply(id: string) {
@@ -227,7 +240,7 @@
  function toggleSelected(name: string, turnId: string) { selectedMods = selectedMods.includes(name) ? selectedMods.filter(item => item !== name) : [...selectedMods, name]; selectedTurn = turnId; }
  async function stop() { controller?.abort(); await fetch(endpoint, { method: 'POST', headers: { Accept: 'application/json' }, body: new URLSearchParams({ chat, operation: 'cancel' }) }); }
  onMount(() => { if (serverId) return; window.addEventListener('facmandu-explain', explain); return () => window.removeEventListener('facmandu-explain', explain); });
- onDestroy(() => { controller?.abort(); clearTimeout(pollTimer); });
+ onDestroy(() => { voice.stop(); controller?.abort(); clearTimeout(pollTimer); });
 </script>
 {#snippet planRows(plan: ModlistPlan)}
       <div class="divide-y divide-border/60">
@@ -365,14 +378,26 @@
    </div>
   {/if}
   <div class="flex h-8 shrink-0 items-center gap-2 px-5 text-xs text-muted-foreground" role="status" aria-live="polite">
-   {#if inProgress}<LoaderCircleIcon class="size-3.5 animate-spin motion-reduce:animate-none" /><span class="truncate">{progress || 'Thinking…'}</span>{:else if compacted}<span>Earlier context summarized</span>{/if}
+   {#if inProgress}<LoaderCircleIcon class="size-3.5 animate-spin motion-reduce:animate-none" /><span class="truncate">{progress || 'Thinking…'}</span>{:else if voiceState.error}<span class="truncate text-destructive" title={voiceState.error}>{voiceState.error}</span>{:else if voiceState.active || voiceState.connecting}<MicIcon class="size-3.5" /><span class="truncate">{voiceState.status}</span>{:else if compacted}<span>Earlier context summarized</span>{/if}
   </div>
+  {#if voiceState.active || voiceState.connecting}
+   <div class="grid h-24 shrink-0 grid-rows-2 gap-1 border-t border-border bg-white/5 px-5 py-2 text-sm" role="log" aria-live="off" aria-label="Voice captions">
+    <p class="line-clamp-2 break-words" title={voiceState.userCaption}><span class="mr-2 text-xs text-muted-foreground">You</span>{voiceState.userCaption}</p>
+    <p class="line-clamp-2 break-words" title={voiceState.assistantCaption}><span class="mr-2 text-xs text-muted-foreground">Assistant</span>{voiceState.assistantCaption}</p>
+   </div>
+  {/if}
   <form onsubmit={(event) => { event.preventDefault(); void send(); }} class="shrink-0 border-t border-border p-4 space-y-3">
    {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
    {#if refreshError}<p role="status" class="text-sm text-muted-foreground">{refreshError} <button type="button" class="underline" onclick={() => void refresh()}>Retry</button></p>{/if}
    {#if modelError}<p role="status" class="text-sm text-muted-foreground">{modelError}</p>{/if}
    <Prompt bind:value={prompt} label="Message" placeholder={serverId ? "Ask about this server…" : "Ask about this list…"} maxLength={6000} busy={inProgress} {send} disabledReason={loading ? 'Loading conversation' : ''} stop={busy && controller ? stop : undefined}>
     {#snippet controls()}
+     {#if voiceState.active || voiceState.connecting}
+      <TooltipButton tooltip={voiceState.muted ? 'Unmute microphone' : 'Mute microphone'} variant="ghost" size="icon" disabled={voiceState.connecting} aria-pressed={voiceState.muted} onclick={() => voice.mute()}>{#if voiceState.muted}<MicOffIcon />{:else}<MicIcon />{/if}</TooltipButton>
+      <TooltipButton tooltip="End voice" variant="ghost" size="icon" onclick={() => voice.stop()}><PhoneOffIcon /></TooltipButton>
+     {:else}
+      <TooltipButton tooltip={loading ? 'Loading conversation' : inProgress ? 'Wait for the current response' : 'Start voice'} disabled={loading || inProgress} variant="ghost" size="icon" onclick={() => voice.start({ chat, listId, serverId })}><MicIcon /></TooltipButton>
+     {/if}
      <label class="flex min-w-0 items-center gap-2 text-xs"><span class="sr-only">Assistant model</span><select aria-label="Assistant model" class="min-w-0 max-w-56 border py-1.5 pl-2 pr-8 text-xs" bind:value={model} disabled={busy || !models.length}>{#each models as item}<option value={item.id}>{item.name}</option>{/each}</select></label>
      <label class="flex items-center gap-2 text-xs text-muted-foreground"><span>Effort</span><select aria-label="Thinking effort" class="border py-1.5 pl-2 pr-8 text-xs" bind:value={effort} disabled={busy || !effortChoices.length}>{#each effortChoices as level}<option value={level}>{({ minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' } as Record<string, string>)[level] ?? level}</option>{/each}</select></label>
     {/snippet}

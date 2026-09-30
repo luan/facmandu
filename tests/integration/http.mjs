@@ -216,6 +216,22 @@ const fixture = createServer(async (request, response) => {
 				]
 			});
 		}
+		if (key === '/codex/backend-api/codex/realtime/calls') {
+			assert.equal(url.searchParams.get('intent'), 'quicksilver');
+			assert.equal(request.headers['chatgpt-account-id'], 'shared-workspace');
+			assert.equal(request.headers['openai-alpha'], 'quicksilver=v2');
+			const chunks = [];
+			for await (const chunk of request) chunks.push(chunk);
+			const body = JSON.parse(Buffer.concat(chunks).toString());
+			assert.equal(body.session.model, 'gpt-live-1-codex');
+			assert.equal(body.session.delegation.type, 'client');
+			assert.ok(body.session.instructions.includes('Delegate every request'));
+			assert.ok(Array.isArray(body.session.initial_items));
+			assert.ok(request.headers.authorization.startsWith('Bearer header.'));
+			response.writeHead(201, { 'Content-Type': 'application/sdp' });
+			response.end('v=0\r\nfixture-voice-answer');
+			return;
+		}
 		if (key.startsWith('/codex/')) {
 			const chunks = [];
 			for await (const chunk of request) chunks.push(chunk);
@@ -1307,6 +1323,40 @@ try {
 	assert.equal(assistantCatalog.model, 'gpt-6-astra');
 	const listHistory = await json(`${assistantPath}?models=0`, { cookie: cookies.owner });
 	assert.equal(listHistory.chat.id, assistantCatalog.chat.id);
+	const voiceForm = { chat: assistantCatalog.chat.id, listId, sdp: 'v=0\r\nfixture-offer' };
+	assert.equal(
+		(await request('/api/assistant/voice', { method: 'POST', form: voiceForm })).status,
+		401
+	);
+	await action('/api/assistant/voice', cookies.stranger, voiceForm, 403);
+	await action('/api/assistant/voice', cookies.viewer, voiceForm, 403);
+	await action('/api/assistant/voice', cookies.owner, { ...voiceForm, chat: 'missing-chat' }, 404);
+	await action(
+		'/api/assistant/voice',
+		cookies.owner,
+		{ ...voiceForm, sdp: `v=0${'x'.repeat(17000)}` },
+		413
+	);
+	await action(
+		'/api/assistant/voice',
+		cookies.owner,
+		{ ...voiceForm, serverId: 'other-target' },
+		400
+	);
+	const voiceReply = await request('/api/assistant/voice', {
+		cookie: cookies.owner,
+		method: 'POST',
+		form: voiceForm
+	});
+	assert.equal(voiceReply.status, 200);
+	assert.equal(voiceReply.headers.get('cache-control'), 'no-store');
+	assert.equal(
+		voiceReply.headers.get('permissions-policy'),
+		'camera=(), microphone=(self), geolocation=()'
+	);
+	assert.equal(await voiceReply.text(), 'v=0\r\nfixture-voice-answer');
+	passed('voice SDP setup uses private chats, bounded input and server-owned Codex credentials');
+
 	assert.equal('models' in listHistory, false);
 	await action(assistantPath, cookies.owner, { prompt: 'test', model: 'hidden-model' }, 400);
 	const statusReply = await request(assistantPath, {
@@ -1953,6 +2003,21 @@ done
 	const serverHistory = await json(`${serverAssistantPath}?models=0`, { cookie: cookies.owner });
 	assert.equal(serverHistory.turns.length, 1);
 	assert.equal('models' in serverHistory, false);
+	const serverVoice = {
+		chat: serverHistory.chat.id,
+		serverId: secondPath.split('/').at(-1),
+		sdp: 'v=0\r\nfixture-offer'
+	};
+	await action('/api/assistant/voice', cookies.stranger, serverVoice, 403);
+	await action(
+		'/api/assistant/voice',
+		cookies.owner,
+		{ ...serverVoice, chat: assistantCatalog.chat.id },
+		404
+	);
+	const serverVoiceReply = await action('/api/assistant/voice', cookies.owner, serverVoice);
+	assert.equal(await serverVoiceReply.text(), 'v=0\r\nfixture-voice-answer');
+
 	assert.equal((await json(`${serverPath}/assistant`, { cookie: cookies.owner })).turns.length, 0);
 	passed('server assistant access and per-instance conversation isolation');
 	for (const [prompt, expectedTool] of [
