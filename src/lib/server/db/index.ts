@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import type { Config } from '@libsql/client';
 import { and, eq, or } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/libsql';
+import { building } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import initialSchema from './initial.sql?raw';
 import { migrate } from './migrate';
@@ -10,11 +11,12 @@ import * as schema from './schema';
 import workerSource from './worker.cjs?raw';
 import { createDatabaseClient } from './worker-client';
 
-const connectionUrl = env.TURSO_CONNECTION_URL || env.DATABASE_URL;
+// Route analysis imports server modules during a build; it must never open the live replica.
+const connectionUrl = building ? 'file::memory:' : env.TURSO_CONNECTION_URL || env.DATABASE_URL;
 if (!connectionUrl) throw new Error('TURSO_CONNECTION_URL or DATABASE_URL must be set');
 
 const clientConfig: Omit<Config, 'fetch'> = { url: connectionUrl };
-if (env.FACMANDU_REPLICA_PATH && !connectionUrl.startsWith('file:')) {
+if (!building && env.FACMANDU_REPLICA_PATH && !connectionUrl.startsWith('file:')) {
 	const path = resolve(env.FACMANDU_REPLICA_PATH);
 	mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
 	Object.assign(clientConfig, {
@@ -24,7 +26,7 @@ if (env.FACMANDU_REPLICA_PATH && !connectionUrl.startsWith('file:')) {
 		readYourWrites: true
 	});
 }
-if (env.TURSO_AUTH_TOKEN) {
+if (!building && env.TURSO_AUTH_TOKEN) {
 	clientConfig.authToken = env.TURSO_AUTH_TOKEN;
 }
 
