@@ -1,4 +1,6 @@
-# Live development on beast
+# Legacy manual development on beast
+
+Automatic releases now use [the beast updater](../beast/README.md). The original checkout and private data remain for rollback. Direct source edits here do not publish after the release service drop-in is enabled. The instructions below describe the prior manual setup and can be used only after deliberately pausing automatic deployment and restoring that service configuration.
 
 Open **https://factorio.luan.sh**. It uses Facmandu's existing login and current database. Source edits in `/home/luan/src/facmandu` become live through Vite HMR without a build or deployment. The Cloudflare tunnel routes the public hostname to Vite on `127.0.0.1:5173`; HMR uses HTTPS port 443. No SSH forwarding is needed.
 

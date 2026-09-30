@@ -35,3 +35,6 @@ vite.config.ts.timestamp-*
 # Generated static site output (never lint or commit)
 cutetorio-site/dist/
 cutetorio-site/.openai/
+
+# Python deployment tooling
+__pycache__/

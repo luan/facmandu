@@ -100,7 +100,7 @@ Biome handles formatting and strict linting. Svelte formatting is temporarily di
 
 The public application is **https://factorio.luan.sh**. The named Cloudflare Tunnel `facmandu-beast` connects outbound from beast to Facmandu on `127.0.0.1:5173`; it requires no inbound port forwarding or browser-side SSH session.
 
-- App: user service `facmandu-dev.service`, `/home/luan/src/facmandu`, Bun 1.4.2, port 5173.
+- App: user service `facmandu-dev.service`, verified releases at `/home/luan/.local/share/facmandu-deploy/current`, Bun 1.4.2, port 5173.
 - Game instances: user services `facmandu-factorio-<id>.service`, data in `/home/luan/.local/share/facmandu/servers`.
 - Tunnel: system service `facmandu-cloudflared.service`.
 - Public origin: `ORIGIN=https://factorio.luan.sh`.
@@ -108,9 +108,11 @@ The public application is **https://factorio.luan.sh**. The named Cloudflare Tun
 
 Back up the database, environment, and instance directories before changing server ownership or storage. Keep credentials private. Do not run two app processes against the same replica.
 
-### Live development on beast
+### Automatic deployment and rollback
 
-See [infra/dev/README.md](infra/dev/README.md) for live edits at `factorio.luan.sh`, service control, rollback, and the remote Codex thread.
+Pushes to `main` run quality checks. Beast polls for a successful check on the exact main revision, builds in an isolated release, restarts the existing app, and verifies the running revision, database, login, and private-source boundaries. Failed health checks restore the previous source/service configuration. Game processes and all runtime data stay in place. See [infra/beast/README.md](infra/beast/README.md) for installation, status, pausing, and rollback.
+
+The original `/home/luan/src/facmandu` checkout is retained as the first rollback source and holds existing assistant state. [infra/dev/README.md](infra/dev/README.md) documents the legacy manual development setup; direct edits there no longer publish changes after automatic releases are enabled.
 
 ## Docker / Fly (mod library)
 
@@ -122,6 +124,6 @@ docker run -p 3000:3000 -v "$PWD/data:/app/data" \
   -e ORIGIN=https://your-host.example facmandu
 ```
 
-The container runs the mod library. Native instance management requires a Linux host with a systemd user session. Builds need no production database or credentials. Supply runtime environment variables through your deployment secret store. The existing Fly workflow runs quality gates before deploying pushes to `main`; Fly credentials and runtime app secrets must already be configured. Beast is managed separately through its systemd services.
+The container runs the mod library. Native instance management requires a Linux host with a systemd user session. Builds need no production database or credentials. Supply runtime environment variables through your deployment secret store. GitHub Actions runs quality gates only; it never deploys to Fly. The historical Fly configuration is retained for an optional mod-library container, while automatic application deployment targets beast through its existing systemd service.
 
 Type checking uses TypeScript 7 through `@typescript/native`. Svelte Check 4.7 requires TypeScript 6 alongside it; remove that compatibility dependency when Svelte Check supports TypeScript 7 alone.

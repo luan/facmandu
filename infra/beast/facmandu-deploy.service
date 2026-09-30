@@ -1,0 +1,9 @@
+[Unit]
+Description=Deploy Facmandu main after successful GitHub quality checks
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/share/facmandu-deploy/deploy.py
+TimeoutStartSec=15min
+UMask=0077
