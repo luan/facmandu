@@ -398,7 +398,7 @@
      {:else}
       <TooltipButton tooltip={loading ? 'Loading conversation' : inProgress ? 'Wait for the current response' : 'Start voice'} disabled={loading || inProgress} variant="ghost" size="icon" onclick={() => voice.start({ chat, listId, serverId })}><MicIcon /></TooltipButton>
      {/if}
-     <label class="flex min-w-0 items-center gap-2 text-xs"><span class="sr-only">Assistant model</span><select aria-label="Assistant model" class="min-w-0 max-w-56 border py-1.5 pl-2 pr-8 text-xs" bind:value={model} disabled={busy || !models.length}>{#each models as item}<option value={item.id}>{item.name}</option>{/each}</select></label>
+     <label class="flex min-w-0 items-center gap-2 text-xs"><span class="sr-only">Assistant model</span><select aria-label="Assistant model" title={models.find(item => item.id === model)?.name} class="min-w-0 max-w-36 sm:max-w-56 border py-1.5 pl-2 pr-8 text-xs" bind:value={model} disabled={busy || !models.length}>{#each models as item}<option value={item.id}>{item.name}</option>{/each}</select></label>
      <label class="flex items-center gap-2 text-xs text-muted-foreground"><span>Effort</span><select aria-label="Thinking effort" class="border py-1.5 pl-2 pr-8 text-xs" bind:value={effort} disabled={busy || !effortChoices.length}>{#each effortChoices as level}<option value={level}>{({ minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' } as Record<string, string>)[level] ?? level}</option>{/each}</select></label>
     {/snippet}
    </Prompt>

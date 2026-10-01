@@ -40,5 +40,5 @@
  .prompt-editor textarea { display: block; min-height: 46px; max-height: 176px; resize: none; border: 0; background: transparent; box-shadow: none; outline: none; }
  .prompt-editor textarea.highlighted { color: transparent; caret-color: var(--foreground); }
  .prompt-highlight { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
- .prompt-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 12px 10px; }
+ .prompt-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; padding: 0 12px 10px; }
 </style>
