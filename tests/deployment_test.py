@@ -1,7 +1,9 @@
 import importlib.util
+import io
 from pathlib import Path
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("deploy", Path(__file__).resolve().parents[1] / "infra/beast/deploy.py")
@@ -10,6 +12,36 @@ spec.loader.exec_module(deploy)
 
 
 class DeploymentTests(unittest.TestCase):
+    def test_cold_login_retries_timeout_but_rejects_invalid_page(self):
+        revision = "a" * 40
+        calls = []
+
+        def request(url, timeout):
+            calls.append(url)
+            if url.endswith("/login"):
+                if calls.count(url) == 1:
+                    raise TimeoutError("cold page compilation")
+                response = io.BytesIO(b"Facmandu")
+                response.status = 200
+                return response
+            raise urllib.error.HTTPError(url, 403, "Forbidden", {}, None)
+
+        with patch.object(deploy, "fetch_json", return_value={"status": "ok", "revision": revision}), \
+             patch.object(deploy.urllib.request, "urlopen", side_effect=request), \
+             patch.object(deploy.time, "sleep"):
+            deploy.health(revision)
+        self.assertEqual(calls.count("http://127.0.0.1:5173/login"), 2)
+        for failure in (urllib.error.HTTPError("/login", 500, "Broken page", {}, None),
+                        TimeoutError("still unavailable")):
+            def broken(url, timeout):
+                if url.endswith("/login"):
+                    raise failure
+                raise urllib.error.HTTPError(url, 403, "Forbidden", {}, None)
+            with patch.object(deploy, "fetch_json", return_value={"status": "ok", "revision": revision}), \
+                 patch.object(deploy.urllib.request, "urlopen", side_effect=broken), \
+                 patch.object(deploy.time, "sleep"), self.assertRaises(type(failure)):
+                deploy.health(revision)
+
     def test_quality_gate_rejects_wrong_revision_event_and_failed_rerun(self):
         revision = "a" * 40
         passing = dict(head_sha=revision, event="push", head_branch="main", id=10,

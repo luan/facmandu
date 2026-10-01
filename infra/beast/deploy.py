@@ -69,12 +69,25 @@ def health(revision):
         try:
             urllib.request.urlopen("http://127.0.0.1:5173" + path, timeout=10)
         except urllib.error.HTTPError as cause:
+            cause.close()
             if cause.code == 403:
                 continue
         raise RuntimeError("Private source boundary failed")
-    with urllib.request.urlopen("http://127.0.0.1:5173/login", timeout=10) as response:
-        if response.status != 200 or b"Facmandu" not in response.read():
-            raise RuntimeError("Login page did not load")
+    # A cold Vite release compiles the page/CSS after the DB endpoint is ready.
+    # Retry transport timeouts, but never accept a broken page or boundary check.
+    for attempt in range(6):
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:5173/login", timeout=10) as response:
+                if response.status != 200 or b"Facmandu" not in response.read():
+                    raise RuntimeError("Login page did not load")
+            return
+        except urllib.error.HTTPError as cause:
+            cause.close()
+            raise
+        except OSError:
+            if attempt == 5:
+                raise
+            time.sleep(1)
 
 
 def install_dropin(revision):
