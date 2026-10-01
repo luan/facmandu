@@ -21,7 +21,13 @@ import { modSyncJob } from '$lib/server/server-mod-sync';
 import { installMod, removeMod, toggleMod } from '$lib/server/server-mods';
 import { requireStopped, serverStatus, startFactorio } from '$lib/server/server-process';
 import { rcon } from '$lib/server/server-rcon';
-import { deleteSave, savePath, serverSaves, uploadSave } from '$lib/server/server-saves';
+import {
+	deleteSave,
+	renameSave,
+	savePath,
+	serverSaves,
+	uploadSave
+} from '$lib/server/server-saves';
 import {
 	reserveServer,
 	serverTask,
@@ -115,14 +121,20 @@ export const actions: Actions = {
 					await updateServerConfig(server, { useWhitelist: enabled === 'true' });
 					break;
 				}
+				case 'resumeSave':
+					await updateServerConfig(server, { resumeAutosave: true });
+					break;
 				case 'selectSave': {
 					const saves = await serverSaves(server);
 					if (name && !saves.some((save) => save.name === name)) {
 						return fail(400, { message: 'Save not found' });
 					}
-					await updateServerConfig(server, { save: name });
+					await updateServerConfig(server, { save: name, resumeAutosave: !name });
 					break;
 				}
+				case 'renameSave':
+					await renameSave(server, name, stringField(form, 'newName'));
+					break;
 				case 'deleteSave':
 					await deleteSave(server, name);
 					break;

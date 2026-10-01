@@ -44,6 +44,9 @@ export const configSchema = z.object({
 		.string()
 		.refine((value) => !value || safeFileName(value))
 		.default(''),
+	// An explicit save selection bypasses autosaves for its first launch.
+	resumeAutosave: z.boolean().default(true),
+	autosaveAfter: z.number().nonnegative().default(0),
 	useWhitelist: z.boolean().default(false),
 	rconPassword: z.string().min(16),
 	account: z

@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process';
-import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
 import type { ManagedServer } from './db/schema';
-import { ServerError, saveGameSettings, serverConfig } from './server-files';
+import { ServerError, saveGameSettings, serverConfig, updateServerConfig } from './server-files';
+import { prepareStartupSave } from './server-saves';
 
 export const run = promisify(execFile);
 export const unitName = (server: ManagedServer) => {
@@ -69,27 +70,13 @@ export async function startFactorio(server: ManagedServer) {
 	const installed = await run(binary, ['--version'], { timeout: 10000 });
 	if (!installed.stdout.includes(`Version: ${config.version?.version} `))
 		throw new ServerError(409, 'The selected installation changed. Download this version again.');
-	const saves = await readdir(join(server.directory, 'saves'));
-	let save = config.save;
-	if (!save) {
-		const candidates = await Promise.all(
-			saves
-				.filter((name) => name.endsWith('.zip'))
-				.map(async (name) => ({
-					name,
-					modified: (await stat(join(server.directory, 'saves', name))).mtimeMs
-				}))
-		);
-		save = candidates.sort((a, b) => b.modified - a.modified)[0]?.name ?? '';
-	}
-	if (!save) throw new ServerError(409, 'Create or upload a save first');
-	await stat(join(server.directory, 'saves', save));
+	const save = await prepareStartupSave(server);
 	if (config.account.username && config.account.token)
 		await saveGameSettings(server, config.account);
 	const args = await factorioArguments(server);
 	args.push(
 		'--start-server',
-		join(server.directory, 'saves', save),
+		save,
 		'--bind',
 		`${config.bindAddress.includes(':') ? `[${config.bindAddress}]` : config.bindAddress}:${server.gamePort}`,
 		'--rcon-bind',
@@ -119,7 +106,12 @@ export async function startFactorio(server: ManagedServer) {
 		{ mode: 0o600 }
 	);
 	await run('systemctl', ['--user', 'daemon-reload'], { timeout: 10000 });
+	const startedAt = Date.now();
 	await run('systemctl', ['--user', 'start', unitName(server)], { timeout: 15000 });
+	await updateServerConfig(server, {
+		resumeAutosave: true,
+		autosaveAfter: config.resumeAutosave ? config.autosaveAfter : startedAt
+	});
 }
 export async function stopFactorio(server: ManagedServer) {
 	await run('systemctl', ['--user', 'stop', '--no-block', unitName(server)], { timeout: 5000 });

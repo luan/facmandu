@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { copyFile, mkdir, open, rm } from 'node:fs/promises';
+import { copyFile, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { useTool } from '@flue/runtime';
@@ -21,7 +21,7 @@ import {
 import { loadModSyncPlan } from './server-mod-sync';
 import { requireStopped, serverStatus, startFactorio, stopFactorio } from './server-process';
 import { rconScript } from './server-rcon';
-import { savePath, serverSaves } from './server-saves';
+import { completeSaveZip, renameSave, savePath, serverSaves } from './server-saves';
 import { reserveServer, serverTask, startServerDownload, stopServer } from './server-tasks';
 import { selectVersion, serverVersions } from './server-versions';
 import { editableSettings } from './server-view';
@@ -37,39 +37,6 @@ function reserve(server: ManagedServer, label: string) {
 	if (!release)
 		throw new ServerError(409, `${serverTask(server.id)}. Wait for this task to finish.`);
 	return release;
-}
-
-// A named live save is complete only after ZIP's trailing central directory is readable.
-// ZIP64 saves need a larger parser if worlds outgrow the classic ZIP directory limits.
-export async function completeSaveZip(path: string): Promise<boolean> {
-	const file = await open(path, 'r').catch((cause: unknown) => {
-		if (cause instanceof Error && 'code' in cause && cause.code === 'ENOENT') return null;
-		throw cause;
-	});
-	if (!file) return false;
-	try {
-		const { size } = await file.stat();
-		if (size < 22) return false;
-		const length = Math.min(size, 65_557);
-		const tail = Buffer.alloc(length);
-		const { bytesRead } = await file.read(tail, 0, length, size - length);
-		if (bytesRead !== length) return false;
-		for (let offset = length - 22; offset >= 0; offset--) {
-			if (tail.readUInt32LE(offset) !== 0x06054b50) continue;
-			if (offset + 22 + tail.readUInt16LE(offset + 20) !== length) continue;
-			const entries = tail.readUInt16LE(offset + 10);
-			const centralSize = tail.readUInt32LE(offset + 12);
-			const centralOffset = tail.readUInt32LE(offset + 16);
-			if (!entries || centralOffset + centralSize !== size - length + offset) continue;
-			const signature = Buffer.alloc(4);
-			const central = await file.read(signature, 0, 4, centralOffset);
-			if (central.bytesRead !== 4 || signature.readUInt32LE(0) !== 0x02014b50) continue;
-			return (await file.stat()).size === size;
-		}
-		return false;
-	} finally {
-		await file.close();
-	}
 }
 
 async function waitForCompleteSave(path: string) {
@@ -263,7 +230,7 @@ export function serverAssistantOperationTools(context: Context) {
 	useTool({
 		name: 'select_server_save',
 		description:
-			'Select an existing ZIP save for the next server start. Requires a stopped server. The previous save remains intact. List saves first.',
+			'Load an existing ZIP save on the next start instead of newer autosaves. Subsequent starts resume newer autosaves under this name. Requires a stopped server. The previous save remains intact. List saves first.',
 		input: v.object({ name: v.pipe(v.string(), v.minLength(5), v.maxLength(180)) }),
 		async run({ data }) {
 			const instance = await server();
@@ -272,10 +239,29 @@ export function serverAssistantOperationTools(context: Context) {
 				await requireStopped(instance);
 				if (!(await serverSaves(instance)).some((save) => save.name === data.name))
 					throw new ServerError(404, 'Save not found');
-				await updateServerConfig(instance, { save: data.name });
+				await updateServerConfig(instance, { save: data.name, resumeAutosave: false });
 				return result('select_server_save', 'Save selected', {
 					selected: data.name,
 					startsOnNextLaunch: true
+				});
+			} finally {
+				release();
+			}
+		}
+	});
+	useTool({
+		name: 'rename_server_save',
+		description:
+			'Rename an existing save when requested. Requires a stopped server. Keeps the selected world and never overwrites another save. List saves first.',
+		input: v.object({ name: v.string(), newName: v.string() }),
+		async run({ data }) {
+			const instance = await server();
+			const release = reserve(instance, 'Renaming save');
+			try {
+				await renameSave(instance, data.name, data.newName);
+				return result('rename_server_save', 'Save renamed', {
+					name: data.name,
+					newName: data.newName
 				});
 			} finally {
 				release();

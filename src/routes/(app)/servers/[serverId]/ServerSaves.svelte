@@ -1,5 +1,5 @@
 <script lang="ts">
- import { CheckIcon, DownloadIcon, FileArchiveIcon, LoaderCircleIcon, PlusIcon, TrashIcon, UploadIcon, FolderOpenIcon } from '@lucide/svelte';
+ import { CheckIcon, DownloadIcon, FileArchiveIcon, LoaderCircleIcon, PlusIcon, TrashIcon, UploadIcon, FolderOpenIcon, PencilIcon } from '@lucide/svelte';
  import { enhance } from '$app/forms';
  import type { SubmitFunction } from '@sveltejs/kit';
  import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
@@ -7,12 +7,13 @@
  import type { ServerView } from '$lib/server/server-view';
  import { defaultWorldGenerationSettings, type WorldGenerationSettings } from '$lib/map-generation';
  import WorldGenerationEditor from './WorldGenerationEditor.svelte';
- let { saves, selected, running, configured, busyReason, creating, action, base, serverId, submit }: {
-  saves: ServerView['saves']; selected: string; running: boolean; configured: boolean;
+ let { saves, selected, resumeAutosave, running, configured, busyReason, creating, action, base, serverId, submit }: {
+  saves: ServerView['saves']; selected: string; resumeAutosave: boolean; running: boolean; configured: boolean;
   busyReason: string; creating: boolean; action: string; base: string; serverId: string; submit: SubmitFunction;
  } = $props();
- let dialog = $state<'create' | 'upload' | null>(null);
+ let dialog = $state<'create' | 'upload' | 'rename' | null>(null);
  let name = $state('');
+ let originalName = $state('');
  let settings = $state<WorldGenerationSettings>({ ...defaultWorldGenerationSettings });
  let file = $state<File | null>(null);
  let fileInput = $state<HTMLInputElement>();
@@ -36,8 +37,8 @@
 <section aria-label="Saves" class="min-w-0">
  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
   <form method="POST" {action} use:enhance={submit} class="flex items-center gap-2 text-sm">
-   <input type="hidden" name="operation" value="selectSave" /><input type="hidden" name="name" value="" />
-   {#if selected}<TooltipButton type="submit" tooltip={busyReason || 'Load the newest save on startup'} disabled={!!busyReason} variant="ghost" size="sm"><CheckIcon class="size-4" />Use latest save</TooltipButton>{:else}<span class="inline-flex items-center gap-2 text-muted-foreground"><CheckIcon class="size-4" />Latest save on startup</span>{/if}
+   <input type="hidden" name="operation" value="resumeSave" /><input type="hidden" name="name" value="" />
+   {#if !resumeAutosave}<TooltipButton type="submit" tooltip={busyReason || 'Resume the latest saved progress on startup'} disabled={!!busyReason} variant="ghost" size="sm"><CheckIcon class="size-4" />Resume latest</TooltipButton>{:else}<span class="inline-flex items-center gap-2 text-muted-foreground"><CheckIcon class="size-4" />Resume latest progress</span>{/if}
   </form>
   <div class="flex items-center gap-2">
    <TooltipButton tooltip={busyReason || 'Upload save'} disabled={!!busyReason} variant="outline" size="sm" onclick={() => { file = null; dialog = 'upload'; }}><UploadIcon class="size-4" />Upload</TooltipButton>
@@ -46,15 +47,16 @@
  </div>
  <ul class="divide-y divide-border border border-border bg-background/20">
   {#each sorted as save (save.name)}
-   {@const active = selected ? save.name === selected : save.name === sorted[0]?.name}
+   {@const active = selected ? save.name === selected : save.name === (sorted.find((entry) => !/^_autosave\d+\.zip$/u.test(entry.name))?.name || sorted[0]?.name)}
    <li class="flex flex-wrap items-center gap-3 p-3 sm:px-4">
     <FileArchiveIcon class="size-7 shrink-0 text-muted-foreground" />
     <div class="min-w-0 flex-1">
-     <div class="flex flex-wrap items-baseline gap-2"><span class="break-all text-sm font-semibold">{save.name.replace(/\.zip$/u, '')}</span>{#if active}<span class="inline-flex items-center gap-1 text-xs text-primary"><CheckIcon class="size-3" />{running ? 'Next start' : 'Selected'}</span>{/if}</div>
+     <div class="flex flex-wrap items-baseline gap-2"><span class="break-all text-sm font-semibold">{save.name.replace(/\.zip$/u, '')}</span>{#if active}<span class="inline-flex items-center gap-1 text-xs text-primary"><CheckIcon class="size-3" />{resumeAutosave ? 'World' : 'Next start'}</span>{/if}</div>
      <div class="mt-1 flex flex-wrap gap-x-3 text-xs text-muted-foreground"><span>{size(save.size)}</span><time datetime={save.modTime}>{new Date(save.modTime).toLocaleString()}</time></div>
     </div>
     <div class="flex items-center gap-2">
-     {#if !active}<form method="POST" {action} use:enhance={submit}><input type="hidden" name="operation" value="selectSave" /><input type="hidden" name="name" value={save.name} /><TooltipButton tooltip={busyReason || 'Select save'} type="submit" disabled={!!busyReason} variant="outline" size="sm"><CheckIcon class="size-4" />Select</TooltipButton></form>{/if}
+     {#if !active || resumeAutosave}<form method="POST" {action} use:enhance={submit}><input type="hidden" name="operation" value="selectSave" /><input type="hidden" name="name" value={save.name} /><TooltipButton tooltip={busyReason || 'Load this save on the next start instead of resuming newer autosaves'} type="submit" disabled={!!busyReason} variant="outline" size="sm"><CheckIcon class="size-4" />Load this save</TooltipButton></form>{/if}
+     <TooltipButton tooltip={busyReason || (running ? 'Stop the server first' : 'Rename save')} aria-label={`Rename ${save.name}`} disabled={!!busyReason || running} variant="ghost" size="icon" onclick={() => { originalName = save.name; name = save.name.replace(/\.zip$/u, ''); dialog = 'rename'; }}><PencilIcon class="size-4" /></TooltipButton>
      <TooltipButton href={`${base}/saves/${encodeURIComponent(save.name)}`} download tooltip="Download save" aria-label={`Download ${save.name}`} variant="ghost" size="icon"><DownloadIcon class="size-4" /></TooltipButton>
      <form method="POST" {action} use:enhance={submit}><input type="hidden" name="operation" value="deleteSave" /><input type="hidden" name="name" value={save.name} /><TooltipButton tooltip={busyReason || (running ? 'Stop the server first' : active ? 'Select another save first' : 'Delete save')} aria-label={`Delete ${save.name}`} type="submit" disabled={!!busyReason || running || active} variant="ghost" size="icon" class="text-destructive"><TrashIcon class="size-4" /></TooltipButton></form>
     </div>
@@ -64,9 +66,15 @@
 </section>
 <Dialog.Root open={dialog !== null} onOpenChange={(open) => { if (!open && !busyReason) dialog = null; }}>
  <Dialog.Content class={dialog === 'create' ? 'flex h-[92dvh] min-h-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(70rem,calc(100vw-2rem))] max-h-[92dvh]' : 'sm:max-w-md'}>
-  <Dialog.Header class={dialog === 'create' ? 'shrink-0 border-b border-border px-4 py-4 text-left sm:px-6' : undefined}><Dialog.Title>{dialog === 'create' ? 'Create save' : 'Upload save'}</Dialog.Title></Dialog.Header>
+  <Dialog.Header class={dialog === 'create' ? 'shrink-0 border-b border-border px-4 py-4 text-left sm:px-6' : undefined}><Dialog.Title>{dialog === 'create' ? 'Create save' : dialog === 'rename' ? 'Rename save' : 'Upload save'}</Dialog.Title></Dialog.Header>
   {#if dialog === 'create'}
    <WorldGenerationEditor {serverId} {action} submit={submitDialog} {createReason} bind:name bind:settings />
+  {:else if dialog === 'rename'}
+   <form method="POST" {action} use:enhance={submitDialog} class="space-y-4">
+    <input type="hidden" name="operation" value="renameSave" /><input type="hidden" name="name" value={originalName} /><input type="hidden" name="newName" value={`${name.trim().replace(/\.zip$/u, '')}.zip`} />
+    <div><label for="save-name" class="mb-2 block text-sm">Save name</label><div class="flex items-center border border-input bg-background"><input id="save-name" bind:value={name} required maxlength="180" class="min-w-0 flex-1 bg-transparent px-3 py-2" /><span class="pr-3 text-sm text-muted-foreground">.zip</span></div></div>
+    <div class="flex justify-end"><TooltipButton tooltip={busyReason || 'Rename save'} type="submit" disabled={!!busyReason || !name.trim()}><CheckIcon class="size-4" />Rename</TooltipButton></div>
+   </form>
   {:else}
    <form method="POST" {action} use:enhance={submitDialog} enctype="multipart/form-data" class="space-y-4">
     <input bind:this={fileInput} name="save" type="file" accept=".zip,application/zip" required class="sr-only" aria-label="Save file" onchange={(event) => file = event.currentTarget.files?.[0] ?? null} />

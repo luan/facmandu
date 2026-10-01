@@ -389,7 +389,7 @@
 	{/if}
 
  {#if data.activeTab === 'saves'}
-  <ServerSaves serverId={data.server.id} saves={data.saves} selected={data.selectedSave} running={data.status.running} configured={data.status.is_configured} {busyReason} creating={task?.task === 'save-create'} action={manageAction} {base} {submit} />
+  <ServerSaves serverId={data.server.id} saves={data.saves} selected={data.selectedSave} resumeAutosave={data.resumeAutosave} running={data.status.running} configured={data.status.is_configured} {busyReason} creating={task?.task === 'save-create'} action={manageAction} {base} {submit} />
  {/if}
 
 	{#if data.activeTab === 'mods'}

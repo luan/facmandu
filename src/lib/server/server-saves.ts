@@ -1,11 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { appendFile, link, readdir, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import {
+	appendFile,
+	copyFile,
+	link,
+	open,
+	readdir,
+	rename,
+	rm,
+	stat,
+	unlink,
+	writeFile
+} from 'node:fs/promises';
 import { join } from 'node:path';
 import { type WorldGenerationSettings, worldGenerationSchema } from '../map-generation';
 import type { ManagedServer } from './db/schema';
 import { withNativeMapGeneration } from './map-generation-native';
-import { ServerError, safeFileName, serverConfig } from './server-files';
+import { ServerError, safeFileName, serverConfig, updateServerConfig } from './server-files';
 import { requireStopped, run } from './server-process';
 export async function serverSaves(server: ManagedServer) {
 	const entries = await readdir(join(server.directory, 'saves'));
@@ -23,6 +34,105 @@ export function savePath(server: ManagedServer, name: string) {
 		throw new ServerError(400, 'Invalid save name');
 	return join(server.directory, 'saves', name);
 }
+// A named live save is complete only after ZIP's trailing central directory is readable.
+// ZIP64 saves need a larger parser if worlds outgrow the classic ZIP directory limits.
+export async function completeSaveZip(path: string): Promise<boolean> {
+	const file = await open(path, 'r').catch((cause: unknown) => {
+		if (cause instanceof Error && 'code' in cause && cause.code === 'ENOENT') return null;
+		throw cause;
+	});
+	if (!file) return false;
+	try {
+		const { size } = await file.stat();
+		if (size < 22) return false;
+		const length = Math.min(size, 65_557);
+		const tail = Buffer.alloc(length);
+		const { bytesRead } = await file.read(tail, 0, length, size - length);
+		if (bytesRead !== length) return false;
+		for (let offset = length - 22; offset >= 0; offset--) {
+			if (tail.readUInt32LE(offset) !== 0x06054b50) continue;
+			if (offset + 22 + tail.readUInt16LE(offset + 20) !== length) continue;
+			const entries = tail.readUInt16LE(offset + 10);
+			const centralSize = tail.readUInt32LE(offset + 12);
+			const centralOffset = tail.readUInt32LE(offset + 16);
+			if (!entries || centralOffset + centralSize !== size - length + offset) continue;
+			const signature = Buffer.alloc(4);
+			const central = await file.read(signature, 0, 4, centralOffset);
+			if (central.bytesRead !== 4 || signature.readUInt32LE(0) !== 0x02014b50) continue;
+			return (await file.stat()).size === size;
+		}
+		return false;
+	} finally {
+		await file.close();
+	}
+}
+
+export async function renameSave(server: ManagedServer, name: string, newName: string) {
+	const source = savePath(server, name),
+		target = savePath(server, newName);
+	await requireStopped(server);
+	try {
+		await stat(source);
+	} catch (cause) {
+		if (cause instanceof Error && 'code' in cause && cause.code === 'ENOENT')
+			throw new ServerError(404, 'Save not found');
+		throw cause;
+	}
+	if (name === newName) return;
+	try {
+		await link(source, target);
+	} catch (cause) {
+		if (cause instanceof Error && 'code' in cause && cause.code === 'EEXIST')
+			throw new ServerError(409, 'A save with that name already exists');
+		throw cause;
+	}
+	try {
+		if ((await serverConfig(server)).save === name)
+			await updateServerConfig(server, { save: newName });
+	} catch (cause) {
+		await unlink(target);
+		throw cause;
+	}
+	await unlink(source);
+}
+
+export async function prepareStartupSave(server: ManagedServer) {
+	const config = await serverConfig(server);
+	const saves = (await serverSaves(server)).toSorted((a, b) => b.modTime.localeCompare(a.modTime));
+	const autosave = saves.find(
+		(save) =>
+			/^_autosave\d+\.zip$/u.test(save.name) && Date.parse(save.modTime) > config.autosaveAfter
+	);
+	const primary =
+		config.save ||
+		saves.find((save) => !/^_autosave\d+\.zip$/u.test(save.name))?.name ||
+		(autosave ? 'world.zip' : '');
+	if (!primary) throw new ServerError(409, 'Create or upload a save first');
+	const path = savePath(server, primary);
+	const existing = saves.find((save) => save.name === primary);
+	if (config.save && !existing) throw new ServerError(404, 'Selected save not found');
+	if (config.resumeAutosave && autosave && (!existing || autosave.modTime > existing.modTime)) {
+		const source = savePath(server, autosave.name);
+		if (!(await completeSaveZip(source)))
+			throw new ServerError(
+				409,
+				'The latest autosave is incomplete. Select a different save to recover.'
+			);
+		// Launch the recovered bytes under the world's name so Factorio saves back to that name.
+		// Keep the autosave intact and publish only a complete copy.
+		const temporary = `${path}.${randomUUID()}.tmp`;
+		try {
+			await copyFile(source, temporary);
+			await rename(temporary, path);
+		} finally {
+			await rm(temporary, { force: true });
+		}
+	}
+	await stat(path);
+	await updateServerConfig(server, { save: primary });
+	return path;
+}
+
 export async function deleteSave(server: ManagedServer, name: string) {
 	await requireStopped(server);
 	if ((await serverConfig(server)).save === name)

@@ -92,6 +92,7 @@ export async function loadServerView(
 		status,
 		saves: saves.status === 'fulfilled' ? saves.value : [],
 		selectedSave: selection.status === 'fulfilled' ? selection.value.save : '',
+		resumeAutosave: selection.status === 'fulfilled' ? selection.value.resumeAutosave : true,
 		useWhitelist: selection.status === 'fulfilled' ? selection.value.useWhitelist : undefined,
 		mods: mods.status === 'fulfilled' ? mods.value.mods : [],
 		versions: versions.status === 'fulfilled' ? versions.value : null,

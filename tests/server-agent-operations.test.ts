@@ -7,10 +7,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { strToU8, zipSync } from 'fflate';
 import { initializeServer, updateServerConfig } from '../src/lib/server/server-files';
+import { completeSaveZip } from '../src/lib/server/server-saves';
 
 mock.module('$env/dynamic/private', () => ({ env: {} }));
 mock.module('../src/lib/server/db', () => ({ db: {}, userHasModlistAccess: async () => false }));
-const { backupSelectedSave, completeSaveZip, validatedSettingChanges } = await import(
+const { backupSelectedSave, validatedSettingChanges } = await import(
 	'../src/lib/server/server-agent-operations'
 );
 

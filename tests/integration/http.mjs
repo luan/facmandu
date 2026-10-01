@@ -1909,6 +1909,64 @@ done
 		{ operation: 'deleteSave', name: 'new-world.zip' },
 		409
 	);
+
+	await action(
+		`${serverPath}?/manage`,
+		cookies.owner,
+		{ operation: 'renameSave', name: 'new-world.zip', newName: '../escape.zip' },
+		400
+	);
+	await writeFile(join(machineDirs[0], 'saves/taken.zip'), 'existing save');
+	await action(
+		`${serverPath}?/manage`,
+		cookies.owner,
+		{ operation: 'renameSave', name: 'new-world.zip', newName: 'taken.zip' },
+		409
+	);
+	assert.equal(await readFile(join(machineDirs[0], 'saves/taken.zip'), 'utf8'), 'existing save');
+	await rm(join(machineDirs[0], 'saves/taken.zip'));
+	const beforeRename = await readFile(join(machineDirs[0], 'saves/new-world.zip'));
+	await action(`${serverPath}?/manage`, cookies.owner, {
+		operation: 'renameSave',
+		name: 'new-world.zip',
+		newName: 'renamed-world.zip'
+	});
+	assert.deepEqual(await readFile(join(machineDirs[0], 'saves/renamed-world.zip')), beforeRename);
+	assert.equal((await readState(0, 'facmandu.json')).save, 'renamed-world.zip');
+	assert.equal((await readState(0, 'facmandu.json')).resumeAutosave, false);
+	await action(`${serverPath}?/manage`, cookies.owner, { operation: 'resumeSave' });
+	assert.equal((await readState(0, 'facmandu.json')).save, 'renamed-world.zip');
+	assert.equal((await readState(0, 'facmandu.json')).resumeAutosave, true);
+	await writeFile(
+		join(directory, 'bin/systemctl'),
+		'#!/bin/sh\nprintf "ActiveState=active\\nSubState=running\\n"\n',
+		{ mode: 0o755 }
+	);
+	await action(
+		`${serverPath}?/manage`,
+		cookies.owner,
+		{ operation: 'renameSave', name: 'renamed-world.zip', newName: 'running.zip' },
+		409
+	);
+	await writeFile(
+		join(directory, 'bin/systemctl'),
+		'#!/bin/sh\nprintf "ActiveState=inactive\\nSubState=dead\\n"\n',
+		{ mode: 0o755 }
+	);
+	await action(
+		`${serverPath}?/manage`,
+		cookies.stranger,
+		{ operation: 'renameSave', name: 'renamed-world.zip', newName: 'stolen.zip' },
+		403
+	);
+	await action(`${serverPath}?/manage`, cookies.owner, {
+		operation: 'renameSave',
+		name: 'renamed-world.zip',
+		newName: 'new-world.zip'
+	});
+	passed(
+		'save renaming preserves the selected world and rejects collisions, paths, and unauthorized users'
+	);
 	await writeFile(engine, `${createFixture}exit 1\n`);
 	await action(`${serverPath}?/manage`, cookies.owner, {
 		operation: 'createSave',
