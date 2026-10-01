@@ -3,12 +3,15 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { RCON_COMMAND_BYTES } from '$lib/console';
 import { worldGenerationSchema } from '$lib/map-generation';
+import { assistantModelCatalog } from '$lib/server/assistant-models';
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
+import { refreshInGameAssistants } from '$lib/server/in-game-assistant';
 import { validModName } from '$lib/server/mod-names';
 import { saveLiveModSettings } from '$lib/server/mod-settings-defs';
 import {
 	changeServerUser,
+	gameAssistantSchema,
 	gameSettings,
 	modSettingsSchema,
 	ServerError,
@@ -93,6 +96,35 @@ export const actions: Actions = {
 			)
 				return fail(409, { message: 'Wait for this server’s mod update to finish' });
 			switch (operation) {
+				case 'gameAssistant': {
+					const parsed = gameAssistantSchema.safeParse({
+						enabled: form.get('enabled') === 'on',
+						ownerId: event.locals.user?.id,
+						model: stringField(form, 'model'),
+						effort: stringField(form, 'effort'),
+						actions: stringField(form, 'actions'),
+						players: stringField(form, 'players')
+							.split(/[\s,]+/u)
+							.filter(Boolean)
+					});
+					if (!parsed.success)
+						return fail(400, {
+							message: 'Choose valid in-game assistant settings and Factorio player names'
+						});
+					if (parsed.data.enabled) {
+						const model = (await assistantModelCatalog(event.locals.user?.id ?? '')).find(
+							(model) => model.id === parsed.data.model
+						);
+						if (
+							!model ||
+							(parsed.data.effort && !model.efforts.some((effort) => effort === parsed.data.effort))
+						)
+							return fail(400, { message: 'Choose an available model and effort' });
+					}
+					await updateServerConfig(server, { gameAssistant: parsed.data });
+					await refreshInGameAssistants();
+					return { message: 'In-game assistant settings saved' };
+				}
 				case 'stop':
 					stopServer(server);
 					return { message: 'Shutdown requested. The server will finish saving before it stops.' };

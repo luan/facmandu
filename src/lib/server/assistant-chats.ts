@@ -23,6 +23,7 @@ export function chatHistory(userId: string, target: Target) {
 export async function newChat(userId: string, target: Target) {
 	const chat = {
 		id: genID('chat'),
+		gamePlayer: null,
 		userId,
 		...target,
 		title: 'New chat',
@@ -33,7 +34,11 @@ export async function newChat(userId: string, target: Target) {
 	return chat;
 }
 export async function resolveChat(userId: string, target: Target, id: string | null) {
-	if (!id) return (await chatHistory(userId, target))[0] ?? (await newChat(userId, target));
+	if (!id)
+		return (
+			(await chatHistory(userId, target)).find((chat) => !chat.gamePlayer) ??
+			(await newChat(userId, target))
+		);
 	const chat = await db
 		.select()
 		.from(assistantChat)

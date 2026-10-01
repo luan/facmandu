@@ -304,6 +304,7 @@ export const recommendationFeedback = sqliteTable(
 );
 
 export const assistantChat = sqliteTable('assistant_chat', {
+	gamePlayer: text('game_player'),
 	id: text('id').primaryKey(),
 	userId: text('user_id')
 		.notNull()

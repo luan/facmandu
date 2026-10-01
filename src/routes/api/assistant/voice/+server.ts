@@ -31,6 +31,7 @@ export const POST: RequestHandler = async ({ locals, request, url }) => {
 		if (!(await userHasModlistAccess(userId, target.data.listId))) error(403, 'List access denied');
 	} else if (target.data.serverId) await requireServer(userId, target.data.serverId);
 	const chat = await resolveChat(userId, target.data, setup.data.chat);
+	if (chat.gamePlayer) error(403, 'Use voice in a web chat');
 	if (connecting.has(userId)) error(429, 'A voice connection is already being prepared');
 	connecting.add(userId);
 	try {

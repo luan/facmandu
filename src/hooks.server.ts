@@ -3,11 +3,15 @@ import { building } from '$app/environment';
 import * as auth from '$lib/server/auth.js';
 import { initializeDatabase } from '$lib/server/db';
 import { startFactoryWatchSampler } from '$lib/server/factory-watches';
+import { startInGameAssistants } from '$lib/server/in-game-assistant';
 
 // The hook module loads with the web process, including before its first request.
 if (!building)
 	void initializeDatabase()
-		.then(startFactoryWatchSampler)
+		.then(() => {
+			startFactoryWatchSampler();
+			startInGameAssistants();
+		})
 		.catch((cause) => console.error('Factory watch startup failed:', cause));
 
 const handleAuth: Handle = async ({ event, resolve }) => {
@@ -52,6 +56,7 @@ const handleSecurity: Handle = async ({ event, resolve }) => {
 export const handle: Handle = async ({ event, resolve }) => {
 	await initializeDatabase();
 	startFactoryWatchSampler();
+	startInGameAssistants();
 	// Chain the handlers
 	return handleSecurity({ event, resolve: (event) => handleAuth({ event, resolve }) });
 };

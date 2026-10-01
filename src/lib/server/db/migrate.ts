@@ -72,6 +72,12 @@ CREATE TABLE IF NOT EXISTS recommendation_feedback (
  list_id TEXT NOT NULL REFERENCES modlist(id) ON DELETE CASCADE,
  mod_name TEXT NOT NULL, PRIMARY KEY(user_id,list_id,mod_name));`);
 	await migrateChats(client);
+	if (
+		!(await client.execute('PRAGMA table_info(assistant_chat)')).rows.some(
+			(row) => row.name === 'game_player'
+		)
+	)
+		await client.execute('ALTER TABLE assistant_chat ADD COLUMN game_player TEXT');
 	await client.executeMultiple(`CREATE TABLE IF NOT EXISTS factory_watch (
 	 id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
 	 server_id TEXT NOT NULL REFERENCES native_server(id) ON DELETE CASCADE,

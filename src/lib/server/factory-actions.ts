@@ -125,11 +125,20 @@ function luaString(value: string) {
 	return `[${delimiter}[${value}]${delimiter}]`;
 }
 
-export function factoryActionCommand(input: FactoryAction | FactoryActionInspect) {
-	const encoded = JSON.stringify(input);
+type GameActionPlayer = { name: string; requireAdmin: boolean };
+
+export function factoryActionCommand(
+	input: FactoryAction | FactoryActionInspect,
+	player?: GameActionPlayer
+) {
+	const encoded = JSON.stringify({ ...input, player });
 	if (Buffer.byteLength(encoded) > 8192) throw new ServerError(400, 'Action is too large');
 	return `/silent-command local request = helpers.json_to_table(${luaString(encoded)})
 local ok, result = pcall(function()
+if request.player then
+ local p = game.get_player(request.player.name)
+ if not p or not p.connected or p.force.name ~= request.force or (request.player.requireAdmin and not p.admin) then error("Player permission changed; ask again", 0) end
+end
 ${source}
 return action(request)
 end)
@@ -173,10 +182,14 @@ const logisticResultSchema = z.object({
 	after: z.object({ request: request.optional() }).passthrough()
 });
 
-async function execute(server: ManagedServer, input: FactoryAction | FactoryActionInspect) {
+async function execute(
+	server: ManagedServer,
+	input: FactoryAction | FactoryActionInspect,
+	player?: GameActionPlayer
+) {
 	if (!(await serverStatus(server)).running)
 		throw new ServerError(409, 'Start this server to access the factory');
-	const raw = await rconScript(server, factoryActionCommand(input));
+	const raw = await rconScript(server, factoryActionCommand(input, player));
 	let decoded: unknown;
 	try {
 		decoded = JSON.parse(raw.trim());
@@ -226,10 +239,10 @@ async function execute(server: ManagedServer, input: FactoryAction | FactoryActi
 	};
 }
 
-export function factoryAction(server: ManagedServer, input: unknown) {
+export function factoryAction(server: ManagedServer, input: unknown, player?: GameActionPlayer) {
 	const parsed = factoryActionSchema.safeParse(input);
 	if (!parsed.success) throw new ServerError(400, 'Invalid factory action');
-	return execute(server, parsed.data);
+	return execute(server, parsed.data, player);
 }
 
 export function factoryActionInspect(server: ManagedServer, input: unknown) {

@@ -28,7 +28,20 @@ export class ServerError extends Error {
 		super(message);
 	}
 }
+export const gameAssistantSchema = z.object({
+	enabled: z.boolean().default(false),
+	ownerId: z.string().default(''),
+	model: z.string().default(''),
+	effort: z.string().default(''),
+	actions: z.enum(['off', 'admins', 'allowlist']).default('off'),
+	players: z
+		.array(z.string().regex(/^[A-Za-z0-9_-]{3,30}$/u))
+		.max(100)
+		.default([])
+});
+export type GameAssistantConfig = z.infer<typeof gameAssistantSchema>;
 export const configSchema = z.object({
+	gameAssistant: gameAssistantSchema.prefault({}),
 	bindAddress: z
 		.string()
 		.refine((value) => isIP(value) !== 0, 'Invalid game bind address')

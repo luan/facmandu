@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import { assistantModelCatalog } from './assistant-models';
 import { db } from './db';
 import * as table from './db/schema';
 import { liveModSettings } from './mod-settings-defs';
@@ -91,6 +92,8 @@ export async function loadServerView(
 		modSyncJob: await modSyncJob(server.id),
 		status,
 		saves: saves.status === 'fulfilled' ? saves.value : [],
+		gameAssistant: selection.status === 'fulfilled' ? selection.value.gameAssistant : null,
+		gameModels: activeTab === 'settings' ? await assistantModelCatalog(userId).catch(() => []) : [],
 		selectedSave: selection.status === 'fulfilled' ? selection.value.save : '',
 		resumeAutosave: selection.status === 'fulfilled' ? selection.value.resumeAutosave : true,
 		useWhitelist: selection.status === 'fulfilled' ? selection.value.useWhitelist : undefined,

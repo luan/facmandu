@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { createServer as createTcpServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -206,6 +207,15 @@ const fixture = createServer(async (request, response) => {
 						default_reasoning_level: 'medium'
 					},
 					{
+						slug: 'gpt-6-luna',
+						display_name: 'GPT-6-Luna',
+						visibility: 'list',
+						context_window: 272000,
+						priority: 3,
+						supported_reasoning_levels: [{ effort: 'low' }, { effort: 'medium' }],
+						default_reasoning_level: 'medium'
+					},
+					{
 						slug: 'hidden-model',
 						display_name: 'Hidden',
 						visibility: 'hide',
@@ -276,6 +286,13 @@ const fixture = createServer(async (request, response) => {
 					'New chat must not inherit another conversation'
 				);
 			const wantsCompaction = currentRequest.includes('fixture-long-context');
+			const wantsGame = currentRequest.includes('fixture-game-');
+			const wantsGameQuestionAction = currentRequest.includes('fixture-game-question-action');
+			if (wantsGame) {
+				assert.equal(body.model, 'gpt-6-luna');
+				assert.equal(body.reasoning.effort, 'medium');
+				assert.match(currentRequest, /connected in-game player/u);
+			}
 			const wantsPlan = currentRequest.includes('User request: fixture-plan');
 			if (wantsPlan) assert.equal(body.reasoning.effort, 'high');
 			const wantsCards = currentRequest.includes('User request: fixture-cards');
@@ -351,6 +368,18 @@ const fixture = createServer(async (request, response) => {
 						: null
 				: null;
 			const item =
+				(wantsGameQuestionAction && !called('factory_action')
+					? {
+							type: 'function_call',
+							id: 'fc_game_question_action',
+							call_id: 'call_game_question_action',
+							name: 'factory_action',
+							arguments: JSON.stringify({
+								operation: 'research_add',
+								args: { force: 'player', expectedQueue: [], technology: 'automation' }
+							})
+						}
+					: null) ??
 				compoundItem ??
 				((wantsSelectRelease || wantsSelectIncompatible || wantsIceboxAbsent) &&
 				!called('apply_changes')
@@ -610,7 +639,9 @@ const fixture = createServer(async (request, response) => {
 																												? 'Remember this factory context. '.repeat(
 																														1400
 																													)
-																												: 'Fixture contextual explanation: this adds transport options alongside your enabled root-mod.',
+																												: wantsGame
+																													? '**Iron nearby:** [item=iron-plate] [gps=12,34,nauvis].'
+																													: 'Fixture contextual explanation: this adds transport options alongside your enabled root-mod.',
 																											annotations: []
 																										}
 																									]
@@ -1318,7 +1349,7 @@ try {
 	const assistantCatalog = await json(assistantPath, { cookie: cookies.owner });
 	assert.deepEqual(
 		assistantCatalog.models.map((model) => model.id),
-		['gpt-6-astra', 'gpt-6-sol']
+		['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna']
 	);
 	assert.equal(assistantCatalog.model, 'gpt-6-astra');
 	const listHistory = await json(`${assistantPath}?models=0`, { cookie: cookies.owner });
@@ -2174,6 +2205,210 @@ done
 		403
 	);
 	passed('Jev chat context and tool groups, dynamic expansion, and stopped server reads');
+	const gameSockets = new Set();
+	const gameReplies = [];
+	const gameWaiters = new Map();
+	const gameRcon = createTcpServer((socket) => {
+		gameSockets.add(socket);
+		socket.on('close', () => gameSockets.delete(socket));
+		let buffer = Buffer.alloc(0);
+		const reply = (id, type, value) => {
+			const data = Buffer.from(value);
+			const packet = Buffer.alloc(data.length + 14);
+			packet.writeInt32LE(data.length + 10, 0);
+			packet.writeInt32LE(id, 4);
+			packet.writeInt32LE(type, 8);
+			data.copy(packet, 12);
+			socket.write(packet);
+		};
+		socket.on('data', (chunk) => {
+			buffer = Buffer.concat([buffer, chunk]);
+			while (buffer.length >= 4 && buffer.length >= buffer.readInt32LE(0) + 4) {
+				const length = buffer.readInt32LE(0);
+				const id = buffer.readInt32LE(4);
+				const type = buffer.readInt32LE(8);
+				const command = buffer.toString('utf8', 12, length + 2);
+				buffer = buffer.subarray(length + 4);
+				if (type === 3) reply(id, 2, '');
+				else if (command.includes('facmandu-ready')) reply(id, 0, 'facmandu-ready');
+				else if (command.includes('rcon.print(helpers.table_to_json')) {
+					const player = /game\.get_player\("([^"]+)"\)/u.exec(command)?.[1];
+					assert.ok(player, command);
+					reply(
+						id,
+						0,
+						JSON.stringify({
+							name: player,
+							force: 'player',
+							surface: 'nauvis',
+							position: { x: 12, y: 34 },
+							admin: false,
+							connected: true
+						})
+					);
+				} else if (command.includes('p.print(')) {
+					gameReplies.push(command);
+					const player = /game\.get_player\("([^"]+)"\)/u.exec(command)?.[1];
+					gameWaiters.get(player)?.resolve(command);
+					gameWaiters.delete(player);
+					reply(id, 0, '');
+				} else throw new Error(`Unexpected in-game RCON command: ${command}`);
+			}
+		});
+	});
+	const nextGameReply = (player) => {
+		const waiter = Promise.withResolvers();
+		gameWaiters.set(player, waiter);
+		const timeout = setTimeout(
+			() => waiter.reject(new Error(`No game reply for ${player}: ${logs}`)),
+			10_000
+		);
+		return waiter.promise.finally(() => clearTimeout(timeout));
+	};
+	await new Promise((done) => gameRcon.listen(Number(firstPorts.rcon_port), '127.0.0.1', done));
+	try {
+		const gameLog = join(machineDirs[0], 'logs/server.log');
+		const gameSettings = {
+			operation: 'gameAssistant',
+			enabled: 'on',
+			model: 'gpt-6-luna',
+			effort: 'medium',
+			actions: 'off',
+			players: ''
+		};
+		await appendFile(gameLog, '100.000 [CHAT] OldPlayer: @assistant fixture-game-history\n');
+		await action(`${serverPath}?/manage`, cookies.owner, gameSettings);
+		assert.equal(
+			(
+				await client.execute(
+					"SELECT COUNT(*) AS count FROM server_assistant_turn WHERE prompt = 'fixture-game-history'"
+				)
+			).rows[0].count,
+			0
+		);
+		const aliceReply = nextGameReply('Alice');
+		await appendFile(
+			gameLog,
+			'101.000 [CHAT] Alice: @assistant fixture-game-alice: where is iron?\n'
+		);
+		assert.match(
+			await aliceReply,
+			/Assistant: Iron nearby: \[item=iron-plate\] \[gps=12,34,nauvis\]/u
+		);
+		const gameHistory = await json(`${serverPath}/assistant`, { cookie: cookies.owner });
+		const aliceChat = gameHistory.chats.find((chat) => chat.gamePlayer === 'Alice');
+		assert.ok(aliceChat, JSON.stringify(gameHistory.chats));
+		const aliceTurns = await json(`${serverPath}/assistant?chat=${aliceChat.id}`, {
+			cookie: cookies.owner
+		});
+		assert.equal(aliceTurns.turns[0].prompt, 'fixture-game-alice: where is iron?');
+		assert.equal(aliceTurns.turns[0].state, 'done');
+		assert.equal(aliceTurns.turns[0].model, 'gpt-6-luna');
+		const route = routingQueries.find((query) =>
+			query.state.request.includes('fixture-game-alice')
+		);
+		assert.match(route.state.request, /"name":"Alice"/u);
+		assert.match(route.state.request, /"force":"player"/u);
+		assert.match(route.state.request, /"surface":"nauvis"/u);
+		const gameMenu = codexMenus.find((menu) => menu.request.includes('fixture-game-alice'));
+		assert.match(gameMenu.request, /Alice/u);
+		assert.ok(gameMenu.tools.includes('factory_lookup'));
+		for (const forbidden of [
+			'server_logs',
+			'server_saves',
+			'server_control',
+			'list_factory_watches',
+			'update_server_settings'
+		])
+			assert.ok(!gameMenu.tools.includes(forbidden), `${forbidden}: ${JSON.stringify(gameMenu)}`);
+		await action(
+			`${serverPath}/assistant`,
+			cookies.owner,
+			{ chat: aliceChat.id, prompt: 'web injection', model: 'gpt-6-luna' },
+			403
+		);
+		await action(
+			'/api/assistant/voice',
+			cookies.owner,
+			{ chat: aliceChat.id, serverId, sdp: 'v=0\r\nfixture-offer' },
+			403
+		);
+		const bobReply = nextGameReply('Bob');
+		await appendFile(
+			gameLog,
+			'102.000 [CHAT] Alice: @assistant fixture-game-spam\n102.001 [CHAT] Bob: @assistant fixture-game-bob\n'
+		);
+		await bobReply;
+		const chats = (await json(`${serverPath}/assistant`, { cookie: cookies.owner })).chats;
+		const bobChat = chats.find((chat) => chat.gamePlayer === 'Bob');
+		assert.ok(bobChat);
+		assert.notEqual(aliceChat.id, bobChat.id);
+		assert.equal(
+			(await json(`${serverPath}/assistant?chat=${bobChat.id}`, { cookie: cookies.owner })).turns[0]
+				.prompt,
+			'fixture-game-bob'
+		);
+		assert.equal(
+			(
+				await client.execute(
+					"SELECT COUNT(*) AS count FROM server_assistant_turn WHERE prompt = 'fixture-game-spam'"
+				)
+			).rows[0].count,
+			0
+		);
+		await stop();
+		await start();
+		await action(`${serverPath}?/manage`, cookies.owner, gameSettings);
+		const charlieReply = nextGameReply('Charlie');
+		await appendFile(gameLog, '103.000 [CHAT] Charlie: @assistant fixture-game-charlie\n');
+		await charlieReply;
+		const newChatReply = nextGameReply('Bob');
+		await appendFile(gameLog, '104.000 [CHAT] Bob: @assistant new chat\n');
+		assert.match(await newChatReply, /Assistant: Started a new chat\./u);
+		const bobChats = (
+			await json(`${serverPath}/assistant`, { cookie: cookies.owner })
+		).chats.filter((chat) => chat.gamePlayer === 'Bob');
+		assert.equal(bobChats.length, 2);
+		assert.equal(
+			(await json(`${serverPath}/assistant?chat=${bobChats[0].id}`, { cookie: cookies.owner }))
+				.turns.length,
+			0
+		);
+		assert.equal(
+			(await json(`${serverPath}/assistant?chat=${bobChat.id}`, { cookie: cookies.owner })).turns[0]
+				.prompt,
+			'fixture-game-bob'
+		);
+		const questionReply = nextGameReply('Eve');
+		await appendFile(
+			gameLog,
+			'105.000 [CHAT] Eve: @assistant fixture-game-question-action: could you queue Automation?\n'
+		);
+		await questionReply;
+		assert.ok(codexMenus.some((menu) => menu.request.includes('fixture-game-question-action')));
+		assert.ok(assistantToolOutputs.some((output) => output.callId === 'call_game_question_action'));
+		assert.equal(
+			gameReplies.length,
+			5,
+			'Only player replies reached RCON; no factory write was sent'
+		);
+		assert.equal(
+			(
+				await client.execute(
+					"SELECT COUNT(*) AS count FROM server_assistant_turn WHERE prompt LIKE 'fixture-game-%'"
+				)
+			).rows[0].count,
+			4
+		);
+		assert.equal(gameReplies.length, 5);
+		await action(`${serverPath}?/manage`, cookies.owner, { ...gameSettings, enabled: 'off' });
+		passed(
+			'in-game assistant starts at EOF, scopes player chats and tools, rejects web writes and unauthorized actions, bounds spam, supports new chat and does not replay after restart'
+		);
+	} finally {
+		for (const socket of gameSockets) socket.destroy();
+		await new Promise((done) => gameRcon.close(done));
+	}
 	// Warm archives remain usable after an account removes its portal credentials.
 	await client.execute(
 		"UPDATE user SET factorio_username = NULL, factorio_token = NULL WHERE id = 'owner'"

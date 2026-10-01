@@ -64,7 +64,7 @@ import {
 import { requireServer } from './servers';
 import { validateDependencies } from './services/dependencies';
 
-type Context = { userId: string; model: string; chatId?: string } & (
+type Context = { userId: string; model: string; chatId?: string; gamePlayer?: string } & (
 	| { listId: string; serverId?: never }
 	| { serverId: string; listId?: never }
 );
@@ -570,6 +570,7 @@ ModlistAssistant.initialData = v.union([
 	v.object({
 		userId: v.string(),
 		serverId: v.string(),
+		gamePlayer: v.optional(v.string()),
 		model: v.string(),
 		chatId: v.optional(v.string())
 	})
@@ -617,7 +618,7 @@ runtimeState.agent ??= FacmanduAssistant;
 const registeredAgent = runtimeState.agent;
 export async function agentHandle(
 	userId: string,
-	target: string | { serverId: string },
+	target: string | { serverId: string; gamePlayer?: string },
 	selectedModel?: string,
 	selectedEffort?: string,
 	chatId?: string
@@ -628,7 +629,13 @@ export async function agentHandle(
 	const context: Context =
 		typeof target === 'string'
 			? { userId, listId: target, model: details.id, chatId }
-			: { userId, serverId: target.serverId, model: details.id, chatId };
+			: {
+					userId,
+					serverId: target.serverId,
+					model: details.id,
+					chatId,
+					gamePlayer: target.gamePlayer
+				};
 	registerAssistantProvider(context, loaded, effort);
 	if (!runtimeState.runtime) {
 		const directory = resolve(env.FACMANDU_AGENT_DATA ?? '.data/agent');

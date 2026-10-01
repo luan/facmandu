@@ -51,6 +51,7 @@
  let voiceState = $state({ ...idleVoice });
  const voice = new AssistantVoice({ change: state => voiceState = state, request: ask });
  $effect(() => { listId; serverId; if (!open) voice.stop(); return () => voice.stop(); });
+ let gamePlayer = $state<string | null>(null);
  let open = $state(false); let prompt = $state(''); let busy = $state(false); let progress = $state(''); let text = $state(''); let error = $state(''); let refreshError = $state('');
  let turns = $state<{ id: string; prompt: string; answer: string; state: string; mods: AssistantMod[]; results?: FactoryResult[]; plans?: ModlistPlan[] }[]>([]);
   const inProgress = $derived(busy || turns.some(turn => turn.state === 'running'));
@@ -131,7 +132,7 @@
    const data = await response.json();
    if (!response.ok) throw new Error(data.message);
    if (selectedChat && chat !== selectedChat) return false;
-   chat = data.chat.id; chats = data.chats; hasMore = data.hasMore; compacted = Boolean(data.chat.compactedAt); turns = data.turns;
+   chat = data.chat.id; gamePlayer = data.chat.gamePlayer ?? null; chats = data.chats; hasMore = data.hasMore; compacted = Boolean(data.chat.compactedAt); turns = data.turns;
    plans = data.plans; combineablePlanIds = data.combineablePlanIds ?? [];
    if (data.models) { models = data.models; modelError = data.modelError; modelCatalogLoaded = true; }
    if (resetModel || !model || (data.models && !models.some(item => item.id === model))) model = models.some(item => item.id === data.model) ? data.model : models[0]?.id ?? '';
@@ -146,7 +147,7 @@
   } finally {
    loading = false;
    clearTimeout(pollTimer);
-   if (open && !busy && (turns.some(turn => turn.state === 'running') || (activePrompt && refreshError))) pollTimer = setTimeout(() => void refresh(), 1500);
+   if (open && !busy && (gamePlayer || turns.some(turn => turn.state === 'running') || (activePrompt && refreshError))) pollTimer = setTimeout(() => void refresh(), 1500);
   }
  }
  $effect(() => { if (open) { followOutput = true; void untrack(() => refresh(false, !modelCatalogLoaded)); } });
@@ -320,7 +321,7 @@
      <section class="space-y-4" aria-label="Conversation turn">
       <div class="flex justify-end"><p class="max-w-[90%] whitespace-pre-wrap break-words border border-border bg-white/5 px-4 py-3 text-sm leading-relaxed">{turn.prompt}</p></div>
       {#if turn.state === 'error'}
-       <div class="flex flex-wrap items-center gap-3"><p class="text-sm text-destructive">Could not finish this response.</p><Button variant="outline" size="sm" disabled={busy} onclick={() => { prompt = turn.prompt; void send(); }}><RefreshCwIcon class="size-4" />Retry</Button></div>
+       <div class="flex flex-wrap items-center gap-3"><p class="text-sm text-destructive">Could not finish this response.</p>{#if !gamePlayer}<Button variant="outline" size="sm" disabled={busy} onclick={() => { prompt = turn.prompt; void send(); }}><RefreshCwIcon class="size-4" />Retry</Button>{/if}</div>
       {:else}<div class="pr-2"><AssistantMessage text={turn.answer} /></div>{/if}
       {@render modCards(turn.mods, turn.id)}
       {#if !serverId}
@@ -389,6 +390,7 @@
   <form onsubmit={(event) => { event.preventDefault(); void send(); }} class="shrink-0 border-t border-border p-4 space-y-3">
    {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
    {#if refreshError}<p role="status" class="text-sm text-muted-foreground">{refreshError} <button type="button" class="underline" onclick={() => void refresh()}>Retry</button></p>{/if}
+   {#if gamePlayer}<div class="flex items-center justify-between gap-3 text-sm text-muted-foreground"><span>In-game conversation with {gamePlayer}</span><Button variant="outline" size="sm" disabled={inProgress || loading} onclick={createChat}>New web chat</Button></div>{:else}
    {#if modelError}<p role="status" class="text-sm text-muted-foreground">{modelError}</p>{/if}
    <Prompt bind:value={prompt} label="Message" placeholder={serverId ? "Ask about this server…" : "Ask about this list…"} maxLength={6000} busy={inProgress} {send} disabledReason={loading ? 'Loading conversation' : ''} stop={busy && controller ? stop : undefined}>
     {#snippet controls()}
@@ -402,6 +404,7 @@
      <label class="flex items-center gap-2 text-xs text-muted-foreground"><span>Effort</span><select aria-label="Thinking effort" class="border py-1.5 pl-2 pr-8 text-xs" bind:value={effort} disabled={busy || !effortChoices.length}>{#each effortChoices as level}<option value={level}>{({ minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' } as Record<string, string>)[level] ?? level}</option>{/each}</select></label>
     {/snippet}
    </Prompt>
+   {/if}
   </form>
  </Sheet.Content>
 </Sheet.Root>

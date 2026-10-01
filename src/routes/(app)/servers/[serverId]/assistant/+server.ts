@@ -1,165 +1,20 @@
 import { error, json } from '@sveltejs/kit';
 import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import {
-	type FactoryResult,
-	factoryResultSchema,
-	serverAssistantPlanSchema
-} from '$lib/assistant-results';
+import { factoryResultSchema, serverAssistantPlanSchema } from '$lib/assistant-results';
 import { chatHistory, newChat, resolveChat, touchChat } from '$lib/server/assistant-chats';
-import { submissionEvents } from '$lib/server/assistant-events';
 import { assistantModelCatalog } from '$lib/server/assistant-models';
 import { authenticationForm, requireSameOrigin } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { genID } from '$lib/server/db/ids';
 import { serverAssistantTurn as turnTable } from '$lib/server/db/schema';
-import { agentHandle, routeServerRequest, watchCompaction } from '$lib/server/modlist-agent';
+import { finishServerTurn, serverAssistantRequests } from '$lib/server/server-assistant';
 import { startModSync } from '$lib/server/server-mod-sync';
-import { serverStatus } from '$lib/server/server-process';
 import { requireServer } from '$lib/server/servers';
 import type { RequestHandler } from './$types';
 
-const state = globalThis as typeof globalThis & {
-	__facmanduServerAssistantRequests?: Map<string, AbortController>;
-};
-state.__facmanduServerAssistantRequests ??= new Map();
-const running = state.__facmanduServerAssistantRequests;
+const running = serverAssistantRequests;
 const keyOf = (userId: string, serverId: string) => `${userId}:${serverId}`;
-async function finishTurn(
-	turn: typeof turnTable.$inferSelect,
-	controller: AbortController,
-	send: (event: object) => void
-) {
-	const timeout = setTimeout(
-		() => controller.abort(),
-		Math.max(1, 180_000 - (Date.now() - turn.createdAt.getTime()))
-	);
-	const results: FactoryResult[] = [];
-	const stopWatching = watchCompaction(turn.chatId ?? keyOf(turn.userId, turn.serverId), send);
-	try {
-		const recent = await db
-			.select({ prompt: turnTable.prompt, answer: turnTable.answer })
-			.from(turnTable)
-			.where(
-				and(
-					eq(turnTable.userId, turn.userId),
-					eq(turnTable.serverId, turn.serverId),
-					eq(turnTable.chatId, turn.chatId ?? ''),
-					eq(turnTable.state, 'done')
-				)
-			)
-			.orderBy(desc(turnTable.createdAt))
-			.limit(4);
-		const route = !turn.receipt
-			? await routeServerRequest(turn.userId, turn.serverId, turn.prompt, recent.reverse())
-			: null;
-		if (route?.intent === 'status' && !route.clarify) {
-			if (controller.signal.aborted) throw new Error('Stopped');
-			const server = await requireServer(turn.userId, turn.serverId);
-			const status = await serverStatus(server);
-			const answer = `${server.name}: ${status.running ? 'running' : 'stopped'}${status.version.version ? ` · Factorio ${status.version.version}` : ''}.`;
-			results.push({
-				kind: 'factory-result',
-				tool: 'server_status',
-				title: 'Server',
-				result: { name: server.name, ...status }
-			});
-			await db
-				.update(turnTable)
-				.set({ state: 'done', answer, results: JSON.stringify(results) })
-				.where(eq(turnTable.id, turn.id));
-			send({ done: true, answer, results });
-			return;
-		}
-		const { handle, context, effort } = await agentHandle(
-			turn.userId,
-			{ serverId: turn.serverId },
-			turn.model ?? undefined,
-			turn.effort ?? undefined,
-			turn.chatId ?? undefined
-		);
-		const abort = () => {
-			void handle.abort().catch(() => {});
-		};
-		controller.signal.addEventListener('abort', abort, { once: true });
-		try {
-			if (controller.signal.aborted) throw new Error('Stopped');
-			const receipt =
-				turn.receipt ??
-				(
-					await handle.dispatch({
-						message: {
-							kind: 'signal',
-							type: 'facmandu-request',
-							body: `${route?.clarify ? 'Clarify missing targets or preferences before making changes.\n' : ''}${turn.prompt}`,
-							attributes: { groups: JSON.stringify(route?.groups ?? []), requestId: turn.id }
-						},
-						initialData: context,
-						idempotencyKey: turn.id
-					})
-				).submissionId;
-			await db
-				.update(turnTable)
-				.set({ receipt, model: context.model, effort })
-				.where(eq(turnTable.id, turn.id));
-			if (controller.signal.aborted) {
-				abort();
-				throw new Error('Stopped');
-			}
-			const result = await handle.read(receipt, {
-				signal: controller.signal,
-				onEvent: submissionEvents(receipt, (chunk) => {
-					if (chunk.type === 'message-delta' && chunk.kind === 'text') send({ delta: chunk.delta });
-					if (chunk.type === 'tool-input')
-						send({
-							progress:
-								chunk.toolName === 'factory_action'
-									? 'Updating factory…'
-									: chunk.toolName === 'plan_production'
-										? 'Calculating production…'
-										: chunk.toolName === 'create_factory_watch'
-											? 'Creating watch…'
-											: chunk.toolName.startsWith('factory_')
-												? 'Reading factory…'
-												: 'Working…'
-						});
-					if (chunk.type === 'tool-output') {
-						const parsed = factoryResultSchema.safeParse(chunk.output);
-						if (parsed.success) {
-							results.push(parsed.data);
-							send({ results });
-						}
-					}
-				})
-			});
-			await db
-				.update(turnTable)
-				.set({ state: 'done', answer: result.text, results: JSON.stringify(results) })
-				.where(eq(turnTable.id, turn.id));
-			send({ done: true, answer: result.text });
-		} finally {
-			controller.signal.removeEventListener('abort', abort);
-		}
-	} catch (cause) {
-		console.error(
-			'Server assistant failed:',
-			cause instanceof Error ? cause.message.split('\n')[0]?.slice(0, 200) : 'Unknown error'
-		);
-		const answer = controller.signal.aborted
-			? 'Response stopped.'
-			: 'Could not finish this response. Try again.';
-		await db
-			.update(turnTable)
-			.set({ state: 'error', answer, results: JSON.stringify(results) })
-			.where(eq(turnTable.id, turn.id))
-			.catch(() => {});
-		send({ error: answer });
-	} finally {
-		stopWatching();
-		clearTimeout(timeout);
-		running.delete(turn.chatId ?? keyOf(turn.userId, turn.serverId));
-	}
-}
 export const GET: RequestHandler = async ({ locals, params, url }) => {
 	if (!locals.user) error(401, 'Sign in');
 	const server = await requireServer(locals.user.id, params.serverId);
@@ -180,11 +35,22 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
 		.limit(31)
 		.offset(offset);
 	for (const turn of turns.filter((turn) => turn.state === 'running')) {
+		if (chat.gamePlayer) {
+			if (!running.has(chat.id))
+				await db
+					.update(turnTable)
+					.set({
+						state: 'error',
+						answer: 'This in-game request was interrupted. Ask again in game.'
+					})
+					.where(eq(turnTable.id, turn.id));
+			continue;
+		}
 		const key = turn.chatId ?? keyOf(turn.userId, turn.serverId);
 		if (!running.has(key)) {
 			const controller = new AbortController();
 			running.set(key, controller);
-			void finishTurn(turn, controller, () => {}).catch(() => {});
+			void finishServerTurn(turn, controller, () => {}).catch(() => {});
 		}
 	}
 	const catalog =
@@ -231,6 +97,7 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 	const target = { serverId: server.id };
 	if (input.get('operation') === 'new-chat') return json(await newChat(userId, target));
 	const chat = await resolveChat(userId, target, String(input.get('chat') ?? '') || null);
+	if (chat.gamePlayer) error(403, 'Reply to this conversation in game or start a new web chat');
 	const operation = input.get('operation');
 	const key = chat.id;
 	if (operation === 'cancel') {
@@ -324,7 +191,7 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 			};
 			request.signal.addEventListener('abort', disconnect, { once: true });
 			send({ progress: 'Thinking…' });
-			void finishTurn(turn, controller, send).finally(() => {
+			void finishServerTurn(turn, controller, send).finally(() => {
 				request.signal.removeEventListener('abort', disconnect);
 				if (!closed) {
 					closed = true;

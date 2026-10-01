@@ -17,6 +17,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import Console from './Console.svelte';
 	import ServerBookmarks from './ServerBookmarks.svelte';
+ import GameAssistantSettings from './GameAssistantSettings.svelte';
  import ServerSaves from './ServerSaves.svelte';
 	import type { ServerView } from '$lib/server/server-view';
 	import type { ServerSummary } from '$lib/server/servers';
@@ -517,6 +518,8 @@
 			</Card.Content>
 		</Card.Root>
 	</div>
+
+ {#if data.gameAssistant}{#key JSON.stringify(data.gameAssistant)}<GameAssistantSettings config={data.gameAssistant} models={data.gameModels} action={manageAction} {submit} {busyReason} />{/key}{/if}
 
 	<Card.Root>
 		<Card.Header>
