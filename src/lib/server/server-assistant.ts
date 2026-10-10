@@ -23,16 +23,18 @@ export async function finishServerTurn(
 	controller: AbortController,
 	send: (event: object) => void
 ) {
-	const timeout = setTimeout(
-		() => controller.abort(),
-		Math.max(1, 180_000 - (Date.now() - turn.createdAt.getTime()))
-	);
+	let timeout: ReturnType<typeof setTimeout> | undefined;
 	const results: FactoryResult[] = [];
 	const stopWatching = watchCompaction(turn.chatId ?? keyOf(turn.userId, turn.serverId), send);
 	try {
 		const chat = turn.chatId
 			? await db.select().from(assistantChat).where(eq(assistantChat.id, turn.chatId)).get()
 			: null;
+		// Visual design and construction need several tool rounds; game chat stays brief.
+		timeout = setTimeout(
+			() => controller.abort(),
+			Math.max(1, (chat?.gamePlayer ? 180_000 : 900_000) - (Date.now() - turn.createdAt.getTime()))
+		);
 		const game = chat?.gamePlayer
 			? await requireGamePlayer(
 					await requireServer(turn.userId, turn.serverId),
