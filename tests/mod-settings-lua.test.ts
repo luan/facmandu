@@ -3,6 +3,15 @@ import { existsSync } from 'node:fs';
 import { test } from 'node:test';
 import { parseModSettingsLua } from '../src/lib/server/mod-settings-lua';
 
+test('mod formats reject unbounded precision before reaching sprintf-js', () => {
+	for (const precision of ['101', '999999999999999999999999'])
+		assert.throws(
+			() => parseModSettingsLua(`string.format("%.${precision}f", 1)`),
+			/width or precision too long/u
+		);
+	assert.deepEqual(parseModSettingsLua('assert(string.format("%.99f", 1))'), []);
+});
+
 test('reads types, defaults, ranges, and allowed values', () => {
 	const defs = parseModSettingsLua(`
 data:extend({
