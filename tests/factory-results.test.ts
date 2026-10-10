@@ -502,3 +502,28 @@ test('routine reads stay in activity while requested displays and pending review
 		details: [read, review, apply]
 	});
 });
+
+test('blueprint placement reports incomplete work and actionable blocked coordinates', () => {
+	const placed = view('blueprint_operation', {
+		operation: 'place_blueprint',
+		surface: 'nauvis',
+		requested: 3,
+		placed: 1,
+		complete: false,
+		error: 'Site changed during placement'
+	});
+	assert.equal(placed.cards[0]?.badge, 'Incomplete');
+	assert.deepEqual(placed.cards[0]?.metrics, [
+		{ label: 'Placed ghosts', value: '1' },
+		{ label: 'Requested entities', value: '3' }
+	]);
+	assert.deepEqual(placed.cards[0]?.notes, ['Site changed during placement']);
+	const blocked = view('blueprint_operation', {
+		ready: false,
+		surface: 'nauvis',
+		entities: 2,
+		blocked: [{ name: 'transport-belt', position: { x: 50.5, y: 50.5 }, reason: 'Occupied' }]
+	});
+	assert.equal(blocked.cards[0]?.badge, 'Blocked');
+	assert.deepEqual(blocked.tables[0]?.rows, [['Transport belt', '50.5', '50.5', 'Occupied']]);
+});

@@ -3,9 +3,12 @@
  import { presentFactoryResult } from '$lib/factory-results';
  import { consoleLevel, highlightCommand, isLuaLine, tokenClass } from '$lib/console';
  import { FlaskConicalIcon, UsersIcon, ChartNoAxesCombinedIcon, MapPinIcon, ServerIcon, CopyIcon, CheckIcon, ArrowUpRightIcon } from '@lucide/svelte';
+ import { blueprintArtifactSchema } from '$lib/blueprints';
+ import BlueprintResult from './BlueprintResult.svelte';
  import PrototypeIcon from './PrototypeIcon.svelte';
  import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
  let { item, serverId }: { item: FactoryResult; serverId?: string } = $props();
+ const blueprint = $derived(blueprintArtifactSchema.safeParse(item.result));
  const view = $derived(presentFactoryResult(item));
  const Icon = $derived(({ research: FlaskConicalIcon, players: UsersIcon, production: ChartNoAxesCombinedIcon, location: MapPinIcon, server: ServerIcon })[view.icon]);
  let expanded = $state(false);
@@ -13,6 +16,9 @@
  let copyError = $state('');
  async function copyGPS(gps: string) { try { await navigator.clipboard.writeText(gps); copied = gps; copyError = ''; } catch { copyError = 'Could not copy location.'; } }
 </script>
+{#if blueprint.success}
+<BlueprintResult blueprint={blueprint.data} />
+{:else}
 <section class="overflow-hidden border border-border bg-white/[0.025] text-sm" aria-label={view.title}>
  <header class="flex items-center gap-2 border-b border-border px-3 py-2.5"><Icon class="size-4 shrink-0 text-primary" /><h3 class="font-semibold">{view.title}</h3>{#if view.context}<span class="ml-auto text-right text-xs text-muted-foreground">{view.context}</span>{/if}</header>
  <div class="divide-y divide-border">
@@ -37,3 +43,5 @@
  {#if view.link}<a href={view.link.href} class="flex items-center justify-between border-t border-border px-3 py-2.5 text-sm font-medium text-primary hover:bg-white/5">{view.link.label}<ArrowUpRightIcon class="size-4" /></a>{/if}
  {#if copyError}<p role="alert" class="px-3 py-2 text-xs text-destructive">{copyError}</p>{/if}
 </section>
+
+{/if}

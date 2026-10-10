@@ -976,6 +976,61 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 		lines: [],
 		empty: 'No matches.'
 	};
+	if (tool === 'blueprint_operation') {
+		view.title = item.title;
+		if (data.operation === 'place_blueprint' || typeof data.ready === 'boolean') {
+			view.cards = [
+				{
+					title: humanName(data.surface),
+					badge:
+						data.operation === 'place_blueprint'
+							? data.complete
+								? 'Ghosts placed'
+								: 'Incomplete'
+							: data.ready
+								? 'Ready to place'
+								: 'Blocked',
+					tone: data.complete || data.ready ? 'good' : 'warning',
+					metrics:
+						data.operation === 'place_blueprint'
+							? [
+									...numeric('Placed ghosts', data.placed),
+									...numeric('Requested entities', data.requested)
+								]
+							: numeric('Entities', data.entities),
+					notes: [string(data.note), string(data.error)].filter(Boolean)
+				}
+			];
+			const blocked = rows(data.blocked);
+			if (blocked.length)
+				view.tables = [
+					{
+						title: 'Blocked locations',
+						columns: ['Entity', 'X', 'Y', 'Reason'],
+						rows: blocked.map((e) => [
+							humanName(e.name),
+							display(record(e.position).x),
+							display(record(e.position).y),
+							string(e.reason)
+						])
+					}
+				];
+		} else {
+			view.tables = [
+				{
+					title: 'Live construction prototypes',
+					columns: ['Entity', 'Size', 'Belt items/s', 'Unlocked'],
+					rows: rows(data.entities).map((e) => [
+						humanName(e.name),
+						e.error ? string(e.error) : `${display(e.width)} × ${display(e.height)}`,
+						display(e.belt_items_per_second) || '—',
+						e.unlocked ? 'Yes' : 'No'
+					])
+				}
+			];
+		}
+		return view;
+	}
 	if (data.found === false || (data.error && !setupTool) || data.too_large) {
 		view.notes.unshift(
 			string(data.reason) || string(data.error) || 'This lookup could not return a result.'
