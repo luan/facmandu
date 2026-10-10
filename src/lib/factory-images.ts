@@ -32,3 +32,9 @@ export const factoryViewSchema = z.object({
 });
 export const factoryImageUrl = (serverId: string, image: FactoryImage) =>
 	`/api/servers/${encodeURIComponent(serverId)}/images/${image.id}`;
+
+export const factoryImageArtifactSchema = z.object({
+	kind: z.literal('factory-image'),
+	label: z.string(),
+	image: factoryImageSchema
+});

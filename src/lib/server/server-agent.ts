@@ -178,6 +178,30 @@ export function serverAssistantTools(context: {
 	}
 	if (groups.has('planning')) {
 		useTool({
+			name: 'render_blueprint',
+			description:
+				'Render an existing native blueprint import string with this server’s installed mod sprites. Works while hosting is stopped and never changes the world. The same image is attached to your model context and displayed in the harness. Use this for previously created or user-provided blueprints; do not invent encoded blueprint strings. Rendering does not validate recipes, progression or throughput.',
+			input: v.object({
+				blueprint: v.pipe(v.string(), v.minLength(2), v.maxLength(256000)),
+				label: v.optional(
+					v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+					'Blueprint sprite preview'
+				)
+			}),
+			async run({ data }) {
+				return result(
+					'render_blueprint',
+					data.label,
+					{
+						kind: 'factory-image',
+						label: data.label,
+						image: await renderFactoryBlueprint(await server(), data.blueprint)
+					},
+					true
+				);
+			}
+		});
+		useTool({
 			name: 'blueprint_catalog',
 			description:
 				'Read the exact input schema for native blueprint creation, entity prototype inspection and construction ghost placement. Use blueprint_operation catalog to read dimensions, fluid ports, belt throughput and unlocks for real prototype names.',

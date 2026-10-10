@@ -6,10 +6,11 @@
  import { blueprintArtifactSchema } from '$lib/blueprints';
  import BlueprintResult from './BlueprintResult.svelte';
  import FactoryImage from './FactoryImage.svelte';
- import { factoryViewSchema } from '$lib/factory-images';
+ import { factoryViewSchema, factoryImageArtifactSchema } from '$lib/factory-images';
  import PrototypeIcon from './PrototypeIcon.svelte';
  import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
  let { item, serverId }: { item: FactoryResult; serverId?: string } = $props();
+ const renderedImage = $derived(factoryImageArtifactSchema.safeParse(item.result));
  const snapshot = $derived(factoryViewSchema.safeParse(item.result));
  const blueprint = $derived(blueprintArtifactSchema.safeParse(item.result));
  const view = $derived(presentFactoryResult(item));
@@ -21,6 +22,8 @@
 </script>
 {#if blueprint.success}
 <BlueprintResult blueprint={blueprint.data} {serverId} />
+{:else if renderedImage.success && serverId}
+<section class="overflow-hidden border border-border bg-white/[0.025] text-sm" aria-label={renderedImage.data.label}><header class="p-3"><h3 class="font-semibold">{renderedImage.data.label}</h3></header><FactoryImage image={renderedImage.data.image} {serverId} label={renderedImage.data.label} /><p class="p-3 text-xs text-muted-foreground">Static sprite preview. Rendering does not validate recipes, progression or throughput.</p></section>
 {:else if snapshot.success && serverId}
 <section class="overflow-hidden border border-border bg-white/[0.025] text-sm" aria-label="Factory view"><header class="flex flex-wrap items-center justify-between gap-2 p-3"><h3 class="font-semibold">{snapshot.data.surface} · Factory view</h3><span class="text-xs text-muted-foreground">{snapshot.data.count} entities · Tick {snapshot.data.tick}</span></header><FactoryImage image={snapshot.data.image} {serverId} label={`Factory on ${snapshot.data.surface} at tick ${snapshot.data.tick}`} /><p class="p-3 text-xs text-muted-foreground">World area ({snapshot.data.area.left_top.x}, {snapshot.data.area.left_top.y}) to ({snapshot.data.area.right_bottom.x}, {snapshot.data.area.right_bottom.y}). Grid labels identify blueprint tile edges. Add ({snapshot.data.origin.x}, {snapshot.data.origin.y}) for world coordinates. Static layout; terrain, belt contents and operating state are not shown.</p></section>
 {:else}
