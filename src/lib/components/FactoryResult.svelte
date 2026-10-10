@@ -5,9 +5,12 @@
  import { FlaskConicalIcon, UsersIcon, ChartNoAxesCombinedIcon, MapPinIcon, ServerIcon, CopyIcon, CheckIcon, ArrowUpRightIcon } from '@lucide/svelte';
  import { blueprintArtifactSchema } from '$lib/blueprints';
  import BlueprintResult from './BlueprintResult.svelte';
+ import FactoryImage from './FactoryImage.svelte';
+ import { factoryViewSchema } from '$lib/factory-images';
  import PrototypeIcon from './PrototypeIcon.svelte';
  import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
  let { item, serverId }: { item: FactoryResult; serverId?: string } = $props();
+ const snapshot = $derived(factoryViewSchema.safeParse(item.result));
  const blueprint = $derived(blueprintArtifactSchema.safeParse(item.result));
  const view = $derived(presentFactoryResult(item));
  const Icon = $derived(({ research: FlaskConicalIcon, players: UsersIcon, production: ChartNoAxesCombinedIcon, location: MapPinIcon, server: ServerIcon })[view.icon]);
@@ -17,7 +20,9 @@
  async function copyGPS(gps: string) { try { await navigator.clipboard.writeText(gps); copied = gps; copyError = ''; } catch { copyError = 'Could not copy location.'; } }
 </script>
 {#if blueprint.success}
-<BlueprintResult blueprint={blueprint.data} />
+<BlueprintResult blueprint={blueprint.data} {serverId} />
+{:else if snapshot.success && serverId}
+<section class="overflow-hidden border border-border bg-white/[0.025] text-sm" aria-label="Factory view"><header class="flex flex-wrap items-center justify-between gap-2 p-3"><h3 class="font-semibold">{snapshot.data.surface} · Factory view</h3><span class="text-xs text-muted-foreground">{snapshot.data.count} entities · Tick {snapshot.data.tick}</span></header><FactoryImage image={snapshot.data.image} {serverId} label={`Factory on ${snapshot.data.surface} at tick ${snapshot.data.tick}`} /><p class="p-3 text-xs text-muted-foreground">World area ({snapshot.data.area.left_top.x}, {snapshot.data.area.left_top.y}) to ({snapshot.data.area.right_bottom.x}, {snapshot.data.area.right_bottom.y}). Grid labels identify blueprint tile edges. Add ({snapshot.data.origin.x}, {snapshot.data.origin.y}) for world coordinates. Static layout; terrain, belt contents and operating state are not shown.</p></section>
 {:else}
 <section class="overflow-hidden border border-border bg-white/[0.025] text-sm" aria-label={view.title}>
  <header class="flex items-center gap-2 border-b border-border px-3 py-2.5"><Icon class="size-4 shrink-0 text-primary" /><h3 class="font-semibold">{view.title}</h3>{#if view.context}<span class="ml-auto text-right text-xs text-muted-foreground">{view.context}</span>{/if}</header>

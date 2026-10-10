@@ -2,7 +2,14 @@
  import type { BlueprintArtifact } from '$lib/blueprints';
  import { CopyIcon, DownloadIcon, CheckIcon } from '@lucide/svelte';
  import Button from './ui/button/button.svelte';
- let { blueprint }: {blueprint:BlueprintArtifact} = $props();
+ import FactoryImage from './FactoryImage.svelte';
+ import { factoryImageSchema, type FactoryImage as ImageData } from '$lib/factory-images';
+ let { blueprint, serverId }: {blueprint:BlueprintArtifact;serverId?:string} = $props();
+ let rendered=$state<ImageData>();
+ $effect(()=>{blueprint.blueprint;rendered=undefined;error='';});
+ let rendering=$state(false);
+ const image=$derived(rendered??blueprint.image);
+ async function render() { if(!serverId)return;rendering=true;error='';try{const response=await fetch(`/api/servers/${encodeURIComponent(serverId)}/images`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blueprint:blueprint.blueprint})});if(!response.ok)throw new Error(response.status===425?'Sprites are preparing. Follow Activity, then retry.':'Could not render this layout. Check the renderer’s supported mod sprites.');rendered=factoryImageSchema.parse(await response.json());}catch(cause){error=cause instanceof Error?cause.message:'Could not render preview';}finally{rendering=false;}}
  let copied=$state(false);
  let error=$state('');
  const bounds=$derived({
@@ -19,6 +26,7 @@
 </script>
 <section class="overflow-hidden border border-border bg-white/[0.025] text-sm" aria-label={blueprint.label}>
  <header class="flex flex-wrap items-center justify-between gap-3 border-b border-border p-3"><h3 class="font-semibold">{blueprint.label}</h3><span class="text-xs text-muted-foreground">{blueprint.entities.length} entities · Native blueprint</span></header>
+ {#if image && serverId}<FactoryImage {image} {serverId} label={`Sprite layout for ${blueprint.label}`} />{:else}
  <svg class="h-80 w-full bg-black/20" viewBox={`${bounds.left} ${bounds.top} ${bounds.right-bounds.left} ${bounds.bottom-bounds.top}`} role="img" aria-label={`Layout for ${blueprint.label}`}>
   {#each blueprint.entities as entity}
    <g><title>{entity.name}{entity.recipe ? ` · ${entity.recipe}` : ''} · {entity.position.x}, {entity.position.y}</title>
@@ -27,8 +35,11 @@
    </g>
   {/each}
  </svg>
+ {#if blueprint.renderError}<p class="px-3 pt-3 text-xs text-amber-200">{blueprint.renderError}</p>{/if}
+ {#if serverId}<div class="p-3"><Button size="sm" disabled={rendering} onclick={()=>void render()}>{rendering?'Rendering sprites…':'Render sprite preview'}</Button></div>{/if}
+ {/if}
  <div class="space-y-3 border-t border-border p-3">
-  <p class="text-xs text-muted-foreground">Validated by this server’s Factorio engine. Hover over an entity to inspect it. Export validation does not verify throughput or supply connections.</p>
+  <p class="text-xs text-muted-foreground">Validated by this server’s Factorio engine. Static layout preview; operating state is not shown. Export validation does not verify throughput or supply connections.</p>
   <details><summary class="cursor-pointer text-xs">Construction materials</summary><ul class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">{#each blueprint.cost as item}<li>{item.count} × {item.name}</li>{/each}</ul></details>
   <div class="flex gap-2"><Button size="sm" onclick={() => void copy()}>{#if copied}<CheckIcon />{:else}<CopyIcon />{/if}Copy blueprint</Button><Button size="sm" variant="outline" onclick={download}><DownloadIcon />Download</Button></div>
   {#if error}<p role="alert" class="text-xs text-destructive">{error}</p>{/if}

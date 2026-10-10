@@ -58,7 +58,7 @@ async function packageFiles(
 	return files;
 }
 
-async function iconFingerprint(server: ManagedServer): Promise<string> {
+export async function prototypeFingerprint(server: ManagedServer): Promise<string> {
 	const config = await serverConfig(server);
 	if (!config.version) throw new ServerError(409, 'Select a Factorio version first');
 	const mods = join(server.directory, 'mods');
@@ -129,7 +129,7 @@ async function exportIcons(server: ManagedServer, fingerprint: string): Promise<
 			],
 			{ timeout: 180_000, maxBuffer: 4 * 1024 * 1024 }
 		);
-		if ((await iconFingerprint(server)) !== fingerprint)
+		if ((await prototypeFingerprint(server)) !== fingerprint)
 			throw new ServerError(409, 'Server mods changed during icon export');
 		await stat(join(writeData, 'script-output'));
 		await writeFile(join(staging, '.complete'), fingerprint, { mode: 0o600 });
@@ -145,7 +145,7 @@ async function exportIcons(server: ManagedServer, fingerprint: string): Promise<
 
 export async function prototypeIcon(server: ManagedServer, kind: PrototypeIconKind, name: string) {
 	for (let attempt = 0; attempt < 2; attempt++) {
-		const fingerprint = await iconFingerprint(server);
+		const fingerprint = await prototypeFingerprint(server);
 		const key = `${server.id}:${fingerprint}`;
 		if ((failedExports.get(key) ?? 0) > Date.now())
 			throw new ServerError(503, 'Factorio icon export temporarily unavailable');
@@ -166,7 +166,7 @@ export async function prototypeIcon(server: ManagedServer, kind: PrototypeIconKi
 			if (cause instanceof ServerError && cause.status === 409) continue;
 			throw cause;
 		}
-		if ((await iconFingerprint(server)) !== fingerprint) continue;
+		if ((await prototypeFingerprint(server)) !== fingerprint) continue;
 		try {
 			return await readFile(join(root, 'write', 'script-output', kind, `${name}.png`));
 		} catch (cause) {

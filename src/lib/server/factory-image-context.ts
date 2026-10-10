@@ -1,0 +1,68 @@
+import type { TranscriptContext } from '@earendil-works/pi-ai';
+import { z } from 'zod';
+import { factoryImageSchema } from '$lib/factory-images';
+import { pngDimensions } from './factory-image-data';
+
+const imageResult = z.object({
+	kind: z.literal('factory-result'),
+	result: z.object({ image: factoryImageSchema })
+});
+// Load at the provider boundary: transcripts store small immutable image references, not base64 JSON.
+export function addFactoryImages(
+	context: TranscriptContext,
+	read: (id: string) => Buffer,
+	vision = true
+): TranscriptContext {
+	const images = new Map<number, string>();
+	for (const [index, message] of context.messages.entries()) {
+		if (
+			message.role !== 'toolResult' ||
+			message.isError ||
+			!['factory_view', 'blueprint_operation'].includes(message.toolName)
+		)
+			continue;
+		for (const part of message.content) {
+			if (part.type !== 'text') continue;
+			try {
+				const parsed = imageResult.safeParse(JSON.parse(part.text));
+				if (parsed.success) images.set(index, parsed.data.result.image.id);
+			} catch {
+				/* Other tool text is not an image reference. */
+			}
+		}
+	}
+	// Keep two recent views available for comparison; older snapshots remain in the harness history.
+	const selected = new Map([...images].slice(-2));
+	return {
+		...context,
+		messages: context.messages.map((message, index) => {
+			const id = selected.get(index);
+			if (!id || message.role !== 'toolResult') return message;
+			try {
+				if (!vision) throw new Error('This model does not support images');
+				const png = read(id);
+				pngDimensions(png);
+				return {
+					...message,
+					content: [
+						...message.content,
+						{ type: 'image' as const, data: png.toString('base64'), mimeType: 'image/png' }
+					]
+				};
+			} catch {
+				return {
+					...message,
+					content: [
+						...message.content,
+						{
+							type: 'text' as const,
+							text: vision
+								? 'The referenced factory image is unavailable. Do not claim to have viewed it; capture another factory_view.'
+								: 'This model does not support image input. The harness displays the snapshot, but you have not viewed it. Use structured factory queries.'
+						}
+					]
+				};
+			}
+		})
+	};
+}

@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { normalizeContext, type ThinkingLevel } from '@earendil-works/pi-ai';
 import {
@@ -44,6 +44,9 @@ import { authorizedList } from './modlist-plans';
 
 export { inspectList } from './modlist-management-tools';
 
+import type { TranscriptContext } from '@earendil-works/pi-ai';
+import { addFactoryImages } from './factory-image-context';
+import { factoryImagePath } from './factory-images';
 import { listRankedRecommendations } from './modlist-recommendations';
 import { startModlistRepair } from './modlist-repair';
 import { saveRecommendationFeedback } from './recommendation-feedback';
@@ -66,13 +69,30 @@ const providerName = (context: Context) => {
 	const target = `${context.userId}-${context.serverId ? `server-${context.serverId}` : context.listId}`;
 	return `codex-${context.chatId && context.chatId !== `${target}-chat` ? context.chatId : target}`;
 };
-function registerAssistantProvider(
+async function registerAssistantProvider(
 	context: Context,
 	loaded: LoadedAssistantModel,
 	effort: ThinkingLevel
 ) {
+	const instance = context.serverId
+		? await requireServer(context.userId, context.serverId)
+		: undefined;
+	const transcriptWithImages = (transcript: TranscriptContext) =>
+		instance
+			? addFactoryImages(
+					transcript,
+					(id) => readFileSync(factoryImagePath(instance, id)),
+					loaded.model.input.includes('image')
+				)
+			: transcript;
 	if (loaded.entry.provider === 'codex') {
-		registerCodexProvider(context, loaded.model as CodexModel, effort, loaded.accessToken);
+		registerCodexProvider(
+			context,
+			loaded.model as CodexModel,
+			effort,
+			loaded.accessToken,
+			transcriptWithImages
+		);
 		return;
 	}
 	const providerId = providerName(context);
@@ -83,7 +103,7 @@ function registerAssistantProvider(
 		streamSimple: (model, transcript, options) =>
 			loaded.provider.streamSimple(
 				{ ...selected, baseUrl: model.baseUrl },
-				normalizeContext(transcript),
+				transcriptWithImages(normalizeContext(transcript)),
 				{
 					...options,
 					reasoning: effort
@@ -108,7 +128,8 @@ function registerCodexProvider(
 	context: Context,
 	selected: CodexModel,
 	effort: ThinkingLevel,
-	accessToken: () => Promise<string>
+	accessToken: () => Promise<string>,
+	transcriptWithImages: (context: TranscriptContext) => TranscriptContext
 ) {
 	const providerId = providerName(context);
 	if (!selected) throw new Error('Model unavailable');
@@ -117,7 +138,7 @@ function registerCodexProvider(
 	setProvider({
 		...codexProvider,
 		streamSimple: (_model, transcript, options) =>
-			codexProvider.streamSimple(selected, normalizeContext(transcript), {
+			codexProvider.streamSimple(selected, transcriptWithImages(normalizeContext(transcript)), {
 				...options,
 				reasoning: effort,
 				transport: 'sse',
@@ -475,7 +496,7 @@ export async function agentHandle(
 					chatId,
 					gamePlayer: target.gamePlayer
 				};
-	registerAssistantProvider(context, loaded, effort);
+	await registerAssistantProvider(context, loaded, effort);
 	if (!runtimeState.runtime) {
 		const directory = resolve(env.FACMANDU_AGENT_DATA ?? '.data/agent');
 		mkdirSync(directory, { recursive: true, mode: 0o700 });

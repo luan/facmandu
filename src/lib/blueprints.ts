@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { factoryImageSchema } from './factory-images';
 
 const name = z.string().min(1).max(200);
 const coordinate = z.number().min(-10000).max(10000).multipleOf(0.5);
@@ -43,6 +44,8 @@ export const blueprintRequestSchema = z.discriminatedUnion('operation', [
 export type BlueprintRequest = z.infer<typeof blueprintRequestSchema>;
 export const blueprintArtifactSchema = z.object({
 	kind: z.literal('blueprint'),
+	image: factoryImageSchema.optional(),
+	renderError: z.string().optional(),
 	label: z.string(),
 	blueprint: z.string().startsWith('0'),
 	entities: z
