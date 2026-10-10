@@ -58,12 +58,7 @@ export const factoryPlanInput = v.object({
 	surface: v.pipe(v.string(), v.minLength(1)),
 	product: v.pipe(v.string(), v.minLength(1)),
 	type: v.optional(v.picklist(['item', 'fluid']), 'item'),
-	per_min: v.pipe(
-		v.number(),
-		v.finite(),
-		v.minValue(Number.MIN_VALUE),
-		v.maxValue(1e9)
-	),
+	per_min: v.pipe(v.number(), v.finite(), v.minValue(Number.MIN_VALUE), v.maxValue(1e9)),
 	window: v.optional(
 		v.picklist([
 			'five_seconds',
