@@ -429,7 +429,6 @@
    <aside class="harness-activity border-l border-border bg-black/10" data-open={sidebar === 'activity'} aria-label="Tool activity">
     <h2 class="px-4 pb-3 pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tool activity</h2>
     <div class="space-y-4 px-3 pb-4">
-     {#if busy}<p role="status" class="text-xs text-muted-foreground">{progress || 'Thinking…'}</p>{/if}
      {#if activeResults.length}{@render toolActivity(activeResults, 'Current request')}{/if}
      {#each [...turns].reverse().filter(turn => turn.results?.length) as turn (turn.id)}{@render toolActivity(turn.results ?? [], turn.prompt)}{/each}
      {#if !activeResults.length && !turns.some(turn => turn.results?.length)}<p class="text-sm text-muted-foreground">Reads and operation results appear here. Open an entry to inspect its evidence.</p>{/if}

@@ -120,9 +120,11 @@ local function blueprint(request)
  -- Create ghosts at exact inspected coordinates; build_blueprint centers the layout around its cursor.
  local placed=0
  local failure
- for _,e in ipairs(entities) do
+ for i,e in ipairs(entities) do
   local position={x=e.position.x+request.position.x,y=e.position.y+request.position.y}
   local ok,err=pcall(function()
+   local b=boxes[i]
+   if surface.count_entities_filtered{area={{b.x1+request.position.x,b.y1+request.position.y},{b.x2+request.position.x,b.y2+request.position.y}},type="entity-ghost"}>0 then error("Site changed during placement",0) end
    if not surface.can_place_entity{name=e.name,position=position,direction=e.direction,force=force,build_check_type=defines.build_check_type.manual} then error('Site changed during placement',0) end
    local ghost=surface.create_entity{name='entity-ghost',inner_name=e.name,position=position,direction=e.direction,force=force,type=e.type,expires=false}
    if not ghost then error('Factorio refused a construction ghost',0) end

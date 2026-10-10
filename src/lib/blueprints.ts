@@ -17,10 +17,14 @@ export const blueprintDesignSchema = z.strictObject({
 });
 export const blueprintTargetSchema = blueprintDesignSchema.extend({
 	surface: name,
-	position: z.strictObject({
-		x: z.number().int().min(-1000000).max(1000000),
-		y: z.number().int().min(-1000000).max(1000000)
-	})
+	position: z
+		.strictObject({
+			x: z.number().int().min(-1000000).max(1000000),
+			y: z.number().int().min(-1000000).max(1000000)
+		})
+		.describe(
+			'Integer world offset added to every entity position; not the blueprint cursor center'
+		)
 });
 export const blueprintRequestSchema = z.discriminatedUnion('operation', [
 	z.strictObject({

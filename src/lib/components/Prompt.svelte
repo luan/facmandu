@@ -22,7 +22,7 @@
 <div class="prompt" class:font-mono={!!tokens}>
  <div class="prompt-editor">
   {#if tokens}<div aria-hidden="true" class="prompt-highlight"><pre style:transform={`translateY(-${scrollTop}px)`}>{#each tokens as token, index (index)}<span class={tokenClass(token.kind)}>{token.text}</span>{/each}</pre></div>{/if}
-  <textarea bind:this={element} bind:value aria-label={label} {placeholder} maxlength={maxLength} rows="1" spellcheck={!tokens} autocomplete="off" aria-autocomplete={completionId ? 'list' : undefined} aria-controls={completionId} aria-activedescendant={activeOption} onkeydown={keydown} oninput={() => oninput?.()} onscroll={(event) => scrollTop = event.currentTarget.scrollTop} class:highlighted={!!tokens}></textarea>
+  <textarea bind:this={element} bind:value aria-label={label} {placeholder} maxlength={maxLength} rows="1" spellcheck={!tokens} autocomplete="off" data-1p-ignore aria-autocomplete={completionId ? 'list' : undefined} aria-controls={completionId} aria-activedescendant={activeOption} onkeydown={keydown} oninput={() => oninput?.()} onscroll={(event) => scrollTop = event.currentTarget.scrollTop} class:highlighted={!!tokens}></textarea>
  </div>
  <div class="prompt-actions">
   {#if controls}<div class="flex min-w-0 flex-wrap items-center gap-2 font-sans">{@render controls()}</div>{/if}
