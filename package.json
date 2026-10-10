@@ -7,7 +7,7 @@
 	"scripts": {
 		"dev": "vite dev",
 		"test": "bun test tests",
-		"test:http": "bun tests/integration/http.mjs",
+		"test:http": "bun tests/integration/vite-boundary.mjs && bun tests/integration/http.mjs",
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "if test -x node_modules/.bin/svelte-kit; then svelte-kit sync; fi",
