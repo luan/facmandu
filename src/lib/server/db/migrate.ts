@@ -51,6 +51,13 @@ async function migrateInitial(client: Client, initialSchema: string) {
 export async function migrate(client: Client, initialSchema: string) {
 	await migrateInitial(client, initialSchema);
 	await migrateAccounts(client);
+	await client.executeMultiple(`CREATE TABLE IF NOT EXISTS dropbox_account (
+		user_id TEXT PRIMARY KEY REFERENCES user(id) ON DELETE CASCADE,
+		account_id TEXT NOT NULL, refresh_token TEXT NOT NULL);
+		CREATE TABLE IF NOT EXISTS dropbox_login (
+		id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+		session_id TEXT NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+		server_id TEXT NOT NULL, verifier TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0, expires_at INTEGER NOT NULL);`);
 	await client.execute(`CREATE TABLE IF NOT EXISTS provider_key (
 		user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
 		provider_id TEXT NOT NULL, key TEXT NOT NULL, PRIMARY KEY(user_id,provider_id))`);

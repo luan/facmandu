@@ -59,6 +59,27 @@ export const session = sqliteTable(
 
 export type Session = typeof session.$inferSelect;
 
+export const dropboxAccount = sqliteTable('dropbox_account', {
+	userId: text('user_id')
+		.primaryKey()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	accountId: text('account_id').notNull(),
+	refreshToken: text('refresh_token').notNull()
+});
+export const dropboxLogin = sqliteTable('dropbox_login', {
+	id: text('id').primaryKey(),
+	userId: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	sessionId: text('session_id')
+		.notNull()
+		.references(() => session.id, { onDelete: 'cascade' }),
+	serverId: text('server_id').notNull(),
+	verifier: text('verifier').notNull(),
+	used: integer('used', { mode: 'boolean' }).notNull().default(false),
+	expiresAt: integer('expires_at').notNull()
+});
+
 export const modList = sqliteTable(
 	'modlist',
 	{

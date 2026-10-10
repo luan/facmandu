@@ -7,6 +7,7 @@
  import type { ServerView } from '$lib/server/server-view';
  import { defaultWorldGenerationSettings, type WorldGenerationSettings } from '$lib/map-generation';
  import WorldGenerationEditor from './WorldGenerationEditor.svelte';
+ import DropboxSaves from './DropboxSaves.svelte';
  let { saves, selected, resumeAutosave, running, configured, busyReason, creating, action, base, serverId, submit }: {
   saves: ServerView['saves']; selected: string; resumeAutosave: boolean; running: boolean; configured: boolean;
   busyReason: string; creating: boolean; action: string; base: string; serverId: string; submit: SubmitFunction;
@@ -64,6 +65,7 @@
   {:else}<li class="p-8 text-center text-sm text-muted-foreground">No saves yet</li>{/each}
  </ul>
 </section>
+<DropboxSaves {serverId} {running} {busyReason} />
 <Dialog.Root open={dialog !== null} onOpenChange={(open) => { if (!open && !busyReason) dialog = null; }}>
  <Dialog.Content class={dialog === 'create' ? 'flex h-[92dvh] min-h-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(70rem,calc(100vw-2rem))] max-h-[92dvh]' : 'sm:max-w-md'}>
   <Dialog.Header class={dialog === 'create' ? 'shrink-0 border-b border-border px-4 py-4 text-left sm:px-6' : undefined}><Dialog.Title>{dialog === 'create' ? 'Create save' : dialog === 'rename' ? 'Rename save' : 'Upload save'}</Dialog.Title></Dialog.Header>

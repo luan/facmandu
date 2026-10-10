@@ -88,3 +88,22 @@ matching service; **Connect to address** does not use that matchmaking exchange.
 NAT punching is not guaranteed on every router. Public-address detection and
 browser registration alone do not prove external reachability. Before removing
 forwarding, verify a browser join from outside the LAN with forwarding disabled.
+
+## Dropbox save backups
+
+Register one scoped **App folder** Dropbox app for Facmandu, with
+`account_info.read`, `files.metadata.read`, `files.content.read`, and
+`files.content.write`. Register `https://factorio.luan.sh/api/dropbox/callback`
+as its OAuth redirect URI, allow PKCE clients, and set its public `DROPBOX_APP_KEY`
+in the app environment. No app secret or manually generated access token is used.
+The initial development registration permits its owner; enable additional
+development users before other owners connect their own Dropbox accounts.
+
+Connect from the server's Saves tab. Back up and restore require a stopped server.
+Backups retain a local snapshot and upload a unique file under
+`Apps/Facmandu/servers/<server-id>` without overwriting or deleting cloud files.
+Transfers verify Dropbox's content hash and Factorio ZIP structure. Restore pins
+the selected cloud revision, preserves current progress in a separate local
+backup, and selects a separate restored file for the next start. It does not
+start the server or restore mods and settings. Roll back by selecting the retained
+world or `before-restore` copy. Disconnect revokes access and retains backups.

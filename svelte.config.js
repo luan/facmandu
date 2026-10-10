@@ -31,7 +31,8 @@ const config = {
 				'object-src': ['none'],
 				'base-uri': ['self'],
 				'frame-ancestors': ['none'],
-				'form-action': ['self']
+				// Dropbox OAuth redirects the same-origin connection form to its consent page.
+				'form-action': ['self', 'https://www.dropbox.com']
 			}
 		}
 	}

@@ -153,6 +153,21 @@ let blockDownload;
 let downloadStarted;
 let blockReleases;
 let releasesStarted;
+const dropboxFiles = new Map();
+let dropboxRevision = 0;
+let corruptCloudDownload = false;
+let rejectCloudUpload = false;
+function cloudHash(bytes) {
+	const parts = [];
+	for (let i = 0; i < bytes.length; i += 4194304)
+		parts.push(
+			createHash('sha256')
+				.update(bytes.subarray(i, i + 4194304))
+				.digest()
+		);
+	return createHash('sha256').update(Buffer.concat(parts)).digest('hex');
+}
+
 const fixture = createServer(async (request, response) => {
 	try {
 		const url = new URL(request.url, origin);
@@ -162,6 +177,72 @@ const fixture = createServer(async (request, response) => {
 			response.writeHead(status, { 'content-type': 'application/json' });
 			response.end(JSON.stringify(value));
 		};
+
+		if (key.startsWith('/dropbox/')) {
+			const chunks = [];
+			for await (const part of request) chunks.push(part);
+			const bytes = Buffer.concat(chunks);
+			if (key === '/dropbox/oauth2/token') {
+				const fields = new URLSearchParams(bytes.toString());
+				assert.equal(fields.get('client_id'), 'fixture-dropbox-app');
+				if (fields.get('grant_type') === 'authorization_code')
+					assert.ok(fields.get('code_verifier').length >= 43);
+				return send({
+					access_token: 'fixture-dropbox-access',
+					refresh_token: 'fixture-dropbox-refresh',
+					account_id: 'dbid:owner',
+					scope: 'account_info.read files.metadata.read files.content.read files.content.write'
+				});
+			}
+			assert.equal(request.headers.authorization, 'Bearer fixture-dropbox-access');
+			const arg = request.headers['dropbox-api-arg']
+				? JSON.parse(request.headers['dropbox-api-arg'])
+				: JSON.parse(bytes.toString());
+			if (key === '/dropbox/2/auth/token/revoke') return send(null);
+			if (key === '/dropbox/2/files/upload') {
+				assert.equal(arg.mode, 'add');
+				assert.equal(arg.autorename, false);
+				assert.equal(arg.strict_conflict, true);
+				assert.equal(arg.content_hash, cloudHash(bytes));
+				if (rejectCloudUpload === 'quota')
+					return send({ error_summary: 'path/insufficient_space/' }, 409);
+				if (rejectCloudUpload || dropboxFiles.has(arg.path.toLowerCase()))
+					return send({ error: 'conflict' }, 409);
+				const metadata = {
+					'.tag': 'file',
+					name: arg.path.split('/').at(-1),
+					path_lower: arg.path.toLowerCase(),
+					rev: `abc${(++dropboxRevision).toString(16).padStart(10, '0')}`,
+					content_hash: cloudHash(bytes),
+					size: bytes.length,
+					server_modified: new Date().toISOString()
+				};
+				dropboxFiles.set(metadata.path_lower, { metadata, bytes });
+				return send(metadata);
+			}
+			if (key === '/dropbox/2/files/list_folder')
+				return send({
+					entries: [...dropboxFiles.values()]
+						.map((file) => file.metadata)
+						.filter((file) => file.path_lower.startsWith(`${arg.path}/`)),
+					cursor: 'done',
+					has_more: false
+				});
+			if (key === '/dropbox/2/files/get_metadata') {
+				const file = dropboxFiles.get(arg.path);
+				return file ? send(file.metadata) : send({ error: 'missing' }, 409);
+			}
+			if (key === '/dropbox/2/files/download') {
+				const file = [...dropboxFiles.values()].find(
+					(file) => `rev:${file.metadata.rev}` === arg.path
+				);
+				if (!file) return send({ error: 'missing' }, 409);
+				response.writeHead(200, { 'Dropbox-API-Result': JSON.stringify(file.metadata) });
+				response.end(corruptCloudDownload ? Buffer.from('wrong bytes') : file.bytes);
+				return;
+			}
+			return send({ error: 'unknown Dropbox path' }, 404);
+		}
 
 		if (key === '/openai/api/accounts/deviceauth/usercode')
 			return send({ device_auth_id: 'fixture-device', user_code: 'TEST-1234', interval: 0 });
@@ -895,6 +976,7 @@ const fixtureUrl = `http://127.0.0.1:${fixture.address().port}`;
 const childEnv = {
 	PATH: `${join(directory, 'bin')}:${process.env.PATH}`,
 	FACMANDU_SERVER_DIRECTORY: join(directory, 'servers'),
+	DROPBOX_APP_KEY: 'fixture-dropbox-app',
 	NODE_ENV: 'production',
 	DATABASE_URL: `file:${database}`,
 	TURSO_CONNECTION_URL: `file:${database}`,
@@ -938,6 +1020,7 @@ async function start() {
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = (input, init) => {
  const url = new URL(input instanceof Request ? input.url : input);
+ if (url.hostname === 'api.dropboxapi.com' || url.hostname === 'content.dropboxapi.com') return nativeFetch(${JSON.stringify(fixtureUrl)} + '/dropbox' + url.pathname, init);
  if (url.hostname === 'mods.factorio.com' || url.hostname === 'factorio.com') return nativeFetch(${JSON.stringify(fixtureUrl)} + '/portal' + url.pathname + url.search, init);
  if (url.hostname === 'auth.openai.com') return nativeFetch(${JSON.stringify(fixtureUrl)} + '/openai' + url.pathname, init);
  if (url.hostname === 'chatgpt.com') return nativeFetch(${JSON.stringify(fixtureUrl)} + '/codex' + url.pathname + url.search, init);
@@ -1088,6 +1171,10 @@ try {
 		.match(/script-src ([^;]+)/u)?.[1];
 	assert.ok(scriptPolicy?.includes("'self'"));
 	assert.ok(!scriptPolicy.includes('unsafe-inline'));
+	assert.equal(
+		loginPage.headers.get('content-security-policy').match(/form-action ([^;]+)/u)?.[1],
+		"'self' https://www.dropbox.com"
+	);
 	const nonce = scriptPolicy.match(/'nonce-([^']+)'/u)?.[1];
 	assert.ok(nonce);
 	assert.ok((await loginPage.text()).includes(`nonce="${nonce}"`));
@@ -4255,6 +4342,190 @@ done
 		'server-to-list sync imports pinned and newest installed versions, handles unpacked mods, preserves history, checks permissions, and rejects incomplete inventories atomically'
 	);
 
+	{
+		// Dropbox callback is bound to the original login but works without its Strict cookie.
+		assert.equal((await request(`${serverPath}/cloud`, { cookie: cookies.stranger })).status, 403);
+		assert.equal((await json(`${serverPath}/cloud`, { cookie: cookies.owner })).connected, false);
+		const connect = await action(`/api/dropbox/start?serverId=${serverId}`, cookies.owner, {}, 303);
+		const authorization = new URL(connect.headers.get('location'));
+		assert.equal(authorization.origin, 'https://www.dropbox.com');
+		assert.equal(authorization.searchParams.get('token_access_type'), 'offline');
+		assert.equal(authorization.searchParams.get('code_challenge_method'), 'S256');
+		const nonce = authorization.searchParams.get('state');
+		assert.match(connect.headers.get('set-cookie'), /HttpOnly/);
+		assert.match(connect.headers.get('set-cookie'), /SameSite=Lax/i);
+		assert.equal(
+			(
+				await request(`/api/dropbox/callback?state=${nonce}&code=fixture`, {
+					cookie: 'dropbox-link=forged'
+				})
+			).status,
+			400
+		);
+		const login = (
+			await client.execute({
+				sql: 'SELECT verifier FROM dropbox_login WHERE id=?',
+				args: [createHash('sha256').update(nonce).digest('hex')]
+			})
+		).rows[0];
+		assert.equal(
+			createHash('sha256').update(login.verifier).digest('base64url'),
+			authorization.searchParams.get('code_challenge')
+		);
+		const linked = await request(`/api/dropbox/callback?state=${nonce}&code=fixture`, {
+			cookie: `dropbox-link=${nonce}`
+		});
+		assert.equal(linked.status, 200, await linked.clone().text());
+		assert.ok((await linked.text()).includes('http-equiv="refresh"'));
+		cookies.owner = linked.headers
+			.getSetCookie()
+			.find((cookie) => cookie.startsWith('auth-session='))
+			.split(';')[0];
+		assert.equal(
+			(
+				await request(`/api/dropbox/callback?state=${nonce}&code=fixture`, {
+					cookie: `dropbox-link=${nonce}`
+				})
+			).status,
+			400
+		);
+		assert.equal((await json(`${serverPath}/cloud`, { cookie: cookies.owner })).connected, true);
+		assert.equal((await request(`${secondPath}/cloud`, { cookie: cookies.stranger })).status, 403);
+		assert.doesNotMatch(
+			JSON.stringify(await json(`${serverPath}/cloud`, { cookie: cookies.owner })),
+			/fixture-dropbox-(refresh|access)/
+		);
+		passed(
+			'Dropbox OAuth uses PKCE, browser-bound single-use state, refresh tokens and original-session ownership without exposing credentials'
+		);
+
+		const cloudDirectory = machineDirs[0];
+		const cloudConfigPath = join(cloudDirectory, 'facmandu.json');
+		const cloudOriginal = zipSync({ 'world/level.dat': strToU8('original world') });
+		await writeFile(join(cloudDirectory, 'saves/cloud-original.zip'), cloudOriginal);
+		const cloudConfig = JSON.parse(await readFile(cloudConfigPath, 'utf8'));
+		await writeFile(
+			cloudConfigPath,
+			JSON.stringify({ ...cloudConfig, save: 'cloud-original.zip', resumeAutosave: false })
+		);
+		async function cloudOperation(operation, choice) {
+			const abort = new AbortController();
+			const events = await fetch(`${appUrl}/api/activity`, {
+				headers: { Cookie: cookies.owner },
+				signal: abort.signal
+			});
+			const reader = events.body.getReader();
+			let text = '';
+			await reader.read(); // Initial snapshot of earlier tasks.
+			const response = await action(
+				`${serverPath}/cloud`,
+				cookies.owner,
+				{ operation, ...(choice ? { save: JSON.stringify(choice) } : {}) },
+				202
+			);
+			assert.equal((await response.json()).requested, true);
+			let event;
+			let sawRunning = false;
+			try {
+				while (!event) {
+					const part = await reader.read();
+					assert.equal(part.done, false);
+					text += Buffer.from(part.value).toString();
+					const lines = text.split('\n');
+					text = lines.pop();
+					for (const line of lines)
+						if (line.startsWith('data: ')) {
+							const candidate = JSON.parse(line.slice(6));
+							if (
+								candidate.targetId === serverId &&
+								candidate.task === 'cloud-save' &&
+								candidate.state === 'running'
+							)
+								sawRunning = true;
+							if (
+								sawRunning &&
+								candidate.targetId === serverId &&
+								candidate.task === 'cloud-save' &&
+								candidate.state !== 'running'
+							)
+								event = candidate;
+						}
+				}
+			} finally {
+				abort.abort();
+			}
+			return event;
+		}
+		assert.equal((await cloudOperation('backup')).state, 'done');
+		const cloudList = await json(`${serverPath}/cloud`, { cookie: cookies.owner });
+		assert.equal(cloudList.saves.length, 1);
+		const cloudChoice = cloudList.saves[0];
+		assert.deepEqual(dropboxFiles.get(cloudChoice.path_lower).bytes, Buffer.from(cloudOriginal));
+		assert.equal((await json(`${secondPath}/cloud`, { cookie: cookies.owner })).saves.length, 0);
+		rejectCloudUpload = true;
+		assert.equal((await cloudOperation('backup')).state, 'error');
+		rejectCloudUpload = 'quota';
+		assert.match((await cloudOperation('backup')).message, /storage is full/);
+		rejectCloudUpload = false;
+		assert.equal(dropboxFiles.size, 1);
+		const beforeBadRestore = await readFile(cloudConfigPath, 'utf8');
+		const crossServer = {
+			...cloudChoice,
+			path_lower: cloudChoice.path_lower.replace(`/servers/${serverId}/`, '/servers/wrong/')
+		};
+		assert.equal((await cloudOperation('restore', crossServer)).state, 'error');
+		assert.equal(await readFile(cloudConfigPath, 'utf8'), beforeBadRestore);
+		corruptCloudDownload = true;
+		assert.equal((await cloudOperation('restore', cloudChoice)).state, 'error');
+		corruptCloudDownload = false;
+		assert.equal(await readFile(cloudConfigPath, 'utf8'), beforeBadRestore);
+		const stale = { ...cloudChoice, rev: 'deadbeef001' };
+		assert.equal((await cloudOperation('restore', stale)).state, 'error');
+		assert.equal(await readFile(cloudConfigPath, 'utf8'), beforeBadRestore);
+		await writeFile(
+			join(cloudDirectory, 'saves/cloud-original.zip'),
+			zipSync({ 'world/level.dat': strToU8('newer world') })
+		);
+		const newerWorld = await readFile(join(cloudDirectory, 'saves/cloud-original.zip'));
+		const restoredEvent = await cloudOperation('restore', cloudChoice);
+		assert.equal(restoredEvent.state, 'done', restoredEvent.message);
+		const restoredConfig = JSON.parse(await readFile(cloudConfigPath, 'utf8'));
+		assert.notEqual(restoredConfig.save, 'cloud-original.zip');
+		assert.equal(restoredConfig.resumeAutosave, false);
+		assert.deepEqual(
+			await readFile(join(cloudDirectory, 'saves', restoredConfig.save)),
+			Buffer.from(cloudOriginal)
+		);
+		assert.deepEqual(await readFile(join(cloudDirectory, 'saves/cloud-original.zip')), newerWorld);
+		const recoveryName = (await readdir(join(cloudDirectory, 'saves'))).find((name) =>
+			name.startsWith('before-restore-')
+		);
+		assert.deepEqual(await readFile(join(cloudDirectory, 'saves', recoveryName)), newerWorld);
+		await writeFile(
+			join(directory, 'bin/systemctl'),
+			'#!/bin/sh\nprintf "ActiveState=active\nSubState=running\n"\n',
+			{ mode: 0o755 }
+		);
+		await action(`${serverPath}/cloud`, cookies.owner, { operation: 'backup' }, 409);
+		await action(
+			`${serverPath}/cloud`,
+			cookies.owner,
+			{ operation: 'restore', save: JSON.stringify(cloudChoice) },
+			409
+		);
+		await writeFile(
+			join(directory, 'bin/systemctl'),
+			'#!/bin/sh\nprintf "ActiveState=inactive\nSubState=dead\n"\n',
+			{ mode: 0o755 }
+		);
+		await action(`${serverPath}/cloud`, cookies.owner, { operation: 'disconnect' });
+		assert.equal((await json(`${serverPath}/cloud`, { cookie: cookies.owner })).connected, false);
+		assert.equal(dropboxFiles.size, 1);
+		await action(`${serverPath}/cloud`, cookies.owner, { operation: 'backup' }, 409);
+		passed(
+			'Dropbox backups never overwrite, restores reject wrong-server/stale/corrupt files, preserve newer worlds, stay stopped, and disconnect retains backups'
+		);
+	}
 	console.info(`${checks} HTTP workflow checks passed.`);
 } catch (cause) {
 	console.error(logs);
