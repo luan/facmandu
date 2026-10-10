@@ -43,6 +43,7 @@ function privateSource(url: string, root: string): boolean {
 		relative.startsWith('src/routes/api/') ||
 		(relative.startsWith('src/routes/') && name.startsWith('+server.')) ||
 		name.includes('.server.') ||
+		name === 'Dockerfile' ||
 		['infra', 'tests', 'build'].includes(segments[0] ?? '') ||
 		// Add new root-level public assets here when they are introduced.
 		(segments.length === 1 &&
@@ -109,7 +110,8 @@ export default defineConfig({
 				'**/drizzle.config.*',
 				'**/package.json',
 				'**/bun.lock',
-				'**/README.md'
+				'**/README.md',
+				'**/Dockerfile'
 			]
 		},
 		...(devHost && {

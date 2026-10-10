@@ -65,7 +65,7 @@ def health(revision):
     else:
         raise RuntimeError("Running revision/database health did not become ready")
     for path in ("/src/lib/server/db/index.ts", "/@fs" + str(APP_STATE / ".env"),
-                 "/.env", "/__open-in-editor"):
+                 "/.env", "/__open-in-editor", "/Dockerfile", "/Dockerfile?import"):
         try:
             urllib.request.urlopen("http://127.0.0.1:5173" + path, timeout=10)
         except urllib.error.HTTPError as cause:
