@@ -1,3 +1,4 @@
+import * as v from 'valibot';
 import { z } from 'zod';
 import type { ManagedServer } from './db/schema';
 import { factoryQuery } from './factory-query';
@@ -52,14 +53,19 @@ const rateReply = z.object({
 	net_per_min: z.coerce.number().optional()
 });
 
-export const factoryPlanInput = z.object({
-	force: z.string().min(1),
-	surface: z.string().min(1),
-	product: z.string().min(1),
-	type: z.enum(['item', 'fluid']).default('item'),
-	per_min: z.number().positive().finite().max(1e9),
-	window: z
-		.enum([
+export const factoryPlanInput = v.object({
+	force: v.pipe(v.string(), v.minLength(1)),
+	surface: v.pipe(v.string(), v.minLength(1)),
+	product: v.pipe(v.string(), v.minLength(1)),
+	type: v.optional(v.picklist(['item', 'fluid']), 'item'),
+	per_min: v.pipe(
+		v.number(),
+		v.finite(),
+		v.minValue(Number.MIN_VALUE),
+		v.maxValue(1e9)
+	),
+	window: v.optional(
+		v.picklist([
 			'five_seconds',
 			'one_minute',
 			'ten_minutes',
@@ -68,16 +74,25 @@ export const factoryPlanInput = z.object({
 			'fifty_hours',
 			'two_hundred_fifty_hours',
 			'one_thousand_hours'
-		])
-		.default('one_minute'),
-	recipes: z.record(z.string(), z.string()).default({}),
-	machines: z.record(z.string(), z.string()).default({}),
-	external_inputs: z
-		.array(z.strictObject({ name: z.string().min(1), type: z.enum(['item', 'fluid']) }))
-		.max(32)
-		.default([])
+		]),
+		'one_minute'
+	),
+	recipes: v.optional(v.record(v.string(), v.string()), {}),
+	machines: v.optional(v.record(v.string(), v.string()), {}),
+	external_inputs: v.optional(
+		v.pipe(
+			v.array(
+				v.strictObject({
+					name: v.pipe(v.string(), v.minLength(1)),
+					type: v.picklist(['item', 'fluid'])
+				})
+			),
+			v.maxLength(32)
+		),
+		[]
+	)
 });
-export type FactoryPlanInput = z.input<typeof factoryPlanInput>;
+export type FactoryPlanInput = v.InferInput<typeof factoryPlanInput>;
 type Product = z.infer<typeof material>;
 type Rate = { name: string; type: Product['type']; per_min: number };
 
@@ -124,7 +139,7 @@ export async function planFactory(
 	server: ManagedServer,
 	rawInput: FactoryPlanInput
 ): Promise<FactoryPlan> {
-	const input = factoryPlanInput.parse(rawInput);
+	const input = v.parse(factoryPlanInput, rawInput);
 	const result: FactoryPlan = {
 		kind: 'factory_plan',
 		status: 'complete',
