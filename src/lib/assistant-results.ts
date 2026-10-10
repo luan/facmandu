@@ -23,6 +23,7 @@ export const factoryResultSchema = z.object({
 	kind: z.literal('factory-result'),
 	tool: z.string().optional(),
 	title: z.string(),
+	display: z.boolean().optional(),
 	result: z.unknown()
 });
 export type FactoryResult = z.infer<typeof factoryResultSchema>;

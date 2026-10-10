@@ -53,7 +53,7 @@
  const voice = new AssistantVoice({ change: state => voiceState = state, request: ask });
  $effect(() => { listId; serverId; if (!open) voice.stop(); return () => voice.stop(); });
  let gamePlayer = $state<string | null>(null);
- let open = $state(false); let prompt = $state(''); let busy = $state(false); let progress = $state(''); let text = $state(''); let error = $state(''); let refreshError = $state('');
+ let open = $state(false); let sidebar = $state<'history' | 'activity' | null>(null); let prompt = $state(''); let busy = $state(false); let progress = $state(''); let text = $state(''); let error = $state(''); let refreshError = $state('');
  let turns = $state<{ id: string; prompt: string; answer: string; state: string; mods: AssistantMod[]; results?: FactoryResult[]; plans?: ModlistPlan[] }[]>([]);
   const inProgress = $derived(busy || turns.some(turn => turn.state === 'running'));
  type ModlistPlan = {
@@ -180,10 +180,11 @@
    accepted = true;
    const reader = response.body?.getReader(); if (!reader) throw new Error('No response stream');
 
-   const decoder = new TextDecoder(); let buffer = '';
+   const decoder = new TextDecoder(); let buffer = ''; let complete = false;
    for (;;) { const { done, value } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true });
     let newline = buffer.indexOf('\n');
-    while (newline >= 0) { const event = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1); if (event.compacted) compacted = true; if (event.results) activeResults = event.results; if (event.mods) activeMods = event.mods; if (event.delta) text += event.delta; if (event.progress) progress = event.progress; if (event.answer) text = event.answer; if (event.error) error = event.error; newline = buffer.indexOf('\n'); }
+    while (newline >= 0) { const event = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1); if (event.compacted) compacted = true; if (event.results) activeResults = event.results; if (event.mods) activeMods = event.mods; if (event.delta) text += event.delta; if (event.progress) progress = event.progress; if (event.answer) text = event.answer; if (event.error) error = event.error; if (event.done || event.error) complete = true; newline = buffer.indexOf('\n'); }
+    if (complete) break;
    }
    if (error) throw new Error(error);
    return text;
@@ -302,22 +303,34 @@
   {/each}
  </div>{/if}
 {/snippet}
+{#snippet toolActivity(items: FactoryResult[], title: string)}
+ <section class="space-y-2"><h3 class="line-clamp-2 text-xs text-muted-foreground">{title}</h3>
+  {#each items as item}<details class="border border-border bg-background text-sm"><summary class="cursor-pointer px-3 py-2 text-muted-foreground">{item.title}</summary><FactoryResultView {item} {serverId} /></details>{/each}
+ </section>
+{/snippet}
 <Sheet.Root bind:open>
  <Sheet.Trigger class={buttonVariants({ variant: 'secondary', size: 'sm' })}><MessageSquareIcon class="size-4" />Assistant</Sheet.Trigger>
- <Sheet.Content class="!w-full !max-w-2xl !gap-0 overflow-hidden flex flex-col">
+ <Sheet.Content class="!w-full !max-w-none !gap-0 overflow-hidden flex flex-col">
   <Sheet.Header class="shrink-0 !px-5 !py-4">
    <div class="flex items-center gap-3 pr-6">
     <Sheet.Title class="flex shrink-0 items-center gap-2"><MessageSquareIcon class="size-5" />Assistant</Sheet.Title>
-    <select aria-label="Chat history" class="ml-auto min-w-0 flex-1 truncate border px-2 py-1.5 text-sm" value={chat} disabled={inProgress || loading} onchange={(event) => selectChat(event.currentTarget.value)}>
-     {#each chats as conversation (conversation.id)}<option value={conversation.id}>{conversation.title}</option>{/each}
-    </select>
+    <div class="min-w-0 flex-1"><p class="truncate text-sm font-medium">{chats.find(item => item.id === chat)?.title || 'New conversation'}</p>{#if contextLabel}<p class="truncate text-xs text-muted-foreground">{contextLabel}</p>{/if}</div>
+    <Button variant="ghost" size="sm" class="lg:hidden" aria-expanded={sidebar === 'history'} onclick={() => sidebar = sidebar === 'history' ? null : 'history'}>Chats</Button>
+    <Button variant="ghost" size="sm" class="lg:hidden" aria-expanded={sidebar === 'activity'} onclick={() => sidebar = sidebar === 'activity' ? null : 'activity'}>Activity</Button>
     <TooltipButton tooltip={inProgress ? 'Finish or stop the response first' : 'New chat'} variant="ghost" size="icon" disabled={inProgress || loading} onclick={createChat}><PlusIcon /></TooltipButton>
    </div>
    <Sheet.Description class="sr-only">{serverId ? 'Ask about this server and its factory.' : 'Ask about mods or review changes to this list.'}</Sheet.Description>
   </Sheet.Header>
-  {#if contextLabel}<p class="border-b px-4 py-2 text-sm text-muted-foreground">{contextLabel}</p>{/if}
+  <div class="harness-layout">
+   <aside class="harness-history border-r border-border bg-black/10" data-open={sidebar === 'history'} aria-label="Conversations">
+    <h2 class="px-4 pb-3 pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conversations</h2>
+    <nav class="space-y-1 px-2 pb-4" aria-label="Chat history">
+     {#each chats as conversation (conversation.id)}<button type="button" class="w-full border border-transparent px-3 py-3 text-left text-sm hover:bg-white/5 disabled:opacity-50" class:active-chat={chat === conversation.id} aria-current={chat === conversation.id ? 'page' : undefined} disabled={inProgress || loading} onclick={() => { sidebar = null; void selectChat(conversation.id); }}><span class="line-clamp-2">{conversation.title}</span><span class="mt-1 block text-xs text-muted-foreground">{new Date(conversation.updatedAt).toLocaleDateString()}</span></button>{/each}
+    </nav>
+   </aside>
+   <main class="flex min-h-0 min-w-0 flex-col" aria-label="Assistant conversation">
   <div bind:this={feed} class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6" onscroll={() => { if (feed) followOutput = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 80; }}>
-   <div class="space-y-7">
+   <div class="mx-auto w-full max-w-4xl space-y-7">
     {#if hasMore}<Button variant="ghost" size="sm" disabled={olderLoading} onclick={loadOlder}>{olderLoading ? 'Loading…' : 'Earlier messages'}</Button>{/if}
     {#each turns.filter(turn => turn.state !== 'running') as turn (turn.id)}
      {@const resultGroups = assistantResultGroups(turn.results ?? [])}
@@ -353,7 +366,6 @@
         {/if}
        </div>
       {/each}
-      {#if resultGroups.details.length}<details class="text-sm"><summary class="cursor-pointer text-muted-foreground">Installation details</summary><div class="mt-2 space-y-2">{#each resultGroups.details as item}<FactoryResultView {item} {serverId} />{/each}</div></details>{/if}
      </section>
     {:else}
      {#if loading}<p role="status" class="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircleIcon class="size-4 animate-spin" />Loading conversation…</p>{:else if !activePrompt}
@@ -371,7 +383,6 @@
       {#if text}<div class="pr-2"><AssistantMessage {text} /></div>{/if}
       {@render modCards(activeMods)}
       {#each resultGroups.primary as item}<FactoryResultView {item} {serverId} />{/each}
-      {#if resultGroups.details.length}<details class="text-sm"><summary class="cursor-pointer text-muted-foreground">Installation details</summary><div class="mt-2 space-y-2">{#each resultGroups.details as item}<FactoryResultView {item} {serverId} />{/each}</div></details>{/if}
      </section>
     {/if}
 
@@ -384,16 +395,18 @@
     <TooltipButton tooltip={inProgress ? 'Response in progress' : 'Review selected mods and their dependencies together'} size="sm" disabled={inProgress} onclick={reviewSelected}>Review selected</TooltipButton>
    </div>
   {/if}
+  {#if inProgress || voiceState.error || voiceState.active || voiceState.connecting || compacted}
   <div class="flex h-8 shrink-0 items-center gap-2 px-5 text-xs text-muted-foreground" role="status" aria-live="polite">
    {#if inProgress}<LoaderCircleIcon class="size-3.5 animate-spin motion-reduce:animate-none" /><span class="truncate">{progress || 'Thinking…'}</span>{:else if voiceState.error}<span class="truncate text-destructive" title={voiceState.error}>{voiceState.error}</span>{:else if voiceState.active || voiceState.connecting}<MicIcon class="size-3.5" /><span class="truncate">{voiceState.status}</span>{:else if compacted}<span>Earlier context summarized</span>{/if}
   </div>
+  {/if}
   {#if voiceState.active || voiceState.connecting}
    <div class="grid h-24 shrink-0 grid-rows-2 gap-1 border-t border-border bg-white/5 px-5 py-2 text-sm" role="log" aria-live="off" aria-label="Voice captions">
     <p class="line-clamp-2 break-words" title={voiceState.userCaption}><span class="mr-2 text-xs text-muted-foreground">You</span>{voiceState.userCaption}</p>
     <p class="line-clamp-2 break-words" title={voiceState.assistantCaption}><span class="mr-2 text-xs text-muted-foreground">Assistant</span>{voiceState.assistantCaption}</p>
    </div>
   {/if}
-  <form onsubmit={(event) => { event.preventDefault(); void send(); }} class="shrink-0 border-t border-border p-4 space-y-3">
+  <form onsubmit={(event) => { event.preventDefault(); void send(); }} class="mx-auto w-full max-w-4xl shrink-0 border-t border-border p-4 space-y-3">
    {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
    {#if refreshError}<p role="status" class="text-sm text-muted-foreground">{refreshError} <button type="button" class="underline" onclick={() => void refresh()}>Retry</button></p>{/if}
    {#if gamePlayer}<div class="flex items-center justify-between gap-3 text-sm text-muted-foreground"><span>In-game conversation with {gamePlayer}</span><Button variant="outline" size="sm" disabled={inProgress || loading} onclick={createChat}>New web chat</Button></div>{:else}
@@ -412,7 +425,36 @@
    </Prompt>
    {/if}
   </form>
+   </main>
+   <aside class="harness-activity border-l border-border bg-black/10" data-open={sidebar === 'activity'} aria-label="Tool activity">
+    <h2 class="px-4 pb-3 pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tool activity</h2>
+    <div class="space-y-4 px-3 pb-4">
+     {#if busy}<p role="status" class="text-xs text-muted-foreground">{progress || 'Thinking…'}</p>{/if}
+     {#if activeResults.length}{@render toolActivity(activeResults, 'Current request')}{/if}
+     {#each [...turns].reverse().filter(turn => turn.results?.length) as turn (turn.id)}{@render toolActivity(turn.results ?? [], turn.prompt)}{/each}
+     {#if !activeResults.length && !turns.some(turn => turn.results?.length)}<p class="text-sm text-muted-foreground">Reads and operation results appear here. Open an entry to inspect its evidence.</p>{/if}
+    </div>
+   </aside>
+  </div>
  </Sheet.Content>
 </Sheet.Root>
 
 <ModPreviewSheet bind:open={previewOpen} modName={previewName} />
+
+<style>
+ .harness-layout { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; flex: 1; min-height: 0; }
+ .harness-history, .harness-activity { display: none; min-height: 0; overflow-y: auto; }
+ .harness-history[data-open="true"], .harness-activity[data-open="true"] { display: block; max-height: 16rem; }
+ .harness-history { grid-row: 1; }
+ .harness-layout > main { grid-row: 2; }
+ .harness-activity { grid-row: 3; }
+ .active-chat { border-color: var(--border); background: #ffffff08; color: var(--primary); }
+ @media (min-width: 1024px) {
+  .harness-layout { grid-template-columns: 14rem minmax(0, 1fr) 20rem; grid-template-rows: minmax(0, 1fr); }
+  .harness-layout > main, .harness-history, .harness-activity { grid-row: 1; }
+  .harness-history { grid-column: 1; }
+  .harness-layout > main { grid-column: 2; }
+  .harness-activity { grid-column: 3; }
+  .harness-history, .harness-activity, .harness-history[data-open="true"], .harness-activity[data-open="true"] { display: block; max-height: none; }
+ }
+</style>

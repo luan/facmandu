@@ -1236,11 +1236,14 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 // Keep installation evidence available without presenting every intermediate snapshot as an outcome.
 export function assistantResultGroups(results: readonly FactoryResult[]) {
 	const installation = results.findLastIndex((item) => item.tool === 'apply_server_mod_list');
-	if (installation < 0) return { primary: results, details: [] as FactoryResult[] };
-	const context = results.findLastIndex((item) => item.tool === 'server_context');
-	const outcome = context > installation ? context : installation;
+	const review = results.findLastIndex((item) => item.tool === 'prepare_server_mod_list');
+	const visible = (item: FactoryResult, index: number) =>
+		item.display === true ||
+		(index === review && review > installation) ||
+		item.tool === 'create_server_from_list' ||
+		item.tool === 'retry_server_setup';
 	return {
-		primary: results.filter((_, index) => index === outcome),
-		details: results.filter((_, index) => index !== outcome)
+		primary: results.filter(visible),
+		details: results.filter((item, index) => !visible(item, index))
 	};
 }

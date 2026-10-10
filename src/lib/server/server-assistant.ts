@@ -117,7 +117,8 @@ export async function finishServerTurn(
 			const result = await handle.read(receipt, {
 				signal: controller.signal,
 				onEvent: submissionEvents(receipt, (chunk) => {
-					if (chunk.type === 'message-delta' && chunk.kind === 'text') send({ delta: chunk.delta });
+					if (chunk.type === 'message-delta' && chunk.kind === 'text')
+						send({ delta: chunk.delta, progress: 'Responding…' });
 					if (chunk.type === 'tool-input')
 						send({
 							progress:
@@ -132,6 +133,7 @@ export async function finishServerTurn(
 												: 'Working…'
 						});
 					if (chunk.type === 'tool-output') {
+						send({ progress: 'Thinking…' });
 						const cards = assistantModsSchema.safeParse(chunk.output);
 						if (cards.success) {
 							const previous = results.find((item) => item.tool === 'mod_cards');

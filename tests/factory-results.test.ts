@@ -479,20 +479,26 @@ test('logistic actions and watches label their actual state', () => {
 	assert.deepEqual(watches.cards[1]?.notes, ['Unknown force']);
 });
 
-test('installation shows the final outcome and folds intermediate evidence without discarding it', () => {
-	const results = [
-		'server_context',
-		'prepare_server_mod_list',
-		'apply_server_mod_list',
-		'server_context'
-	].map((tool) => ({ kind: 'factory-result' as const, tool, title: tool, result: {} }));
-	assert.deepEqual(assistantResultGroups(results), {
-		primary: [results[3]],
-		details: results.slice(0, 3)
+test('routine reads stay in activity while requested displays and pending reviews remain visible', () => {
+	const read = {
+		kind: 'factory-result' as const,
+		tool: 'server_context',
+		title: 'Server',
+		result: {}
+	};
+	const display = { ...read, display: true };
+	const review = { ...read, tool: 'prepare_server_mod_list' };
+	const apply = { ...read, tool: 'apply_server_mod_list' };
+	assert.deepEqual(assistantResultGroups([read, display, review]), {
+		primary: [display, review],
+		details: [read]
 	});
-	assert.deepEqual(assistantResultGroups(results.slice(0, 2)), {
-		primary: results.slice(0, 2),
-		details: []
+	assert.deepEqual(assistantResultGroups([read, review, apply, read]), {
+		primary: [],
+		details: [read, review, apply, read]
 	});
-	assert.deepEqual(assistantResultGroups(results.slice(0, 3)).primary, [results[2]]);
+	assert.deepEqual(assistantResultGroups([read, review, apply, review]), {
+		primary: [review],
+		details: [read, review, apply]
+	});
 });
