@@ -19,6 +19,37 @@ local function dimensions(p, direction)
  if direction==4 or direction==12 then w,h=h,w end
  return w,h
 end
+local function construction_report(force,surface,entities,offset,cost)
+ local networks={}
+ local ready=false
+ for _,network in pairs(force.logistic_networks[surface.name] or {}) do
+  local covered=0
+  for _,entity in ipairs(entities) do
+   local position={x=entity.position.x+offset.x,y=entity.position.y+offset.y}
+   for _,cell in pairs(network.cells) do
+    if cell.transmitting and cell.is_in_construction_range(position) then covered=covered+1;break end
+   end
+  end
+  if covered>0 then
+   local materials={}
+   local stocked=true
+   for _,item in ipairs(cost) do
+    local available=network.get_item_count({name=item.name,quality='normal'},'providers')+network.get_item_count({name=item.name,quality='normal'},'storage')
+    local missing=math.max(0,item.count-available)
+    if missing>0 then stocked=false end
+    materials[#materials+1]={name=item.name,required=item.count,available=available,missing=missing,quality='normal'}
+   end
+   local can_build=covered==#entities and stocked and network.available_construction_robots>0
+   ready=ready or can_build
+   networks[#networks+1]={id=network.network_id,covered_entities=covered,construction_robots=network.all_construction_robots,available_construction_robots=network.available_construction_robots,materials=materials,ready=can_build}
+  end
+ end
+ table.sort(networks,function(a,b) if a.ready~=b.ready then return a.ready end if a.covered_entities~=b.covered_entities then return a.covered_entities>b.covered_entities end return a.id<b.id end)
+ local total=#networks
+ while #networks>8 do networks[#networks]=nil end
+ -- A positive result requires one network to cover and stock the whole layout; split-network builds need allocation checks.
+ return {single_network_ready=ready,entities=#entities,networks=networks,total_networks=total,production_verified=false,note='Normal-quality stock is not reserved. Coverage and materials do not verify power, input/output connections or throughput.'}
+end
 local function blueprint(request)
  local force=game.forces[request.force]
  if not force then error('Unknown force',0) end
@@ -116,7 +147,7 @@ local function blueprint(request)
   local existing=surface.find_entities_filtered{area={{b.x1+request.position.x,b.y1+request.position.y},{b.x2+request.position.x,b.y2+request.position.y}},type='entity-ghost'}
   if #existing>0 then blocked[#blocked+1]={name=e.name,position=position,reason='An existing construction ghost occupies this position'} end
  end
- if request.operation=='inspect' then return {ready=#blocked==0,blocked=blocked,expectedTick=game.tick,expectedDesign=request.design,surface=surface.name,position=request.position,entities=#entities,cost=cost} end
+ if request.operation=='inspect' then return {ready=#blocked==0,blocked=blocked,expectedTick=game.tick,expectedDesign=request.design,surface=surface.name,position=request.position,entities=#entities,cost=cost,construction=construction_report(force,surface,entities,request.position,cost)} end
  if #blocked>0 then error('Placement is blocked at '..blocked[1].name..'; inspect the site again',0) end
  -- Create ghosts at exact inspected coordinates; build_blueprint centers the layout around its cursor.
  local placed=0
