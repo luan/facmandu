@@ -511,3 +511,68 @@ export async function mapGenerationPreview(
 	}
 	return pending;
 }
+
+const settingsInProgress = new Map<string, Promise<unknown[]>>();
+// Native exports cover shared settings-stage APIs the Lua sandbox cannot emulate.
+export async function nativeModSettingPrototypes(server: ManagedServer): Promise<unknown[]> {
+	const key = await fingerprint(server);
+	const ready = join(server.directory, 'map-generation-cache', `${key}.settings-v1.json`);
+	try {
+		return JSON.parse(await readFile(ready, 'utf8')) as unknown[];
+	} catch (cause) {
+		if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause;
+	}
+	const pending = settingsInProgress.get(key);
+	if (pending !== undefined) return pending;
+	const operation = (async () => {
+		const defs = await withProfile(server, async ({ binary, args, directory }) => {
+			try {
+				await run('xvfb-run', ['-a', binary, ...args, '--threads', '2', '--dump-data'], {
+					timeout: 180_000,
+					maxBuffer: 4 * 1024 * 1024
+				});
+			} catch (cause) {
+				const output =
+					cause && typeof cause === 'object' && 'stdout' in cause ? String(cause.stdout) : '';
+				const error = output
+					.split('\n')
+					.filter(
+						(line) =>
+							/error|failed|dependency/iu.test(line) && !/password|token|secret/iu.test(line)
+					)
+					.slice(-4)
+					.join(' ')
+					.slice(0, 1000);
+				throw new ServerError(
+					502,
+					`Factorio could not export settings. ${error || 'Check the installed mods and their dependencies in Mods, then retry.'}`
+				);
+			}
+			const file = join(directory, 'write', 'script-output', 'mod-settings-dump.json');
+			if ((await stat(file)).size > 4 * 1024 * 1024)
+				throw new ServerError(503, 'Native mod settings exceed the 4 MiB limit');
+			const dump: unknown = JSON.parse(await readFile(file, 'utf8'));
+			if (!dump || typeof dump !== 'object' || Array.isArray(dump))
+				throw new ServerError(502, 'Factorio returned an invalid settings export');
+			return Object.values(dump).flatMap((value) =>
+				value && typeof value === 'object' && !Array.isArray(value) ? Object.values(value) : []
+			);
+		});
+		if ((await fingerprint(server)) !== key)
+			throw new ServerError(409, 'Mods or settings changed during export. Reload Mod settings.');
+		const temporary = `${ready}.${randomUUID()}.tmp`;
+		try {
+			await writeFile(temporary, JSON.stringify(defs), { mode: 0o600 });
+			await rename(temporary, ready);
+		} finally {
+			await rm(temporary, { force: true });
+		}
+		return defs;
+	})();
+	settingsInProgress.set(key, operation);
+	try {
+		return await operation;
+	} finally {
+		settingsInProgress.delete(key);
+	}
+}

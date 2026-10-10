@@ -65,7 +65,7 @@ export async function loadServerView(
 				? serverVersions(server)
 				: Promise.resolve({ available: {}, installed: {} as Record<string, string[]> }),
 			activeTab === 'settings' ? gameSettings(server) : Promise.resolve({}),
-			activeTab === 'settings'
+			activeTab === 'mod-settings'
 				? status.running
 					? liveModSettings(server)
 					: modSettings(server)
@@ -94,6 +94,7 @@ export async function loadServerView(
 		saves: saves.status === 'fulfilled' ? saves.value : [],
 		gameAssistant: selection.status === 'fulfilled' ? selection.value.gameAssistant : null,
 		gameModels: activeTab === 'settings' ? await assistantModelCatalog(userId).catch(() => []) : [],
+		selectedModlist: server.selectedModlist,
 		selectedSave: selection.status === 'fulfilled' ? selection.value.save : '',
 		resumeAutosave: selection.status === 'fulfilled' ? selection.value.resumeAutosave : true,
 		useWhitelist: selection.status === 'fulfilled' ? selection.value.useWhitelist : undefined,

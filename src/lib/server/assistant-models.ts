@@ -1,12 +1,19 @@
 import type { Api, Model, ModelAuth, Provider, ThinkingLevel } from '@earendil-works/pi-ai';
-import { and, eq, isNotNull, or } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
+import {
+	accountProviderKey,
+	accountProviderKeys,
+	apiProviderAuth,
+	apiProviders
+} from './assistant-providers';
 import { codexAccessToken, codexModels, codexProvider } from './codex';
 import { copilotAccessToken, copilotModelAuth, copilotModels, copilotProvider } from './copilot';
 import { db } from './db';
 import { user } from './db/schema';
 import { metaAccessToken, metaModels, metaProvider } from './meta';
+import { deriveEfforts } from './provider-auth';
 
-export type AssistantProviderId = 'codex' | 'meta' | 'copilot';
+export type AssistantProviderId = 'codex' | 'meta' | 'copilot' | `api:${string}`;
 
 export type AssistantModel = {
 	// Codex keeps bare catalog ids so stored turns still resolve. Meta and
@@ -46,7 +53,7 @@ type Source = {
 	codexTransport: boolean;
 };
 
-const sources: Source[] = [
+const sources: (Source & { provider: keyof ConnectionSubjects })[] = [
 	{
 		provider: 'codex',
 		label: 'Codex',
@@ -77,7 +84,7 @@ const sources: Source[] = [
 	}
 ];
 
-type ConnectionSubjects = Record<AssistantProviderId, string | null>;
+type ConnectionSubjects = Record<'codex' | 'meta' | 'copilot', string | null>;
 
 async function connectionSubjects(userId: string): Promise<ConnectionSubjects | undefined> {
 	const account = await db
@@ -92,14 +99,37 @@ async function connectionSubjects(userId: string): Promise<ConnectionSubjects | 
 	return account ?? undefined;
 }
 
+async function connectedSources(userId: string): Promise<Source[]> {
+	const [account, keys] = await Promise.all([
+		connectionSubjects(userId),
+		accountProviderKeys(userId)
+	]);
+	const connected: Source[] = sources.filter((source) => account?.[source.provider]);
+	for (const provider of apiProviders) {
+		const key = keys.get(provider.id);
+		if (!key) continue;
+		connected.push({
+			provider: `api:${provider.id}`,
+			label: provider.name,
+			namespaced: true,
+			models: async () =>
+				provider.getModels().map((model) => ({ ...model, ...deriveEfforts(model) })),
+			providerInstance: provider,
+			accessToken: () => accountProviderKey(userId, provider.id),
+			requestAuth: async () =>
+				apiProviderAuth(provider, await accountProviderKey(userId, provider.id)),
+			codexTransport: false
+		});
+	}
+	return connected;
+}
+
 export async function assistantModelCatalog(userId: string): Promise<AssistantModel[]> {
-	const account = await connectionSubjects(userId);
-	if (!account || (!account.codex && !account.meta && !account.copilot))
-		throw new Error('Connect a Codex, Muse, or Copilot account in Settings to use the assistant');
+	const connected = await connectedSources(userId);
+	if (!connected.length) throw new Error('Add a provider in Account settings to use the assistant');
 	const catalog: AssistantModel[] = [];
 	let firstError: unknown = null;
-	for (const source of sources) {
-		if (!account[source.provider]) continue;
+	for (const source of connected) {
 		try {
 			const models = await source.models(userId);
 			for (const model of models)
@@ -128,7 +158,7 @@ export async function loadAssistantModel(
 	const catalog = await assistantModelCatalog(userId);
 	const entry = modelId ? catalog.find((model) => model.id === modelId) : catalog[0];
 	if (!entry) throw new Error('Choose an available model in the assistant');
-	const source = sources.find((item) => item.provider === entry.provider);
+	const source = (await connectedSources(userId)).find((item) => item.provider === entry.provider);
 	if (!source) throw new Error('Choose an available model in the assistant');
 	const bareId = source.namespaced ? entry.id.slice(source.provider.length + 1) : entry.id;
 	const model = (await source.models(userId)).find((item) => item.id === bareId);
@@ -147,19 +177,5 @@ export async function loadAssistantModel(
 }
 
 export async function assistantConnected(userId: string): Promise<boolean> {
-	const account = await db
-		.select({ id: user.id })
-		.from(user)
-		.where(
-			and(
-				eq(user.id, userId),
-				or(
-					isNotNull(user.codexSubject),
-					isNotNull(user.metaSubject),
-					isNotNull(user.copilotSubject)
-				)
-			)
-		)
-		.get();
-	return Boolean(account);
+	return (await connectedSources(userId)).length > 0;
 }

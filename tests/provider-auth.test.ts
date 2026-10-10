@@ -26,8 +26,10 @@ if (process.env.FACMANDU_PROVIDER_TEST_CHILD !== '1') {
 		meta_subject TEXT,
 		meta_credentials TEXT,
 		copilot_subject TEXT,
-		copilot_credentials TEXT
+		copilot_credentials TEXT,
+		openai_api_key TEXT
 	);
+	CREATE TABLE provider_key (user_id TEXT NOT NULL, provider_id TEXT NOT NULL, key TEXT NOT NULL, PRIMARY KEY(user_id,provider_id));
 	INSERT INTO user(id) VALUES ('owner');`);
 	const db = drizzle(client, { schema: { user } });
 	afterAll(() => client.close());
@@ -84,7 +86,30 @@ if (process.env.FACMANDU_PROVIDER_TEST_CHILD !== '1') {
 	const { metaIdentity } = await import('../src/lib/server/meta');
 	const { copilotModels, copilotModelAuth } = await import('../src/lib/server/copilot');
 	const { loadAssistantModel } = await import('../src/lib/server/assistant-models');
+	const { apiProviders } = await import('../src/lib/server/assistant-providers');
 	const expires = Date.now() + 600_000;
+
+	test('API-key-only accounts use Pi models and cannot retain a removed credential', async () => {
+		await client.execute("INSERT INTO user(id) VALUES ('api-owner')");
+		await client.execute(
+			"INSERT INTO provider_key VALUES ('api-owner','anthropic','private-api-key')"
+		);
+		const provider = apiProviders.find((provider) => provider.id === 'anthropic');
+		assert.ok(provider);
+		const model = provider.getModels()[0];
+		assert.ok(model);
+		const selected = await loadAssistantModel('api-owner', `api:anthropic:${model.id}`);
+		assert.equal(selected.provider.id, 'anthropic');
+		assert.equal(selected.model.id, model.id);
+		assert.equal(selected.codexTransport, false);
+		assert.equal((await selected.requestAuth()).apiKey, 'private-api-key');
+		await client.execute("DELETE FROM provider_key WHERE user_id='api-owner'");
+		await assert.rejects(selected.requestAuth(), /Provider disconnected/u);
+		await assert.rejects(
+			loadAssistantModel('api-owner', `api:anthropic:${model.id}`),
+			/Add a provider/u
+		);
+	});
 
 	test('Meta identity retains the API key returned by its verification exchange', async () => {
 		const originalFetch = globalThis.fetch;

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { publishActivity } from '$lib/server/activity';
 import { db, userHasModlistAccess } from '$lib/server/db';
@@ -7,15 +7,84 @@ import * as table from '$lib/server/db/schema';
 import { type ModChange, planServerMods } from '$lib/server/server-mod-plan';
 import { reserveServer, serverTask } from '$lib/server/server-tasks';
 import { requireServer } from '$lib/server/servers';
+import { genID } from './db/ids';
 import type { ManagedServer } from './db/schema';
+import { publishModlistEvent } from './realtime';
+import { ServerError } from './server-files';
 import {
 	downloadMod,
 	installMod,
 	serverModInventory,
+	serverModSnapshot,
 	serverMods as serverModsOnDisk,
 	toggleMod
 } from './server-mods';
 import { serverStatus } from './server-process';
+
+export async function syncModlistFromServer(server: ManagedServer, userId: string, listId: string) {
+	await requireServer(userId, server.id);
+	if (!(await userHasModlistAccess(userId, listId)))
+		throw new ServerError(403, 'Mod list not found or not shared with you');
+	const snapshot = await serverModSnapshot(server);
+	await db.transaction(
+		async (tx) => {
+			const access = await tx
+				.select({ id: table.modList.id })
+				.from(table.modList)
+				.leftJoin(
+					table.modListCollaborator,
+					and(
+						eq(table.modListCollaborator.modlistId, table.modList.id),
+						eq(table.modListCollaborator.userId, userId)
+					)
+				)
+				.where(
+					and(
+						eq(table.modList.id, listId),
+						or(eq(table.modList.owner, userId), eq(table.modListCollaborator.userId, userId))
+					)
+				)
+				.get();
+			if (!access) throw new ServerError(403, 'Mod list not found or not shared with you');
+			await tx
+				.update(table.mod)
+				.set({ enabled: false, updatedBy: userId })
+				.where(eq(table.mod.modlist, listId));
+			// Batch writes stay below SQLite's parameter limit and avoid one remote round trip per mod.
+			for (let offset = 0; offset < snapshot.mods.length; offset += 100) {
+				await tx
+					.insert(table.mod)
+					.values(
+						snapshot.mods
+							.slice(offset, offset + 100)
+							.map((mod) => ({ id: genID('mod'), modlist: listId, ...mod, updatedBy: userId }))
+					)
+					.onConflictDoUpdate({
+						target: [table.mod.modlist, table.mod.name],
+						set: {
+							enabled: sql`excluded.enabled`,
+							version: sql`excluded.version`,
+							factorioVersion: sql`excluded.factorio_version`,
+							dependencies: sql`excluded.dependencies`,
+							icebox: sql`CASE WHEN excluded.enabled = 1 THEN 0 ELSE ${table.mod.icebox} END`,
+							updatedBy: userId
+						}
+					});
+			}
+			await tx
+				.update(table.modList)
+				.set({ factorioVersion: snapshot.factorioVersion })
+				.where(eq(table.modList.id, listId));
+			await tx
+				.update(table.managedServer)
+				.set({ selectedModlist: listId })
+				.where(eq(table.managedServer.id, server.id));
+		},
+		{ behavior: 'immediate' }
+	);
+	publishModlistEvent(listId, 'mod-updated', { source: 'server-sync' });
+	return snapshot.mods.filter((mod) => mod.enabled).length;
+}
 
 const jobSchema = z.object({
 	id: z.string(),

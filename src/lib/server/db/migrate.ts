@@ -51,6 +51,9 @@ async function migrateInitial(client: Client, initialSchema: string) {
 export async function migrate(client: Client, initialSchema: string) {
 	await migrateInitial(client, initialSchema);
 	await migrateAccounts(client);
+	await client.execute(`CREATE TABLE IF NOT EXISTS provider_key (
+		user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+		provider_id TEXT NOT NULL, key TEXT NOT NULL, PRIMARY KEY(user_id,provider_id))`);
 	await client.executeMultiple(`CREATE TABLE IF NOT EXISTS native_server (
 		id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, directory TEXT NOT NULL UNIQUE,
 		game_port INTEGER NOT NULL UNIQUE, rcon_port INTEGER NOT NULL UNIQUE,
@@ -119,6 +122,9 @@ async function migrateAccounts(client: Client) {
     used_by TEXT REFERENCES user(id), revoked INTEGER NOT NULL DEFAULT 0);
     INSERT INTO facmandu_migration (version) VALUES (2026092701);`);
 		}
+		// TypeSafe credentials remain in their legacy column; they are not OpenAI keys.
+		if (!columns.has('openai_api_key'))
+			await tx.execute('ALTER TABLE user ADD COLUMN openai_api_key TEXT');
 		if (
 			!(await tx.execute('SELECT version FROM facmandu_migration WHERE version = 2026092702')).rows
 				.length

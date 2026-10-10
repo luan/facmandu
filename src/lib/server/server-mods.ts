@@ -2,12 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { copyFile, mkdir, readdir, rename, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { compareVersions } from '$lib/dependencies';
 import type { ManagedServer } from './db/schema';
 import { modArchive } from './mod-downloads';
 import { validModName } from './mod-names';
 import { getPortalMod } from './portal-cache';
 import { readJson, ServerError, serverConfig, versionPattern, writeJson } from './server-files';
-import { executable, requireStopped } from './server-process';
+import { executable, requireStopped, run } from './server-process';
 
 const modListSchema = z.object({
 	mods: z.array(
@@ -16,6 +17,92 @@ const modListSchema = z.object({
 });
 export async function serverMods(server: ManagedServer) {
 	return modListSchema.parse(await readJson(join(server.directory, 'mods', 'mod-list.json')));
+}
+
+const installedInfoSchema = z.object({
+	name: z.string().refine(validModName),
+	version: z.string().regex(versionPattern),
+	title: z.string().optional(),
+	factorio_version: z.string().optional(),
+	dependencies: z.array(z.string()).default(['base'])
+});
+
+export async function serverModSnapshot(server: ManagedServer) {
+	// Disk is authoritative while stopped. Add live RCON snapshots before supporting running servers.
+	await requireStopped(server);
+	const config = await serverConfig(server);
+	if (!config.version) throw new ServerError(409, 'Select a Factorio version first');
+	const factorioVersion = config.version.version.split('.').slice(0, 2).join('.');
+	const list = await serverMods(server);
+	const wanted = new Set(list.mods.map((mod) => mod.name));
+	const directory = join(server.directory, 'mods');
+	const installed = new Map<
+		string,
+		{ info: z.infer<typeof installedInfoSchema>; unpacked: boolean }[]
+	>();
+	for (const entry of await readdir(directory, { withFileTypes: true })) {
+		const path = join(directory, entry.name);
+		const kind = entry.isSymbolicLink() ? await stat(path) : entry;
+		let raw: unknown;
+		if (kind.isDirectory()) raw = await readJson(join(path, 'info.json'));
+		else if (kind.isFile() && entry.name.endsWith('.zip')) {
+			const name = /^(.*)_\d+\.\d+\.\d+\.zip$/u.exec(entry.name)?.[1];
+			if (!name || !wanted.has(name)) continue;
+			// Graphics archives can exceed a gigabyte. Extract only metadata off the app's event loop.
+			// Entry lists/metadata are capped at 4/1 MiB; raise the caps when a real mod exceeds them.
+			const entries = await run('unzip', ['-Z', '-1', path], {
+				maxBuffer: 4 * 1024 * 1024,
+				timeout: 10000
+			});
+			const infos = entries.stdout.split('\n').filter((name) => /^[^/]+\/info\.json$/u.test(name));
+			const info = infos[0];
+			if (infos.length !== 1 || !info)
+				throw new ServerError(409, `Invalid mod metadata in ${entry.name}`);
+			const pattern = info.replaceAll('[', '[[]').replaceAll('*', '[*]').replaceAll('?', '[?]');
+			const { stdout } = await run('unzip', ['-p', path, pattern], {
+				maxBuffer: 1024 * 1024,
+				timeout: 10000
+			});
+			raw = JSON.parse(stdout);
+		} else continue;
+		const info = installedInfoSchema.parse(raw);
+		installed.set(info.name, [
+			...(installed.get(info.name) ?? []),
+			{ info, unpacked: kind.isDirectory() }
+		]);
+	}
+	const inventory = await serverModInventory(server);
+	const mods = list.mods.flatMap((mod) => {
+		if (mod.name === 'core') return [];
+		if (!validModName(mod.name)) throw new ServerError(409, 'Invalid server mod name');
+		const bundled = inventory.bundled[mod.name];
+		const selected = installed
+			.get(mod.name)
+			?.filter((item) => !mod.version || item.info.version === mod.version)
+			.toSorted(
+				(a, b) =>
+					(compareVersions(b.info.version, a.info.version) ?? 0) ||
+					Number(b.unpacked) - Number(a.unpacked)
+			)[0];
+		if (!bundled && !selected && mod.enabled)
+			throw new ServerError(
+				409,
+				`Enabled mod ${mod.name} is not installed at its selected version`
+			);
+		if (!bundled && !selected) return [];
+		return [
+			{
+				name: mod.name,
+				enabled: mod.enabled,
+				version: bundled?.version ?? selected?.info.version ?? null,
+				title: selected?.info.title ?? mod.name,
+				factorioVersion: selected?.info.factorio_version ?? factorioVersion,
+				dependencies: JSON.stringify(bundled?.dependencies ?? selected?.info.dependencies ?? [])
+			}
+		];
+	});
+	await requireStopped(server);
+	return { factorioVersion, mods };
 }
 export type ModInventory = {
 	available: Record<string, string[]>[];

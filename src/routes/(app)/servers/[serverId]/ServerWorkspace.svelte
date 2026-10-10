@@ -32,6 +32,7 @@
  const loadedMods = $derived(data.mods);
  const base = $derived(`/servers/${data.server.id}`);
 	const settingsActive = $derived(data.activeTab === 'settings');
+	const modSettingsActive = $derived(data.activeTab === 'mod-settings');
 	let availableVersions = $state<AvailableVersions>({});
 	let releasesLoading = $state(false);
 	let releasesOpen = $state(false);
@@ -146,13 +147,13 @@
  $effect(() => {
   const key = catalogKey;
   const attempt = catalogAttempt;
-  if (!settingsActive || untrack(() => catalogLoadedKey === key && catalogLoadedAttempt === attempt)) return;
+  if (!modSettingsActive || untrack(() => catalogLoadedKey === key && catalogLoadedAttempt === attempt)) return;
   const controller = new AbortController();
   catalogLoading = true;
   catalogFailed = false;
   void (async () => {
    try {
-    const response = await fetch(`${base}/mod-settings-defs`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) });
+    const response = await fetch(`${base}/mod-settings-defs`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(180_000)]) });
     if (!response.ok) throw new Error('Settings unavailable');
     const catalog: ModSettingsCatalog = await response.json();
     if (controller.signal.aborted) return;
@@ -205,7 +206,7 @@
  }
  $effect(() => {
   const running = data.status.running;
-  if (settingsActive && data.modSettings && untrack(() => !modLoaded || modMode !== running || !modDirty)) resetModDraft();
+  if (modSettingsActive && data.modSettings && untrack(() => !modLoaded || modMode !== running || !modDirty)) resetModDraft();
  });
  function setModValue(def: SettingDef, next: unknown) {
   if (!canEditModSetting(def)) return;
@@ -330,7 +331,7 @@
 	{#if data.activeTab === 'mods'}
 		<Card.Root>
 			<Card.Header>
-				<Card.Title class="flex items-center justify-between gap-2">Apply a mod list{#if repairingList}<span role="status" aria-label="Checking mods"><LoaderCircleIcon class="size-4 animate-spin" /></span>{/if}</Card.Title>
+				<Card.Title class="flex items-center justify-between gap-2">Mod list sync{#if repairingList}<span role="status" aria-label="Checking mods"><LoaderCircleIcon class="size-4 animate-spin" /></span>{/if}</Card.Title>
 
 			</Card.Header>
 			<Card.Content class="space-y-5">
@@ -344,6 +345,14 @@
 					</label>
 					{#if selectedList}<a href={`/modlists/${selectedList.id}`} class="text-primary py-2 text-sm underline">Edit {selectedList.name}</a>{/if}
 				</form>
+    {#if selectedList}
+     <form method="POST" action={`${base}?/manage`} use:enhance={submit} class="grid gap-2">
+      <input type="hidden" name="operation" value="syncListFromServer" />
+      <input type="hidden" name="listId" value={selectedList.id} />
+      <Button type="submit" variant="secondary" class="justify-self-start" disabled={pending || serverBusy || data.status.running || currentJob?.status === 'running'}><RefreshCwIcon class="size-4" />Sync list from server</Button>
+      <p class="text-sm text-muted-foreground">Copy installed versions and enabled flags into {selectedList.name}. Other list entries become disabled; notes and locks are kept. Stop the server first.</p>
+     </form>
+    {/if}
     {#if selectedList && !data.status.version.version.startsWith(`${selectedList.factorioVersion}.`)}
      <div class="flex flex-wrap items-center justify-between gap-3 border border-primary/40 p-3 text-sm">
       <span>{selectedList.name} requires Factorio {selectedList.factorioVersion}.</span>
@@ -511,8 +520,8 @@
 				{#if !data.canSyncFactorioAccount}<p class="text-muted-foreground mt-2 text-sm">Add a service token in <a href="/settings" class="underline">Settings</a> first.</p>{/if}
 				<form method="POST" action={manageAction} use:enhance={submit} class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
 					<input type="hidden" name="operation" value="setFactorioAccount" />
-					<input name="username" class={inputClass} placeholder="Factorio username" aria-label="Factorio username" required />
-					<input name="token" type="password" autocomplete="new-password" class={inputClass} placeholder="Service token" aria-label="Factorio service token" required />
+					<input name="username" autocomplete="off" data-1p-ignore class={inputClass} placeholder="Factorio username" aria-label="Factorio username" required />
+					<input name="token" type="password" autocomplete="off" data-1p-ignore class={inputClass} placeholder="Service token" aria-label="Factorio service token" required />
 					<TooltipButton type="submit" disabled={pending || serverBusy} variant="outline" tooltip={busyReason || 'Save token'}><LinkIcon class="size-4" />Save token</TooltipButton>
 				</form>
 			</Card.Content>
@@ -545,6 +554,9 @@
 		</Card.Content>
 	</Card.Root>
 
+ {/if}
+
+ {#if modSettingsActive}
  <Card.Root>
   <Card.Header><Card.Title>Mod settings</Card.Title></Card.Header>
   <Card.Content>
@@ -619,7 +631,7 @@
        {/if}
       </div>
      </div>
-     {#if modCatalog.unavailable.length}<details class="text-xs text-muted-foreground"><summary>{modCatalog.unavailable.length} mods could not be checked</summary><p class="py-2">{modCatalog.unavailable.join(', ')}</p><Button variant="link" size="sm" onclick={() => { catalogAttempt += 1; }}>Retry</Button></details>{/if}
+     {#if modCatalog.unavailable.length}<details class="text-xs text-muted-foreground"><summary>{modCatalog.unavailable.length} mods could not be checked</summary><ul class="space-y-2 py-2">{#each modCatalog.unavailable as name (name)}<li><strong>{name}</strong>: {modCatalog.issues?.[name] || 'Settings could not be read. Check that the installed archive is intact and matches the selected Factorio version, then retry.'}</li>{/each}</ul><Button variant="link" size="sm" onclick={() => { catalogAttempt += 1; }}>Retry</Button></details>{/if}
      <div class="flex flex-wrap items-center gap-2">
       <TooltipButton tooltip={pending || serverBusy ? 'Updating server' : !modDirty ? 'No changes' : data.status.running ? 'Apply runtime settings' : 'Save mod settings'} type="submit" disabled={pending || serverBusy || !modDirty || catalogLoading}><SaveIcon class="size-4" />{data.status.running ? 'Apply mod settings' : 'Save mod settings'}</TooltipButton>
       {#if modDirty}<Button variant="ghost" onclick={() => resetModDraft()}><XIcon class="size-4" />Discard</Button><span class="text-xs text-muted-foreground">{modChangeCount} {modChangeCount === 1 ? 'setting' : 'settings'} changed</span>{/if}
@@ -648,7 +660,7 @@
 					<form method="POST" action={manageAction} use:enhance={submit} class="flex gap-2">
 						<input type="hidden" name="operation" value="addUser" />
 						<input type="hidden" name="list" value={list.key} />
-						<input name="username" class={inputClass} placeholder="Factorio username" required aria-label={`Add ${list.label.toLowerCase()} user`} />
+						<input name="username" autocomplete="off" data-1p-ignore class={inputClass} placeholder="Factorio username" required aria-label={`Add ${list.label.toLowerCase()} user`} />
 						<TooltipButton type="submit" disabled={pending || serverBusy} size="sm" tooltip={busyReason || 'Add'}><PlusIcon class="size-4" />Add</TooltipButton>
 					</form>
 					<ul class="space-y-1">

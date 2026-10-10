@@ -7,7 +7,7 @@ export const GET: RequestHandler = async ({ params, locals, url }) => {
 	const server = await requireServer(locals.user?.id, params.serverId);
 	const requestedTab = url.searchParams.get('tab');
 	const tab = !requestedTab || requestedTab === 'overview' ? 'console' : requestedTab;
-	if (!['mods', 'saves', 'settings', 'access', 'console'].includes(tab))
+	if (!['mods', 'mod-settings', 'saves', 'settings', 'access', 'console'].includes(tab))
 		return new Response('Unknown server section', { status: 400 });
 	return json(
 		await loadServerView(

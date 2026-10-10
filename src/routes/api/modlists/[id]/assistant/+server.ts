@@ -167,7 +167,12 @@ function recoverPendingTurns() {
 							onEvent: submissionEvents(turn.receipt ?? '', (chunk) => {
 								if (chunk.type === 'tool-output') {
 									const parsed = assistantModsSchema.safeParse(chunk.output);
-									if (parsed.success) cards = parsed.data.mods;
+									if (parsed.success)
+										cards = [
+											...new Map(
+												[...cards, ...parsed.data.mods].map((mod) => [mod.name, mod])
+											).values()
+										];
 									const factoryResult = factoryResultSchema.safeParse(chunk.output);
 									if (
 										factoryResult.success &&
@@ -660,7 +665,11 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 									if (chunk.type === 'tool-output') {
 										const parsed = assistantModsSchema.safeParse(chunk.output);
 										if (parsed.success) {
-											cards = parsed.data.mods;
+											cards = [
+												...new Map(
+													[...cards, ...parsed.data.mods].map((mod) => [mod.name, mod])
+												).values()
+											];
 											send({ mods: cards });
 										}
 										const factoryResult = factoryResultSchema.safeParse(chunk.output);

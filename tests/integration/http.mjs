@@ -143,6 +143,7 @@ const codexMenus = [];
 const routingQueries = [];
 const assistantToolOutputs = [];
 let fixturePlanListId;
+let fixtureCohesiveListId;
 let fixtureSharedListId;
 let fixtureUnrelatedListId;
 let portalOffline = false;
@@ -367,7 +368,58 @@ const fixture = createServer(async (request, response) => {
 							}
 						: null
 				: null;
+			const wantsCohesive = currentRequest.includes('fixture-cohesive-mods');
+			const wantsInspection = currentRequest.includes('fixture-inspect-card');
+			let cohesiveCall = null;
+			if (wantsCohesive) {
+				const steps = [
+					['load_tools', { groups: ['server', 'discover', 'changes'] }],
+					['linked_servers', {}],
+					['server_context', {}],
+					['inspect_list', {}],
+					['inspect_mod', { name: 'companion' }],
+					['apply_changes', { changes: [{ name: 'companion', action: 'enable' }] }],
+					['prepare_server_mod_list', { listId: fixtureCohesiveListId }]
+				];
+				const next = steps.find(([name]) => !called(name));
+				if (next)
+					cohesiveCall = {
+						type: 'function_call',
+						id: `fc_cohesive_${next[0]}`,
+						call_id: `call_cohesive_${next[0]}`,
+						name: next[0],
+						arguments: JSON.stringify(next[1])
+					};
+				else if (!called('apply_server_mod_list')) {
+					const output = currentInput.find(
+						(item) =>
+							item.type === 'function_call_output' &&
+							item.call_id === 'call_cohesive_prepare_server_mod_list'
+					);
+					assert.ok(output.output.startsWith('{'), output.output);
+					const plan = JSON.parse(output.output);
+					cohesiveCall = {
+						type: 'function_call',
+						id: 'fc_cohesive_apply',
+						call_id: 'call_cohesive_apply',
+						name: 'apply_server_mod_list',
+						arguments: JSON.stringify({ listId: fixtureCohesiveListId, hash: plan.result.hash })
+					};
+				}
+			}
+			const inspectionCall =
+				wantsInspection && !called('inspect_mod')
+					? {
+							type: 'function_call',
+							id: 'fc_inspect_card',
+							call_id: 'call_inspect_card',
+							name: 'inspect_mod',
+							arguments: JSON.stringify({ name: 'companion' })
+						}
+					: null;
 			const item =
+				cohesiveCall ??
+				inspectionCall ??
 				(wantsGameQuestionAction && !called('factory_action')
 					? {
 							type: 'function_call',
@@ -680,25 +732,43 @@ const fixture = createServer(async (request, response) => {
 				response.write(`data: ${JSON.stringify(event)}\n\n`);
 			return response.end();
 		}
-		if (key === '/typesafe/v1/systemone') {
-			assert.equal(request.headers.authorization, 'Bearer fixture-typesafe-key');
+		if (key === '/openai/v1/decisions') {
+			assert.equal(request.headers.authorization, 'Bearer fixture-openai-key');
 			let body = '';
 			for await (const chunk of request) body += chunk;
 			const query = JSON.parse(body);
-			assert.equal(query.model, 'jev-latest');
-			if (query.questions.intent) {
-				routingQueries.push(query);
-				const server = 'research' in query.questions;
+			assert.equal(query.model, 'gpt-6-luna');
+			assert.deepEqual(Object.keys(query).sort(), ['input', 'model', 'questions']);
+			assert.equal(typeof query.input, 'string');
+			const state = JSON.parse(query.input);
+			assert.ok(Array.isArray(query.questions));
+			const questions = Object.fromEntries(
+				query.questions.map((question) => [question.name, question])
+			);
+			assert.equal(Object.keys(questions).length, query.questions.length);
+			assert.ok(query.questions.every((question) => typeof question.instructions === 'string'));
+			if (questions.intent) {
+				assert.equal(questions.intent.type, 'choice');
+				assert.ok(
+					questions.intent.choices.every(
+						(choice) => typeof choice.value === 'string' && typeof choice.description === 'string'
+					)
+				);
+				assert.ok(query.questions.slice(1).every((question) => question.type === 'predicate'));
+			}
+			if (questions.intent) {
+				routingQueries.push({ state, questions });
+				const server = 'research' in questions;
 				const selected = server
 					? ['server']
-					: /^fixture-provision-/u.test(query.state.request)
+					: /^fixture-provision-/u.test(state.request)
 						? ['inspect', 'server']
 						: /^(fixture-plan|fixture-combined-review|fixture-direct-apply|fixture-lock-mod|fixture-unlock-mod|fixture-disable-locked|fixture-unlock-disable|fixture-select-release|fixture-select-incompatible|fixture-icebox-absent|fixture-bundled-lock|fixture-bundled-unlock|fixture-bundled-disable)/u.test(
-									query.state.request
+									state.request
 								)
 							? ['inspect', 'changes']
 							: /^(fixture-preview-recommendations|fixture-dismiss-recommendation|fixture-restore-recommendation|fixture-restore-and-rank|fixture-ranked-recommendations|fixture-browse-lists|fixture-inspect-shared|fixture-inspect-unrelated|fixture-compare-lists)/u.test(
-										query.state.request
+										state.request
 									)
 								? ['inspect', 'discover']
 								: ['inspect'];
@@ -706,38 +776,42 @@ const fixture = createServer(async (request, response) => {
 					? ['research', 'production', 'power', 'logistics', 'server', 'watches', 'planning']
 					: ['inspect', 'discover', 'changes', 'server'];
 				return send({
-					answers: {
-						intent: {
+					answers: [
+						{
+							name: 'intent',
+							type: 'choice',
 							choice:
-								query.state.request === 'Show list status'
+								state.request === 'Show list status'
 									? 'inspect'
-									: query.state.request === 'Show server status'
+									: state.request === 'Show server status'
 										? 'status'
 										: 'question',
 							confidence: 0.99
 						},
-						ambiguous: { noul: 0.01 },
-						...Object.fromEntries(
-							groups.map((group) => [group, { noul: selected.includes(group) ? 0.99 : 0.01 }])
-						)
-					}
+						{ name: 'ambiguous', type: 'predicate', probability: 0.01 },
+						...groups.map((group) => ({
+							name: group,
+							type: 'predicate',
+							probability: selected.includes(group) ? 0.99 : 0.01
+						}))
+					]
 				});
 			}
-			if (Buffer.byteLength(JSON.stringify(query.state)) > 28_000)
+			if (Buffer.byteLength(JSON.stringify(state)) > 28_000)
 				return send({ detail: { error_type: 'max_tokens_exceeded' } }, 400);
-			assert.deepEqual(Object.keys(query.state).sort(), [
+			assert.deepEqual(Object.keys(state).sort(), [
 				'candidates',
 				'dismissedMods',
 				'enabledMods',
 				'factorioVersion'
 			]);
-			assert.equal(Object.keys(query.questions).length, query.state.candidates.length * 3);
-			for (const question of Object.values(query.questions)) {
+			assert.equal(query.questions.length, state.candidates.length * 3);
+			for (const question of query.questions) {
 				assert.equal(question.type, 'score');
-				assert.equal(question.criteria.length, 4);
+				assert.equal(question.levels.length, 4);
 			}
 			assert.ok(
-				query.state.enabledMods.every((item) =>
+				state.enabledMods.every((item) =>
 					Object.keys(item).every((key) =>
 						['name', 'summary', 'title', 'category', 'description'].includes(key)
 					)
@@ -745,17 +819,18 @@ const fixture = createServer(async (request, response) => {
 			);
 			return send({
 				answers:
-					query.state.candidates[0].name === 'missing-ranking' && incompleteRankings
-						? { candidate_0_fit: { type: 'score', score: 3, confidence: 0.9 } }
-						: {
-								candidate_0_fit: {
+					state.candidates[0].name === 'missing-ranking' && incompleteRankings
+						? [{ name: 'candidate_0_fit', type: 'score', score: 3, confidence: 0.9 }]
+						: [
+								{
+									name: 'candidate_0_fit',
 									type: 'score',
-									score: query.state.dismissedMods.some((mod) => mod.name === 'cold-mod') ? 1.5 : 3,
+									score: state.dismissedMods.some((mod) => mod.name === 'cold-mod') ? 1.5 : 3,
 									confidence: 0.9
 								},
-								candidate_0_novelty: { type: 'score', score: 1.5, confidence: 0.6 },
-								candidate_0_integration: { type: 'score', score: 0, confidence: 0.8 }
-							}
+								{ name: 'candidate_0_novelty', type: 'score', score: 1.5, confidence: 0.6 },
+								{ name: 'candidate_0_integration', type: 'score', score: 0, confidence: 0.8 }
+							]
 			});
 		}
 		if (key.startsWith('/portal/')) {
@@ -827,8 +902,8 @@ const childEnv = {
 	FACMANDU_CACHE_DIR: cache,
 	FACMANDU_REPLICA_PATH: '',
 	FACMANDU_OPERATOR_USER_IDS: 'owner',
-	FACMANDU_TYPESAFE_API_KEY: 'must-not-use-global-key',
-	TYPESAFE_API_KEY: 'unused-fallback-key',
+	FACMANDU_OPENAI_API_KEY: 'must-not-use-global-key',
+	OPENAI_API_KEY: 'unused-fallback-key',
 	HOST: '127.0.0.1',
 	PORT: '0',
 	ORIGIN: origin,
@@ -866,7 +941,7 @@ globalThis.fetch = (input, init) => {
  if (url.hostname === 'mods.factorio.com' || url.hostname === 'factorio.com') return nativeFetch(${JSON.stringify(fixtureUrl)} + '/portal' + url.pathname + url.search, init);
  if (url.hostname === 'auth.openai.com') return nativeFetch(${JSON.stringify(fixtureUrl)} + '/openai' + url.pathname, init);
  if (url.hostname === 'chatgpt.com') return nativeFetch(${JSON.stringify(fixtureUrl)} + '/codex' + url.pathname + url.search, init);
- if (url.hostname === 'api.typesafe.ai') return nativeFetch(${JSON.stringify(fixtureUrl)} + '/typesafe' + url.pathname, init);
+ if (url.hostname === 'api.openai.com') return nativeFetch(${JSON.stringify(fixtureUrl)} + '/openai' + url.pathname, init);
  if (url.hostname === '127.0.0.1') return nativeFetch(input, init);
  throw new Error('Integration test blocked external request to ' + url.hostname);
 };
@@ -975,7 +1050,7 @@ try {
 	for (const name of ['root-mod', 'dependency', longName])
 		await writeFile(join(cache, 'mods', `${name}_1.0.0_${sha1}.zip`), archive);
 	await client.execute(
-		"UPDATE user SET is_admin = 1, typesafe_api_key = 'fixture-typesafe-key' WHERE id = 'owner'"
+		"UPDATE user SET is_admin = 1, openai_api_key = 'fixture-openai-key' WHERE id = 'owner'"
 	);
 	const cookies = {};
 	for (const id of ['owner', 'viewer', 'stranger']) {
@@ -1118,7 +1193,7 @@ try {
 	assert.equal((await request('/admin', { cookie: cookies.viewer })).status, 200);
 	await action('/admin?/role', cookies.owner, { id: 'viewer', admin: 'false' });
 	assert.equal((await request('/admin', { cookie: cookies.viewer })).status, 403);
-	await action('/settings?/typesafe', cookies.viewer, { key: 'viewer-separate-key' });
+	await action('/settings?/openai', cookies.viewer, { key: 'viewer-separate-key' });
 	const accountSettings = await request('/settings', { cookie: cookies.viewer });
 	assert.ok(!(await accountSettings.text()).includes('viewer-separate-key'));
 	passed(
@@ -1348,10 +1423,53 @@ try {
 	assert.equal((await request(assistantPath, { cookie: cookies.stranger })).status, 403);
 	const assistantCatalog = await json(assistantPath, { cookie: cookies.owner });
 	assert.deepEqual(
-		assistantCatalog.models.map((model) => model.id),
+		assistantCatalog.models.filter((model) => model.provider === 'codex').map((model) => model.id),
 		['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna']
 	);
 	assert.equal(assistantCatalog.model, 'gpt-6-astra');
+	await action('/settings?/providerKey', cookies.owner, {
+		provider: 'anthropic',
+		key: 'private-anthropic-fixture'
+	});
+	await action(
+		'/settings?/providerKey',
+		cookies.owner,
+		{ provider: 'unknown-provider', key: 'invalid' },
+		400
+	);
+	await action(
+		'/settings?/providerKey',
+		cookies.owner,
+		{ provider: 'anthropic', key: 'has whitespace' },
+		400
+	);
+	const expandedCatalog = await json(assistantPath, { cookie: cookies.owner });
+	assert.ok(expandedCatalog.models.some((model) => model.provider === 'api:anthropic'));
+	assert.ok(expandedCatalog.models.some((model) => model.provider === 'api:openai'));
+	assert.equal(
+		new Set(expandedCatalog.models.map((model) => model.id)).size,
+		expandedCatalog.models.length
+	);
+	assert.ok(!JSON.stringify(expandedCatalog).includes('private-anthropic-fixture'));
+	assert.ok(
+		!(await (await request('/settings', { cookie: cookies.owner })).text()).includes(
+			'private-anthropic-fixture'
+		)
+	);
+	assert.equal(
+		(await client.execute("SELECT COUNT(*) AS count FROM provider_key WHERE user_id='viewer'"))
+			.rows[0].count,
+		0
+	);
+	await action('/settings?/providerKey', cookies.owner, { provider: 'anthropic', remove: 'true' });
+	assert.ok(
+		!(await json(assistantPath, { cookie: cookies.owner })).models.some(
+			(model) => model.provider === 'api:anthropic'
+		)
+	);
+	passed(
+		'Pi provider keys expand the assistant catalog, stay private per account, and disappear on disconnect'
+	);
 	const listHistory = await json(`${assistantPath}?models=0`, { cookie: cookies.owner });
 	assert.equal(listHistory.chat.id, assistantCatalog.chat.id);
 	const voiceForm = { chat: assistantCatalog.chat.id, listId, sdp: 'v=0\r\nfixture-offer' };
@@ -1449,13 +1567,13 @@ try {
 	const followupRoute = routingQueries.find((query) =>
 		query.state.request.startsWith('fixture-followup')
 	);
-	assert.ok(followupRoute, 'Jev routed the follow-up');
+	assert.ok(followupRoute, 'Decisions routed the follow-up');
 	assert.ok(
 		followupRoute.state.recent.some((turn) => turn.prompt.startsWith('fixture-cards')),
-		'Jev receives recent turns from this chat'
+		'Decisions receives recent turns from this chat'
 	);
-	assert.equal(followupRoute.questions.discover.type, 'noul');
-	assert.equal(followupRoute.questions.changes.type, 'noul');
+	assert.equal(followupRoute.questions.discover.type, 'predicate');
+	assert.equal(followupRoute.questions.changes.type, 'predicate');
 	const planMenu = codexMenus.find((menu) => menu.request.includes('User request: fixture-plan'));
 	assert.ok(planMenu.tools.includes('prepare_changes'));
 	assert.ok(
@@ -1488,7 +1606,7 @@ try {
 	);
 	await action(`${listPath}?/removeMod`, cookies.owner, { modName: 'agent-addon' });
 	passed(
-		'Jev status routing, Flue tools, contextual explanations, reviewed changes, actor isolation and idempotent apply'
+		'Decisions status routing, Flue tools, contextual explanations, reviewed changes, actor isolation and idempotent apply'
 	);
 
 	const searchPath = `/api/modlists/${listId}/search?q=solar&version=2.1`;
@@ -1667,7 +1785,7 @@ try {
 		'runtime-per-user': { tint: { r: 0.1, g: 0.2, b: 0.3, a: 1 } }
 	});
 	await writeFile(settingsFile, encodeModSettings(nativeSettings));
-	const nativeView = await json(`${serverPath}/data?tab=settings`, { cookie: cookies.owner });
+	const nativeView = await json(`${serverPath}/data?tab=mod-settings`, { cookie: cookies.owner });
 	assert.equal(JSON.parse(nativeView.modSettings).startup.flag.value, true);
 	await action(`${serverPath}?/manage`, cookies.owner, {
 		operation: 'saveModSettings',
@@ -2137,7 +2255,7 @@ done
 	assert.ok(
 		settingsRoute.state.recent.some((turn) => turn.prompt.startsWith('fixture-server-saves'))
 	);
-	assert.equal(settingsRoute.questions.watches.type, 'noul');
+	assert.equal(settingsRoute.questions.watches.type, 'predicate');
 	const loadReply = await request(`${serverPath}/assistant`, {
 		cookie: cookies.owner,
 		method: 'POST',
@@ -2204,7 +2322,82 @@ done
 		},
 		403
 	);
-	passed('Jev chat context and tool groups, dynamic expansion, and stopped server reads');
+
+	const inspectReply = await request(`/api/modlists/${listId}/assistant`, {
+		cookie: cookies.owner,
+		method: 'POST',
+		form: { prompt: 'fixture-inspect-card: explain companion', model: 'gpt-6-sol' }
+	});
+	assert.equal(inspectReply.status, 200);
+	await inspectReply.text();
+	const inspectTurn = (
+		await json(`/api/modlists/${listId}/assistant`, { cookie: cookies.owner })
+	).turns.find((turn) => turn.prompt.startsWith('fixture-inspect-card'));
+	assert.equal(
+		inspectTurn.mods.find((mod) => mod.name === 'companion')?.title,
+		'Fixture companion'
+	);
+	fixtureCohesiveListId = 'cohesive-list';
+	await client.execute({
+		sql: 'INSERT INTO modlist (id, user_id, name, factorio_version) VALUES (?, ?, ?, ?)',
+		args: [fixtureCohesiveListId, 'owner', 'Cohesive', '2.1']
+	});
+	const secondId = secondPath.split('/').at(-1);
+	await client.execute({
+		sql: 'UPDATE native_server SET selected_modlist = ? WHERE id = ?',
+		args: [fixtureCohesiveListId, secondId]
+	});
+	const secondConfig = await readState(1, 'facmandu.json');
+	await writeFile(
+		join(machineDirs[1], 'facmandu.json'),
+		JSON.stringify({ ...secondConfig, save: 'context-world.zip', resumeAutosave: false })
+	);
+	const preservedSave = zipSync({ 'world.txt': strToU8('preserved world') });
+	await writeFile(join(machineDirs[1], 'saves/context-world.zip'), preservedSave);
+	const cohesiveReply = await request(`/api/modlists/${fixtureCohesiveListId}/assistant`, {
+		cookie: cookies.owner,
+		method: 'POST',
+		form: {
+			prompt: 'fixture-cohesive-mods: add companion and install the linked list, leave stopped',
+			model: 'gpt-6-sol'
+		}
+	});
+	assert.equal(cohesiveReply.status, 200);
+	await cohesiveReply.text();
+	const cohesiveTurn = (
+		await json(`/api/modlists/${fixtureCohesiveListId}/assistant`, { cookie: cookies.owner })
+	).turns.find((turn) => turn.prompt.startsWith('fixture-cohesive-mods'));
+	assert.equal(cohesiveTurn.state, 'done', JSON.stringify(cohesiveTurn));
+	const contextResult = cohesiveTurn.results.find((item) => item.tool === 'server_context').result;
+	assert.equal(contextResult.selectedSave, 'context-world.zip');
+	assert.equal(contextResult.listId, fixtureCohesiveListId);
+	assert.equal(cohesiveTurn.mods.find((mod) => mod.name === 'companion')?.version, '1.0.0');
+	assert.ok(cohesiveTurn.results.some((item) => item.tool === 'apply_server_mod_list'));
+	const cohesiveJob = await until(
+		`${secondPath}/mod-sync`,
+		cookies.owner,
+		(value) => value.job?.status !== 'running'
+	);
+	assert.equal(cohesiveJob.job.status, 'done', JSON.stringify(cohesiveJob));
+
+	assert.ok(
+		(await readState(1, 'mods/mod-list.json')).mods.some(
+			(mod) => mod.name === 'companion' && mod.enabled
+		)
+	);
+	assert.deepEqual(await readFile(join(machineDirs[1], 'mods/companion_1.0.0.zip')), archive);
+	assert.deepEqual(
+		await readFile(join(machineDirs[1], 'saves/context-world.zip')),
+		Buffer.from(preservedSave)
+	);
+	assert.equal(
+		(await json(`${secondPath}/data?tab=console`, { cookie: cookies.owner })).status.running,
+		false
+	);
+	passed(
+		'list assistant discovers its linked server, installs archives without changing the save and leaves it stopped'
+	);
+	passed('Decisions chat context and tool groups, dynamic expansion, and stopped server reads');
 	const gameSockets = new Set();
 	const gameReplies = [];
 	const gameWaiters = new Map();
@@ -2459,7 +2652,7 @@ done
 		[...calls]
 			.filter(([key]) => key.startsWith('/portal/download'))
 			.reduce((sum, [, count]) => sum + count, 0),
-		3
+		4
 	);
 	passed(
 		'concurrent exports share one artifact, preserve exact pins and long names, and reuse verified archives without credentials'
@@ -2611,7 +2804,7 @@ done
 		'bulk metadata repair and list copies span write batches while preserving every enabled flag and selected version'
 	);
 
-	const routingCalls = calls.get('/typesafe/v1/systemone') ?? 0;
+	const routingCalls = calls.get('/openai/v1/decisions') ?? 0;
 	const curationPath = `/api/modlists/${listId}/recommendations`;
 	assert.equal(
 		(
@@ -2641,7 +2834,7 @@ done
 	});
 	assert.deepEqual(cachedCuration.scores, curation.scores);
 	assert.equal(cachedCuration.source, 'cache');
-	assert.equal(calls.get('/typesafe/v1/systemone'), routingCalls + 1);
+	assert.equal(calls.get('/openai/v1/decisions'), routingCalls + 1);
 	const rankingFailure = await request(curationPath, {
 		cookie: cookies.owner,
 		method: 'POST',
@@ -2653,10 +2846,10 @@ done
 		(await rankingFailure.json()).message,
 		'Ranking is unavailable. You can still browse and add mods.'
 	);
-	assert.equal(calls.get('/typesafe/v1/systemone'), routingCalls + 2);
+	assert.equal(calls.get('/openai/v1/decisions'), routingCalls + 2);
 	incompleteRankings = false;
 	await client.execute(
-		"UPDATE portal_cache SET retry_after = 0 WHERE key LIKE 'typesafe:%' AND status != 200"
+		"UPDATE portal_cache SET retry_after = 0 WHERE key LIKE 'decisions:%' AND status != 200"
 	);
 	const recoveredRanking = await json(curationPath, {
 		cookie: cookies.owner,
@@ -2664,9 +2857,9 @@ done
 		body: { names: ['missing-ranking'] }
 	});
 	assert.deepEqual(recoveredRanking.scores['missing-ranking'], curation.scores.companion);
-	assert.equal(calls.get('/typesafe/v1/systemone'), routingCalls + 3);
+	assert.equal(calls.get('/openai/v1/decisions'), routingCalls + 3);
 	passed(
-		'TypeSafe receives only verified candidates and public mod descriptions, validates rankings, and caches matching requests'
+		'OpenAI receives only verified candidates and public mod descriptions, validates rankings, and caches matching requests'
 	);
 
 	const remoteCalls = [...calls]
@@ -2729,7 +2922,7 @@ done
 		).scores,
 		curation.scores
 	);
-	assert.equal(calls.get('/typesafe/v1/systemone'), routingCalls + 3);
+	assert.equal(calls.get('/openai/v1/decisions'), routingCalls + 3);
 	await client.execute({
 		sql: 'UPDATE mod SET summary = ?, dependencies = ? WHERE modlist_id = ?',
 		args: [
@@ -2745,7 +2938,7 @@ done
 		body: { names: ['companion'] }
 	});
 	assert.deepEqual(largeRanking.scores, curation.scores);
-	assert.equal(calls.get('/typesafe/v1/systemone'), routingCalls + 5);
+	assert.equal(calls.get('/openai/v1/decisions'), routingCalls + 5);
 	const cachedLargeRanking = await json(largeRankingPath, {
 		cookie: cookies.owner,
 		method: 'POST',
@@ -2753,7 +2946,7 @@ done
 	});
 	assert.equal(cachedLargeRanking.source, 'cache');
 	assert.deepEqual(cachedLargeRanking.scores, largeRanking.scores);
-	assert.equal(calls.get('/typesafe/v1/systemone'), routingCalls + 5);
+	assert.equal(calls.get('/openai/v1/decisions'), routingCalls + 5);
 	passed('oversized ranking requests retry with less prose and reuse the cached result');
 	const portalCallsBeforeFeedback = [...calls].filter(([key]) => key.startsWith('/portal/'));
 	const feedbackPath = `/api/modlists/${listId}/recommendations`;
@@ -2768,7 +2961,7 @@ done
 		body: { names: ['companion'], dismissed: [] }
 	});
 	assert.ok(withFeedback.scores.companion.score < curation.scores.companion.score);
-	assert.equal(calls.get('/typesafe/v1/systemone'), routingCalls + 6);
+	assert.equal(calls.get('/openai/v1/decisions'), routingCalls + 6);
 	const repeatFeedback = await json(curationPath, {
 		cookie: cookies.owner,
 		method: 'POST',
@@ -2794,7 +2987,7 @@ done
 		body: { names: ['companion'], dismissed: ['not-a-known-mod', 'root-mod'] }
 	});
 	assert.deepEqual(unknownFeedback.scores, curation.scores);
-	assert.equal(calls.get('/typesafe/v1/systemone'), routingCalls + 6);
+	assert.equal(calls.get('/openai/v1/decisions'), routingCalls + 6);
 	assert.deepEqual(
 		[...calls].filter(([key]) => key.startsWith('/portal/')),
 		portalCallsBeforeFeedback
@@ -3914,6 +4107,154 @@ done
 	passed(
 		'assistant locks and unlocks bundled mods while required dependencies block disabling them'
 	);
+	const importedServer = await action(
+		'/servers/new',
+		cookies.owner,
+		{ name: 'Import fixture' },
+		303
+	);
+	const importPath = importedServer.headers.get('location').split('?')[0];
+	const importId = importPath.split('/').at(-1);
+	const importDirectory = (
+		await client.execute({
+			sql: 'SELECT directory FROM native_server WHERE id = ?',
+			args: [importId]
+		})
+	).rows[0].directory;
+	const importConfig = JSON.parse(await readFile(join(importDirectory, 'facmandu.json'), 'utf8'));
+	await writeFile(
+		join(importDirectory, 'facmandu.json'),
+		JSON.stringify({ ...importConfig, version: { branch: 'stable', version: '2.1.20' } })
+	);
+	await mkdir(join(importDirectory, 'versions/stable/2.1.20/data/base'), { recursive: true });
+	await writeFile(
+		join(importDirectory, 'versions/stable/2.1.20/data/base/info.json'),
+		JSON.stringify({ name: 'base', version: '2.1.20', dependencies: [] })
+	);
+	for (const version of ['1.0.0', '2.0.0'])
+		await writeFile(
+			join(importDirectory, `mods/sync-mod_${version}.zip`),
+			zipSync({
+				[`${version === '2.0.0' ? 'sync-mod' : `sync-mod_${version}`}/info.json`]: strToU8(
+					JSON.stringify({
+						name: 'sync-mod',
+						version,
+						title: 'Sync mod',
+						factorio_version: '2.1',
+						dependencies: ['base >= 2.1']
+					})
+				)
+			})
+		);
+	await mkdir(join(importDirectory, 'mods/loose-sync'));
+	await writeFile(
+		join(importDirectory, 'mods/loose-sync/info.json'),
+		JSON.stringify({ name: 'loose-sync', version: '0.2.0', factorio_version: '2.1' })
+	);
+	const importMods = {
+		mods: [
+			{ name: 'base', enabled: true },
+			{ name: 'sync-mod', enabled: true, version: '1.0.0' },
+			{ name: 'loose-sync', enabled: false }
+		]
+	};
+	await writeFile(join(importDirectory, 'mods/mod-list.json'), JSON.stringify(importMods));
+	await client.executeMultiple(
+		"INSERT INTO modlist (id,user_id,name,factorio_version) VALUES ('sync-list','owner','Sync list','2.0'); INSERT INTO mod (id,modlist_id,name,enabled,essential,title) VALUES ('sync-old','sync-list','old-mod',1,1,'Keep title');"
+	);
+	const importAction = `${importPath}?/manage`;
+	await action(
+		importAction,
+		cookies.stranger,
+		{ operation: 'syncListFromServer', listId: 'sync-list' },
+		403
+	);
+	await action(
+		importAction,
+		cookies.owner,
+		{ operation: 'syncListFromServer', listId: fixtureUnrelatedListId },
+		403
+	);
+	await action(importAction, cookies.owner, {
+		operation: 'syncListFromServer',
+		listId: 'sync-list'
+	});
+	const importedRows = (
+		await client.execute(
+			"SELECT name,enabled,version,essential,title,dependencies FROM mod WHERE modlist_id='sync-list' ORDER BY name"
+		)
+	).rows;
+	assert.equal(importedRows.find((row) => row.name === 'sync-mod').version, '1.0.0');
+	assert.equal(importedRows.find((row) => row.name === 'loose-sync').enabled, 0);
+	assert.deepEqual(
+		importedRows.find((row) => row.name === 'old-mod'),
+		{
+			name: 'old-mod',
+			enabled: 0,
+			version: null,
+			essential: 1,
+			title: 'Keep title',
+			dependencies: null
+		}
+	);
+	assert.equal(
+		(await client.execute("SELECT factorio_version FROM modlist WHERE id='sync-list'")).rows[0]
+			.factorio_version,
+		'2.1'
+	);
+	assert.deepEqual(
+		JSON.parse(await readFile(join(importDirectory, 'mods/mod-list.json'), 'utf8')),
+		importMods
+	);
+	delete importMods.mods[1].version;
+	await writeFile(join(importDirectory, 'mods/mod-list.json'), JSON.stringify(importMods));
+	await action(importAction, cookies.owner, {
+		operation: 'syncListFromServer',
+		listId: 'sync-list'
+	});
+	assert.equal(
+		(
+			await client.execute(
+				"SELECT version FROM mod WHERE modlist_id='sync-list' AND name='sync-mod'"
+			)
+		).rows[0].version,
+		'2.0.0'
+	);
+	const beforeFailedSync = (
+		await client.execute("SELECT * FROM mod WHERE modlist_id='sync-list' ORDER BY name")
+	).rows;
+	await writeFile(
+		join(directory, 'bin/systemctl'),
+		'#!/bin/sh\nprintf "ActiveState=active\\nSubState=running\\n"\n',
+		{ mode: 0o755 }
+	);
+	await action(
+		importAction,
+		cookies.owner,
+		{ operation: 'syncListFromServer', listId: 'sync-list' },
+		409
+	);
+	await writeFile(
+		join(directory, 'bin/systemctl'),
+		'#!/bin/sh\nprintf "ActiveState=inactive\\nSubState=dead\\n"\n',
+		{ mode: 0o755 }
+	);
+	importMods.mods.push({ name: 'missing-sync', enabled: true });
+	await writeFile(join(importDirectory, 'mods/mod-list.json'), JSON.stringify(importMods));
+	await action(
+		importAction,
+		cookies.owner,
+		{ operation: 'syncListFromServer', listId: 'sync-list' },
+		409
+	);
+	assert.deepEqual(
+		(await client.execute("SELECT * FROM mod WHERE modlist_id='sync-list' ORDER BY name")).rows,
+		beforeFailedSync
+	);
+	passed(
+		'server-to-list sync imports pinned and newest installed versions, handles unpacked mods, preserves history, checks permissions, and rejects incomplete inventories atomically'
+	);
+
 	console.info(`${checks} HTTP workflow checks passed.`);
 } catch (cause) {
 	console.error(logs);

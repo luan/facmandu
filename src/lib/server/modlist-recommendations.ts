@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
 import { and, eq, inArray, isNull, or } from 'drizzle-orm';
+import { type DecisionRequest, decisionsModel } from '$lib/decisions';
 import {
 	composeRanking,
 	type RecommendationRating,
@@ -18,8 +18,8 @@ import {
 import { listOwnerKey } from './accounts';
 import { db, userHasModlistAccess } from './db';
 import { mod, modList, portalCache, recommendationFeedback } from './db/schema';
+import { cachedDecisionRequest } from './decisions';
 import {
-	cachedPortalRequest,
 	getPortalMod,
 	getPortalModForFactorio,
 	PortalHttpError,
@@ -68,10 +68,10 @@ export async function rankModlistRecommendations(
 		throw new RecommendationRankingError(403, 'You cannot edit this list');
 	const owner = await listOwnerKey(listId);
 	const apiKey = owner?.apiKey;
-	if (!apiKey)
+	if (!owner || !apiKey)
 		throw new RecommendationRankingError(
 			503,
-			'The list owner needs to add a TypeSafe key in account settings'
+			'The list owner needs to add an OpenAI key in account settings'
 		);
 	if (
 		names.length < 1 ||
@@ -160,7 +160,7 @@ export async function rankModlistRecommendations(
 			}
 		})
 		.sort((a, b) => a.name.localeCompare(b.name));
-	// Keep list and account identities local; TypeSafe receives public mod metadata only.
+	// Keep list and account identities local; OpenAI receives public mod metadata only.
 	const related = new Set(shortlist.flatMap((candidate) => candidate.recommendedBy));
 	const enabledMods = mods
 		.filter((item) => item.enabled)
@@ -183,26 +183,21 @@ export async function rankModlistRecommendations(
 				maxBytes,
 				dismissedMods
 			);
-			const body = { model: 'jev-latest', state, questions };
-			const hash = createHash('sha256').update(JSON.stringify(body)).digest('hex');
-			const result = await cachedPortalRequest(
-				`typesafe:${owner.ownerId}:${hash}`,
-				'https://api.typesafe.ai/v1/systemone',
+			const body: DecisionRequest = {
+				model: decisionsModel,
+				input: JSON.stringify(state),
+				questions
+			};
+			const result = await cachedDecisionRequest(
+				owner.ownerId,
+				apiKey,
+				body,
 				rankingAnswerSchema.refine(
 					(value) => shortlist.every((_, index) => composeRanking(value.answers, index) !== null),
 					'Incomplete rankings'
-				),
-				{ maxAgeMs: Number.POSITIVE_INFINITY },
-				{
-					method: 'POST',
-					headers: {
-						Authorization: `Bearer ${apiKey}`,
-						'Content-Type': 'application/json'
-					},
-					body: JSON.stringify(body)
-				}
+				)
 			);
-			if (!result.data) throw new RecommendationRankingError(502, 'TypeSafe returned no rankings');
+			if (!result.data) throw new RecommendationRankingError(502, 'OpenAI returned no rankings');
 			const scores = Object.fromEntries(
 				shortlist.flatMap((candidate, index) => {
 					const answer = result.data && composeRanking(result.data.answers, index);

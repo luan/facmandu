@@ -1,5 +1,9 @@
 import { and, desc, eq } from 'drizzle-orm';
-import { type FactoryResult, factoryResultSchema } from '$lib/assistant-results';
+import {
+	assistantModsSchema,
+	type FactoryResult,
+	factoryResultSchema
+} from '$lib/assistant-results';
 import { submissionEvents } from './assistant-events';
 import { db } from './db';
 import { assistantChat, serverAssistantTurn as turnTable } from './db/schema';
@@ -128,10 +132,29 @@ export async function finishServerTurn(
 												: 'Working…'
 						});
 					if (chunk.type === 'tool-output') {
+						const cards = assistantModsSchema.safeParse(chunk.output);
+						if (cards.success) {
+							const previous = results.find((item) => item.tool === 'mod_cards');
+							const before = assistantModsSchema.safeParse(previous?.result);
+							const mods = new Map(
+								(before.success ? before.data.mods : []).map((mod) => [mod.name, mod])
+							);
+							for (const mod of cards.data.mods) mods.set(mod.name, mod);
+							const value = { kind: 'mods', mods: [...mods.values()].slice(-6) };
+							if (previous) previous.result = value;
+							else
+								results.push({
+									kind: 'factory-result',
+									tool: 'mod_cards',
+									title: 'Mods',
+									result: value
+								});
+							send({ mods: value.mods });
+						}
 						const parsed = factoryResultSchema.safeParse(chunk.output);
 						if (parsed.success) {
 							results.push(parsed.data);
-							send({ results });
+							send({ results: results.filter((item) => item.tool !== 'mod_cards') });
 						}
 					}
 				})

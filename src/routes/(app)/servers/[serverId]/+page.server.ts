@@ -20,7 +20,7 @@ import {
 	type UserList,
 	updateServerConfig
 } from '$lib/server/server-files';
-import { modSyncJob } from '$lib/server/server-mod-sync';
+import { modSyncJob, syncModlistFromServer } from '$lib/server/server-mod-sync';
 import { installMod, removeMod, toggleMod } from '$lib/server/server-mods';
 import { requireStopped, serverStatus, startFactorio } from '$lib/server/server-process';
 import { rcon } from '$lib/server/server-rcon';
@@ -59,7 +59,8 @@ export const load: PageServerLoad = async (event) => {
 	const server = await requireServer(event.locals.user?.id, event.params.serverId ?? '');
 	const requestedTab = event.url.searchParams.get('tab');
 	const activeTab =
-		requestedTab && ['mods', 'saves', 'settings', 'access', 'console'].includes(requestedTab)
+		requestedTab &&
+		['mods', 'mod-settings', 'saves', 'settings', 'access', 'console'].includes(requestedTab)
 			? requestedTab
 			: 'console';
 	return {
@@ -96,6 +97,14 @@ export const actions: Actions = {
 			)
 				return fail(409, { message: 'Wait for this server’s mod update to finish' });
 			switch (operation) {
+				case 'syncListFromServer': {
+					const count = await syncModlistFromServer(
+						server,
+						event.locals.user?.id ?? '',
+						stringField(form, 'listId')
+					);
+					return { message: `Mod list synced from server: ${count} enabled mods` };
+				}
 				case 'gameAssistant': {
 					const parsed = gameAssistantSchema.safeParse({
 						enabled: form.get('enabled') === 'on',

@@ -15,7 +15,7 @@ export const user = sqliteTable('user', {
 	username: text('username').notNull().unique(),
 	passwordHash: text('password_hash').notNull(),
 	isAdmin: integer('is_admin', { mode: 'boolean' }).notNull().default(false),
-	typesafeApiKey: text('typesafe_api_key'),
+	openaiApiKey: text('openai_api_key'),
 	codexSubject: text('codex_subject').unique(),
 	codexCredentials: text('codex_credentials'),
 	metaSubject: text('meta_subject').unique(),
@@ -29,6 +29,18 @@ export const user = sqliteTable('user', {
 });
 
 export type User = typeof user.$inferSelect;
+
+export const providerKey = sqliteTable(
+	'provider_key',
+	{
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		providerId: text('provider_id').notNull(),
+		key: text('key').notNull()
+	},
+	(table) => [primaryKey({ columns: [table.userId, table.providerId] })]
+);
 
 export const session = sqliteTable(
 	'session',

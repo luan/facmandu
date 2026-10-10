@@ -22,6 +22,7 @@
 	const headerView = $derived(view ?? (lastView?.serverId === data.server.id ? lastView.data : null));
 	let loading = $state(true);
 	let statusSnapshot = $state<{ serverId: string; status: ServerView['status'] } | null>(null);
+	const linkedList = $derived(data.modLists.find(list => list.id === headerView?.selectedModlist));
 	const headerStatus = $derived(statusSnapshot?.serverId === data.server.id ? statusSnapshot.status : headerView?.status);
 	let errorMessage = $state('');
 	let connectionLost = $state(false);
@@ -31,7 +32,7 @@
 	const base = $derived(`/servers/${data.server.id}`);
 	const query = $derived(new URLSearchParams({ tab: data.activeTab, ...(data.selectedListId ? { list: data.selectedListId } : {}) }));
 	const cacheKey = $derived(`${data.user?.id}:${base}?${query}&connection=${encodeURIComponent(data.server.directory)}`);
-	const tabs = [{ id: 'console', icon: TerminalIcon, label: 'Console' }, { id: 'mods', icon: PackageIcon, label: 'Mods' }, { id: 'saves', icon: HardDriveIcon, label: 'Saves' }, { id: 'settings', icon: SettingsIcon, label: 'Settings' }, { id: 'access', icon: ShieldCheckIcon, label: 'Access' }];
+	const tabs = [{ id: 'console', icon: TerminalIcon, label: 'Console' }, { id: 'mods', icon: PackageIcon, label: 'Mods' }, { id: 'mod-settings', icon: SettingsIcon, label: 'Mod settings' }, { id: 'saves', icon: HardDriveIcon, label: 'Saves' }, { id: 'settings', icon: SettingsIcon, label: 'Settings' }, { id: 'access', icon: ShieldCheckIcon, label: 'Access' }];
 	let lifecyclePending = $state(false);
 	const task = $derived(activityState.items.find((item) => item.scope === 'server' && item.targetId === data.server.id && item.state === 'running'));
 	const stopping = $derived(task?.task === 'stop' || headerStatus?.stopping);
@@ -118,7 +119,7 @@
 			{#if headerStatus}<div role="status" aria-label="Server status" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
 				<span class="inline-flex items-center gap-2 font-semibold"><span class={`size-2 rounded-full ${connectionLost || stopping ? 'bg-amber-400' : headerStatus.failed ? 'bg-red-400' : headerStatus.running ? 'bg-emerald-500' : 'bg-muted-foreground'}`}></span>{connectionLost ? 'Reconnecting…' : stopping ? 'Stopping…' : headerStatus.running ? 'Running' : headerStatus.failed ? 'Failed to start' : 'Stopped'}</span>
 				<span class="text-muted-foreground">Factorio {headerStatus.version.version || 'not selected'}</span>
-				{#if headerView}<span class="text-muted-foreground">{headerView.selectedSave || 'Latest save'}</span>
+				{#if headerView}<span class="text-muted-foreground">{headerView.selectedSave || 'Latest save'}</span>{#if linkedList}<a class="text-primary underline" href={`/modlists/${linkedList.id}`}>{linkedList.name}</a>{/if}
 				<span class="text-muted-foreground">{headerView.mods.filter((mod) => mod.enabled).length} enabled mods</span>{/if}
 			</div>{:else}<div role="status" aria-label="Loading server status" class="flex items-center gap-3">{#if connectionLost}<span class="text-sm text-muted-foreground">Reconnecting…</span>{:else}<span class="bg-muted h-4 w-20 motion-safe:animate-pulse"></span><span class="bg-muted h-4 w-28 motion-safe:animate-pulse"></span>{/if}</div>{/if}
 		</div>
@@ -128,7 +129,7 @@
 				<input type="hidden" name="operation" value={headerStatus.running ? 'stop' : 'start'} />
 				<TooltipButton tooltip={startReason || (headerStatus.running ? 'Stop server' : 'Start server')} type="submit" size="sm" disabled={!!startReason} variant={headerStatus.running ? 'destructive' : 'default'}>{#if headerStatus.running}<SquareIcon class="size-4" />{:else}<PlayIcon class="size-4" />{/if}{stopping ? 'Stopping…' : headerStatus.running ? 'Stop' : 'Start'}</TooltipButton>
 			</form>{:else}<span aria-hidden="true" class="bg-muted h-8 w-20 motion-safe:animate-pulse"></span>{/if}
-			{#key data.server.id}<Assistant serverId={data.server.id} />{/key}
+			{#key data.server.id}<Assistant serverId={data.server.id} contextLabel={headerView ? `${headerView.selectedSave || 'Latest save'} · ${linkedList?.name || 'No linked mod list'}` : ''} />{/key}
 			<Button variant="outline" size="sm" onclick={refresh} disabled={loading}><RefreshCwIcon class={`size-4 ${loading ? 'motion-safe:animate-spin' : ''}`} />Refresh</Button>
 		</div>
 	</div>

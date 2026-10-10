@@ -113,3 +113,11 @@ CREATE TABLE IF NOT EXISTS recommendation_feedback (
  user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
  list_id TEXT NOT NULL REFERENCES modlist(id) ON DELETE CASCADE,
  mod_name TEXT NOT NULL, PRIMARY KEY(user_id,list_id,mod_name));
+
+CREATE TABLE IF NOT EXISTS `provider_key` (
+	`user_id` text NOT NULL,
+	`provider_id` text NOT NULL,
+	`key` text NOT NULL,
+	PRIMARY KEY(`user_id`, `provider_id`),
+	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
+);

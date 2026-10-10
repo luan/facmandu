@@ -92,6 +92,7 @@ import = require
 serpent = { block = function() return '' end }
 mods = {}
 log = function() end
+table_size = function(t) local n = 0 for _ in pairs(t) do n = n + 1 end return n end
 debug = {
   getinfo = function()
     local mod = type(__modname) == 'string' and __modname or ''
@@ -176,8 +177,12 @@ const nativeDefSchema = rawDefSchema.safeExtend({
 		'color-setting'
 	]),
 	setting_type: z.enum(['startup', 'runtime-global', 'runtime-per-user']),
-	default_value: settingValueSchema,
-	allowed_values: z.union([z.array(z.string()), z.array(z.number())]).optional()
+	default_value: z.union([z.boolean(), z.number(), z.string(), rawColorSchema]),
+	allowed_values: z.preprocess(
+		(value) =>
+			value && typeof value === 'object' && !Array.isArray(value) ? Object.values(value) : value,
+		z.union([z.array(z.string()), z.array(z.number())]).optional()
+	)
 });
 
 export const settingDefSchema = z.object({
@@ -211,11 +216,17 @@ function matchingDefault(
 	if (kind === 'boolean') return typeof value === 'boolean' ? value : null;
 	if (kind === 'number') return typeof value === 'number' ? value : null;
 	if (kind === 'string') return typeof value === 'string' ? value : null;
-	if (Array.isArray(value))
-		return { r: value[0] ?? 0, g: value[1] ?? 0, b: value[2] ?? 0, a: value[3] ?? 1 };
-	return value !== null && typeof value === 'object'
-		? { r: value.r ?? 0, g: value.g ?? 0, b: value.b ?? 0, a: value.a ?? 1 }
-		: null;
+	if (!value || typeof value !== 'object') return null;
+	const color = Array.isArray(value)
+		? { r: value[0] ?? 0, g: value[1] ?? 0, b: value[2] ?? 0, a: value[3] }
+		: value;
+	const scale = Math.max(color.r ?? 0, color.g ?? 0, color.b ?? 0, color.a ?? 0) > 1 ? 255 : 1;
+	return {
+		r: (color.r ?? 0) / scale,
+		g: (color.g ?? 0) / scale,
+		b: (color.b ?? 0) / scale,
+		a: (color.a ?? scale) / scale
+	};
 }
 
 function settingDef(raw: z.infer<typeof rawDefSchema>): SettingDef | null {

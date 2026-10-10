@@ -8,6 +8,7 @@ import { compareVersions } from '$lib/dependencies';
 import { db } from './db';
 import type { ManagedServer } from './db/schema';
 import { mod, portalCache } from './db/schema';
+import { nativeModSettingPrototypes } from './map-generation-native';
 import { validModName } from './mod-names';
 import { resolveModSettingLocale } from './mod-settings-locale';
 import {
@@ -35,6 +36,7 @@ export type ModSettingsCatalog = {
 		defs: SettingDef[];
 	}[];
 	unavailable: string[];
+	issues?: Record<string, string>;
 };
 // Decimal byte escapes keep arbitrary JSON and mod names inside one Lua string.
 const luaString = (value: string) =>
@@ -175,7 +177,8 @@ async function defsForMod(
 				.filter(
 					(path) =>
 						!path.includes('__MACOSX/') &&
-						(path.endsWith('/settings.lua') || path === 'settings.lua')
+						((path.split('/').length === 2 && path.endsWith('/settings.lua')) ||
+							path === 'settings.lua')
 				)
 				.sort();
 			for (const settingsPath of settingsPaths) {
@@ -426,13 +429,24 @@ async function catalogMetadata(server: ManagedServer, names: string[]) {
 
 export async function modSettingsCatalog(server: ManagedServer): Promise<ModSettingsCatalog> {
 	let gameVersion: string | null = null;
+	let bundledRoot: string | null = null;
 	try {
-		gameVersion = (await serverConfig(server)).version?.version ?? null;
+		const config = await serverConfig(server);
+		gameVersion = config.version?.version ?? null;
+		if (config.version)
+			bundledRoot = join(
+				server.directory,
+				'versions',
+				config.version.branch,
+				config.version.version,
+				'data'
+			);
 	} catch {
 		gameVersion = null;
 	}
 	const defsByMod: { name: string; version: string; defs: SettingDef[] }[] = [];
 	const unavailable: string[] = [];
+	const issues: Record<string, string> = {};
 	if ((await serverStatus(server)).running) {
 		const live = await readLivePrototypeDefs(server);
 		for (const [name, entry] of live.mods) {
@@ -461,9 +475,49 @@ export async function modSettingsCatalog(server: ManagedServer): Promise<ModSett
 		const [list, entries] = await Promise.all([serverMods(server), readdir(directory)]);
 		for (const item of list.mods) {
 			if (!item.enabled || item.name === 'base' || !validModName(item.name)) continue;
-			const parsed = await defsForMod(directory, item.name, gameVersion, entries, item.version);
+			// Bundled mods live in the selected installation, not the downloaded mod directory.
+			const bundled = ['elevated-rails', 'quality', 'recycler', 'space-age'].includes(item.name);
+			const parsed = await defsForMod(
+				bundled && bundledRoot ? bundledRoot : directory,
+				item.name,
+				gameVersion,
+				bundled && bundledRoot ? await readdir(bundledRoot) : entries,
+				item.version
+			);
 			if (!parsed) unavailable.push(item.name);
 			else if (parsed.defs.length) defsByMod.push({ name: item.name, ...parsed });
+		}
+	}
+	if (unavailable.length && !(await serverStatus(server)).running) {
+		try {
+			const native = parseNativeModSettings(await nativeModSettingPrototypes(server));
+			const remaining = new Map(native.map((def) => [def.name, def]));
+			for (const mod of defsByMod) {
+				mod.defs = mod.defs.flatMap((def) => {
+					const actual = remaining.get(def.name);
+					if (!actual) return [];
+					remaining.delete(def.name);
+					return [
+						{
+							...actual,
+							label: def.label ?? actual.label,
+							description: def.description ?? actual.description
+						}
+					];
+				});
+			}
+			// The offline dump lacks mod ownership. Keep unmapped definitions together;
+			// a running game supplies authoritative owners through RCON.
+			if (remaining.size)
+				defsByMod.push({
+					name: 'additional-settings',
+					version: gameVersion ?? '',
+					defs: [...remaining.values()]
+				});
+			unavailable.length = 0;
+		} catch (cause) {
+			const message = cause instanceof Error ? cause.message : 'Native settings export failed';
+			for (const name of unavailable) issues[name] = message;
 		}
 	}
 	const metadata = await catalogMetadata(
@@ -476,11 +530,15 @@ export async function modSettingsCatalog(server: ManagedServer): Promise<ModSett
 				name,
 				version,
 				defs,
-				title: metadata.get(name)?.title?.trim() || name.replaceAll(/[-_]/gu, ' '),
+				title:
+					name === 'additional-settings'
+						? 'Other installed mod settings'
+						: metadata.get(name)?.title?.trim() || name.replaceAll(/[-_]/gu, ' '),
 				thumbnail: metadata.get(name)?.thumbnail ?? null
 			}))
 			.sort((a, b) => (a.title ?? a.name).localeCompare(b.title ?? b.name)),
-		unavailable: unavailable.sort()
+		unavailable: unavailable.sort(),
+		...(Object.keys(issues).length ? { issues } : {})
 	};
 }
 

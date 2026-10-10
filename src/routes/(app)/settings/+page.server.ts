@@ -1,5 +1,10 @@
 import { error, fail } from '@sveltejs/kit';
 import { and, eq, isNotNull, ne, or, sql } from 'drizzle-orm';
+import {
+	accountProviderKeys,
+	apiProviderAuth,
+	apiProviders
+} from '$lib/server/assistant-providers';
 import { authenticationForm } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
@@ -15,7 +20,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 		.get();
 	const preferences = await db
 		.select({
-			key: table.user.typesafeApiKey,
 			codexSubject: table.user.codexSubject,
 			metaSubject: table.user.metaSubject,
 			copilotSubject: table.user.copilotSubject
@@ -23,12 +27,39 @@ export const load: PageServerLoad = async ({ locals }) => {
 		.from(table.user)
 		.where(eq(table.user.id, locals.user.id))
 		.get();
+	const keys = await accountProviderKeys(locals.user.id);
 	return {
 		account,
-		typesafeConnected: Boolean(preferences?.key),
-		codexConnected: Boolean(preferences?.codexSubject),
-		metaConnected: Boolean(preferences?.metaSubject),
-		copilotConnected: Boolean(preferences?.copilotSubject)
+		providers: [
+			{
+				id: 'codex',
+				name: 'Codex',
+				issuer: 'OpenAI',
+				mode: 'account',
+				connected: Boolean(preferences?.codexSubject)
+			},
+			{
+				id: 'meta',
+				name: 'Muse',
+				issuer: 'Meta',
+				mode: 'account',
+				connected: Boolean(preferences?.metaSubject)
+			},
+			{
+				id: 'copilot',
+				name: 'Copilot',
+				issuer: 'GitHub',
+				mode: 'account',
+				connected: Boolean(preferences?.copilotSubject)
+			},
+			...apiProviders.map((provider) => ({
+				id: provider.id,
+				name: provider.name,
+				issuer: provider.name,
+				mode: 'key' as const,
+				connected: keys.has(provider.id)
+			}))
+		]
 	};
 };
 
@@ -84,22 +115,57 @@ function disconnectProvider(provider: keyof typeof providerKeys, displayName: st
 }
 
 export const actions: Actions = {
+	providerKey: async ({ request, locals }) => {
+		if (!locals.user) error(401, 'Sign in to manage your account');
+		const form = await authenticationForm(request);
+		const provider = apiProviders.find((provider) => provider.id === form.get('provider'));
+		if (!provider) return fail(400, { success: false, message: 'Choose a supported provider' });
+		const remove = form.get('remove') === 'true';
+		const key = String(form.get('key') ?? '').trim();
+		if (!remove && (!key || key.length > 4096 || /\s/.test(key)))
+			return fail(400, { success: false, message: 'Enter a valid API key' });
+		if (!remove) await apiProviderAuth(provider, key);
+		if (provider.id === 'openai') {
+			await db
+				.update(table.user)
+				.set({ openaiApiKey: remove ? null : key })
+				.where(eq(table.user.id, locals.user.id));
+		} else if (remove) {
+			await db
+				.delete(table.providerKey)
+				.where(
+					and(
+						eq(table.providerKey.userId, locals.user.id),
+						eq(table.providerKey.providerId, provider.id)
+					)
+				);
+		} else {
+			await db
+				.insert(table.providerKey)
+				.values({ userId: locals.user.id, providerId: provider.id, key })
+				.onConflictDoUpdate({
+					target: [table.providerKey.userId, table.providerKey.providerId],
+					set: { key }
+				});
+		}
+		return { success: true, message: `${provider.name} ${remove ? 'key removed' : 'key saved'}` };
+	},
 	codex: disconnectProvider('codex', 'Codex'),
 	meta: disconnectProvider('meta', 'Muse'),
 	copilot: disconnectProvider('copilot', 'Copilot'),
-	typesafe: async ({ request, locals }) => {
+	openai: async ({ request, locals }) => {
 		if (!locals.user) error(401, 'Sign in to manage your account');
 		const form = await authenticationForm(request);
 		const key = String(form.get('key') ?? '').trim();
 		if (form.get('remove') !== 'true' && (!key || key.length > 4096 || /\s/.test(key)))
-			return fail(400, { success: false, message: 'Enter a valid TypeSafe API key' });
+			return fail(400, { success: false, message: 'Enter a valid OpenAI API key' });
 		await db
 			.update(table.user)
-			.set({ typesafeApiKey: form.get('remove') === 'true' ? null : key })
+			.set({ openaiApiKey: form.get('remove') === 'true' ? null : key })
 			.where(eq(table.user.id, locals.user.id));
 		return {
 			success: true,
-			message: form.get('remove') === 'true' ? 'TypeSafe key removed' : 'TypeSafe key saved'
+			message: form.get('remove') === 'true' ? 'OpenAI key removed' : 'OpenAI key saved'
 		};
 	},
 	updateFactorioCredentials: async ({ request, locals }) => {

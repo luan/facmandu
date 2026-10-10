@@ -2,6 +2,7 @@
  import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
  import Prompt from '$lib/components/Prompt.svelte';
  import { AssistantVoice, idleVoice } from '$lib/assistant-voice';
+ import { assistantResultGroups } from '$lib/factory-results';
  import FactoryResultView from '$lib/components/FactoryResult.svelte';
  import { serverAssistantPlanSchema, type FactoryResult, type AssistantMod } from '$lib/assistant-results';
  import { modThumbnailUrl } from '$lib/utils';
@@ -12,7 +13,7 @@
  import { RefreshCwIcon, MessageSquareIcon, CheckIcon, LoaderCircleIcon, PackageIcon, PlusIcon, XIcon, ChevronRightIcon, MicIcon, MicOffIcon, PhoneOffIcon } from '@lucide/svelte';
  import { Button, buttonVariants } from '$lib/components/ui/button';
  import * as Sheet from '$lib/components/ui/sheet';
- let { listId, serverId }: { listId?: string; serverId?: string } = $props();
+ let { listId, serverId, contextLabel = '' }: { listId?: string; serverId?: string; contextLabel?: string } = $props();
  let activeResults = $state<FactoryResult[]>([]);
  let chat = $state('');
  let chats = $state<{ id: string; title: string; updatedAt: string; compactedAt: string | null }[]>([]);
@@ -278,7 +279,7 @@
       {@render planRows(plan)}
        <div class="flex items-center justify-end gap-3 border-t border-border px-4 py-3">
         {#if plan.stale}<span class="mr-auto text-xs text-muted-foreground">{plan.refreshable ? 'This review is out of date.' : 'This older review is out of date. Select the mods again.'}</span>{#if plan.refreshable}<Button variant="outline" size="sm" disabled={inProgress} onclick={() => refreshPlan(plan.id)}><RefreshCwIcon class="size-4" />Refresh review</Button>{/if}
-        {:else}<TooltipButton tooltip={inProgress ? 'Response in progress' : 'Apply all reviewed changes together'} size="sm" disabled={inProgress} onclick={() => apply(plan.id)}><CheckIcon />Apply changes</TooltipButton>{/if}
+        {:else if !serverId}<TooltipButton tooltip={inProgress ? 'Response in progress' : 'Apply all reviewed changes together'} size="sm" disabled={inProgress} onclick={() => apply(plan.id)}><CheckIcon />Apply changes</TooltipButton>{/if}
        </div>
      </section>
  {/if}
@@ -295,7 +296,7 @@
     </div>
     <p class="border-l-2 border-primary/50 pl-3 text-sm leading-relaxed">{item.reason}</p>
     <div class="flex justify-end items-center gap-2">
-     {#if item.enabled}<span class="inline-flex items-center gap-1 text-xs text-muted-foreground"><CheckIcon class="size-3.5" />Enabled</span>{:else}<TooltipButton tooltip={inProgress ? 'Response in progress' : !item.version ? `No release for Factorio ${item.factorioVersion}` : selectedMods.includes(item.name) ? 'Remove from review' : 'Select for one combined review'} variant={selectedMods.includes(item.name) ? 'outline' : 'secondary'} size="sm" disabled={inProgress || !item.version} onclick={() => toggleSelected(item.name, turnId)}>{#if selectedMods.includes(item.name)}<CheckIcon />Selected{:else}<PlusIcon />Select{/if}</TooltipButton>{/if}
+     {#if item.enabled}<span class="inline-flex items-center gap-1 text-xs text-muted-foreground"><CheckIcon class="size-3.5" />Enabled</span>{:else if !serverId}<TooltipButton tooltip={inProgress ? 'Response in progress' : !item.version ? `No release for Factorio ${item.factorioVersion}` : selectedMods.includes(item.name) ? 'Remove from review' : 'Select for one combined review'} variant={selectedMods.includes(item.name) ? 'outline' : 'secondary'} size="sm" disabled={inProgress || !item.version} onclick={() => toggleSelected(item.name, turnId)}>{#if selectedMods.includes(item.name)}<CheckIcon />Selected{:else}<PlusIcon />Select{/if}</TooltipButton>{/if}
     </div>
    </section>
   {/each}
@@ -314,10 +315,12 @@
    </div>
    <Sheet.Description class="sr-only">{serverId ? 'Ask about this server and its factory.' : 'Ask about mods or review changes to this list.'}</Sheet.Description>
   </Sheet.Header>
+  {#if contextLabel}<p class="border-b px-4 py-2 text-sm text-muted-foreground">{contextLabel}</p>{/if}
   <div bind:this={feed} class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6" onscroll={() => { if (feed) followOutput = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 80; }}>
    <div class="space-y-7">
     {#if hasMore}<Button variant="ghost" size="sm" disabled={olderLoading} onclick={loadOlder}>{olderLoading ? 'Loading…' : 'Earlier messages'}</Button>{/if}
     {#each turns.filter(turn => turn.state !== 'running') as turn (turn.id)}
+     {@const resultGroups = assistantResultGroups(turn.results ?? [])}
      <section class="space-y-4" aria-label="Conversation turn">
       <div class="flex justify-end"><p class="max-w-[90%] whitespace-pre-wrap break-words border border-border bg-white/5 px-4 py-3 text-sm leading-relaxed">{turn.prompt}</p></div>
       {#if turn.state === 'error'}
@@ -335,7 +338,7 @@
         </section>
        {/if}
       {/if}
-      {#each turn.results ?? [] as item}
+      {#each resultGroups.primary as item}
        {@const failedSetup = setupId(item, 'failed')}
        <div class="space-y-2"><FactoryResultView {item} {serverId} />
         {#if failedSetup && !serverId}<div class="flex justify-end"><TooltipButton tooltip={inProgress ? 'Response in progress' : 'Retry setup on the same server'} disabled={inProgress} size="sm" onclick={() => retrySetup(failedSetup)}><RefreshCwIcon />Retry setup</TooltipButton></div>{/if}
@@ -350,6 +353,7 @@
         {/if}
        </div>
       {/each}
+      {#if resultGroups.details.length}<details class="text-sm"><summary class="cursor-pointer text-muted-foreground">Installation details</summary><div class="mt-2 space-y-2">{#each resultGroups.details as item}<FactoryResultView {item} {serverId} />{/each}</div></details>{/if}
      </section>
     {:else}
      {#if loading}<p role="status" class="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircleIcon class="size-4 animate-spin" />Loading conversation…</p>{:else if !activePrompt}
@@ -361,11 +365,13 @@
      {/if}
     {/each}
     {#if activePrompt}
+     {@const resultGroups = assistantResultGroups(activeResults)}
      <section class="space-y-4" aria-label="Current response">
       <div class="flex justify-end"><p class="max-w-[90%] whitespace-pre-wrap break-words border border-border bg-white/5 px-4 py-3 text-sm leading-relaxed">{activePrompt}</p></div>
       {#if text}<div class="pr-2"><AssistantMessage {text} /></div>{/if}
       {@render modCards(activeMods)}
-      {#each activeResults as item}<FactoryResultView {item} {serverId} />{/each}
+      {#each resultGroups.primary as item}<FactoryResultView {item} {serverId} />{/each}
+      {#if resultGroups.details.length}<details class="text-sm"><summary class="cursor-pointer text-muted-foreground">Installation details</summary><div class="mt-2 space-y-2">{#each resultGroups.details as item}<FactoryResultView {item} {serverId} />{/each}</div></details>{/if}
      </section>
     {/if}
 

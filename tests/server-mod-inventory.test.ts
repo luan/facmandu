@@ -29,6 +29,7 @@ if (process.env.FACMANDU_INVENTORY_TEST_CHILD !== '1') {
 } else {
 	// Keep dependency mocks out of other tests' real process and download modules.
 	mock.module('../src/lib/server/server-process', () => ({
+		run: promisify(execFile),
 		executable: async () => null,
 		requireStopped: async () => undefined
 	}));

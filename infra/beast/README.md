@@ -68,3 +68,23 @@ Restart the timer only when the desired main revision is safe to deploy again.
 
 Update the installed updater script and timer explicitly when deployment behavior
 changes; application releases do not silently replace the updater itself.
+
+## Game connectivity
+
+The Cloudflare Tunnel carries Facmandu's web UI, not Factorio's UDP traffic.
+The current Beast game binds to `192.168.1.191:34197`. Its host firewall must allow
+external players, not just LAN sources:
+
+```sh
+sudo ufw allow in proto udp to 192.168.1.191 port 34197 comment 'Facmandu Factorio public game'
+```
+
+Keep RCON on loopback. For additional instances, allow their configured game
+address and UDP port individually; do not open their RCON ports.
+
+With public visibility and a Factorio account configured, friends can join through
+Factorio's **Browse public games**. This path requests NAT punching through the
+matching service; **Connect to address** does not use that matchmaking exchange.
+NAT punching is not guaranteed on every router. Public-address detection and
+browser registration alone do not prove external reachability. Before removing
+forwarding, verify a browser join from outside the LAN with forwarding disabled.

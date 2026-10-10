@@ -70,7 +70,7 @@ export function createInvitedAccount(
 
 export function listOwnerKey(listId: string) {
 	return db
-		.select({ ownerId: user.id, apiKey: user.typesafeApiKey })
+		.select({ ownerId: user.id, apiKey: user.openaiApiKey })
 		.from(modList)
 		.innerJoin(user, eq(modList.owner, user.id))
 		.where(eq(modList.id, listId))

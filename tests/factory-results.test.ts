@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseConsoleLine } from '../src/lib/console';
-import { presentFactoryResult } from '../src/lib/factory-results';
+import { assistantResultGroups, presentFactoryResult } from '../src/lib/factory-results';
 
 const view = (tool: string, result: unknown) =>
 	presentFactoryResult({ kind: 'factory-result', title: tool.replaceAll('_', ' '), result });
@@ -477,4 +477,22 @@ test('logistic actions and watches label their actual state', () => {
 	assert.equal(watches.cards[0]?.badge, 'Pending validation');
 	assert.equal(watches.cards[1]?.badge, 'Invalid');
 	assert.deepEqual(watches.cards[1]?.notes, ['Unknown force']);
+});
+
+test('installation shows the final outcome and folds intermediate evidence without discarding it', () => {
+	const results = [
+		'server_context',
+		'prepare_server_mod_list',
+		'apply_server_mod_list',
+		'server_context'
+	].map((tool) => ({ kind: 'factory-result' as const, tool, title: tool, result: {} }));
+	assert.deepEqual(assistantResultGroups(results), {
+		primary: [results[3]],
+		details: results.slice(0, 3)
+	});
+	assert.deepEqual(assistantResultGroups(results.slice(0, 2)), {
+		primary: results.slice(0, 2),
+		details: []
+	});
+	assert.deepEqual(assistantResultGroups(results.slice(0, 3)).primary, [results[2]]);
 });

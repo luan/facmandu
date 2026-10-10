@@ -56,7 +56,11 @@ export async function cachedPortalRequest<T extends z.ZodType>(
 	url: string,
 	schema: T,
 	options: CacheOptions,
-	init: RequestInit = {}
+	init: RequestInit = {},
+	requestFetch: (
+		url: string,
+		options?: RequestInit
+	) => Promise<Response> = factorioApiLimiter.fetch.bind(factorioApiLimiter)
 ): Promise<CacheResult<z.infer<T>>> {
 	const now = Date.now();
 	const cached = await readCache(key);
@@ -90,7 +94,7 @@ export async function cachedPortalRequest<T extends z.ZodType>(
 			if (cached?.etag && data) headers.set('If-None-Match', cached.etag);
 			if (cached?.lastModified && data) headers.set('If-Modified-Since', cached.lastModified);
 			try {
-				const response = await factorioApiLimiter.fetch(url, {
+				const response = await requestFetch(url, {
 					...init,
 					headers,
 					signal: AbortSignal.timeout(15_000)

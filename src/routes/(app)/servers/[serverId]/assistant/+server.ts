@@ -1,7 +1,11 @@
 import { error, json } from '@sveltejs/kit';
 import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { factoryResultSchema, serverAssistantPlanSchema } from '$lib/assistant-results';
+import {
+	assistantModsSchema,
+	factoryResultSchema,
+	serverAssistantPlanSchema
+} from '$lib/assistant-results';
 import { chatHistory, newChat, resolveChat, touchChat } from '$lib/server/assistant-chats';
 import { assistantModelCatalog } from '$lib/server/assistant-models';
 import { authenticationForm, requireSameOrigin } from '$lib/server/auth';
@@ -81,7 +85,17 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
 			turns: turns
 				.slice(0, 30)
 				.reverse()
-				.map((turn) => ({ ...turn, mods: [], results: JSON.parse(turn.results) })),
+				.map((turn) => {
+					const results = z.array(factoryResultSchema).parse(JSON.parse(turn.results));
+					const cards = assistantModsSchema.safeParse(
+						results.find((item) => item.tool === 'mod_cards')?.result
+					);
+					return {
+						...turn,
+						mods: cards.success ? cards.data.mods : [],
+						results: results.filter((item) => item.tool !== 'mod_cards')
+					};
+				}),
 			plans: []
 		},
 		{ headers: { 'Cache-Control': 'no-store' } }

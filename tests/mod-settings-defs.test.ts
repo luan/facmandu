@@ -30,6 +30,7 @@ if (process.env.FACMANDU_DEFS_TEST_CHILD !== '1') {
 	let liveResponses: string[] = [];
 	let liveCommands: string[] = [];
 	mock.module('../src/lib/server/server-process', () => ({
+		run: promisify(execFile),
 		serverStatus: async () => ({ running }),
 		executable: async () => null,
 		requireStopped: async () => undefined

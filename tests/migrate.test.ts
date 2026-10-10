@@ -13,7 +13,7 @@ test('additive migration preserves list data, infers compatibility, and is idemp
 	const client = createClient({ url: 'file::memory:' });
 	try {
 		await client.executeMultiple(
-			`CREATE TABLE user (id TEXT PRIMARY KEY, username TEXT, password_hash TEXT); INSERT INTO user VALUES ('luan', 'luan', 'hash'); CREATE TABLE modlist (id TEXT PRIMARY KEY, name TEXT); CREATE TABLE mod (id TEXT PRIMARY KEY, modlist_id TEXT, enabled INTEGER, factorio_version TEXT); INSERT INTO modlist VALUES ('list', 'Existing list'); INSERT INTO mod VALUES ('mod', 'list', 1, '2.1');`
+			`CREATE TABLE user (id TEXT PRIMARY KEY, username TEXT, password_hash TEXT, typesafe_api_key TEXT); INSERT INTO user VALUES ('luan', 'luan', 'hash', 'legacy-typesafe-key'); CREATE TABLE modlist (id TEXT PRIMARY KEY, name TEXT); CREATE TABLE mod (id TEXT PRIMARY KEY, modlist_id TEXT, enabled INTEGER, factorio_version TEXT); INSERT INTO modlist VALUES ('list', 'Existing list'); INSERT INTO mod VALUES ('mod', 'list', 1, '2.1');`
 		);
 		await client.executeMultiple(
 			'CREATE TABLE facmandu_migration (version INTEGER PRIMARY KEY); INSERT INTO facmandu_migration VALUES (2);'
@@ -26,12 +26,24 @@ test('additive migration preserves list data, infers compatibility, and is idemp
    CREATE TABLE modlist_plan (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,list_id TEXT NOT NULL,snapshot TEXT NOT NULL,body TEXT NOT NULL,created_at INTEGER NOT NULL,applied INTEGER NOT NULL DEFAULT 0);
    INSERT INTO modlist_plan VALUES ('old-plan','luan','list','snapshot','{}',1,0);`);
 		await migrate(client, initialSchema);
+		assert.deepEqual(
+			(await client.execute('SELECT typesafe_api_key, openai_api_key FROM user')).rows[0],
+			{
+				typesafe_api_key: 'legacy-typesafe-key',
+				openai_api_key: null
+			}
+		);
+		await client.execute("UPDATE user SET openai_api_key = 'new-openai-key'");
 		assert.equal(
 			(await client.execute("SELECT is_admin FROM user WHERE username = 'luan'")).rows[0]?.is_admin,
 			1
 		);
 		await client.execute("UPDATE user SET is_admin = 0 WHERE username = 'luan'");
 		await migrate(client, initialSchema);
+		assert.equal(
+			(await client.execute('SELECT openai_api_key FROM user')).rows[0]?.openai_api_key,
+			'new-openai-key'
+		);
 		assert.equal(
 			(await client.execute("SELECT is_admin FROM user WHERE username = 'luan'")).rows[0]?.is_admin,
 			0

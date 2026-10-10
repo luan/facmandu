@@ -10,20 +10,20 @@ import { recommendationPriority } from '../src/lib/recommendations';
 
 test('ranks every candidate in one batch with explicit candidate identities', () => {
 	const questions = rankingQuestions([{ name: 'planet' }, { name: 'patch' }]);
-	assert.equal(Object.keys(questions).length, 6);
+	assert.equal(questions.length, 6);
 	assert.deepEqual(
-		Object.values(questions).map((question) => question.instructions.candidate),
+		questions.map((question) => JSON.parse(question.instructions).candidate),
 		['planet', 'planet', 'planet', 'patch', 'patch', 'patch']
 	);
 });
 
 test('combines distinct ratings on a ten point scale without inflating certainty', () => {
 	const result = composeRanking(
-		{
-			candidate_0_fit: { type: 'score', score: 3, confidence: 0.9 },
-			candidate_0_novelty: { type: 'score', score: 1.5, confidence: 0.6 },
-			candidate_0_integration: { type: 'score', score: 0, confidence: 0.8 }
-		},
+		[
+			{ name: 'candidate_0_fit', type: 'score', score: 3, confidence: 0.9 },
+			{ name: 'candidate_0_novelty', type: 'score', score: 1.5, confidence: 0.6 },
+			{ name: 'candidate_0_integration', type: 'score', score: 0, confidence: 0.8 }
+		],
 		0
 	);
 	assert.equal(result?.score, 6.25);
@@ -36,13 +36,16 @@ test('combines distinct ratings on a ten point scale without inflating certainty
 
 test('incomplete or out-of-range answers cannot become a ranking', () => {
 	assert.equal(
-		composeRanking({ candidate_0_fit: { type: 'score', score: 3, confidence: 1 } }, 0),
+		composeRanking([{ name: 'candidate_0_fit', type: 'score', score: 3, confidence: 1 }], 0),
 		null
 	);
+	const answer = { name: 'candidate_0_fit', type: 'score', score: 3, confidence: 0.9 };
+	for (const answers of [[answer, answer], [{ name: 'candidate_0_fit', type: 'refusal' }]])
+		assert.equal(rankingAnswerSchema.safeParse({ answers }).success, false);
 	for (const score of [-1, 4, Number.NaN]) {
 		assert.equal(
 			rankingAnswerSchema.safeParse({
-				answers: { candidate_0_fit: { type: 'score', score, confidence: 1 } }
+				answers: [{ name: 'candidate_0_fit', type: 'score', score, confidence: 1 }]
 			}).success,
 			false
 		);
@@ -74,7 +77,7 @@ test('bounds a full page against a large mod list without losing identities or d
 		assert.deepEqual(candidate.recommendedBy, ['enabled-0']);
 		assert.ok(candidate.description.length > 0);
 	}
-	assert.equal(Object.keys(rankingQuestions(state.candidates)).length, 36);
+	assert.equal(rankingQuestions(state.candidates).length, 36);
 	assert.equal(enabledMods[0]?.description, '工場🏭'.repeat(1000));
 	const fallback = rankingState('2.0', enabledMods, candidates, 28_000);
 	assert.ok(new TextEncoder().encode(JSON.stringify(fallback)).length <= 28_000);

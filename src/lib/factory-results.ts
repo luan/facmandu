@@ -1000,6 +1000,65 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 		watchView(view, tool, data);
 	} else if (tool === 'prepare_server_mod_list') {
 		modPlanView(view, data);
+	} else if (tool === 'server_context') {
+		view.icon = 'server';
+		const status = record(data.status);
+		const job = record(data.job);
+		view.cards = [
+			{
+				title: string(data.name) || 'Server',
+				subtitle: [string(data.selectedSave), string(data.listName)].filter(Boolean).join(' · '),
+				badge: status.failed ? 'Failed to start' : status.running ? 'Running' : 'Stopped',
+				tone: status.failed ? 'warning' : 'muted',
+				metrics: [
+					{
+						label: 'Enabled mods',
+						value: String(rows(data.mods).filter((mod) => mod.enabled).length)
+					},
+					{ label: 'Pending changes', value: String(rows(data.changes).length) }
+				],
+				notes: [
+					string(data.task),
+					job.status ? `Mod installation: ${job.status}` : '',
+					string(job.error)
+				].filter(Boolean)
+			}
+		];
+		view.notes = Array.isArray(data.problems)
+			? data.problems.filter((problem): problem is string => typeof problem === 'string')
+			: [];
+		if (string(data.serverId))
+			view.link = {
+				href: `/servers/${encodeURIComponent(string(data.serverId))}?tab=mods`,
+				label: 'Manage mods'
+			};
+	} else if (tool === 'apply_server_mod_list') {
+		view.icon = 'server';
+		const job = record(data.job);
+		view.cards = [
+			{
+				title: 'Mod installation',
+				badge: humanName(job.status),
+				tone: job.status === 'failed' ? 'warning' : 'muted',
+				metrics: numeric('Completed', job.completed).concat(numeric('Total', job.total)),
+				notes: [string(job.current), string(job.error)].filter(Boolean)
+			}
+		];
+		view.notes =
+			job.status === 'running'
+				? [
+						'Installation started. Check Activity or server_context for completion before starting the server.'
+					]
+				: [];
+	} else if (tool === 'sync_server_mod_list') {
+		view.icon = 'server';
+		view.cards = [
+			{
+				title: 'List synced from server',
+				metrics: numeric('Enabled mods', data.enabledCount),
+				notes: []
+			}
+		];
 	} else if (tool === 'list_trains') {
 		trainListView(view, data);
 	} else if (tool.startsWith('inspect_')) {
@@ -1172,4 +1231,16 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 		}
 	}
 	return view;
+}
+
+// Keep installation evidence available without presenting every intermediate snapshot as an outcome.
+export function assistantResultGroups(results: readonly FactoryResult[]) {
+	const installation = results.findLastIndex((item) => item.tool === 'apply_server_mod_list');
+	if (installation < 0) return { primary: results, details: [] as FactoryResult[] };
+	const context = results.findLastIndex((item) => item.tool === 'server_context');
+	const outcome = context > installation ? context : installation;
+	return {
+		primary: results.filter((_, index) => index === outcome),
+		details: results.filter((_, index) => index !== outcome)
+	};
 }

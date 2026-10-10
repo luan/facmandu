@@ -45,7 +45,7 @@
 	const currentPage = $derived(Math.min(page, pageCount - 1));
 	// Score sorting must not change which candidates are fetched or ranked.
 	const pageCandidates = $derived(visible.slice(currentPage * recommendationPageSize, (currentPage + 1) * recommendationPageSize));
-	const rows = $derived(pageCandidates.toSorted((a, b) => recommendationPriority(scores[b.name]) - recommendationPriority(scores[a.name])));
+	const rows = $derived(pageCandidates.filter(candidate => showDismissed || (details[candidate.name] && recommendationRelease(details[candidate.name]?.releases ?? [], candidate, mods, factorioVersion))).toSorted((a, b) => recommendationPriority(scores[b.name]) - recommendationPriority(scores[a.name])));
 	const checking = $derived(pageCandidates.filter((candidate) => details[candidate.name] === undefined).length);
 	const compatibleNames = $derived(pageCandidates.filter((candidate) => details[candidate.name] && recommendationRelease(details[candidate.name]?.releases ?? [], candidate, mods, factorioVersion)).map((candidate) => candidate.name));
 	const dismissed = $derived(rejected.rejected.size);
@@ -109,10 +109,11 @@
 				{:else if ranking}<span role="status" class="inline-flex items-center gap-2"><LoaderCircleIcon class="size-3.5 animate-spin motion-reduce:animate-none" />Ranking…</span>{/if}
 			</div>
 		</div>
-		{#if !curationAvailable}<p class="px-4 text-sm text-muted-foreground">Ranking needs the list owner’s TypeSafe key in account settings.</p>{/if}
+		{#if !curationAvailable}<p class="px-4 text-sm text-muted-foreground">Ranking needs the list owner’s OpenAI key in account settings.</p>{/if}
 		{#if rankingMessage}<div class="flex items-center gap-3 px-4 text-sm" role={rankingMessage.error ? 'alert' : 'status'}><p class="text-muted-foreground">{rankingMessage.message}</p>{#if rankingMessage.error}<Button variant="outline" size="sm" onclick={() => rankingAttempt++}><RefreshCwIcon class="size-4" />Retry ranking</Button>{/if}</div>{/if}
 		<div class="min-h-0 flex-1 divide-y overflow-y-auto px-4">
-			{#each rows as candidate (candidate.name)}
+			{#if !showDismissed && !rows.length && !checking}<p class="py-6 text-sm text-muted-foreground">No compatible recommendations on this page.{#if Object.keys(errors).length} Some mod metadata could not be verified. <button type="button" class="underline" onclick={() => { for (const name of Object.keys(errors)) { delete details[name]; delete errors[name]; } retry++; }}>Retry verification</button>{/if}</p>{/if}
+   {#each rows as candidate (candidate.name)}
 				{@const detail = details[candidate.name]}
 				{@const score = scores[candidate.name]}
 				{@const release = detail && recommendationRelease(detail.releases, candidate, mods, factorioVersion)}
