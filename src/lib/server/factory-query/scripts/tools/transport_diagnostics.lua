@@ -1,0 +1,56 @@
+-- Inspect physical routing and delivered items, without changing the world.
+local target = require('scripts.tools.target')
+local bounded = require('scripts.tools.bounded')
+local M = {}
+M.manifest = {
+ inspect_transport = {
+  desc = 'Inspect one built belt, inserter, chest, pipe, tank or pump at exact coordinates: status, direction, item counts/contents, inserter pickup/drop targets and the first fluid storage’s connections. Optional item reports its exact normal-quality count even when content rows are truncated. Fluid segment amounts are shared network stock, not independent stock at every pipe. Read-only; ghosts are not built entities.',
+  params = {surface='string! surface name or index',x='number! map x',y='number! map y',name='string entity prototype name',unit_number='integer unit number to disambiguate',item='string exact item prototype name to count'}
+ }
+}
+local supported={['transport-belt']=true,['underground-belt']=true,splitter=true,inserter=true,container=true,['logistic-container']=true,pipe=true,['pipe-to-ground']=true,['storage-tank']=true,pump=true}
+local function reference(e)
+ if e and e.valid then return {name=e.name,unit_number=e.unit_number,position=e.position} end
+end
+local function inspect(a)
+ local e,miss,surface,force=target.find(a)
+ if not e then return miss end
+ if not supported[e.type] then return {found=false,reason='Not a supported transport entity; use inspect_machine for crafting machines'} end
+ if a.item~=nil and (type(a.item)~='string' or not prototypes.item[a.item]) then error('Unknown item prototype',0) end
+ local status
+ for name,id in pairs(defines.entity_status) do if id==e.status then status=name;break end end
+ local row={found=true,force=force.name,surface=surface.name,name=e.name,type=e.type,unit_number=e.unit_number,position=e.position,direction=e.direction,status=status}
+ if a.item then row.item={name=a.item,quality='normal',count=e.get_item_count{name=a.item,quality='normal'}} end
+ if e.type=='container' or e.type=='logistic-container' then
+  local inventory=e.get_inventory(defines.inventory.chest)
+  local items=inventory.get_contents()
+  table.sort(items,function(a,b) if a.count~=b.count then return a.count>b.count end return a.name<b.name end)
+  row.contents={total_kinds=#items,items=bounded.cut(items,12),truncated=#items>12}
+ elseif e.type=='inserter' then
+  row.pickup_position=e.pickup_position;row.drop_position=e.drop_position
+  row.pickup_target=reference(e.pickup_target);row.drop_target=reference(e.drop_target)
+  row.connected_to_power_source=e.is_connected_to_electric_network();row.energy_j=e.energy
+ elseif e.type=='transport-belt' or e.type=='underground-belt' or e.type=='splitter' then
+  row.total_items=e.get_item_count()
+  local neighbours=e.belt_neighbours
+  row.inputs={};row.outputs={}
+  for _,entity in pairs(neighbours.inputs) do row.inputs[#row.inputs+1]=reference(entity) end
+  for _,entity in pairs(neighbours.outputs) do row.outputs[#row.outputs+1]=reference(entity) end
+ else
+  row.stored_fluids=e.get_fluid_contents()
+  -- 2.1 exposes native entity fluid connections; 2.0 retains stored-fluid evidence only.
+  local major,minor=script.active_mods.base:match('^(%d+)%.(%d+)')
+  if tonumber(major)>2 or (tonumber(major)==2 and tonumber(minor)>=1) then
+   -- Pipes and tanks use storage 1. Extend to every pump storage when its native count is verified.
+   row.fluid_storage_index=1
+   row.segment_fluid=e.get_fluid_segment_fluid(1)
+   row.fluid_connections={}
+   for _,c in pairs(e.get_fluid_box_pipe_connections(1) or {}) do
+    row.fluid_connections[#row.fluid_connections+1]={position=c.position,target_position=c.target_position,target=reference(c.target),flow_direction=c.flow_direction}
+   end
+  end
+ end
+ return row
+end
+M.functions={inspect_transport=inspect}
+return M

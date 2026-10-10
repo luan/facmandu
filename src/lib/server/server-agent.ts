@@ -434,6 +434,7 @@ const lookupGroups: Record<string, string> = {
 	top_items: 'production',
 	production_since: 'production',
 	inspect_machine: 'production',
+	inspect_transport: 'logistics',
 	inspect_power_network: 'power',
 	trains: 'logistics',
 	list_trains: 'logistics',

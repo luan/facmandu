@@ -31,6 +31,7 @@ local built            = require("scripts.tools.built")
 local fluid_rate       = require("scripts.tools.fluid_rate")
 local trains           = require("scripts.tools.trains")
 local machine_diagnostics = require("scripts.tools.machine_diagnostics")
+local transport_diagnostics = require("scripts.tools.transport_diagnostics")
 local power_diagnostics = require("scripts.tools.power_diagnostics")
 local train_diagnostics = require("scripts.tools.train_diagnostics")
 local logistic_requests = require("scripts.tools.logistic_requests")
@@ -41,7 +42,7 @@ local MODULES = {
   basics, surfaces, production, production_since,
   research, tech_status, logistics, entity_count, environment, rockets, game_time,
   locate, kills, built, fluid_rate, trains,
-  machine_diagnostics, power_diagnostics, train_diagnostics, logistic_requests,
+  machine_diagnostics, transport_diagnostics, power_diagnostics, train_diagnostics, logistic_requests,
   planning, sweep,
 }
 
