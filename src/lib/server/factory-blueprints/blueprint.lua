@@ -52,6 +52,7 @@ local function blueprint(request)
   if not p or not supported[p.type] then error('Unknown or unsupported production entity: '..e.name,0) end
   if not unlocked(available,p) then error('Construction item is not unlocked: '..e.name,0) end
   if e.recipe then
+   if p.type~='assembling-machine' then error('Only assembling machines accept explicit recipes; furnaces select recipes from their inputs',0) end
    local recipe=force.recipes[e.recipe]
    local compatible=false
    if recipe and recipe.enabled and p.crafting_categories then
@@ -78,7 +79,7 @@ local function blueprint(request)
  local normalized=stack.get_blueprint_entities()
  if not normalized or #normalized~=#entities then error('Factorio rejected blueprint entities',0) end
  for i,e in ipairs(normalized) do
-  if e.name~=entities[i].name or e.position.x~=entities[i].position.x or e.position.y~=entities[i].position.y then error('Factorio changed blueprint alignment; adjust the design',0) end
+  if e.name~=entities[i].name or e.position.x~=entities[i].position.x or e.position.y~=entities[i].position.y or (e.direction or 0)~=entities[i].direction or e.recipe~=entities[i].recipe or e.type~=entities[i].type then error('Factorio changed blueprint settings; adjust the design',0) end
  end
  stack.label=request.label
  local cost={}
