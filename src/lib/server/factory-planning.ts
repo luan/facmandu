@@ -71,7 +71,11 @@ export const factoryPlanInput = z.object({
 		])
 		.default('one_minute'),
 	recipes: z.record(z.string(), z.string()).default({}),
-	machines: z.record(z.string(), z.string()).default({})
+	machines: z.record(z.string(), z.string()).default({}),
+	external_inputs: z
+		.array(z.strictObject({ name: z.string().min(1), type: z.enum(['item', 'fluid']) }))
+		.max(32)
+		.default([])
 });
 export type FactoryPlanInput = z.input<typeof factoryPlanInput>;
 type Product = z.infer<typeof material>;
@@ -147,6 +151,7 @@ export async function planFactory(
 	const inputs = new Map<string, Rate>();
 	const outputs = new Map<string, Rate>();
 	const active = new Set<string>();
+	const external = new Set(input.external_inputs.map(key));
 	let lookups = 0;
 	const add = (target: Map<string, Rate>, product: Product, amount: number) => {
 		const id = key(product);
@@ -159,6 +164,11 @@ export async function planFactory(
 	};
 	const resolve = async (product: Product, amount: number, depth: number): Promise<void> => {
 		const id = key(product);
+		const selected = input.recipes[id] ?? input.recipes[product.name];
+		if (depth > 0 && external.has(id)) {
+			add(inputs, product, amount);
+			return;
+		}
 		if (depth > 16 || active.has(id)) {
 			result.status = 'limited';
 			result.issues.push(
@@ -179,7 +189,13 @@ export async function planFactory(
 				await factoryQuery(server, {
 					op: 'call',
 					tool: 'planning_recipes',
-					args: { force: input.force, product: product.name, type: product.type }
+					args: {
+						force: input.force,
+						product: product.name,
+						type: product.type,
+						...(selected ? { recipe: selected } : {}),
+						...(selected && input.machines[selected] ? { machine: input.machines[selected] } : {})
+					}
 				})
 			);
 			lookedUp.set(id, reply);
@@ -190,7 +206,6 @@ export async function planFactory(
 			return;
 		}
 		const enabled = reply.recipes.filter((candidate) => candidate.enabled);
-		const selected = input.recipes[id] ?? input.recipes[product.name];
 		const chosen = selected
 			? enabled.find((candidate) => candidate.name === selected)
 			: enabled.length === 1

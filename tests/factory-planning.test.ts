@@ -11,12 +11,66 @@ mock.module('../src/lib/server/factory-query', () => ({
 			request.tool === 'planning_recipes'
 				? `${request.tool}:${request.args?.type}:${request.args?.product}`
 				: request.tool;
+		const exact = `${lookup}:${request.args?.recipe}:${request.args?.machine}`;
+		if (replies.has(exact)) return Promise.resolve(replies.get(exact));
 		if (!lookup || !replies.has(lookup)) throw new Error(`Unexpected lookup: ${lookup}`);
 		return Promise.resolve(replies.get(lookup));
 	}
 }));
 const { planFactory } = await import('../src/lib/server/factory-planning');
 const server = {} as ManagedServer;
+
+test('plans an exact module recipe and machine from supplied inputs without upstream lookups', async () => {
+	replies.clear();
+	replies.set('planning_recipes:item:plastic-bar:plastic-bar:chemical-plant', {
+		force: 'player',
+		product: 'plastic-bar',
+		total: 1,
+		truncated: false,
+		enabled_total: 1,
+		enabled_shown: 1,
+		recipes: [
+			{
+				name: 'plastic-bar',
+				enabled: true,
+				hidden: false,
+				energy: 1,
+				ingredients: [
+					{ name: 'coal', type: 'item', amount: 1 },
+					{ name: 'petroleum-gas', type: 'fluid', amount: 20 }
+				],
+				products: [{ name: 'plastic-bar', type: 'item', amount: 2 }],
+				productivity_bonus: 0,
+				machines: [{ name: 'chemical-plant', speed: 1, availability: 'craftable' }],
+				machines_total: 1
+			}
+		]
+	});
+	replies.set('item_rate', {
+		found: true,
+		produced_per_min: 0,
+		consumed_per_min: 0,
+		net_per_min: 0
+	});
+	const plan = await planFactory(server, {
+		force: 'player',
+		surface: 'nauvis',
+		product: 'plastic-bar',
+		per_min: 120,
+		recipes: { 'plastic-bar': 'plastic-bar' },
+		machines: { 'plastic-bar': 'chemical-plant' },
+		external_inputs: [
+			{ name: 'coal', type: 'item' },
+			{ name: 'petroleum-gas', type: 'fluid' }
+		]
+	});
+	assert.equal(plan.status, 'complete');
+	assert.equal(plan.steps[0]?.machines, 1);
+	assert.deepEqual(plan.inputs, [
+		{ name: 'coal', type: 'item', per_min: 60 },
+		{ name: 'petroleum-gas', type: 'fluid', per_min: 1200 }
+	]);
+});
 
 test('plans a modded chain with exact base-speed machine counts and measured gap', async () => {
 	replies.clear();

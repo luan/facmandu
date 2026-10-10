@@ -10,6 +10,8 @@ M.manifest = {
     params = {
       product = "string! item or fluid prototype name",
       type = "string item or fluid; omit to search both",
+      recipe = "string exact recipe name; restrict the lookup before limits are applied",
+      machine = "string exact crafting entity name; restrict compatible machines before limits are applied",
     },
   },
 }
@@ -74,12 +76,12 @@ local function machine_availability(force, prototype)
   return "unavailable"
 end
 
-local function machines(categories, force)
+local function machines(categories, force, selected)
   local rows, seen = {}, {}
   for _, category in ipairs(categories) do
     local matching = prototypes.get_entity_filtered{{ filter = "crafting-category", crafting_category = category }}
     for name, prototype in pairs(matching) do
-      if not seen[name] and (prototype.type == "assembling-machine" or prototype.type == "furnace" or prototype.type == "rocket-silo") then
+      if (not selected or name==selected) and not seen[name] and (prototype.type == "assembling-machine" or prototype.type == "furnace" or prototype.type == "rocket-silo") then
         seen[name] = true
         local speed = prototype.get_crafting_speed()
         if speed and speed > 0 then
@@ -106,7 +108,8 @@ local function planning_recipes(a)
   if type(a.product) ~= "string" or a.product == "" then error("product is required", 0) end
   if a.type ~= nil and a.type ~= "item" and a.type ~= "fluid" then error("type must be item or fluid", 0) end
   local candidates = {}
-  for _, recipe in pairs(force.recipes) do
+  local source = a.recipe and (force.recipes[a.recipe] and {force.recipes[a.recipe]} or {}) or force.recipes
+  for _, recipe in pairs(source) do
     local matches = false
     -- Read product names first. Computing expected yields for every recipe
     -- made a live RCON lookup stall on large mod packs.
@@ -134,7 +137,7 @@ local function planning_recipes(a)
         categories[#categories + 1] = category
       end
     end
-    local available, total_machines = machines(categories, force)
+    local available, total_machines = machines(categories, force, a.machine)
     for _, machine in ipairs(available) do
       if machine.productivity_bonus ~= 0 then
         machine.products = products(recipe, recipe.productivity_bonus + machine.productivity_bonus)

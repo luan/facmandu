@@ -268,7 +268,7 @@ export function serverAssistantTools(context: {
 		useTool({
 			name: 'plan_production',
 			description:
-				'Calculate a production plan from this save’s actual recipes, unlocks and machine speeds. Target per_min is units per minute. Returns required inputs, machines, recipe choices and measured production. Supply recipe choices by product name and machine choices by recipe name when ambiguous. Plans never build or change anything. Set display=true when the user should see the rich production plan; leave intermediate calculations in tool activity.',
+				'Calculate a production plan from this save’s actual recipes, unlocks and machine speeds. Target per_min is units per minute. Returns required inputs, machines, recipe choices and measured production. Supply exact recipe choices by product name and machine choices by recipe name when ambiguous; exact choices are looked up before catalog limits. For a module fed by existing supplies, declare their names and item/fluid types in external_inputs: the plan reports their required rates without recursively redesigning their upstream production. This declaration does not verify that the supply can sustain the rate; inspect it separately. Plans never build or change anything. Set display=true when the user should see the rich production plan; leave intermediate calculations in tool activity.',
 			input: v.object({
 				display: v.optional(v.boolean(), false),
 				force: v.string(),
