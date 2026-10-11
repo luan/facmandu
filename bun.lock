@@ -44,6 +44,9 @@
       },
     },
   },
+  "patchedDependencies": {
+    "@flue/runtime@2.2.2": "patches/@flue%2Fruntime@2.2.2.patch",
+  },
   "overrides": {
     "@earendil-works/pi-ai": "0.99.1",
     "@modelcontextprotocol/client": "2.2.0",

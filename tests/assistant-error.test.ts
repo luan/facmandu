@@ -27,3 +27,12 @@ test('unknown failures never expose raw exception messages', () => {
 	for (const cause of [new Error('private-token'), 'private-token', null, cyclic])
 		assert.equal(assistantErrorMessage(cause), 'Could not finish this response. Try again.');
 });
+
+test('provider token limits explain recovery without exposing its private response', () => {
+	const error = new Error('429 tpm_uncached_exceeded private-account private-token');
+	const message = assistantErrorMessage(error);
+	assert.match(message, /uncached conversation context/u);
+	assert.match(message, /start a new chat/u);
+	assert.doesNotMatch(message, /private-account|private-token/u);
+	assert.match(assistantErrorMessage(new Error('429 rate_limit_error')), /wait briefly/u);
+});

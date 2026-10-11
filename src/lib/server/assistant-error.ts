@@ -11,6 +11,12 @@ export function assistantErrorMessage(cause: unknown): string {
 			/account\b[^\n]*\bis suspended\b/iu.test(error.message)
 		)
 			return 'Your model provider suspended this account. Check billing or the monthly spending limit, then retry or choose another provider.';
+		if ('message' in error && typeof error.message === 'string') {
+			if (/tpm_uncached_exceeded/iu.test(error.message))
+				return 'The provider rejected too much uncached conversation context. Your work is saved; start a new chat or choose another model to continue.';
+			if (/\b429\b|rate.limit/iu.test(error.message))
+				return 'The model provider is temporarily rate-limiting requests. Your work is saved; wait briefly and retry.';
+		}
 		if (!('cause' in error)) break;
 		error = error.cause;
 	}
