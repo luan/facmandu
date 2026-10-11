@@ -7,8 +7,11 @@ import {
 	blueprintDesignSchema,
 	blueprintEntitySchema,
 	blueprintInputSchema,
+	blueprintReferenceSchema,
 	blueprintRequestSchema,
-	blueprintTargetSchema
+	blueprintRowsSchema,
+	blueprintTargetSchema,
+	expandBlueprintRows
 } from '$lib/blueprints';
 import type { ManagedServer } from './db/schema';
 import source from './factory-blueprints/blueprint.lua?raw';
@@ -16,7 +19,28 @@ import { ServerError } from './server-files';
 import { serverStatus } from './server-process';
 import { rconScript } from './server-rcon';
 
-export const blueprintJsonSchema = z.toJSONSchema(blueprintInputSchema);
+// The operation belongs outside args. Reusing request schemas verbatim made the
+// model emit a second operation inside args and obscured which fields go together.
+export const blueprintToolJsonSchema = {
+	type: 'object',
+	properties: {
+		operation: { type: 'string', enum: ['catalog', 'create', 'inspect', 'place'] },
+		display: { type: 'boolean' },
+		args: { type: 'object' }
+	},
+	required: ['operation', 'args'],
+	additionalProperties: false,
+	oneOf: [
+		...blueprintRequestSchema.options,
+		...blueprintReferenceSchema.options,
+		blueprintRowsSchema
+	].map((variant) => {
+		const { operation, ...fields } = variant.shape;
+		return z.toJSONSchema(
+			z.strictObject({ operation, display: z.boolean().optional(), args: z.strictObject(fields) })
+		);
+	})
+};
 export function blueprintDesignHash(input: unknown) {
 	return createHash('sha256')
 		.update(JSON.stringify(blueprintDesignSchema.parse(input)))
@@ -128,7 +152,7 @@ export async function factoryBlueprint(
 			const { designId: _id, ...target } = reference;
 			resolved = blueprintRequestSchema.parse({ ...saved, ...target });
 		}
-	} else resolved = parsed.data;
+	} else resolved = 'entityRows' in parsed.data ? expandBlueprintRows(parsed.data) : parsed.data;
 	if (!(await serverStatus(server)).running)
 		throw new ServerError(409, 'Start this server to design or place a blueprint');
 	const raw = await rconScript(server, blueprintCommand(resolved, player));

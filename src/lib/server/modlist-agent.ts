@@ -51,7 +51,7 @@ export { inspectList } from './modlist-management-tools';
 
 import type { TranscriptContext } from '@earendil-works/pi-ai';
 import { factoryActionInspectJsonSchema, factoryActionJsonSchema } from './factory-actions';
-import { blueprintJsonSchema } from './factory-blueprints';
+import { blueprintToolJsonSchema } from './factory-blueprints';
 import { addFactoryImages } from './factory-image-context';
 import { factoryImagePath } from './factory-images';
 import { listRankedRecommendations } from './modlist-recommendations';
@@ -86,7 +86,6 @@ async function registerAssistantProvider(
 		? await requireServer(context.userId, context.serverId)
 		: undefined;
 	const argumentSchemas = new Map<string, unknown>([
-		['blueprint_operation', blueprintJsonSchema],
 		['factory_action', factoryActionJsonSchema],
 		['factory_action_inspect', factoryActionInspectJsonSchema]
 	]);
@@ -99,6 +98,8 @@ async function registerAssistantProvider(
 				return {
 					...message,
 					toolsAdded: message.toolsAdded?.map((tool) => {
+						if (tool.name === 'blueprint_operation')
+							return { ...tool, parameters: { ...tool.parameters, ...blueprintToolJsonSchema } };
 						const schema = argumentSchemas.get(tool.name);
 						if (!schema) return tool;
 						const { properties } = v.parse(

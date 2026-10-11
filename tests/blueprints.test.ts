@@ -5,7 +5,9 @@ import {
 	blueprintArtifactSchema,
 	blueprintInputSchema,
 	blueprintRequestSchema,
-	blueprintTargetSchema
+	blueprintRowsSchema,
+	blueprintTargetSchema,
+	expandBlueprintRows
 } from '../src/lib/blueprints';
 import { blueprintCommand } from '../src/lib/server/factory-blueprints';
 
@@ -15,6 +17,69 @@ const design = {
 	entities: [{ name: 'transport-belt', position: { x: 0.5, y: 0.5 }, direction: 4 as const }]
 };
 const target = { ...design, surface: 'nauvis', position: { x: 20, y: 20 } };
+test('compact rows expand exact native positions and preserve settings within the original bounds', () => {
+	const rows = {
+		operation: 'create',
+		force: 'player',
+		label: 'Inserters',
+		entities: design.entities,
+		entityRows: [
+			{
+				entity: {
+					name: 'fast-inserter',
+					position: { x: 1.5, y: 2.5 },
+					direction: 8,
+					pickup_position: { x: 0, y: 2 },
+					drop_position: { x: 0, y: -2 },
+					filters: [{ index: 1, name: 'iron-plate' }],
+					use_filters: true
+				},
+				count: 3,
+				step: { x: 3, y: 0 }
+			}
+		]
+	};
+	const expanded = expandBlueprintRows(blueprintRowsSchema.parse(rows));
+	if (expanded.operation !== 'create') throw new Error('Expected design');
+	assert.deepEqual(
+		expanded.entities.map((entity) => entity.position),
+		[
+			{ x: 0.5, y: 0.5 },
+			{ x: 1.5, y: 2.5 },
+			{ x: 4.5, y: 2.5 },
+			{ x: 7.5, y: 2.5 }
+		]
+	);
+	assert.deepEqual(
+		expanded.entities.slice(1).map((entity) => entity.pickup_position),
+		Array(3).fill({ x: 0, y: 2 })
+	);
+	assert.equal(expanded.entities[3]?.use_filters, true);
+	assert.equal(expanded.entities[3]?.direction, 8);
+	assert.equal(blueprintInputSchema.safeParse(rows).success, true);
+	assert.equal(
+		blueprintRowsSchema.safeParse({ ...rows, entityRows: [{ ...rows.entityRows[0], count: 200 }] })
+			.success,
+		false
+	);
+	assert.throws(() =>
+		expandBlueprintRows(
+			blueprintRowsSchema.parse({
+				...rows,
+				entityRows: [{ ...rows.entityRows[0], step: { x: 10000, y: 0 } }]
+			})
+		)
+	);
+	assert.equal(
+		blueprintRowsSchema.safeParse({
+			...rows,
+			entityRows: [
+				{ ...rows.entityRows[0], entity: { ...rows.entityRows[0]?.entity, wires: [[1, 1, 2, 1]] } }
+			]
+		}).success,
+		false
+	);
+});
 test('blueprints reject arbitrary settings and unbounded layouts at the tool boundary', () => {
 	for (const entities of [
 		[],

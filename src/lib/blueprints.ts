@@ -72,6 +72,45 @@ export const blueprintDesignSchema = z.strictObject({
 	entities: z.array(blueprintEntitySchema).max(200).default([]),
 	tiles: z.array(blueprintTileSchema).max(1024).default([])
 });
+const entityRows = z
+	.array(
+		z.strictObject({
+			entity: blueprintEntitySchema.omit({ wires: true }),
+			count: z.number().int().min(1).max(200),
+			step: z.strictObject({ x: coordinate, y: coordinate })
+		})
+	)
+	.min(1)
+	.max(200)
+	.describe(
+		'Repeat an entity along a row: copy 0 uses entity.position, copy n adds n * step. Use for straight belts, pipes and machine rows. Settings and relative inserter reach are retained. Wire individually after expansion.'
+	);
+export const blueprintRowsSchema = blueprintDesignSchema
+	.extend({
+		operation: z.literal('create'),
+		entityRows
+	})
+	.refine(
+		(input) =>
+			input.entities.length + input.entityRows.reduce((sum, row) => sum + row.count, 0) <= 200,
+		'Expanded blueprint exceeds 200 entities'
+	);
+
+export function expandBlueprintRows(input: z.infer<typeof blueprintRowsSchema>): BlueprintRequest {
+	const { entityRows, ...design } = input;
+	return blueprintRequestSchema.parse({
+		...design,
+		entities: [
+			...design.entities,
+			...entityRows.flatMap(({ entity, count, step }) =>
+				Array.from({ length: count }, (_, index) => ({
+					...entity,
+					position: { x: entity.position.x + index * step.x, y: entity.position.y + index * step.y }
+				}))
+			)
+		]
+	});
+}
 export const blueprintTargetSchema = blueprintDesignSchema.extend({
 	surface: name,
 	position: z
@@ -132,7 +171,11 @@ export const blueprintReferenceSchema = z.discriminatedUnion('operation', [
 		expectedDesign: z.string().regex(/^[a-f0-9]{64}$/)
 	})
 ]);
-export const blueprintInputSchema = z.union([blueprintRequestSchema, blueprintReferenceSchema]);
+export const blueprintInputSchema = z.union([
+	blueprintRequestSchema,
+	blueprintReferenceSchema,
+	blueprintRowsSchema
+]);
 export type BlueprintRequest = z.infer<typeof blueprintRequestSchema>;
 export const blueprintArtifactSchema = z
 	.object({

@@ -3,6 +3,41 @@ import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { lauxlib, lua, lualib, to_luastring } from 'fengari';
 
+test('exact factory centers select the intended belt while overlapping or approximate targets remain ambiguous', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const root = resolve('src/lib/server/factory-query');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ package.path = ${JSON.stringify(`${root}/?.lua;`)} .. package.path
+ local entities={}
+ local force={name='player'}
+ local surface={name='nauvis',valid=true,find_entities_filtered=function(filter)
+  assert(filter.force=='player')
+  return entities
+ end}
+ game={forces={player=force},surfaces={nauvis=surface}}
+ prototypes={entity={['transport-belt']={}}}
+ local target=require('scripts.tools.target')
+ local function belt(id,x) return {valid=true,name='transport-belt',type='transport-belt',unit_number=id,position={x=x,y=0.5}} end
+ entities={belt(1,-0.5),belt(2,0.5),belt(3,1.5)}
+ local args={force='player',surface='nauvis',name='transport-belt',x=0.5,y=0.5}
+ assert(target.find(args).unit_number==2)
+ args.x=0
+ local entity,miss=target.find(args)
+ assert(not entity and miss.ambiguous and #miss.choices==3)
+ args.x=0.5
+ entities[#entities+1]=belt(4,0.5)
+ entity,miss=target.find(args)
+ assert(not entity and miss.ambiguous and #miss.choices==2)
+ args.unit_number=4
+ assert(target.find(args).unit_number==4)
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
+
 test('native lookup contracts declare scope and preserve exact local targets', () => {
 	const state = lauxlib.luaL_newstate();
 	lualib.luaL_openlibs(state);

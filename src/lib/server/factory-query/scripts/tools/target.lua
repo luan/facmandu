@@ -34,6 +34,15 @@ function M.find(a)
       x = a.x, y = a.y, truncated = #found == 20,
       reason = "no matching built entity within one tile" }
   end
+  -- A belt's neighbors are within one tile too. Prefer its exact center, while
+  -- retaining ambiguity for overlapping entities or truncated native searches.
+  if #matches>1 and #found<20 then
+    local exact={}
+    for _,entity in ipairs(matches) do
+      if math.abs(entity.position.x-a.x)<0.000001 and math.abs(entity.position.y-a.y)<0.000001 then exact[#exact+1]=entity end
+    end
+    if #exact>0 then matches=exact end
+  end
   if #matches > 1 then
     local choices = {}
     for i, entity in ipairs(matches) do

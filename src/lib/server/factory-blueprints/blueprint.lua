@@ -99,7 +99,7 @@ local function blueprint(request)
      for _,connection in pairs(box.pipe_connections) do
       local adjacent={}
       local offsets={[0]={x=0,y=-1},[4]={x=1,y=0},[8]={x=0,y=1},[12]={x=-1,y=0}}
-      for i,position in ipairs(connection.positions) do
+      for i,position in ipairs(connection.connection_type=='normal' and connection.positions or {}) do
        local outward=offsets[(connection.direction+(i-1)*4)%16]
        if outward then adjacent[i]={x=position.x+outward.x,y=position.y+outward.y} end
       end

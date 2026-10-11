@@ -4,7 +4,7 @@ local bounded = require("scripts.tools.bounded")
 local M = {}
 M.manifest = {
   inspect_power_network = {
-    desc = "Diagnose power at one built entity: network ID, generation and consumption over the last minute from a nearby pole's electric statistics, and nearby electric entities without a network. The disconnected and accumulator rows cover only the stated radius, not the whole network. A disconnected target has no network statistics.",
+    desc = "Diagnose power at one built entity: instantaneous native satisfaction, available generation and requested demand (2.1+), recent actual flow, and nearby disconnected entities. Actual generation follows consumption; low actual generation alone does not prove a shortage. The local disconnected and accumulator rows cover only the stated radius.",
     tier = "2", params = { surface = "string! surface name or index", x = "number! map x", y = "number! map y", name = "string entity prototype name", unit_number = "integer entity unit number", radius = "integer local inspection radius, default 16, max 32 tiles" },
   },
 }
@@ -68,6 +68,17 @@ local function inspect(a)
     nearby_accumulator_stored_j = bounded.round(stored, 0),
     nearby_accumulator_capacity_j = bounded.round(capacity, 0),
   }
+  -- Native satisfaction is available in 2.1; 2.0 keeps its flow-only diagnostics.
+  local major,minor=(script.active_mods.base or ''):match('^(%d+)%.(%d+)')
+  if tonumber(major) and (tonumber(major)>2 or (tonumber(major)==2 and tonumber(minor)>=1)) then
+    local network=entity.electric_network
+    local flow=network and network.parent_network.flow_last_tick
+    if flow then
+      row.instant={consumption_satisfaction=flow.consumption_satisfaction,production_utilization=flow.production_satisfaction,
+        available_generation_w=bounded.round(flow.maximum_production*60,0),requested_consumption_w=bounded.round(flow.maximum_consumption*60,0),supplied_w=bounded.round(flow.total_transfer*60,0),
+        accumulator_energy_j=bounded.round(flow.accumulator_energy,0),accumulator_capacity_j=bounded.round(flow.accumulator_capacity,0)}
+    end
+  end
   if pole then
     local stats = pole.electric_network_statistics
     if stats then

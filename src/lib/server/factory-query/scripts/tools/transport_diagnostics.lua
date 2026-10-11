@@ -66,6 +66,8 @@ local function inspect(a)
   for index=1,e.get_max_transport_line_index() do
    local line=e.get_transport_line(index)
    local entry={index=index,total_items=line.get_item_count()}
+   local contents=line.get_contents()
+   entry.contents={total_kinds=#contents,items=bounded.cut(contents,12),truncated=#contents>12}
    if a.item then entry.item_count=line.get_item_count{name=a.item,quality='normal'} end
    row.transport_lines[#row.transport_lines+1]=entry
   end
