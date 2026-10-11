@@ -94,6 +94,21 @@ class DeploymentTests(unittest.TestCase):
                     connection.commit()
                     self.assertTrue(deploy.assistant_busy())
 
+    def test_deployment_waits_for_preview_work_after_the_assistant_settles(self):
+        with tempfile.TemporaryDirectory() as directory:
+            processes = Path(directory)
+            renderer = str(Path.home() / '.local/share/facmandu-renderer/current/render.py').encode()
+            self.assertFalse(deploy.renderer_busy(processes))
+            process = processes / '123'
+            process.mkdir()
+            command = process / 'cmdline'
+            command.write_bytes(b'python3\0' + renderer + b'\0--input\0snapshot.json\0')
+            self.assertTrue(deploy.renderer_busy(processes))
+            command.write_bytes(b'python3\0unrelated-script.py\0')
+            self.assertFalse(deploy.renderer_busy(processes))
+            command.write_bytes(b'python3\0' + renderer + b'.unrelated\0')
+            self.assertFalse(deploy.renderer_busy(processes))
+
     def test_failed_health_restores_previous_source_and_service_configuration(self):
         revision = "a" * 40
         with tempfile.TemporaryDirectory() as directory:
@@ -118,7 +133,8 @@ class DeploymentTests(unittest.TestCase):
             with patch.object(deploy, "ROOT", root), patch.object(deploy, "SOURCE", previous), \
                  patch("pathlib.Path.home", return_value=home), patch.object(deploy, "run", side_effect=command), \
                  patch.object(deploy, "health", side_effect=RuntimeError("failed health")), \
-                 patch.object(deploy, "assistant_busy", return_value=False):
+                 patch.object(deploy, "assistant_busy", return_value=False), \
+                 patch.object(deploy, "renderer_busy", return_value=False):
                 deploy.switch(previous)
                 with self.assertRaisesRegex(RuntimeError, "failed health"):
                     deploy.deploy(revision)

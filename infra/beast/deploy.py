@@ -59,6 +59,22 @@ def assistant_busy():
         return True
 
 
+def renderer_busy(processes=Path('/proc')):
+    renderer = str(Path.home() / '.local/share/facmandu-renderer/current/render.py').encode()
+    # Preview work can outlive its assistant turn. Do not kill it on release switch.
+    for process in processes.iterdir():
+        if not process.name.isdigit():
+            continue
+        try:
+            if process.stat().st_uid == os.getuid() and renderer in (process / 'cmdline').read_bytes().split(b'\0'):
+                return True
+        except FileNotFoundError:
+            continue
+        except OSError:
+            return True
+    return False
+
+
 def switch(target):
     temporary = ROOT / ".current-next"
     temporary.unlink(missing_ok=True)
@@ -154,8 +170,8 @@ def deploy(revision):
     if current_main != revision:
         print("Main advanced during preparation; waiting for its quality checks")
         return
-    if assistant_busy():
-        print("Assistant work is running; deferring application restart")
+    if assistant_busy() or renderer_busy():
+        print("Assistant or preview work is running; deferring application restart")
         return
     previous_dropin = dropin.read_bytes() if dropin.exists() else None
     current = ROOT / "current"
