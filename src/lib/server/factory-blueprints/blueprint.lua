@@ -420,7 +420,26 @@ local function blueprint(request)
   end
   -- Check the real entity collision rules, not the permissive ghost collision mask.
   if not charted or not surface.can_place_entity{name=e.name,position=position,direction=e.direction,force=force,build_check_type=defines.build_check_type.manual} then
-   blocked[#blocked+1]={name=e.name,position=position,reason=charted and 'Occupied, unsuitable terrain or surface restrictions' or 'Outside explored, generated terrain'}
+   local row={name=e.name,position=position,reason=charted and 'Occupied, unsuitable terrain or surface restrictions' or 'Outside explored, generated terrain'}
+   -- Detail the first eight blocked sites; native placement remains authoritative.
+   if charted and request.operation=='inspect' and #blocked<8 then
+    local area={{b.x1+request.position.x,b.y1+request.position.y},{b.x2+request.position.x,b.y2+request.position.y}}
+    local tile_names={}
+    for _,at in ipairs({position,{x=area[1][1]+0.001,y=area[1][2]+0.001},{x=area[2][1]-0.001,y=area[1][2]+0.001},{x=area[1][1]+0.001,y=area[2][2]-0.001},{x=area[2][1]-0.001,y=area[2][2]-0.001}}) do
+     tile_names[surface.get_tile(at).name]=true
+    end
+    row.sampled_tiles={} for name in pairs(tile_names) do row.sampled_tiles[#row.sampled_tiles+1]=name end table.sort(row.sampled_tiles)
+    row.nearby_entities={}
+    local nearby=surface.find_entities_filtered{area=area,limit=16}
+    row.nearby_truncated=#nearby==16
+    for _,other in ipairs(nearby) do
+     if other.force==force or other.force.name=='neutral' then
+      row.nearby_entities[#row.nearby_entities+1]={name=other.name,type=other.type,position=other.position,unit_number=other.unit_number}
+     else row.other_force_present=true end
+    end
+    row.note='Sampled tiles and nearby entities explain the site; they are not a collision mask or clearance proof.'
+   end
+   blocked[#blocked+1]=row
   end
   local existing=surface.find_entities_filtered{area={{b.x1+request.position.x,b.y1+request.position.y},{b.x2+request.position.x,b.y2+request.position.y}},type='entity-ghost'}
   if #existing>0 then blocked[#blocked+1]={name=e.name,position=position,reason='An existing construction ghost occupies this position'} end

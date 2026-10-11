@@ -226,6 +226,34 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
   {name='inserter',position={x=0.5,y=0.5},direction=8,pickup_position={x=0,y=2}}
  }})
  assert(not ok and err:match('pickup_position'))
+ omit_vectors=false
+ defines={build_check_type={manual=1}}
+ local force=game.forces.player;force.name='player';force.logistic_networks={}
+ local charted=true
+ force.is_chunk_charted=function() return charted end
+ local surface={name='nauvis',is_chunk_generated=function() return true end,can_place_entity=function() return false end}
+ surface.get_tile=function(at)
+  assert(charted, 'No terrain reads outside explored area')
+  return {name=at.x>0.5 and 'water' or 'grass-1'}
+ end
+ surface.find_entities_filtered=function(filter)
+  if filter.type=='entity-ghost' then return {} end
+  assert(charted and filter.area and filter.limit==16)
+  return {
+   {name='belt',type='transport-belt',position={x=0.5,y=0.5},force=force,unit_number=7},
+   {name='tree',type='tree',position={x=0.5,y=0.5},force={name='neutral'}},
+   {name='private-enemy-machine',type='assembling-machine',position={x=0.5,y=0.5},force={name='other'}}
+  }
+ end
+ game.surfaces={nauvis=surface};game.tick=100
+ local inspection={operation='inspect',force='player',surface='nauvis',position={x=0,y=0},design='site',entities={{name='belt',position={x=0.5,y=0.5},direction=0}}}
+ local site=blueprint(inspection)
+ assert(not site.ready and site.blocked[1].sampled_tiles[1]=='grass-1' and site.blocked[1].sampled_tiles[2]=='water')
+ assert(#site.blocked[1].nearby_entities==2 and site.blocked[1].nearby_entities[1].unit_number==7)
+ assert(site.blocked[1].other_force_present and not site.blocked[1].nearby_truncated)
+ charted=false
+ local unexplored=blueprint(inspection)
+ assert(not unexplored.ready and unexplored.blocked[1].sampled_tiles==nil and unexplored.blocked[1].nearby_entities==nil)
  `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
