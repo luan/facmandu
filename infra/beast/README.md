@@ -10,6 +10,9 @@ checks cannot deploy twice. It installs frozen dependencies and builds without
 production environment variables in an isolated release directory. Preparation
 does not alter the running app or game processes.
 
+Deployments defer while server or mod-list assistant work is running, and check again
+before restarting the web app.
+
 After preparation it atomically switches the release symlink and restarts the
 existing `facmandu-dev.service`. The health endpoint must report the exact SHA and
 working database access; login and private Vite source boundaries are checked too.

@@ -1,5 +1,6 @@
 import importlib.util
 import io
+import sqlite3
 from pathlib import Path
 import tempfile
 import unittest
@@ -56,6 +57,29 @@ class DeploymentTests(unittest.TestCase):
         with patch.object(deploy, "fetch_json", return_value={"workflow_runs": [passing, {**passing, "run_attempt": 2, "conclusion": "failure"}]}):
             self.assertFalse(deploy.ci_passed(revision))
 
+    def test_deployment_waits_for_web_and_in_game_assistant_work(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory).resolve()
+            (state / '.data').mkdir()
+            database = state / '.data/replica.db'
+            with patch.object(deploy, 'APP_STATE', state):
+                self.assertFalse(deploy.assistant_busy())
+                with sqlite3.connect(database) as connection:
+                    for table in ('server_assistant_turn', 'assistant_turn'):
+                        connection.execute(f'CREATE TABLE {table} (state TEXT)')
+                    connection.commit()
+                    self.assertFalse(deploy.assistant_busy())
+                    for table in ('server_assistant_turn', 'assistant_turn'):
+                        connection.execute(f"INSERT INTO {table} VALUES ('running')")
+                        connection.commit()
+                        self.assertTrue(deploy.assistant_busy())
+                        connection.execute(f"UPDATE {table} SET state='done'")
+                        connection.commit()
+                        self.assertFalse(deploy.assistant_busy())
+                    connection.execute('DROP TABLE assistant_turn')
+                    connection.commit()
+                    self.assertTrue(deploy.assistant_busy())
+
     def test_failed_health_restores_previous_source_and_service_configuration(self):
         revision = "a" * 40
         with tempfile.TemporaryDirectory() as directory:
@@ -79,7 +103,8 @@ class DeploymentTests(unittest.TestCase):
 
             with patch.object(deploy, "ROOT", root), patch.object(deploy, "SOURCE", previous), \
                  patch("pathlib.Path.home", return_value=home), patch.object(deploy, "run", side_effect=command), \
-                 patch.object(deploy, "health", side_effect=RuntimeError("failed health")):
+                 patch.object(deploy, "health", side_effect=RuntimeError("failed health")), \
+                 patch.object(deploy, "assistant_busy", return_value=False):
                 deploy.switch(previous)
                 with self.assertRaisesRegex(RuntimeError, "failed health"):
                     deploy.deploy(revision)

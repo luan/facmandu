@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import sqlite3
 import subprocess
 import tarfile
 import tempfile
@@ -43,6 +44,19 @@ def ci_passed(revision):
                    and item["head_branch"] == "main"),
                   key=lambda item: (item["id"], item["run_attempt"]), reverse=True)
     return bool(runs and runs[0]["status"] == "completed" and runs[0]["conclusion"] == "success")
+
+
+def assistant_busy():
+    database = APP_STATE / '.data/replica.db'
+    if not database.exists():
+        return False
+    # Fail closed on unreadable state; a timer retry is safer than interrupting a build request.
+    try:
+        with sqlite3.connect(database.as_uri() + '?mode=ro', uri=True, timeout=1) as connection:
+            return any(connection.execute(f"SELECT 1 FROM {table} WHERE state='running' LIMIT 1").fetchone()
+                       for table in ('server_assistant_turn', 'assistant_turn'))
+    except sqlite3.Error:
+        return True
 
 
 def switch(target):
@@ -136,6 +150,9 @@ def deploy(revision):
     if current_main != revision:
         print("Main advanced during preparation; waiting for its quality checks")
         return
+    if assistant_busy():
+        print("Assistant work is running; deferring application restart")
+        return
     previous_dropin = dropin.read_bytes() if dropin.exists() else None
     current = ROOT / "current"
     previous = current.resolve() if current.is_symlink() else SOURCE
@@ -200,6 +217,9 @@ def main():
             return
         if not ci_passed(revision):
             print("Waiting for successful main quality checks")
+            return
+        if assistant_busy():
+            print("Assistant work is running; deferring deployment")
             return
         deploy(revision)
 
