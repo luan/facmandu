@@ -16,7 +16,7 @@
  <!-- biome-ignore lint/a11y/noNoninteractiveTabindex: allow keyboard scrolling of the zoomed image -->
  <section class="max-h-[65vh] min-h-64 overflow-auto p-4" aria-label={label} tabindex="0">
   {#if unavailable}<p role="alert" class="p-4 text-sm text-muted-foreground">This image is unavailable. Capture another factory view.</p>{:else}
-  <img src={factoryImageUrl(serverId,image)} alt={label} width={image.width} height={image.height} style={`width:${zoom*100}%;max-width:none;height:auto;image-rendering:pixelated`} onerror={()=>unavailable=true} />
+  <img loading="lazy" src={factoryImageUrl(serverId,image)} alt={label} width={image.width} height={image.height} style={`width:${zoom*100}%;max-width:none;height:auto;image-rendering:pixelated`} onerror={()=>unavailable=true} />
   {/if}
  </section>
  <div class="border-t border-border px-3 py-2 text-xs text-muted-foreground"><a class="text-primary" href={factoryImageUrl(serverId,image)} target="_blank" rel="noopener noreferrer">Open full image</a></div>
