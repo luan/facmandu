@@ -13,9 +13,9 @@ test('context occupancy includes cached tokens without adding previous requests'
 });
 
 test('automatic compaction headroom follows the active model including small and unknown windows', () => {
-	assert.equal(assistantContextLimit('large', 128000, 32000).reserve, 64000);
-	assert.equal(assistantContextLimit('small-output', 128000, 4096).reserve, 64000);
-	assert.equal(assistantContextLimit('million', 1048560, 393216).reserve, 984560);
+	assert.equal(assistantContextLimit('large', 128000, 32000).reserve, 20000);
+	assert.equal(assistantContextLimit('small-output', 128000, 4096).reserve, 4096);
+	assert.equal(assistantContextLimit('million', 1048560, 393216).reserve, 20000);
 	assert.equal(assistantContextLimit('small-window', 12000, 8192).reserve, 4000);
 	assert.equal(assistantContextLimit('unknown', 0, 0).window, 0);
 	assert.equal(assistantContextLimit('fresh', 128000, 8192).tokens, null);

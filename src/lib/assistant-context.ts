@@ -14,9 +14,6 @@ export function assistantContextLimit(
 ): AssistantContextUsage {
 	let reserve = Math.min(20_000, maxTokens > 0 ? maxTokens : 20_000);
 	if (window > 0 && reserve * 2 >= window) reserve = Math.max(1024, Math.floor(window / 3));
-	// Large advertised windows need not keep hundreds of thousands of routine
-	// lookup tokens. Summarize above 64k; full chat and native drafts stay durable.
-	if (window > 64_000) reserve = Math.max(reserve, window - 64_000);
 	return { model, tokens: null, window, reserve, compactionFailed: false, compacting: false };
 }
 
