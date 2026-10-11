@@ -1297,17 +1297,17 @@ export function assistantResultGroups(results: readonly FactoryResult[]) {
 	const plan = results.findLastIndex(
 		(item) => item.tool === 'production_plan' && item.display === true
 	);
-	const designs = new Map<string, number>();
-	results.forEach((item, index) => {
-		if (item.tool === 'blueprint_operation' && item.display === true)
-			designs.set(string(record(item.result).label) || item.title, index);
-	});
+	const design = results.findLastIndex(
+		(item) =>
+			(item.tool === 'blueprint_operation' || item.tool === 'render_blueprint') &&
+			item.display === true
+	);
 	const visible = (item: FactoryResult, index: number) =>
 		(item.display === true &&
 			(item.tool !== 'factory_view' || index === inspection) &&
 			(item.tool !== 'production_plan' || index === plan) &&
-			(item.tool !== 'blueprint_operation' ||
-				index === designs.get(string(record(item.result).label) || item.title))) ||
+			((item.tool !== 'blueprint_operation' && item.tool !== 'render_blueprint') ||
+				index === design)) ||
 		(index === review && review > installation) ||
 		item.tool === 'create_server_from_list' ||
 		item.tool === 'retry_server_setup';

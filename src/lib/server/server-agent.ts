@@ -254,10 +254,11 @@ export function serverAssistantTools(context: {
 		useTool({
 			name: 'blueprint_operation',
 			description:
-				'Design an importable native Factorio blueprint or place construction ghosts. operation=catalog inspects named live prototypes; create validates an explicit layout and exports a rich blueprint preview without changing the world. inspect checks exact force/surface/position/layout and reports active robot coverage and exact normal-quality construction materials in provider/storage chests. ready means collision-free placement only; construction.single_network_ready checks whether one network covers and stocks the whole layout with available robots. Neither proves power, connected supplies, output routing or production. Before constructing a working module, verify those connections and report material shortages rather than placing an isolated module. place requires expectedTick and expectedDesign from a successful fresh inspection AND an explicit user placement request. It rechecks collisions, explored terrain, unlocks and player permissions. It never supplies free materials, deconstructs obstacles or builds completed machines. Supports up to 200 item-placeable, blueprintable entities from the current game and mods, plus up to 1024 space-platform-foundation tiles. There is no entity-type whitelist; catalog checks native blueprintability. create may include locked machines or recipes and reports unlock warnings; inspect/place still require unlocks. For new platform area, inspect/place a tiles-only foundation layout first, wait for real foundation construction, then inspect/place its machines. Platforms construct from hub stock without robots. Entity settings support native filters, use_filters/filter_mode, override_stack_size, circuit control_behavior, circuit wires and custom inserter pickup_position/drop_position vectors relative to the inserter center. Read inspect_transport before copying an existing inserter; preserve its filters and vectors. Wire tuples use 1-based entity array indices and native connector IDs. Factorio validates and round-trips these settings; custom vectors must be supported by the current prototype. Modules and train schedules still need explicit support; do not silently discard them.',
+				'Design an importable native Factorio blueprint or place construction ghosts. operation=catalog inspects named live prototypes; create validates an explicit layout and exports a rich blueprint preview without changing the world. Set display=false for intermediate drafts: export and validate without waiting for sprite rendering; display the final design only. inspect checks exact force/surface/position/layout and reports active robot coverage and exact normal-quality construction materials in provider/storage chests. ready means collision-free placement only; construction.single_network_ready checks whether one network covers and stocks the whole layout with available robots. Neither proves power, connected supplies, output routing or production. Before constructing a working module, verify those connections and report material shortages rather than placing an isolated module. place requires expectedTick and expectedDesign from a successful fresh inspection AND an explicit user placement request. It rechecks collisions, explored terrain, unlocks and player permissions. It never supplies free materials, deconstructs obstacles or builds completed machines. Supports up to 200 item-placeable, blueprintable entities from the current game and mods, plus up to 1024 space-platform-foundation tiles. There is no entity-type whitelist; catalog checks native blueprintability. create may include locked machines or recipes and reports unlock warnings; inspect/place still require unlocks. For new platform area, inspect/place a tiles-only foundation layout first, wait for real foundation construction, then inspect/place its machines. Platforms construct from hub stock without robots. Entity settings support native filters, use_filters/filter_mode, override_stack_size, circuit control_behavior, circuit wires and custom inserter pickup_position/drop_position vectors relative to the inserter center. Read inspect_transport before copying an existing inserter; preserve its filters and vectors. Wire tuples use 1-based entity array indices and native connector IDs. Factorio validates and round-trips these settings; custom vectors must be supported by the current prototype. Modules and train schedules still need explicit support; do not silently discard them.',
 			input: v.object({
 				operation: v.picklist(['catalog', 'create', 'inspect', 'place']),
-				args: v.record(v.string(), v.unknown())
+				args: v.record(v.string(), v.unknown()),
+				display: v.optional(v.boolean(), true)
 			}),
 			async run({ data }) {
 				const instance = await server();
@@ -281,7 +282,7 @@ export function serverAssistantTools(context: {
 				);
 				const artifact = blueprintArtifactSchema.safeParse(native);
 				let rendered: unknown = native;
-				if (artifact.success) {
+				if (artifact.success && data.display) {
 					try {
 						rendered = {
 							...artifact.data,
@@ -301,7 +302,9 @@ export function serverAssistantTools(context: {
 							: 'Blueprint inspection',
 					rendered
 				);
-				return { output: { ...output.output, display: data.operation === 'create' } };
+				return {
+					output: { ...output.output, display: data.operation === 'create' && data.display }
+				};
 			}
 		});
 	}
@@ -477,7 +480,7 @@ Answer questions without making changes. An explicit user request authorizes onl
 For requested blueprints or construction:
 1. Locate the player and inspect the requested area with bounded find_entities searches (omit entity filters to see local infrastructure). Identify actual supply endpoints, stored items/fluids, output belt, power and construction stock. A product search finds crafting machines, not stored supplies; inspect chests and tanks before claiming inputs are absent. Inventory summaries are samples; query planning_recipes for compatible machines and their construction_stock before reporting a machine shortage. Zero production flow does not mean a buffer is empty. Infer the belt tier from the existing bus; ask only if ambiguous.
 2. Call plan_production with the target rate and actual recipe/machine choices. For construction, prefer compatible machines already in construction stock. If inspection finds the chosen machine unavailable, recalculate and redesign using stocked alternatives before reporting a shortage. Declare existing supplies in external_inputs instead of recursively redesigning upstream production. Use blueprint_operation catalog for the real machine dimensions, fluid ports and inserter offsets. Do not substitute remembered recipes or hand-calculated machine counts.
-3. Once recipe, capacity and connection facts are known, create a concrete blueprint draft. Stop broad surveys. Structured geometry is sufficient to start designing; a pending sprite preview must not block this step.
+3. Once recipe, capacity and connection facts are known, create a concrete blueprint draft with display=false; render only the final export. Stop broad surveys. Structured geometry is sufficient to start designing; a pending sprite preview must not block this step.
 4. For an explicit construction request, inspect the full target layout, robot coverage and material stock, then place with its fresh expectedTick and expectedDesign. A blueprint request alone does not authorize placement. Ghost placement consumes real construction materials and must preserve existing entities.
 5. Verify construction, power, connected supplies, output routing and measured production. Export or collision-free placement proves none of these. Report incomplete ghosts, shortages and unverified throughput honestly.
 Use available_research for research that can start next and tech_status for prerequisites; current_research only describes an active task. Distinguish crafting triggers from lab research. Diagnose production bottlenecks from machine and supply evidence, not totals alone. Respect truncated scans, sample windows and available log history.

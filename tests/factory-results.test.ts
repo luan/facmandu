@@ -555,7 +555,7 @@ test('only the latest displayed factory inspection is inline and all captures re
 	);
 });
 
-test('blueprint revisions replace the same design inline while distinct designs remain visible', () => {
+test('only the latest blueprint is inline even when a revision changes its label', () => {
 	const design = (label: string, blueprint: string) => ({
 		kind: 'factory-result' as const,
 		tool: 'blueprint_operation',
@@ -567,7 +567,7 @@ test('blueprint revisions replace the same design inline while distinct designs 
 	const alternative = design('Oil processing', 'alternative');
 	const revision = design('Plastic', 'revision');
 	assert.deepEqual(assistantResultGroups([first, alternative, revision]), {
-		primary: [alternative, revision],
-		details: [first]
+		primary: [revision],
+		details: [first, alternative]
 	});
 });

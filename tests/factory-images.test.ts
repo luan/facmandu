@@ -49,6 +49,12 @@ const message = (imageId = id, toolName = 'factory_view'): ToolResultMessage => 
 test('blueprint rendering preserves mod names, recipes and native quality settings', () => {
 	assert.deepEqual(blueprintImageData(encode(layout)), layout);
 });
+test('blueprint title changes reuse the same rendered layout', () => {
+	assert.deepEqual(
+		blueprintImageData(encode({ ...layout, label: 'Draft', description: 'First', icons: [] })),
+		blueprintImageData(encode({ ...layout, label: 'Final' }))
+	);
+});
 test('image input rejects decompression bombs, excessive entities and unbounded regions', () => {
 	for (const invalid of [
 		{ ...layout, entities: Array(1001).fill(layout.entities[0]) },
