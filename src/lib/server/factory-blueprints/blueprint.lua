@@ -107,7 +107,7 @@ local function blueprint(request)
      end
     end
     local custom_vectors;if p.type=='inserter' then custom_vectors=p.allow_custom_vectors end
-    entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,supports_direction=p.supports_direction,collision_box=p.collision_box,crafting_categories=p.crafting_categories,belt_items_per_second=p.belt_speed and p.belt_speed*480,fluid_connections=connections,inserter_connections=inserter_connections(p),allow_custom_vectors=custom_vectors,unlocked=unlocked(available,p),blueprint_settings_example=control_example(p.type)}
+    entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,supports_direction=p.supports_direction,collision_box=p.collision_box,crafting_categories=p.crafting_categories,belt_items_per_second=p.belt_speed and p.belt_speed*480,max_underground_distance=p.max_underground_distance,fluid_connections=connections,inserter_connections=inserter_connections(p),allow_custom_vectors=custom_vectors,unlocked=unlocked(available,p),blueprint_settings_example=control_example(p.type)}
    elseif name=='space-platform-foundation' and prototypes.tile[name] then
     entities[#entities+1]={name=name,type='tile',width=1,height=1,unlocked=unlocked(available,prototypes.tile[name])}
    else

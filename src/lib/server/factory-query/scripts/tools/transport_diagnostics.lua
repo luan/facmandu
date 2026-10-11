@@ -67,6 +67,11 @@ local function inspect(a)
   row.total_items=e.get_item_count()
   row.belt_items_per_second=e.prototype.belt_speed*480
   row.lane_items_per_second=row.belt_items_per_second/2
+  if e.type=='underground-belt' then
+   row.underground_type=e.belt_to_ground_type
+   row.underground_neighbour=reference(e.underground_belt_neighbour)
+   row.max_underground_distance=e.prototype.max_underground_distance
+  end
   row.transport_lines={}
   for index=1,e.get_max_transport_line_index() do
    local line=e.get_transport_line(index)

@@ -30,6 +30,10 @@ test('native belt inspection distinguishes a two-lane turn from one-lane side-lo
  assert(result.inputs[1].connection=='turn' and result.inputs[1].feeds_lanes==2)
  incoming.direction=4;belt.belt_shape='straight';result=inspect(args)
  assert(result.inputs[1].connection=='inline' and result.inputs[1].feeds_lanes==2)
+ belt.type='underground-belt';belt.belt_to_ground_type='input';belt.prototype.max_underground_distance=5
+ result=inspect(args);assert(result.underground_type=='input' and not result.underground_neighbour)
+ belt.underground_belt_neighbour=incoming;result=inspect(args)
+ assert(result.underground_neighbour.position.y==1.5 and result.max_underground_distance==5)
  `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
