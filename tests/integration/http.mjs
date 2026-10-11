@@ -2567,10 +2567,7 @@ done
 			0
 		);
 		const aliceReply = nextGameReply('Alice');
-		await appendFile(
-			gameLog,
-			'101.000 [CHAT] Alice: @ fixture-game-alice: where is iron?\n'
-		);
+		await appendFile(gameLog, '101.000 [CHAT] Alice: @ fixture-game-alice: where is iron?\n');
 		assert.match(
 			await aliceReply,
 			/Assistant: Iron nearby: \[item=iron-plate\] \[gps=12,34,nauvis\]/u
