@@ -133,7 +133,8 @@ local function planning_recipes(a)
     for _, part in pairs(recipe.products) do
       if part.name == a.product and (a.type == nil or part.type == a.type) then matches = true end
     end
-    if matches then candidates[#candidates + 1] = recipe end
+    -- Hidden recycling and internal recipes are not discovery candidates. Exact requests still work.
+    if matches and (a.recipe or not recipe.hidden) then candidates[#candidates + 1] = recipe end
   end
   table.sort(candidates, function(a, b)
     if a.enabled ~= b.enabled then return a.enabled end

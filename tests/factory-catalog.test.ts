@@ -97,6 +97,13 @@ test('native lookup contracts declare scope and preserve exact local targets', (
    assert(recipes.recipes[1].machines[1].availability=='craftable')
    assert(recipes.recipes[1].machines[1].construction_stock==40)
    assert(recipes.recipes[1].machines[2].construction_stock==0)
+   force.recipes.recycling={name='recycling',enabled=true,hidden=true,category='chemistry',energy=1,
+    ingredients={},products={{name='plastic-bar',type='item',amount=1}},productivity_bonus=0,
+    prototype={get_product_amount=function() return 1 end}}
+   assert(functions.planning_recipes({force='player',product='plastic-bar'}).total==1)
+   local exact=functions.planning_recipes({force='player',product='plastic-bar',recipe='recycling'})
+   assert(exact.recipes[1].name=='recycling' and exact.recipes[1].hidden)
+
   `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
