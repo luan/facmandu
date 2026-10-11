@@ -2526,7 +2526,7 @@ done
 							connected: true
 						})
 					);
-				} else if (command.includes('p.print(')) {
+				} else if (command.includes('p.force.print(')) {
 					gameReplies.push(command);
 					const player = /game\.get_player\("([^"]+)"\)/u.exec(command)?.[1];
 					gameWaiters.get(player)?.resolve(command);
