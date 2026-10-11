@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { zstdDecompressSync } from 'node:zlib';
 import { createClient } from '@libsql/client';
 import { hash } from '@node-rs/argon2';
-import { strToU8, zipSync } from 'fflate';
+import { strToU8, unzipSync, zipSync } from 'fflate';
 
 import {
 	createModSettings,
@@ -2634,6 +2634,20 @@ done
 	assert.match(steeredHistory.turns[0].prompt, /Follow-up: fixture-web-steering-update/);
 	assert.match(steeredHistory.turns[0].answer, /Steered to copper/);
 	passed('mid-run web steering preserves follow-ups and finishes after the browser disconnects');
+	const tobyZip = await request('/api/toby-mod', { cookie: cookies.owner });
+	assert.equal(tobyZip.status, 200);
+	const tobyFiles = unzipSync(new Uint8Array(await tobyZip.arrayBuffer()));
+	assert.equal(
+		JSON.parse(Buffer.from(tobyFiles['facmandu-assistant_0.1.0/info.json']).toString()).title,
+		'Toby · Facmandu Assistant'
+	);
+	assert.ok(
+		Buffer.from(tobyFiles['facmandu-assistant_0.1.0/control.lua'])
+			.toString()
+			.includes('FACMANDU_UI')
+	);
+	assert.equal((await request('/api/toby-mod')).status, 401);
+	passed('Toby mod download packages the exact native UI contract and requires authentication');
 	const gameSockets = new Set();
 	const gameReplies = [];
 	const panelUpdates = [];

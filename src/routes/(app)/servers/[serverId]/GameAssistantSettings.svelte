@@ -18,7 +18,7 @@
  function chooseModel(event: Event & { currentTarget: HTMLSelectElement }) { effort = models.find((item) => item.id === event.currentTarget.value)?.defaultEffort ?? ''; }
 </script>
 <Card.Root>
- <Card.Header><Card.Title>In-game assistant</Card.Title><Card.Description>Players can ask with @. Replies go to their force; transcripts appear in your server assistant.</Card.Description></Card.Header>
+ <Card.Header><Card.Title>Toby in game</Card.Title><Card.Description>Players can ask with @. Replies go to their force; transcripts appear in your server assistant.</Card.Description></Card.Header>
  <Card.Content>
   <form method="POST" {action} use:enhance={submit} class="space-y-4">
    <input type="hidden" name="operation" value="gameAssistant" />
@@ -31,6 +31,7 @@
    {#if chatMode === 'ambient'}<p class="text-xs text-muted-foreground">Ordinary player chat and recent assistant context are sent to your NeuralWatt account for routing. Game changes still require an explicit request and follow the Factory actions permissions. Uncertain messages are ignored.</p>{/if}
    <label class="grid gap-2 text-sm">Factory actions<select name="actions" class={input} bind:value={actions}><option value="off">Questions only</option><option value="admins">Factorio administrators</option><option value="allowlist">Selected players</option></select></label>
    {#if actions === 'allowlist'}<label class="grid gap-2 text-sm">Allowed player names<textarea name="players" class={input} rows="3" bind:value={players} placeholder="One Factorio player name per line"></textarea></label>{:else}<input name="players" type="hidden" value={players} />{/if}
+   <p class="text-xs text-muted-foreground"><a href="/api/toby-mod" class="underline">Download the Toby panel mod</a> for the server and every client. The web harness and @ chat work without it.</p>
    <p class="text-xs text-muted-foreground">Uses your connected model account. Actions affect only the player's force; server administration is unavailable. Players can start fresh with @ new chat.</p>
    {#if !models.length}<p class="text-sm text-muted-foreground">Connect a model provider in <a href="/settings" class="underline">Account settings</a> to enable in-game replies.</p>{/if}
    <TooltipButton type="submit" tooltip={busyReason || (enabled && !models.length ? 'Connect a model provider first' : 'Save in-game assistant settings')} disabled={!!busyReason || (enabled && !models.length)}><SaveIcon class="size-4" />Save</TooltipButton>
