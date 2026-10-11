@@ -81,9 +81,14 @@ export const factoryActionInspectSchema = z.discriminatedUnion('operation', [
 	entity.extend({ operation: z.literal('entity_inspect') }),
 	entity.extend({ operation: z.literal('ghost_inspect') }),
 	z.object({ operation: z.literal('research_inspect'), force: label }),
-	z.object({ operation: z.literal('train_inspect'), trainId: train.shape.trainId }),
+	z.object({
+		operation: z.literal('train_inspect'),
+		trainId: train.shape.trainId,
+		force: label.optional()
+	}),
 	z.object({
 		operation: z.literal('logistic_inspect'),
+		force: label.optional(),
 		unitNumber: logistic.shape.unitNumber,
 		surface: label,
 		position: logistic.shape.position,
@@ -368,8 +373,12 @@ export function factoryAction(server: ManagedServer, input: unknown, player?: Ga
 	return execute(server, parsed.data, player);
 }
 
-export function factoryActionInspect(server: ManagedServer, input: unknown) {
+export function factoryActionInspect(
+	server: ManagedServer,
+	input: unknown,
+	player?: GameActionPlayer
+) {
 	const parsed = factoryActionInspectSchema.safeParse(input);
 	if (!parsed.success) throw new ServerError(400, 'Invalid factory inspection');
-	return execute(server, parsed.data);
+	return execute(server, parsed.data, player);
 }

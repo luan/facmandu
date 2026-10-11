@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { lauxlib, lua, lualib, to_luastring } from 'fengari';
 import {
 	factoryActionCommand,
 	factoryActionInspectSchema,
@@ -175,4 +177,34 @@ test('native entity edits require fresh exact snapshots and reject duplicate or 
 		}).success,
 		true
 	);
+});
+
+test('platform requester inspection preserves manual sections and rejects changed identities or forces', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const source = readFileSync('src/lib/server/factory-actions/action.lua', 'utf8');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`${source}
+ local filter={value={name='card',quality='normal'},min=1000,import_from={name='nauvis'}}
+ local section={index=2,valid=true,is_manual=true,filters_count=1,filters={filter},get_slot=function() return filter end}
+ section.set_slot=function(index,value) assert(index==1 and value.import_from.name=='nauvis');filter=value;return index end
+ local point={get_section=function(index) assert(index==2);return section end}
+ local hub={type='space-platform-hub',unit_number=12,force={name='player'},position={x=0,y=0},surface={name='platform-1'},get_requester_point=function() return point end}
+ game={surfaces={['platform-1']={find_entities_filtered=function(args) assert(args.type==nil and args.force=='player');return {hub} end}}}
+ prototypes={item={card={}},quality={normal={}}}
+ local input={operation='logistic_inspect',unitNumber=12,force='player',surface='platform-1',position={x=0,y=0},sectionIndex=2,slotIndex=1}
+ local snapshot=action(input).before
+ assert(snapshot.request.item=='card' and snapshot.request.count==1000)
+ input.operation='logistic_set_request';input.expectedRequest=snapshot.request;input.item='card';input.quality='normal';input.count=1200
+ assert(action(input).after.request.count==1200)
+ local before=filter
+ section.is_manual=false;assert(not pcall(action,input) and filter==before)
+ section.is_manual=true;hub.force.name='other';assert(not pcall(action,input) and filter==before)
+ hub.force.name='player';hub.unit_number=13;assert(not pcall(action,input) and filter==before)
+ game.train_manager={get_train_by_id=function() return {valid=true,carriages={{force={name='other'}}},get_schedule=function() error('Private schedule must not be read') end} end}
+ assert(not pcall(action,{operation='train_inspect',trainId=1,force='player'}))
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 });

@@ -4,7 +4,7 @@ local bounded = require("scripts.tools.bounded")
 local M = {}
 M.manifest = {
   inspect_logistic_requests = {
-    desc = "Inspect configured logistic requests on one built chest, machine, or platform hub at map coordinates. Reports section active state and multiplier, and request min/max per filter. These are settings, not deliveries or logistic-network inventory.",
+    desc = "Inspect configured logistic requests on one built chest, machine, or platform hub at map coordinates. Reports section manual/active state and multiplier, and request min/max per filter. These are settings, not deliveries or logistic-network inventory.",
     tier = "2", params = { surface = "string! surface name or index", x = "number! map x", y = "number! map y", name = "string entity prototype name", unit_number = "integer entity unit number" },
   },
 }
@@ -26,19 +26,21 @@ local function inspect(a)
         filters[#filters + 1] = { name = value.name, type = value.type,
           quality = value.quality, comparator = value.comparator,
           min = filter.min, max = filter.max,
-          import_from = filter.import_from, request_from = filter.request_from }
+          import_from = type(filter.import_from)=="string" and filter.import_from or (filter.import_from and filter.import_from.name), request_from = filter.request_from }
       end
     end
     rows[#rows + 1] = { index = section.index, group = section.group,
-      active = section.active, multiplier = section.multiplier,
+      active = section.active, manual = section.is_manual, multiplier = section.multiplier,
       total_filters = #filters, filters = bounded.cut(filters, 10) }
     if #rows == 4 then break end
   end
+  local construction_requests
+  if entity.type=="space-platform-hub" then construction_requests=entity.request_missing_construction_materials end
   return { found = true, force = force.name, surface = surface.name,
     name = entity.name, unit_number = entity.unit_number,
     x = entity.position.x, y = entity.position.y, supports_requests = true,
     total_sections = sections.sections_count, shown_sections = #rows,
-    sections = rows }
+    sections = rows, request_missing_construction_materials = construction_requests }
 end
 M.functions = { inspect_logistic_requests = inspect }
 return M

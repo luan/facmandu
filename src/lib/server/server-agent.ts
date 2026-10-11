@@ -182,10 +182,20 @@ export function serverAssistantTools(context: {
 				args: v.record(v.string(), v.unknown())
 			}),
 			async run({ data }) {
+				const instance = await server();
+				const request: Record<string, unknown> = { ...data.args, operation: data.operation };
+				let actor: { name: string; requireAdmin: boolean } | undefined;
+				if (context.gamePlayer) {
+					const { player } = await requireGamePlayer(instance, context.userId, context.gamePlayer);
+					if (data.args.force !== undefined && data.args.force !== player.force)
+						throw new ServerError(403, 'You can only inspect your own force');
+					request.force = player.force;
+					actor = { name: player.name, requireAdmin: false };
+				}
 				return result(
 					'factory_action_inspect',
 					'Current state',
-					await factoryActionInspect(await server(), { ...data.args, operation: data.operation })
+					await factoryActionInspect(instance, request, actor)
 				);
 			}
 		});

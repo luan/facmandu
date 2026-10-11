@@ -319,3 +319,29 @@ test('planner adapters use only documented reads and keep private plans and othe
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 });
+
+test('platform request inspection distinguishes automatic sections and reports import locations', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const root = resolve('src/lib/server/factory-query');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ package.path=${JSON.stringify(`${root}/?.lua;`)}..package.path
+ local sections={sections_count=2,sections={
+  {index=1,is_manual=false,active=true,multiplier=1,filters={{value={name='foundation',type='item',quality='normal'},min=112}}},
+  {index=2,is_manual=true,active=true,multiplier=1,filters={{value={name='card',type='item',quality='normal'},min=1000,import_from={name='nauvis'},request_from='planet'}}}
+ }}
+ local force={name='player'}
+ local hub={valid=true,name='space-platform-hub',type='space-platform-hub',unit_number=12,force=force,position={x=0,y=0},request_missing_construction_materials=true,get_logistic_sections=function() return sections end}
+ local surface={valid=true,name='platform-1',find_entities_filtered=function() return {hub} end}
+ prototypes={entity={['space-platform-hub']={}}};game={forces={player=force},surfaces={['platform-1']=surface}}
+ local result=require('scripts.tools.logistic_requests').functions.inspect_logistic_requests{force='player',surface='platform-1',x=0,y=0,unit_number=12}
+ assert(not result.sections[1].manual and result.sections[2].manual)
+ assert(result.sections[2].filters[1].import_from=='nauvis' and result.request_missing_construction_materials)
+ hub.request_missing_construction_materials=false
+ assert(require('scripts.tools.logistic_requests').functions.inspect_logistic_requests{force='player',surface='platform-1',x=0,y=0,unit_number=12}.request_missing_construction_materials==false)
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});

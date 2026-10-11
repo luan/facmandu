@@ -170,6 +170,7 @@ end
 local function train_inspect(request)
   local train = game.train_manager.get_train_by_id(request.trainId)
   if not train or not train.valid or #train.carriages == 0 then fail("Train no longer exists") end
+  if request.force and train.carriages[1].force.name ~= request.force then fail("Train belongs to another force") end
   local snapshot = train_snapshot(train)
   return { operation = request.operation, before = snapshot, after = snapshot }
 end
@@ -201,13 +202,16 @@ end
 local function requester(request)
   local surface = game.surfaces[request.surface]
   if not surface then fail("Surface no longer exists") end
-  -- Some valid requester chests lack the get-by-unit-number prototype flag.
+  -- Requester capability also covers machines and platform hubs; keep exact identity.
   local entities = surface.find_entities_filtered({
-    position = request.position, radius = 0.1, type = "logistic-container", limit = 8,
+    position = request.position, radius = 0.1, force = request.force, limit = 8,
   })
   for _, entity in ipairs(entities) do
     if entity.unit_number == request.unitNumber and entity.position.x == request.position.x
-      and entity.position.y == request.position.y then return entity end
+      and entity.position.y == request.position.y then
+      if request.force and entity.force.name ~= request.force then fail("Requester belongs to another force") end
+      return entity
+    end
   end
   fail("Requester no longer exists")
 end
