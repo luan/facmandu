@@ -14,8 +14,8 @@ import { factoryPlanInput, planFactory } from './factory-planning';
 import { factoryQuery } from './factory-query';
 import {
 	type FactoryTargets,
-	rememberFactoryTargets,
-	resolveFactoryTarget
+	prepareFactoryLookup,
+	rememberFactoryTargets
 } from './factory-query-targets';
 import { captureFactoryView } from './factory-view';
 import {
@@ -462,23 +462,13 @@ export function serverAssistantTools(context: {
 			const player = context.gamePlayer
 				? (await requireGamePlayer(instance, context.userId, context.gamePlayer)).player
 				: null;
-			const queries = data.queries.map((query) => {
-				const tool = manifest.tools[query.tool];
-				if (!tool) throw new Error(`Unknown factory lookup: ${query.tool}`);
-				for (const key of Object.keys(query.args))
-					if (key !== 'force' && !tool.params?.[key])
-						throw new Error(
-							`Unknown argument: ${key}. Parameters for ${query.tool}: ${JSON.stringify(tool.params ?? {})}`
-						);
-				let args = { ...query.args };
-				if (player) {
-					if (args.force && args.force !== player.force) throw new Error('Use your own force');
-					if (tool.params?.force) args.force = player.force;
-				}
-				if (query.tool.startsWith('inspect_')) args = resolveFactoryTarget(args, targets);
-				return { tool: query.tool, args };
-			});
-			const batch = await factoryQuery(instance, { op: 'batch', queries });
+			const prepared = data.queries.map((query) =>
+				prepareFactoryLookup(query, manifest.tools, targets, player?.force)
+			);
+			const queries = prepared.filter((query) => query.ok);
+			const batch = queries.length
+				? await factoryQuery(instance, { op: 'batch', queries })
+				: { results: [] };
 			const parsed = z
 				.object({
 					results: z.array(
@@ -495,7 +485,11 @@ export function serverAssistantTools(context: {
 				if (query.ok && query.tool === 'find_entities' && requestId)
 					targets = rememberFactoryTargets(targets, query.result);
 			if (requestId) setObserved({ requestId, targets });
-			return result('factory_batch', 'Factory inspection batch', batch);
+			let cursor = 0;
+			return result('factory_batch', 'Factory inspection batch', {
+				...z.object({ tick: z.number().optional() }).parse(batch),
+				results: prepared.map((query) => (query.ok ? parsed.results[cursor++] : query))
+			});
 		}
 	});
 	useTool({
@@ -510,27 +504,20 @@ export function serverAssistantTools(context: {
 		async run({ data }) {
 			const instance = await server();
 			const manifest = manifestSchema.parse(await factoryQuery(instance, { op: 'catalog' }));
+			const player = context.gamePlayer
+				? (await requireGamePlayer(instance, context.userId, context.gamePlayer)).player
+				: null;
+			const prepared = prepareFactoryLookup(data, manifest.tools, targets, player?.force);
+			if (!prepared.ok) throw new Error(prepared.error);
+			const args = prepared.args;
 			const tool = manifest.tools[data.tool];
-			if (!tool) throw new Error('Unknown factory lookup');
-			for (const key of Object.keys(data.args))
-				if (key !== 'force' && !tool.params?.[key])
-					throw new Error(
-						`Unknown argument: ${key}. Parameters for ${data.tool}: ${JSON.stringify(tool.params ?? {})}`
-					);
-			let args = { ...data.args };
-			if (context.gamePlayer) {
-				const { player } = await requireGamePlayer(instance, context.userId, context.gamePlayer);
-				if (args.force && args.force !== player.force) throw new Error('Use your own force');
-				if (tool.params?.force) args.force = player.force;
-			}
 			let result: Awaited<ReturnType<typeof factoryQuery>>;
 			try {
-				if (data.tool.startsWith('inspect_')) args = resolveFactoryTarget(args, targets);
 				result = await factoryQuery(instance, { op: 'call', tool: data.tool, args });
 			} catch (cause) {
 				if (cause instanceof ServerError && cause.status === 400)
 					throw new Error(
-						`${cause.message}. Parameters for ${data.tool}: ${JSON.stringify(tool.params ?? {})}`
+						`${cause.message}. Parameters for ${data.tool}: ${JSON.stringify(tool?.params ?? {})}`
 					);
 				throw cause;
 			}

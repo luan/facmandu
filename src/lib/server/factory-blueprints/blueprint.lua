@@ -97,7 +97,13 @@ local function blueprint(request)
     local connections={}
     for _,box in pairs(p.fluidbox_prototypes or {}) do
      for _,connection in pairs(box.pipe_connections) do
-      connections[#connections+1]={positions=connection.positions,connection_type=connection.connection_type,flow_direction=connection.flow_direction}
+      local adjacent={}
+      local offsets={[0]={x=0,y=-1},[4]={x=1,y=0},[8]={x=0,y=1},[12]={x=-1,y=0}}
+      for i,position in ipairs(connection.positions) do
+       local outward=offsets[(connection.direction+(i-1)*4)%16]
+       if outward then adjacent[i]={x=position.x+outward.x,y=position.y+outward.y} end
+      end
+      connections[#connections+1]={fluidbox_index=box.index,production_type=box.production_type,filter=box.filter and box.filter.name,positions=connection.positions,adjacent_pipe_positions=#adjacent>0 and adjacent or nil,connection_type=connection.connection_type,flow_direction=connection.flow_direction,direction=connection.direction,alt_direction=connection.alt_direction,alt_position=connection.alt_position}
      end
     end
     entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,collision_box=p.collision_box,crafting_categories=p.crafting_categories,belt_items_per_second=p.belt_speed and p.belt_speed*480,fluid_connections=connections,inserter_connections=inserter_connections(p),unlocked=unlocked(available,p),blueprint_settings_example=control_example(p.type)}
@@ -107,7 +113,7 @@ local function blueprint(request)
     entities[#entities+1]={name=name,error='Unknown or non-blueprintable entity'}
    end
   end
-  return {force=force.name,entities=entities}
+  return {force=force.name,entities=entities,fluid_position_reference='Offsets from entity center. Four array entries correspond to entity directions 0,4,8,12. positions are ports inside the machine edge; adjacent_pipe_positions are the neighboring pipe centers, outside its footprint.'}
  end
  -- Native exports omit defaults, including include_hands=true in Factorio 2.1.21.
  local defaults={use_filters=false,filter_mode='whitelist',override_stack_size=0,circuit_set_filters=false,circuit_read_hand_contents=false,circuit_read_contents=false,circuit_set_stack_size=false,circuit_enabled=false,connect_to_logistic_network=false,include_hands=true,is_on=true,active=true,multiplier=1,compare_type='or',copy_count_from_input=true,quality='normal'}

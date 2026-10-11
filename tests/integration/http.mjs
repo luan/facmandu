@@ -815,30 +815,60 @@ const fixture = createServer(async (request, response) => {
 																										}
 																									]
 																								});
+			const preamble =
+				wantsServerSaves && item.type === 'function_call'
+					? {
+							type: 'message',
+							role: 'assistant',
+							id: 'msg_preamble',
+							status: 'completed',
+							content: [
+								{ type: 'output_text', text: 'Let me inspect the save files.', annotations: [] }
+							]
+						}
+					: null;
+			const outputIndex = preamble ? 1 : 0;
 			response.writeHead(200, { 'content-type': 'text/event-stream' });
+			if (preamble) {
+				for (const event of [
+					{
+						type: 'response.output_item.added',
+						output_index: 0,
+						item: { ...preamble, content: [] }
+					},
+					{
+						type: 'response.output_text.delta',
+						output_index: 0,
+						content_index: 0,
+						delta: preamble.content[0].text
+					},
+					{ type: 'response.output_item.done', output_index: 0, item: preamble }
+				])
+					response.write(`data: ${JSON.stringify(event)}\n\n`);
+			}
 			for (const event of [
 				{
 					type: 'response.output_item.added',
-					output_index: 0,
+					output_index: outputIndex,
 					item: { ...item, content: [], arguments: '' }
 				},
 				...(item.type === 'message'
 					? [
 							{
 								type: 'response.output_text.delta',
-								output_index: 0,
+								output_index: outputIndex,
 								content_index: 0,
 								delta: item.content[0].text
 							}
 						]
 					: []),
-				{ type: 'response.output_item.done', output_index: 0, item },
+				{ type: 'response.output_item.done', output_index: outputIndex, item },
 				{
 					type: 'response.completed',
 					response: {
 						id: 'resp_fixture',
 						status: 'completed',
-						output: [item],
+						output: preamble ? [preamble, item] : [item],
 						usage: {
 							input_tokens: wantsCompaction ? 300000 : 10,
 							output_tokens: wantsCompaction ? 14000 : 10
@@ -2364,6 +2394,11 @@ done
 		const saved = await json(`${serverPath}/assistant`, { cookie: cookies.owner });
 		const turn = saved.turns.find((item) => item.prompt === prompt);
 		assert.equal(turn.state, 'done', JSON.stringify(turn));
+		assert.doesNotMatch(
+			turn.answer,
+			/Let me inspect/,
+			'Tool-call preambles are progress, not the saved answer'
+		);
 		assert.ok(
 			turn.results.some((item) => item.tool === expectedTool),
 			JSON.stringify(turn.results)

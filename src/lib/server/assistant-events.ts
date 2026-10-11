@@ -12,3 +12,11 @@ export function submissionEvents(id: string, accept: (chunk: ConversationStreamC
 		} else if ('toolCallId' in chunk && tools.has(chunk.toolCallId)) accept(chunk);
 	};
 }
+
+// Tool-call preambles are progress, not part of the final player-facing answer.
+export function assistantText(previous: string | undefined, chunk: ConversationStreamChunk) {
+	if (chunk.type === 'message-started' || chunk.type === 'tool-input') return '';
+	if (chunk.type === 'message-delta' && chunk.kind === 'text')
+		return (previous ?? '') + chunk.delta;
+	return previous;
+}

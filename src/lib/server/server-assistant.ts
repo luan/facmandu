@@ -6,7 +6,7 @@ import {
 	factoryResultSchema
 } from '$lib/assistant-results';
 import { assistantErrorMessage } from './assistant-error';
-import { submissionEvents } from './assistant-events';
+import { assistantText, submissionEvents } from './assistant-events';
 import { db } from './db';
 import { assistantChat, serverAssistantTurn as turnTable } from './db/schema';
 import { requireGamePlayer } from './game-player';
@@ -202,7 +202,10 @@ export async function finishServerTurn(
 					.where(eq(turnTable.id, turn.id));
 				return joined.submissionId;
 			});
+			let answer: string | undefined;
 			const accept = (chunk: ConversationStreamChunk) => {
+				answer = assistantText(answer, chunk);
+				if (chunk.type === 'message-started' || chunk.type === 'tool-input') send({ answer: '' });
 				if (chunk.type === 'message-delta' && chunk.kind === 'text')
 					send({ delta: chunk.delta, progress: 'Responding…' });
 				if (chunk.type === 'tool-input') toolNames.set(chunk.toolCallId, chunk.toolName);
@@ -284,9 +287,9 @@ export async function finishServerTurn(
 			if (current) current.closed = true;
 			await db
 				.update(turnTable)
-				.set({ state: 'done', answer: result.text, results: JSON.stringify(results) })
+				.set({ state: 'done', answer: answer ?? result.text, results: JSON.stringify(results) })
 				.where(eq(turnTable.id, turn.id));
-			send({ done: true, answer: result.text });
+			send({ done: true, answer: answer ?? result.text });
 		} finally {
 			controller.signal.removeEventListener('abort', abort);
 		}

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+	prepareFactoryLookup,
 	rememberFactoryTargets,
 	resolveFactoryTarget
 } from '../src/lib/server/factory-query-targets';
@@ -48,4 +49,42 @@ test('target memory is bounded and ignores unidentified entities', () => {
 		x: 0.5,
 		y: -0.5
 	});
+});
+
+test('independent batch queries retain valid reads while refusing invalid names, parameters and forces', () => {
+	const tools = {
+		game_time: { params: { force: 'string!' } },
+		inspect_transport: {
+			params: {
+				force: 'string!',
+				surface: 'string!',
+				unit_number: 'number',
+				x: 'number',
+				y: 'number'
+			}
+		}
+	};
+	const targets = rememberFactoryTargets(
+		{},
+		{ force: 'player', surface: 'nauvis', entities: [target] }
+	);
+	const inputs: Parameters<typeof prepareFactoryLookup>[0][] = [
+		{ tool: 'game_time', args: {} },
+		{ tool: 'invented_lookup', args: {} },
+		{ tool: 'game_time', args: { force: 'enemy' } },
+		{ tool: 'game_time', args: { invented: true } },
+		{ tool: 'inspect_transport', args }
+	];
+	const prepared = inputs.map((query) => prepareFactoryLookup(query, tools, targets, 'player'));
+	assert.deepEqual(
+		prepared.map((query) => query.ok),
+		[true, false, false, false, true]
+	);
+	assert.deepEqual(prepared[0], { tool: 'game_time', ok: true, args: { force: 'player' } });
+	assert.deepEqual(prepared[4], {
+		tool: 'inspect_transport',
+		ok: true,
+		args: { ...args, x: 0.5, y: -0.5 }
+	});
+	assert.deepEqual(inputs[0]?.args, {});
 });

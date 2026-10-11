@@ -40,3 +40,29 @@ export function resolveFactoryTarget(
 	// This supplies observed coordinates, not authority: native inspection rechecks the exact ID.
 	return { ...args, x: target.x, y: target.y };
 }
+
+export function prepareFactoryLookup(
+	query: { tool: string; args: Record<string, string | number | boolean> },
+	tools: Record<string, { params?: Record<string, string> }>,
+	targets: FactoryTargets,
+	playerForce?: string
+) {
+	const tool = tools[query.tool];
+	if (!tool)
+		return { tool: query.tool, ok: false as const, error: `Unknown factory lookup: ${query.tool}` };
+	for (const key of Object.keys(query.args))
+		if (key !== 'force' && !tool.params?.[key])
+			return {
+				tool: query.tool,
+				ok: false as const,
+				error: `Unknown argument: ${key}. Parameters for ${query.tool}: ${JSON.stringify(tool.params ?? {})}`
+			};
+	let args = { ...query.args };
+	if (playerForce) {
+		if (args.force && args.force !== playerForce)
+			return { tool: query.tool, ok: false as const, error: 'Use your own force' };
+		if (tool.params?.force) args.force = playerForce;
+	}
+	if (query.tool.startsWith('inspect_')) args = resolveFactoryTarget(args, targets);
+	return { tool: query.tool, ok: true as const, args };
+}
