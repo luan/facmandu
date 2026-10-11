@@ -53,6 +53,16 @@ const message = (imageId = id, toolName = 'factory_view'): ToolResultMessage => 
 test('blueprint rendering preserves mod names, recipes and native quality settings', () => {
 	assert.deepEqual(blueprintImageData(encode(layout)), layout);
 });
+test('bounded outpost blueprints retain their distant entities in the preview', () => {
+	const outpost = {
+		...layout,
+		entities: [
+			...layout.entities,
+			{ entity_number: 2, name: 'electric-mining-drill', position: { x: 0, y: 512 } }
+		]
+	};
+	assert.deepEqual(blueprintImageData(encode(outpost)), outpost);
+});
 test('a pending snapshot becomes model-visible when its original image finishes without recapturing', () => {
 	const pending = message();
 	pending.content = [
@@ -117,7 +127,7 @@ test('image input rejects decompression bombs, excessive entities and unbounded 
 		{ ...layout, entities: Array(1001).fill(layout.entities[0]) },
 		{
 			...layout,
-			entities: [...layout.entities, { entity_number: 2, name: 'pipe', position: { x: 129, y: 0 } }]
+			entities: [...layout.entities, { entity_number: 2, name: 'pipe', position: { x: 513, y: 0 } }]
 		},
 		{ ...layout, description: 'x'.repeat(1024 * 1024) }
 	])

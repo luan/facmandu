@@ -37,7 +37,8 @@ export function blueprintImageData(encoded: string) {
 	const positions = [...parsed.entities, ...(parsed.tiles ?? [])].map((item) => item.position);
 	const xs = positions.map((p) => p.x);
 	const ys = positions.map((p) => p.y);
-	if (Math.max(...xs) - Math.min(...xs) > 128 || Math.max(...ys) - Math.min(...ys) > 128)
+	// Outpost routes can span 512 tiles; the renderer still caps the PNG at 1536 pixels.
+	if (Math.max(...xs) - Math.min(...xs) > 512 || Math.max(...ys) - Math.min(...ys) > 512)
 		throw new Error('The layout is too large to render; select a smaller area');
 	// Titles and inventory icons do not change the rendered world layout.
 	delete parsed.label;
