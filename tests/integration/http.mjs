@@ -2666,6 +2666,42 @@ done
 	);
 	assert.equal((await request('/api/toby-mod')).status, 401);
 	passed('Toby mod download packages the exact native UI contract and requires authentication');
+	await action(`${secondPath}?/manage`, cookies.stranger, { operation: 'installToby' }, 403);
+	await writeFile(
+		join(directory, 'bin/systemctl'),
+		'#!/bin/sh\nprintf "ActiveState=active\\nSubState=running\\n"\n',
+		{ mode: 0o755 }
+	);
+	const beforeToby = await readState(1, 'mods/mod-list.json');
+	await action(`${secondPath}?/manage`, cookies.owner, { operation: 'installToby' }, 409);
+	assert.deepEqual(await readState(1, 'mods/mod-list.json'), beforeToby);
+	await writeFile(
+		join(directory, 'bin/systemctl'),
+		'#!/bin/sh\nprintf "ActiveState=inactive\\nSubState=dead\\n"\n',
+		{ mode: 0o755 }
+	);
+	await action(`${secondPath}?/manage`, cookies.owner, { operation: 'installToby' });
+	assert.deepEqual(
+		unzipSync(await readFile(join(machineDirs[1], 'mods/facmandu-assistant_0.1.0.zip'))),
+		tobyFiles
+	);
+	assert.deepEqual(
+		(await readState(1, 'mods/mod-list.json')).mods.find(
+			(mod) => mod.name === 'facmandu-assistant'
+		),
+		{ name: 'facmandu-assistant', version: '0.1.0', enabled: true }
+	);
+	assert.deepEqual(
+		await readFile(join(machineDirs[1], 'saves/context-world.zip')),
+		Buffer.from(preservedSave)
+	);
+	assert.equal(
+		(await json(`${secondPath}/data?tab=settings`, { cookie: cookies.owner })).toby.installed,
+		true
+	);
+	passed(
+		'Toby installs the authenticated client package on a stopped server without changing its save'
+	);
 	const gameSockets = new Set();
 	const gameReplies = [];
 	const panelUpdates = [];

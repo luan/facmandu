@@ -5,10 +5,11 @@ import * as table from './db/schema';
 import { liveModSettings } from './mod-settings-defs';
 import { gameSettings, modSettings, serverConfig, serverUsers } from './server-files';
 import { loadModSyncPlan, modSyncJob } from './server-mod-sync';
-import { serverMods } from './server-mods';
+import { serverModInventory, serverMods } from './server-mods';
 import { serverStatus } from './server-process';
 import { serverSaves } from './server-saves';
 import { serverVersions } from './server-versions';
+import { tobyModInfo } from './toby-mod';
 
 const secretKey = /password|token|secret|username/iu;
 export const settingKind = (value: unknown) =>
@@ -87,7 +88,21 @@ export async function loadServerView(
 			? loadModSyncPlan(server, userId, selectedListId, mods.value.mods)
 			: Promise.resolve(null)
 	]);
+	const inventory =
+		activeTab === 'settings' ? await serverModInventory(server).catch(() => null) : null;
+	const toby =
+		mods.status === 'fulfilled'
+			? mods.value.mods.find((mod) => mod.name === tobyModInfo.name)
+			: null;
 	return {
+		toby: {
+			currentVersion: tobyModInfo.version,
+			installed: !!inventory?.installed[0]?.[tobyModInfo.name]?.includes(
+				toby?.version ?? tobyModInfo.version
+			),
+			enabled: toby?.enabled ?? false,
+			version: toby?.version ?? null
+		},
 		selectedPlan: plan?.status === 'fulfilled' ? plan.value : null,
 		modSyncJob: await modSyncJob(server.id),
 		status,

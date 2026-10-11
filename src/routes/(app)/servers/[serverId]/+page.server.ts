@@ -41,6 +41,7 @@ import {
 import { selectVersion, uninstallVersion } from '$lib/server/server-versions';
 import { editableSettings, settingFields, settingKind } from '$lib/server/server-view';
 import { canManageServer, publicServer, requireServer } from '$lib/server/servers';
+import { installTobyMod } from '$lib/server/toby-mod';
 import type { Actions, PageServerLoad } from './$types';
 
 const jsonObject = z.record(z.string(), z.unknown());
@@ -90,13 +91,26 @@ export const actions: Actions = {
 		try {
 			server = await requireServer(event.locals.user?.id, server.id);
 			if (
-				['start', 'toggleMod', 'installMod', 'uninstallMod', 'deleteMod', 'selectVersion'].includes(
-					operation
-				) &&
+				[
+					'start',
+					'toggleMod',
+					'installMod',
+					'installToby',
+					'uninstallMod',
+					'deleteMod',
+					'selectVersion'
+				].includes(operation) &&
 				(await modSyncJob(server.id))?.status === 'running'
 			)
 				return fail(409, { message: 'Wait for this server’s mod update to finish' });
 			switch (operation) {
+				case 'installToby': {
+					await installTobyMod(server);
+					return {
+						message:
+							'Toby installed and enabled. Install the same mod on each client before joining.'
+					};
+				}
 				case 'syncListFromServer': {
 					const count = await syncModlistFromServer(
 						server,

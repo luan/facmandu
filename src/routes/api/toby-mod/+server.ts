@@ -1,22 +1,11 @@
 import { error } from '@sveltejs/kit';
-import { zipSync } from 'fflate';
-import control from '../../../../factorio-mod/facmandu-assistant/control.lua?raw';
-import info from '../../../../factorio-mod/facmandu-assistant/info.json';
-import readme from '../../../../factorio-mod/facmandu-assistant/README.md?raw';
+import { tobyModArchive, tobyModInfo } from '$lib/server/toby-mod';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = ({ locals }) => {
 	if (!locals.user) error(401, 'Sign in first');
-	const folder = `${info.name}_${info.version}`;
-	const encode = new TextEncoder();
-	const files = Object.fromEntries(
-		Object.entries({
-			'info.json': JSON.stringify(info),
-			'control.lua': control,
-			'README.md': readme
-		}).map(([name, source]) => [`${folder}/${name}`, encode.encode(source)])
-	);
-	return new Response(new Uint8Array(zipSync(files)), {
+	const folder = `${tobyModInfo.name}_${tobyModInfo.version}`;
+	return new Response(new Uint8Array(tobyModArchive()), {
 		headers: {
 			'Content-Type': 'application/zip',
 			'Content-Disposition': `attachment; filename="${folder}.zip"`,
