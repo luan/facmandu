@@ -19,6 +19,16 @@ local function dimensions(p, direction)
  if direction==4 or direction==12 then w,h=h,w end
  return w,h
 end
+local function inserter_connections(p)
+ if p.type~='inserter' then return nil end
+ local pickup,drop=p.inserter_pickup_position,p.inserter_drop_position
+ local connections={}
+ for _,rotation in ipairs({{0,1,0},{4,0,1},{8,-1,0},{12,0,-1}}) do
+  local function offset(v) local x,y=v.x or v[1],v.y or v[2];return {x=x*rotation[2]-y*rotation[3],y=x*rotation[3]+y*rotation[2]} end
+  connections[#connections+1]={direction=rotation[1],pickup_offset=offset(pickup),drop_offset=offset(drop)}
+ end
+ return connections
+end
 local function construction_report(force,surface,entities,offset,cost)
  local networks={}
  local ready=false
@@ -70,7 +80,7 @@ local function blueprint(request)
       connections[#connections+1]={positions=connection.positions,connection_type=connection.connection_type,flow_direction=connection.flow_direction}
      end
     end
-    entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,collision_box=p.collision_box,crafting_categories=p.crafting_categories,belt_items_per_second=p.belt_speed and p.belt_speed*480,fluid_connections=connections,unlocked=unlocked(available,p)}
+    entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,collision_box=p.collision_box,crafting_categories=p.crafting_categories,belt_items_per_second=p.belt_speed and p.belt_speed*480,fluid_connections=connections,inserter_connections=inserter_connections(p),unlocked=unlocked(available,p)}
    else
     entities[#entities+1]={name=name,error='Unknown or unsupported production entity'}
    end

@@ -212,7 +212,7 @@ export function serverAssistantTools(context: {
 		useTool({
 			name: 'blueprint_catalog',
 			description:
-				'Read the exact input schema for native blueprint creation, entity prototype inspection and construction ghost placement. Use blueprint_operation catalog to read dimensions, fluid ports, belt throughput and unlocks for real prototype names.',
+				'Read the exact input schema for native blueprint creation, entity prototype inspection and construction ghost placement. Use blueprint_operation catalog to read dimensions, fluid ports, belt throughput, inserter pickup/drop offsets for each direction, and unlocks for real prototype names. Offsets are relative to entity position; inspect_transport verifies actual targets and any custom vectors on built inserters.',
 			async run() {
 				await server();
 				return { output: z.json().parse(blueprintJsonSchema) };
