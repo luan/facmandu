@@ -9,7 +9,7 @@ test('Toby panel sends native player requests and preserves typed drafts across 
 	const source = readFileSync('factorio-mod/facmandu-assistant/control.lua', 'utf8');
 	const script = `
  local handlers={};local interface;local last
- storage={};defines={events={on_player_created=1,on_player_joined_game=2,on_gui_click=3,on_gui_selection_state_changed=4,on_gui_closed=5,on_gui_text_changed=6,on_gui_selected_tab_changed=7}}
+ storage={};defines={events={on_player_created=1,on_player_joined_game=2,on_gui_click=3,on_gui_selection_state_changed=4,on_gui_closed=5,on_gui_text_changed=6,on_gui_selected_tab_changed=7,on_gui_confirmed=8}}
  script={on_init=function(fn) handlers.init=fn end,on_configuration_changed=function(fn) handlers.migrate=fn end,on_event=function(event,fn) handlers[event]=fn end}
  remote={add_interface=function(name,api) assert(name=='facmandu-assistant');interface=api end}
  helpers={table_to_json=function(data) last=data;return '{}' end};log=function() end
@@ -44,7 +44,7 @@ test('Toby panel sends native player requests and preserves typed drafts across 
  interface.update_player(1,{status='Working',running=true,answer='First answer',current='one',chats={{id='one',title='Glass'},{id='two',title='Science'}}})
  assert(storage.gui[1].message.text=='More glass')
  assert(storage.gui[1].send.caption=='Steer' and storage.gui[1].stop.visible)
- handlers['facmandu-toby-send']({player_index=1})
+ handlers[8]({player_index=1,element=storage.gui[1].message})
  assert(last.player=='Alice' and last.operation=='send' and last.prompt=='More glass' and last.chat=='one')
  assert(storage.gui[1].message.text=='')
  storage.gui[1].chats.selected_index=2

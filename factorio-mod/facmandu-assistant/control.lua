@@ -56,15 +56,15 @@ local function panel(player)
   if entry[1]=='conversation' then refs.history=content end
  end
  tabs.selected_tab_index=storage.tabs[player.index] or 1
- local composer=frame.add{type='text-box',name=PREFIX..'message',text=storage.drafts[player.index] or ''}
- composer.style.width=456;composer.style.height=64
+ local composer=frame.add{type='textfield',name=PREFIX..'message',text=storage.drafts[player.index] or ''}
+ composer.style.width=456;composer.style.height=36
  local actions=frame.add{type='flow',direction='horizontal'}
  actions.style.width=456
  local context=actions.add{type='label',caption=player.surface.name}
  context.style.font_color={r=0.75,g=0.75,b=0.75}
  actions.add{type='empty-widget'}.style.horizontally_stretchable=true
  local stop=actions.add{type='button',name=PREFIX..'stop',caption='Stop',visible=false}
- local send=actions.add{type='button',name=PREFIX..'send',caption='Send',style='confirm_button',tooltip='Send a message to Toby · Ctrl+Enter'}
+ local send=actions.add{type='button',name=PREFIX..'send',caption='Send',style='confirm_button',tooltip='Send a message to Toby · Enter'}
  refs.message=composer;refs.stop=stop;refs.send=send;refs.context=context
  storage.gui[player.index]=refs
  player.opened=frame
@@ -113,7 +113,7 @@ local function update(player_index,state)
  refs.context.caption=player.surface.name
  refs.stop.visible=state.running==true
  refs.send.caption=state.running and 'Steer' or 'Send'
- refs.send.tooltip=state.running and 'Steer the current run · Ctrl+Enter' or 'Send a message to Toby · Ctrl+Enter'
+ refs.send.tooltip=state.running and 'Steer the current run · Enter' or 'Send a message to Toby · Enter'
  refs.chats.items=#items>0 and items or {'New conversation'}
  for i,chat in ipairs(state.chats) do if chat.id==state.current then refs.chats.selected_index=i;break end end
  -- Progress updates never recreate a transcript the player is reading.
@@ -198,7 +198,9 @@ local function send(player)
  local text=refs.message.text:match('^%s*(.-)%s*$')
  if #text>0 and #text<=6000 then emit(player,'send',text,selected(player));refs.message.text='';storage.drafts[player.index]='' end
 end
-script.on_event('facmandu-toby-send',function(event) send(game.get_player(event.player_index)) end)
+script.on_event(defines.events.on_gui_confirmed,function(event)
+ if event.element.valid and event.element.name==PREFIX..'message' then send(game.get_player(event.player_index)) end
+end)
 script.on_event(defines.events.on_gui_click,function(event)
  local element=event.element
  if not element.valid then return end
