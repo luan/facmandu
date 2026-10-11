@@ -157,8 +157,12 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
  inserter.inserter_pickup_position={x=0,y=-1}
  inserter.inserter_drop_position={x=0,y=1.2}
  local belt=prototype('transport-belt',1);belt.belt_speed=0.03125
+ local furnace=prototype('furnace',3)
+ local pole=prototype('electric-pole',1)
+ pole.get_max_wire_distance=function(quality) assert(quality=='normal');return 17 end
+ pole.get_supply_area_distance=function(quality) assert(quality=='normal');return 4 end
  local box=prototype('container',3);box.tile_height=1;box.supports_direction=false
- prototypes={entity={plant=plant,inserter=inserter,belt=belt,box=box}}
+ prototypes={entity={plant=plant,inserter=inserter,belt=belt,box=box,furnace=furnace,pole=pole}}
  local omit_vectors=false
  game={forces={player={recipes={{enabled=true,products={{type='item',name='building'}}}}}},create_inventory=function()
   local saved
@@ -175,6 +179,10 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
    export_stack=function() return '0native' end,cost_to_build={{name='building',count=5}}}}
  end}
  ${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
+ defines={wire_connector_id={}}
+ local catalog=blueprint{operation='catalog',force='player',names={'plant','furnace','pole'}}
+ assert(catalog.entities[1].recipe_settable and not catalog.entities[2].recipe_settable)
+ assert(catalog.entities[3].max_wire_distance==17 and catalog.entities[3].supply_area_distance==4)
  local fixed=blueprint{operation='create',force='player',label='Nondirectional',entities={
   {name='box',position={x=1.5,y=0.5},direction=4}
  }}
