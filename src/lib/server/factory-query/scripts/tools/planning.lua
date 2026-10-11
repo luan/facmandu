@@ -6,7 +6,7 @@ local MAX_MACHINES = 24
 
 M.manifest = {
   planning_recipes = {
-    desc = "Recipes for one item or fluid in this save, including recipe unlock state, expected products, ingredients and prototype-compatible base-speed machines. Machine availability is owned (at least one exists), craftable (a placement-item recipe is enabled), unavailable, or unknown (no placement item). Read-only planning data; normal quality, no modules or beacons. A truncated result must not be used to select a recipe.",
+    desc = "Recipes for one item or fluid in this save, including recipe unlock state, expected products, ingredients and prototype-compatible base-speed machines. Machine availability is owned (at least one exists), craftable (a placement-item recipe is enabled), unavailable, or unknown (no placement item). construction_stock counts normal-quality placement items across this force's provider/storage networks, not unlocked recipes or already-built machines; coverage is checked during blueprint inspection. Read-only planning data; normal quality, no modules or beacons. A truncated result must not be used to select a recipe.",
     params = {
       product = "string! item or fluid prototype name",
       type = "string item or fluid; omit to search both",
@@ -76,6 +76,22 @@ local function machine_availability(force, prototype)
   return "unavailable"
 end
 
+local function construction_stock(force, prototype)
+  local count = 0
+  for _, item in pairs(prototype.items_to_place_this or {}) do
+    local available = 0
+    for _, networks in pairs(force.logistic_networks or {}) do
+      for _, network in pairs(networks) do
+        local stack = {name=item.name,quality='normal'}
+        available = available + network.get_item_count(stack,'providers') + network.get_item_count(stack,'storage')
+      end
+    end
+    count = count + math.floor(available / (item.count or 1))
+  end
+  -- Force-wide stock is not reserved; blueprint inspection checks target-network coverage.
+  return count
+end
+
 local function machines(categories, force, selected)
   local rows, seen = {}, {}
   for _, category in ipairs(categories) do
@@ -99,6 +115,7 @@ local function machines(categories, force, selected)
   while #rows > MAX_MACHINES do table.remove(rows) end
   for _, row in ipairs(rows) do
     row.availability = machine_availability(force, prototypes.entity[row.name])
+    row.construction_stock = construction_stock(force, prototypes.entity[row.name])
   end
   return rows, total
 end

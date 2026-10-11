@@ -41,7 +41,9 @@ test('plans an exact module recipe and machine from supplied inputs without upst
 				],
 				products: [{ name: 'plastic-bar', type: 'item', amount: 2 }],
 				productivity_bonus: 0,
-				machines: [{ name: 'chemical-plant', speed: 1, availability: 'craftable' }],
+				machines: [
+					{ name: 'chemical-plant', speed: 1, availability: 'craftable', construction_stock: 3 }
+				],
 				machines_total: 1
 			}
 		]
@@ -66,6 +68,7 @@ test('plans an exact module recipe and machine from supplied inputs without upst
 	});
 	assert.equal(plan.status, 'complete');
 	assert.equal(plan.steps[0]?.machines, 1);
+	assert.equal(plan.steps[0]?.construction_stock, 3);
 	assert.deepEqual(plan.inputs, [
 		{ name: 'coal', type: 'item', per_min: 60 },
 		{ name: 'petroleum-gas', type: 'fluid', per_min: 1200 }

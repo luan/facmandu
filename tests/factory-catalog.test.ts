@@ -67,6 +67,28 @@ test('native lookup contracts declare scope and preserve exact local targets', (
    assert(locations.players[1].connected==false and locations.players[1].x==0.5)
    assert(functions.locate_player({force='player',all=true,connected_only=true}).total==0)
    assert(functions.locate_player({force='player',player='other'}).found==false)
+   local force=game.forces.player
+   force.get_entity_count=function() return 0 end
+   force.logistic_networks={nauvis={{get_item_count=function(stack,inventory)
+    assert(stack.quality=='normal' and (inventory=='providers' or inventory=='storage'))
+    return stack.name=='chemical-plant' and 20 or 0
+   end}}}
+   force.recipes={
+    plastic={name='plastic',enabled=true,hidden=false,category='chemistry',energy=1,
+     ingredients={},products={{name='plastic-bar',type='item',amount=2}},productivity_bonus=0,
+     prototype={get_product_amount=function() return 2 end}},
+    placement={enabled=true,products={}}
+   }
+   prototypes.entity={}
+   for _,name in ipairs({'chemical-plant','electrochemical-plant'}) do
+    prototypes.entity[name]={name=name,type='assembling-machine',items_to_place_this={{name=name,count=1}},get_crafting_speed=function() return 1 end}
+   end
+   prototypes.get_entity_filtered=function() return prototypes.entity end
+   prototypes.get_recipe_filtered=function() return {placement={}} end
+   local recipes=functions.planning_recipes({force='player',product='plastic-bar'})
+   assert(recipes.recipes[1].machines[1].availability=='craftable')
+   assert(recipes.recipes[1].machines[1].construction_stock==40)
+   assert(recipes.recipes[1].machines[2].construction_stock==0)
   `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));

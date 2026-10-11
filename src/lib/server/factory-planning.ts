@@ -22,6 +22,7 @@ const machine = z.object({
 	name: z.string(),
 	speed: z.number().positive(),
 	availability: z.enum(['owned', 'craftable', 'unavailable', 'unknown']),
+	construction_stock: z.number().int().nonnegative().optional(),
 	productivity_bonus: z.number().default(0),
 	products: wireArray(material).optional()
 });
@@ -108,6 +109,7 @@ export type FactoryPlan = {
 		crafts_per_min: number;
 		machine?: string;
 		machines?: number;
+		construction_stock?: number;
 		ingredients: Rate[];
 		products: Rate[];
 	}>;
@@ -296,6 +298,7 @@ export async function planFactory(
 			crafts_per_min: rounded(crafts),
 			machine: machineChoice.name,
 			machines: rounded((crafts * chosen.energy) / (60 * machineChoice.speed)),
+			construction_stock: machineChoice.construction_stock,
 			ingredients: chosen.ingredients.map((part) => ({
 				name: part.name,
 				type: part.type,
