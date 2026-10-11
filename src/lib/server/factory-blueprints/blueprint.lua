@@ -1,4 +1,4 @@
-local supported = {['assembling-machine']=true, furnace=true, ['transport-belt']=true, ['underground-belt']=true, splitter=true, inserter=true, pipe=true, ['pipe-to-ground']=true, ['electric-pole']=true, container=true, ['logistic-container']=true, ['storage-tank']=true, pump=true}
+local supported = {['assembling-machine']=true, furnace=true, ['transport-belt']=true, ['underground-belt']=true, splitter=true, inserter=true, pipe=true, ['pipe-to-ground']=true, ['electric-pole']=true, container=true, ['logistic-container']=true, ['storage-tank']=true, pump=true, ['asteroid-collector']=true, ['solar-panel']=true, accumulator=true}
 local function unlocked_items(force)
  local items={}
  for _,recipe in pairs(force.recipes) do
@@ -30,6 +30,19 @@ local function inserter_connections(p)
  return connections
 end
 local function construction_report(force,surface,entities,offset,cost)
+ if surface.platform then
+  local hub=surface.platform.hub
+  local stock=hub and hub.get_inventory(defines.inventory.hub_main)
+  local materials={}
+  local ready=stock~=nil
+  for _,item in ipairs(cost) do
+   local available=stock and stock.get_item_count{name=item.name,quality='normal'} or 0
+   local missing=math.max(0,item.count-available)
+   if missing>0 then ready=false end
+   materials[#materials+1]={name=item.name,required=item.count,available=available,missing=missing,quality='normal'}
+  end
+  return {mode='platform',hub_stock_ready=ready,materials=materials,production_verified=false,note='The platform builds from hub inventory without robots. Stock is not reserved; power, supply and throughput need verification.'}
+ end
  local networks={}
  local ready=false
  for _,network in pairs(force.logistic_networks[surface.name] or {}) do
@@ -81,25 +94,49 @@ local function blueprint(request)
      end
     end
     entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,collision_box=p.collision_box,crafting_categories=p.crafting_categories,belt_items_per_second=p.belt_speed and p.belt_speed*480,fluid_connections=connections,inserter_connections=inserter_connections(p),unlocked=unlocked(available,p)}
+   elseif name=='space-platform-foundation' and prototypes.tile[name] then
+    entities[#entities+1]={name=name,type='tile',width=1,height=1,unlocked=unlocked(available,prototypes.tile[name])}
    else
     entities[#entities+1]={name=name,error='Unknown or unsupported production entity'}
    end
   end
   return {force=force.name,entities=entities}
  end
- local entities,preview,boxes={},{},{}
+ local entities,preview,boxes,warnings={},{},{},{}
+ local warned={}
+ local function warn(text) if not warned[text] then warnings[#warnings+1]=text;warned[text]=true end end
+ local tiles=request.tiles or {}
+ local tile_positions={}
+ for _,tile in ipairs(tiles) do
+  local p=prototypes.tile[tile.name]
+  if tile.name~='space-platform-foundation' or not p or not p.can_be_part_of_blueprint then error('Only space-platform-foundation tiles are supported',0) end
+  local key=tile.position.x..':'..tile.position.y
+  if tile_positions[key] then error('Duplicate blueprint tile',0) end
+  tile_positions[key]=true
+  if not unlocked(available,p) then
+   if request.operation~='create' then error('Construction item is not unlocked: '..tile.name,0) end
+   warn('Construction item is not unlocked: '..tile.name)
+  end
+ end
  for i,e in ipairs(request.entities) do
   local p=prototypes.entity[e.name]
   if not p or not supported[p.type] then error('Unknown or unsupported production entity: '..e.name,0) end
-  if not unlocked(available,p) then error('Construction item is not unlocked: '..e.name,0) end
+  if not unlocked(available,p) then
+   if request.operation~='create' then error('Construction item is not unlocked: '..e.name,0) end
+   warn('Construction item is not unlocked: '..e.name)
+  end
   if e.recipe then
    if p.type~='assembling-machine' then error('Only assembling machines accept explicit recipes; furnaces select recipes from their inputs',0) end
    local recipe=force.recipes[e.recipe]
    local compatible=false
-   if recipe and recipe.enabled and p.crafting_categories then
+   if recipe and p.crafting_categories then
     for _,category in pairs(recipe.categories) do if p.crafting_categories[category] then compatible=true end end
    end
-   if not compatible then error('Unavailable recipe for '..e.name..': '..e.recipe,0) end
+   if not compatible then error('Incompatible or unknown recipe for '..e.name..': '..e.recipe,0) end
+   if not recipe.enabled then
+    if request.operation~='create' then error('Recipe is not unlocked: '..e.recipe,0) end
+    warn('Recipe is not unlocked: '..e.recipe)
+   end
   end
   if e.type and p.type~='underground-belt' then error('Input/output type is only valid for underground belts',0) end
   if p.type=='underground-belt' and not e.type then error('Specify input/output for underground belt',0) end
@@ -117,7 +154,13 @@ local function blueprint(request)
  local stack=inventory[1]
  stack.set_stack{name='blueprint'}
  stack.set_blueprint_entities(entities,false)
- local normalized=stack.get_blueprint_entities()
+ if #tiles>0 then stack.set_blueprint_tiles(tiles) end
+ local normalized_tiles=stack.get_blueprint_tiles() or {}
+ if #normalized_tiles~=#tiles then error('Factorio rejected blueprint tiles',0) end
+ for _,tile in ipairs(normalized_tiles) do
+  if tile.name~='space-platform-foundation' or not tile_positions[tile.position.x..':'..tile.position.y] then error('Factorio changed blueprint tile positions',0) end
+ end
+ local normalized=stack.get_blueprint_entities() or {}
  if not normalized or #normalized~=#entities then error('Factorio rejected blueprint entities',0) end
  for i,e in ipairs(normalized) do
   if e.name~=entities[i].name or e.position.x~=entities[i].position.x or e.position.y~=entities[i].position.y or (e.direction or 0)~=entities[i].direction or e.recipe~=entities[i].recipe or e.type~=entities[i].type then error('Factorio changed blueprint settings; adjust the design',0) end
@@ -127,10 +170,12 @@ local function blueprint(request)
  for _,item in pairs(stack.cost_to_build) do cost[#cost+1]={name=item.name,count=item.count} end
  table.sort(cost,function(a,b)return a.name<b.name end)
  if request.operation=='create' then
-  return {kind='blueprint',label=request.label,blueprint=stack.export_stack(),entities=preview,cost=cost}
+  return {kind='blueprint',label=request.label,blueprint=stack.export_stack(),entities=#preview>0 and preview or nil,tiles=#tiles>0 and tiles or nil,warnings=#warnings>0 and warnings or nil,cost=cost}
  end
  local surface=game.surfaces[request.surface]
  if not surface then error('Unknown surface',0) end
+ if surface.platform and surface.platform.force~=force then error('This platform belongs to another force',0) end
+ if #tiles>0 and (not surface.platform or surface.platform.force~=force) then error('Foundation requires a space platform belonging to this force',0) end
  if request.operation=='place' and (request.expectedDesign~=request.design or request.expectedTick>game.tick or game.tick-request.expectedTick>3600) then error('Placement inspection expired; inspect again',0) end
  for _,e in ipairs(entities) do
   if e.recipe then
@@ -141,6 +186,25 @@ local function blueprint(request)
   end
  end
  local blocked={}
+ local pending_tiles={}
+ local existing_foundations=0
+ for _,tile in ipairs(tiles) do
+  local position={x=tile.position.x+request.position.x,y=tile.position.y+request.position.y}
+  local existing=surface.get_tile(position)
+  if existing.name==tile.name then existing_foundations=existing_foundations+1 else
+   if not surface.is_chunk_generated{x=math.floor(position.x/32),y=math.floor(position.y/32)} or not force.is_chunk_charted(surface,{x=math.floor(position.x/32),y=math.floor(position.y/32)}) then
+    blocked[#blocked+1]={name=tile.name,position=position,reason='Outside explored, generated terrain'}
+   elseif existing.name~='empty-space' or existing.has_tile_ghost() then
+    blocked[#blocked+1]={name=tile.name,position=position,reason='Tile is occupied or already has a construction ghost'}
+   else pending_tiles[#pending_tiles+1]={name=tile.name,position=position} end
+  end
+ end
+ for i=#cost,1,-1 do
+  if cost[i].name=='space-platform-foundation' then
+   cost[i].count=cost[i].count-existing_foundations
+   if cost[i].count==0 then table.remove(cost,i) end
+  end
+ end
  for i,e in ipairs(entities) do
   local position={x=e.position.x+request.position.x,y=e.position.y+request.position.y}
   local b=boxes[i]
@@ -157,12 +221,27 @@ local function blueprint(request)
   local existing=surface.find_entities_filtered{area={{b.x1+request.position.x,b.y1+request.position.y},{b.x2+request.position.x,b.y2+request.position.y}},type='entity-ghost'}
   if #existing>0 then blocked[#blocked+1]={name=e.name,position=position,reason='An existing construction ghost occupies this position'} end
  end
- if request.operation=='inspect' then return {ready=#blocked==0,blocked=blocked,expectedTick=game.tick,expectedDesign=request.design,surface=surface.name,position=request.position,entities=#entities,cost=cost,construction=construction_report(force,surface,entities,request.position,cost)} end
+ if request.operation=='inspect' then return {ready=#blocked==0,blocked=blocked,expectedTick=game.tick,expectedDesign=request.design,surface=surface.name,position=request.position,entities=#entities,tiles=#tiles,foundation_pending=#pending_tiles,cost=cost,construction=construction_report(force,surface,entities,request.position,cost)} end
  if #blocked>0 then error('Placement is blocked at '..blocked[1].name..'; inspect the site again',0) end
  -- Create ghosts at exact inspected coordinates; build_blueprint centers the layout around its cursor.
  local placed=0
+ local placed_tiles=0
  local failure
+ -- Only request foundations; the platform builds them using real hub inventory.
+ for _,tile in ipairs(pending_tiles) do
+  local ok,err=pcall(function()
+   if surface.get_tile(tile.position).name~='empty-space' or surface.get_tile(tile.position).has_tile_ghost() then error('Foundation site changed; inspect again',0) end
+   local ghost=surface.create_entity{name='tile-ghost',inner_name=tile.name,position=tile.position,force=force,expires=false}
+   if not ghost then error('Factorio refused a foundation ghost',0) end
+   placed_tiles=placed_tiles+1
+   if actor then ghost.last_user=actor end
+   script.raise_script_built{entity=ghost}
+   if not ghost.valid and surface.get_tile(tile.position).name~=tile.name then error('A mod changed the foundation ghost',0) end
+  end)
+  if not ok then failure=tostring(err):match('^[^\n]*');break end
+ end
  for i,e in ipairs(entities) do
+  if failure then break end
   local position={x=e.position.x+request.position.x,y=e.position.y+request.position.y}
   local ok,err=pcall(function()
    local b=boxes[i]
@@ -183,5 +262,5 @@ local function blueprint(request)
   end)
   if not ok then failure=tostring(err):match('^[^\n]*');break end
  end
- return {operation='place_blueprint',surface=surface.name,position=request.position,requested=#entities,placed=placed,complete=placed==#entities and not failure,error=failure,cost=cost,note='Construction ghosts require real items and player or robot construction. No structures were removed.'}
+ return {operation='place_blueprint',surface=surface.name,position=request.position,requested=#entities,placed=placed,requested_tiles=#pending_tiles,placed_tiles=placed_tiles,complete=placed==#entities and placed_tiles==#pending_tiles and not failure,error=failure,cost=cost,note=surface.platform and 'Construction requests use real platform hub inventory. No structures were removed.' or 'Construction ghosts require real items and player or robot construction. No structures were removed.'}
 end

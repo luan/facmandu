@@ -11,7 +11,7 @@ const entity = z
 const blueprint = z
 	.object({
 		version: z.number().int().positive(),
-		entities: z.array(entity).min(1).max(1000),
+		entities: z.array(entity).max(1000).default([]),
 		tiles: z
 			.array(
 				z.object({
@@ -22,7 +22,8 @@ const blueprint = z
 			.max(16384)
 			.optional()
 	})
-	.passthrough();
+	.passthrough()
+	.refine((value) => value.entities.length + (value.tiles?.length ?? 0) > 0, 'Empty blueprint');
 
 export function blueprintImageData(encoded: string) {
 	if (!/^0[A-Za-z0-9+/=]+$/u.test(encoded) || encoded.length > 256000)

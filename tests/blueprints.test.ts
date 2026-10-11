@@ -84,3 +84,62 @@ test('rich blueprint artifacts need an importable string and validated layout', 
 	);
 	assert.equal(blueprintArtifactSchema.safeParse({ ...artifact, entities: [] }).success, false);
 });
+
+test('foundation layouts use integer tiles and remain bound to the inspected layout', () => {
+	const foundation = {
+		force: 'player',
+		label: 'Foundation',
+		entities: [],
+		tiles: [{ name: 'space-platform-foundation', position: { x: 0, y: 0 } }]
+	};
+	assert.equal(
+		blueprintRequestSchema.safeParse({ ...foundation, operation: 'create' }).success,
+		true
+	);
+	assert.equal(
+		blueprintRequestSchema.safeParse({
+			...foundation,
+			operation: 'create',
+			tiles: [{ name: 'space-platform-foundation', position: { x: 0.5, y: 0 } }]
+		}).success,
+		false
+	);
+	assert.equal(
+		blueprintRequestSchema.safeParse({
+			...foundation,
+			operation: 'create',
+			tiles: Array(1025).fill(foundation.tiles[0])
+		}).success,
+		false
+	);
+	const placement = { ...foundation, surface: 'platform-1', position: { x: 0, y: 0 } };
+	const expectedDesign = createHash('sha256')
+		.update(JSON.stringify(blueprintTargetSchema.parse(placement)))
+		.digest('hex');
+	const request = blueprintRequestSchema.parse({
+		...placement,
+		operation: 'place',
+		expectedTick: 10,
+		expectedDesign
+	});
+	if (request.operation !== 'place') throw new Error('Expected placement');
+	assert.throws(
+		() =>
+			blueprintCommand({
+				...request,
+				tiles: [{ name: 'space-platform-foundation', position: { x: 1, y: 0 } }]
+			}),
+		/Blueprint changed/
+	);
+	assert.equal(
+		blueprintArtifactSchema.safeParse({
+			kind: 'blueprint',
+			label: 'Foundation',
+			blueprint: '0native',
+			tiles: foundation.tiles,
+			warnings: ['Locked recipe'],
+			cost: [{ name: 'space-platform-foundation', count: 1 }]
+		}).success,
+		true
+	);
+});

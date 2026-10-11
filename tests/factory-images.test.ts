@@ -148,3 +148,15 @@ test('text-only models are told that the harness image is not visible to them', 
 		)
 	);
 });
+
+test('foundation-only previews preserve tiles and reject empty blueprints', () => {
+	const tiles = [{ name: 'space-platform-foundation', position: { x: 1, y: 2 } }];
+	assert.deepEqual(blueprintImageData(encode({ version: layout.version, tiles })), {
+		version: layout.version,
+		entities: [],
+		tiles
+	});
+	assert.throws(() =>
+		blueprintImageData(encode({ version: layout.version, entities: [], tiles: [] }))
+	);
+});

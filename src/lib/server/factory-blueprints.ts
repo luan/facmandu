@@ -26,7 +26,12 @@ export function blueprintCommand(
 		input.operation === 'catalog'
 			? undefined
 			: input.operation === 'create'
-				? blueprintDesignHash({ force: input.force, label: input.label, entities: input.entities })
+				? blueprintDesignHash({
+						force: input.force,
+						label: input.label,
+						entities: input.entities,
+						tiles: input.tiles
+					})
 				: createHash('sha256')
 						.update(
 							JSON.stringify(
@@ -34,6 +39,7 @@ export function blueprintCommand(
 									force: input.force,
 									label: input.label,
 									entities: input.entities,
+									tiles: input.tiles,
 									surface: input.surface,
 									position: input.position
 								})
