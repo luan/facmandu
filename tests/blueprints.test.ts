@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { lauxlib, lua, lualib, to_luastring } from 'fengari';
 import {
 	blueprintArtifactSchema,
 	blueprintInputSchema,
@@ -17,6 +19,58 @@ const design = {
 	entities: [{ name: 'transport-belt', position: { x: 0.5, y: 0.5 }, direction: 4 as const }]
 };
 const target = { ...design, surface: 'nauvis', position: { x: 20, y: 20 } };
+test('native blueprint drafts report both belt sides, rotated endpoints and custom reach without building', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ local place={{name='building',count=1}}
+ local function prototype(kind,width)
+  return {type=kind,tile_width=width,tile_height=width,items_to_place_this=place,has_flag=function() return false end}
+ end
+ local plant=prototype('assembling-machine',3)
+ local inserter=prototype('inserter',1)
+ inserter.inserter_pickup_position={x=0,y=-1}
+ inserter.inserter_drop_position={x=0,y=1.2}
+ local belt=prototype('transport-belt',1);belt.belt_speed=0.03125
+ prototypes={entity={plant=plant,inserter=inserter,belt=belt}}
+ game={forces={player={recipes={{enabled=true,products={{type='item',name='building'}}}}}},create_inventory=function()
+  local saved
+  return {{set_stack=function() end,set_blueprint_entities=function(value) saved=value end,
+   get_blueprint_entities=function() return saved end,get_blueprint_tiles=function() return {} end,
+   export_stack=function() return '0native' end,cost_to_build={{name='building',count=5}}}}
+ end}
+ ${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
+ for rotation=0,12,4 do
+  local function point(x,y)
+   if rotation==4 then return {x=-y,y=x} end
+   if rotation==8 then return {x=-x,y=-y} end
+   if rotation==12 then return {x=y,y=-x} end
+   return {x=x,y=y}
+  end
+  local function entity(name,x,y,direction,drop)
+   return {name=name,position=point(x,y),direction=(direction+rotation)%16,drop_position=drop and point(0,drop)}
+  end
+  local result=blueprint{operation='create',force='player',label='Both lanes',entities={
+   entity('plant',2.5,0.5,0),entity('inserter',2.5,2.5,0),entity('belt',2.5,3.5,4),
+   entity('inserter',2.5,4.5,8),entity('plant',2.5,6.5,0)
+  }}
+  local a,b=table.unpack(result.inserter_transfers)
+  assert(a.pickup_entity==1 and a.drop_entity==3 and a.drop_belt_side=='right')
+  assert(b.pickup_entity==5 and b.drop_entity==3 and b.drop_belt_side=='left')
+  assert(a.belt_lane_items_per_second==7.5 and b.belt_lane_items_per_second==7.5)
+  local result=blueprint{operation='create',force='player',label='Custom',entities={
+   entity('plant',2.5,0.5,0),entity('inserter',2.5,2.5,0,0.8),entity('belt',2.5,3.5,4)
+  }}
+  assert(result.inserter_transfers[1].drop_belt_side=='left')
+  local isolated=blueprint{operation='create',force='player',label='External',entities={entity('inserter',2.5,2.5,0)}}
+  assert(not isolated.inserter_transfers[1].pickup_entity and not isolated.inserter_transfers[1].drop_entity)
+ end
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
 test('compact rows expand exact native positions and preserve settings within the original bounds', () => {
 	const rows = {
 		operation: 'create',

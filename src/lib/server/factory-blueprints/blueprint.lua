@@ -254,7 +254,37 @@ local function blueprint(request)
  for _,item in pairs(stack.cost_to_build) do cost[#cost+1]={name=item.name,count=item.count} end
  table.sort(cost,function(a,b)return a.name<b.name end)
  if request.operation=='create' then
-  return {kind='blueprint',label=request.label,blueprint=stack.export_stack(),entities=#preview>0 and preview or nil,tiles=#tiles>0 and tiles or nil,warnings=#warnings>0 and warnings or nil,cost=cost}
+  local transfers={}
+  local function target_at(position)
+   for i,b in ipairs(boxes) do
+    if position.x>=b.x1 and position.x<b.x2 and position.y>=b.y1 and position.y<b.y2 then return i end
+   end
+  end
+  for i,e in ipairs(entities) do
+   local p=prototypes.entity[e.name]
+   if p.type=='inserter' then
+    local offsets
+    for _,connection in ipairs(inserter_connections(p)) do if connection.direction==e.direction then offsets=connection end end
+    local function position(vector)
+     return {x=e.position.x+(vector.x or vector[1]),y=e.position.y+(vector.y or vector[2])}
+    end
+    local pickup=position(e.pickup_position or offsets.pickup_offset)
+    local drop=position(e.drop_position or offsets.drop_offset)
+    local pickup_index,drop_index=target_at(pickup),target_at(drop)
+    local side,capacity
+    local belt=drop_index and entities[drop_index]
+    if belt and prototypes.entity[belt.name].type=='transport-belt' then
+     local headings={[0]={0,-1},[4]={1,0},[8]={0,1},[12]={-1,0}}
+     local heading=headings[belt.direction]
+     local lateral=heading[1]*(drop.y-belt.position.y)-heading[2]*(drop.x-belt.position.x)
+     side=math.abs(lateral)<0.05 and 'center' or lateral>0 and 'right' or 'left'
+     capacity=prototypes.entity[belt.name].belt_speed*240
+    end
+    transfers[#transfers+1]={inserter=i,pickup=pickup,drop=drop,pickup_entity=pickup_index,drop_entity=drop_index,drop_belt_side=side,belt_lane_items_per_second=capacity}
+   end
+  end
+  -- Planned endpoints do not prove curved-belt routing or connections to the existing factory.
+  return {kind='blueprint',label=request.label,blueprint=stack.export_stack(),entities=#preview>0 and preview or nil,tiles=#tiles>0 and tiles or nil,warnings=#warnings>0 and warnings or nil,cost=cost,inserter_transfers=#transfers>0 and transfers or nil}
  end
  local surface=game.surfaces[request.surface]
  if not surface then error('Unknown surface',0) end

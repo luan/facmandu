@@ -199,6 +199,20 @@ export const blueprintArtifactSchema = z
 			.default([]),
 		tiles: z.array(blueprintTileSchema).max(1024).default([]),
 		warnings: z.array(z.string()).default([]),
+		inserter_transfers: z
+			.array(
+				z.object({
+					inserter: z.number().int().min(1).max(200),
+					pickup: z.object({ x: z.number(), y: z.number() }),
+					drop: z.object({ x: z.number(), y: z.number() }),
+					pickup_entity: z.number().int().min(1).max(200).optional(),
+					drop_entity: z.number().int().min(1).max(200).optional(),
+					drop_belt_side: z.enum(['left', 'right', 'center']).optional(),
+					belt_lane_items_per_second: z.number().positive().optional()
+				})
+			)
+			.max(200)
+			.default([]),
 		cost: z.array(z.object({ name: z.string(), count: z.number().positive() }))
 	})
 	.refine(
