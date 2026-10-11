@@ -4,7 +4,7 @@ local bounded = require('scripts.tools.bounded')
 local M = {}
 M.manifest = {
  inspect_transport = {
-  desc = 'Inspect one built belt, inserter, chest, pipe, tank or pump at exact coordinates: status, direction, item counts/contents, inserter pickup/drop targets and the first fluid storage’s connections. Optional item reports its exact normal-quality count even when content rows are truncated. Fluid segment amounts are shared network stock, not independent stock at every pipe. Read-only; ghosts are not built entities.',
+  desc = 'Inspect one built belt, inserter, chest, pipe, tank or pump at exact coordinates: status, direction, item counts/contents, individual belt line counts, inserter pickup/drop targets and the first fluid storage’s connections. Optional item reports exact normal-quality counts. Belt counts are a snapshot, not measured throughput; sample delivered items over game ticks to verify a full belt. Fluid segment amounts are shared network stock, not independent stock at every pipe. Read-only; ghosts are not built entities.',
   params = {surface='string! surface name or index',x='number! map x',y='number! map y',name='string entity prototype name',unit_number='integer unit number to disambiguate',item='string exact item prototype name to count'}
  }
 }
@@ -32,6 +32,14 @@ local function inspect(a)
   row.connected_to_power_source=e.is_connected_to_electric_network();row.energy_j=e.energy
  elseif e.type=='transport-belt' or e.type=='underground-belt' or e.type=='splitter' then
   row.total_items=e.get_item_count()
+  row.belt_items_per_second=e.prototype.belt_speed*480
+  row.transport_lines={}
+  for index=1,e.get_max_transport_line_index() do
+   local line=e.get_transport_line(index)
+   local entry={index=index,total_items=line.get_item_count()}
+   if a.item then entry.item_count=line.get_item_count{name=a.item,quality='normal'} end
+   row.transport_lines[#row.transport_lines+1]=entry
+  end
   local neighbours=e.belt_neighbours
   row.inputs={};row.outputs={}
   for _,entity in pairs(neighbours.inputs) do row.inputs[#row.inputs+1]=reference(entity) end
