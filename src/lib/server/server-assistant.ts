@@ -64,10 +64,32 @@ const keyOf = (userId: string, serverId: string) => `${userId}:${serverId}`;
 export async function finishServerTurn(
 	turn: typeof turnTable.$inferSelect,
 	controller: AbortController,
-	send: (event: object) => void
+	sendEvent: (event: object) => void,
+	notifyProgress?: (progress: string) => Promise<void>
 ) {
 	const current = steering.get(controller);
-	let timeout: ReturnType<typeof setTimeout> | undefined;
+	let progress = 'Thinking…';
+	let notifying = false;
+	const send = (event: object) => {
+		if ('progress' in event && typeof event.progress === 'string') progress = event.progress;
+		sendEvent(event);
+	};
+	// Report liveness without spending model tokens or interrupting its work.
+	const heartbeat = setInterval(() => {
+		if (controller.signal.aborted || current?.closed || notifying) return;
+		const minutes = Math.max(1, Math.floor((Date.now() - turn.createdAt.getTime()) / 60_000));
+		const update = `${progress} · ${minutes} min elapsed`;
+		sendEvent({ progress: update });
+		if (notifyProgress) {
+			notifying = true;
+			void notifyProgress(update)
+				.catch(() => {})
+				.finally(() => {
+					notifying = false;
+				});
+		}
+	}, 60_000);
+	heartbeat.unref();
 	const results: FactoryResult[] = [];
 	const toolNames = new Map<string, string>();
 	const stopWatching = watchCompaction(turn.chatId ?? keyOf(turn.userId, turn.serverId), send);
@@ -75,11 +97,6 @@ export async function finishServerTurn(
 		const chat = turn.chatId
 			? await db.select().from(assistantChat).where(eq(assistantChat.id, turn.chatId)).get()
 			: null;
-		// Construction needs the same runtime budget in game and on the website.
-		timeout = setTimeout(
-			() => controller.abort('timeout'),
-			Math.max(1, 900_000 - (Date.now() - turn.createdAt.getTime()))
-		);
 		const game = chat?.gamePlayer
 			? await requireGamePlayer(
 					await requireServer(turn.userId, turn.serverId),
@@ -271,12 +288,7 @@ export async function finishServerTurn(
 			'Server assistant failed:',
 			cause instanceof Error ? cause.message.split('\n')[0]?.slice(0, 200) : 'Unknown error'
 		);
-		const answer =
-			controller.signal.reason === 'timeout'
-				? 'The assistant reached its 15-minute limit. Completed game changes remain; ask it to inspect the current state before continuing.'
-				: controller.signal.aborted
-					? 'Response stopped.'
-					: assistantErrorMessage(cause);
+		const answer = controller.signal.aborted ? 'Response stopped.' : assistantErrorMessage(cause);
 		await db
 			.update(turnTable)
 			.set({ state: 'error', answer, results: JSON.stringify(results) })
@@ -290,7 +302,7 @@ export async function finishServerTurn(
 			current.done.resolve();
 		}
 		stopWatching();
-		clearTimeout(timeout);
+		clearInterval(heartbeat);
 		const key = turn.chatId ?? keyOf(turn.userId, turn.serverId);
 		if (serverAssistantRequests.get(key) === controller) serverAssistantRequests.delete(key);
 	}

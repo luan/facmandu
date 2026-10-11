@@ -121,13 +121,19 @@ async function answer(
 				.where(eq(serverAssistantTurn.id, id));
 			return;
 		}
-		await finishServerTurn(turn, controller, () => {});
+		await finishServerTurn(
+			turn,
+			controller,
+			() => {},
+			async (progress) => {
+				if (controller.signal.aborted || sessions.get(server.id) !== session) return;
+				await requireGamePlayer(server, ownerId, message.player);
+				if (controller.signal.aborted || sessions.get(server.id) !== session) return;
+				await reply(server, message.player, progress);
+			}
+		);
 		// Changing settings or disconnecting never replays a response or pending game action.
-		if (
-			(controller.signal.aborted && controller.signal.reason !== 'timeout') ||
-			sessions.get(server.id) !== session
-		)
-			return;
+		if (controller.signal.aborted || sessions.get(server.id) !== session) return;
 		await requireGamePlayer(server, ownerId, message.player);
 		const completed = await db
 			.select()
