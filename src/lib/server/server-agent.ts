@@ -378,7 +378,7 @@ export function serverAssistantTools(context: {
 	useTool({
 		name: 'factory_lookup',
 		description:
-			'Run one documented read-only factory lookup. Pass a force name when required. Read the catalog first. Set display=true only when a native table, chart or map-location card meaningfully helps the answer; routine evidence stays in Tool activity. Results are bounded; a truncated scan cannot prove absence.',
+			'Run one documented read-only factory lookup. Pass a force name when required. Read the catalog first. For entity inspections, unit_number returned by find_entities in this request can replace x/y; native inspection still rechecks that exact ID at its observed position. Set display=true only when a native table, chart or map-location card meaningfully helps the answer; routine evidence stays in Tool activity. Results are bounded; a truncated scan cannot prove absence.',
 		input: v.object({
 			tool: v.pipe(v.string(), v.maxLength(80)),
 			display: v.optional(v.boolean(), false),
