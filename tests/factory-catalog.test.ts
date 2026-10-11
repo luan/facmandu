@@ -16,6 +16,7 @@ test('native lookup contracts declare scope and preserve exact local targets', (
     starter_pack_requested=6,waiting_at_station=7,waiting_for_departure=8,waiting_for_starter_pack=9
    }}
    local functions
+   helpers = {table_to_json=function() return '{}' end}
    remote = { add_interface = function(_, value) functions = value end }
    require('scripts.tools.engine').register()
    local manifest = functions.agent_tools_v1()
@@ -42,6 +43,17 @@ test('native lookup contracts declare scope and preserve exact local targets', (
     args.force='player';args.surface='nauvis';args.name='transport-belt'
     assert(not pcall(functions.find_entities,args))
    end
+   local player = {name='builder',valid=true,force=game.forces.player,connected=false,
+    physical_surface=game.surfaces.nauvis,physical_position={x=0.5,y=-0.5}}
+   local outsider = {name='other',valid=true,force={name='other'},connected=true,
+    physical_surface=game.surfaces.nauvis,physical_position={x=0.5,y=-0.5}}
+   game.players={player,outsider};game.connected_players={outsider}
+   game.get_player=function(name) return name=='builder' and player or outsider end
+   local locations=functions.locate_player({force='player',all=true})
+   assert(locations.total==1 and locations.players[1].player=='builder')
+   assert(locations.players[1].connected==false and locations.players[1].x==0.5)
+   assert(functions.locate_player({force='player',all=true,connected_only=true}).total==0)
+   assert(functions.locate_player({force='player',player='other'}).found==false)
   `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));

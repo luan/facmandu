@@ -80,10 +80,11 @@ M.manifest = {
     },
   },
   locate_player = {
-    desc = "Where one player's character is: surface and position with a ready [gps=...] tag, whether they are connected, and the surface they are looking at when it differs (remote view). nearby=N adds the closest built things within N tiles of the character, nearest first, each with its distance and gps (what is Bob standing next to): one read of one small circle, never a walk over the surface. all=true answers for every connected player in one call, one row each, so a per-player question is one lookup however many are online. Unknown player: found=false.",
+    desc = "Locate players on the selected force: physical surface and exact position, connected status, and remote view when different. Offline positions are last known locations, not evidence of presence. all=true includes offline players; connected_only=true restricts to online players. nearby=N lists nearby builds on this force, nearest first, with exact positions and entity IDs. Use these locations to inspect existing infrastructure even when nobody is online. Unknown player: found=false.",
     params = {
       player = "string player name; required unless all=true",
-      all    = "boolean every connected player in one call; player is ignored",
+      all    = "boolean every player on the selected force in one call; player is ignored",
+      connected_only = "boolean restrict all=true to online players, default false",
       nearby = "integer tiles, 1 to " .. NEARBY_MAX .. ": list the built things within this radius of the character",
     },
   },
@@ -147,9 +148,9 @@ end
 --- so the cost is the circle's, never the surface's. On 2026-09-16 the
 --- question "what is each player standing next to" had no bounded read to
 --- reach for at all.
-local function nearest_builds(surface, position, radius, own_character)
+local function nearest_builds(surface, position, radius, own_character, force)
   local found = {}
-  for _, entity in ipairs(surface.find_entities_filtered({ position = position, radius = radius })) do
+  for _, entity in ipairs(surface.find_entities_filtered({ position = position, radius = radius, force = force.name })) do
     if is_build(entity, own_character) then
       local dx, dy = entity.position.x - position.x, entity.position.y - position.y
       found[#found + 1] = { entity = entity, distance = math.sqrt(dx * dx + dy * dy) }
@@ -284,7 +285,7 @@ end
 
 --- One player's row: where the character is, what it is looking at and,
 --- with a radius, what stands beside it.
-local function locate_one(player, nearby)
+local function locate_one(player, nearby, force)
   -- The character's place is the answer to "where is Bob"; the controller's
   -- surface (remote view) is reported beside it when it differs, since that
   -- is what Bob is looking at right now.
@@ -293,35 +294,36 @@ local function locate_one(player, nearby)
   local position = player.physical_position or player.position
   local x, y, tag = gps(position, surface_name)
   local out = {
-    found = true, player = player.name, connected = player.connected == true,
+    found = true, force = force.name, player = player.name, connected = player.connected == true,
     surface = surface_name, x = x, y = y, gps = tag,
   }
   local viewing = player.surface and player.surface.valid and player.surface.name or nil
   if viewing and viewing ~= surface_name then out.viewing = viewing end
   if nearby and physical and physical.valid then
     out.nearby_radius = nearby
-    out.nearest, out.nearby_total = nearest_builds(physical, position, nearby, player.character)
+    out.nearest, out.nearby_total = nearest_builds(physical, position, nearby, player.character, force)
   end
   return out
 end
 
 local function locate_player(a)
+  local force = force_lookup.require_force(a.force)
   local nearby = nearby_radius(a.nearby)
   if a.all == true then
     local rows = {}
-    for _, player in pairs(game.connected_players) do
-      if player.valid then rows[#rows + 1] = locate_one(player, nearby) end
+    for _, player in pairs(a.connected_only == true and game.connected_players or game.players) do
+      if player.valid and player.force.name == force.name then rows[#rows + 1] = locate_one(player, nearby, force) end
     end
     table.sort(rows, function(p, q) return p.player < q.player end)
     local shown = bounded.fit(bounded.cut(rows, bounded.MAX_FORCES))
-    return { found = true, total = #rows, shown = #shown, players = shown }
+    return { found = true, force = force.name, total = #rows, shown = #shown, players = shown }
   end
   if type(a.player) ~= "string" or a.player == "" then error("player is required unless all=true", 0) end
   local player = game.get_player(a.player)
-  if not (player and player.valid) then
-    return { found = false, player = a.player, reason = "no player by that name" }
+  if not (player and player.valid and player.force.name == force.name) then
+    return { found = false, force = force.name, player = a.player, reason = "no player on this force by that name" }
   end
-  return locate_one(player, nearby)
+  return locate_one(player, nearby, force)
 end
 
 M.functions = { find_entities = find_entities, locate_player = locate_player }
