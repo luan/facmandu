@@ -4,6 +4,7 @@ import { zipSync } from 'fflate';
 import control from '../../../factorio-mod/facmandu-assistant/control.lua?raw';
 import data from '../../../factorio-mod/facmandu-assistant/data.lua?raw';
 import info from '../../../factorio-mod/facmandu-assistant/info.json';
+import locale from '../../../factorio-mod/facmandu-assistant/locale/en/toby.cfg?raw';
 import readme from '../../../factorio-mod/facmandu-assistant/README.md?raw';
 import type { ManagedServer } from './db/schema';
 import { ServerError, serverConfig } from './server-files';
@@ -19,6 +20,7 @@ export function tobyModArchive() {
 				'info.json': JSON.stringify(info),
 				'control.lua': control,
 				'data.lua': data,
+				'locale/en/toby.cfg': locale,
 				'README.md': readme
 			}).map(([name, source]) => [`${info.name}_${info.version}/${name}`, encode.encode(source)])
 		)

@@ -21,6 +21,7 @@ test('Toby panel sends native player requests and preserves typed drafts across 
    return child
   end
   element.add_tab=function() end
+  element.focus=function() end
   element.clear=function() element.children={} end
   element.scroll_to_bottom=function() end
   element.destroy=function() element.valid=false;if parent then parent[element.name]=nil end end
@@ -43,7 +44,7 @@ test('Toby panel sends native player requests and preserves typed drafts across 
  interface.update_player(1,{status='Working',running=true,answer='First answer',current='one',chats={{id='one',title='Glass'},{id='two',title='Science'}}})
  assert(storage.gui[1].message.text=='More glass')
  assert(storage.gui[1].send.caption=='Steer' and storage.gui[1].stop.visible)
- handlers[3]({player_index=1,element={valid=true,name='facmandu-toby-send'}})
+ handlers['facmandu-toby-send']({player_index=1})
  assert(last.player=='Alice' and last.operation=='send' and last.prompt=='More glass' and last.chat=='one')
  assert(storage.gui[1].message.text=='')
  storage.gui[1].chats.selected_index=2

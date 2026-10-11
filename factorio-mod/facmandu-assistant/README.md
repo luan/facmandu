@@ -2,7 +2,7 @@
 
 Private development build, version **0.0.1**. This package has not been published to the Mod Portal.
 
-Click **Toby** above the game view, or press **Ctrl+Shift+T**, to open the side panel. **Chat** shows recent messages, **Activity** shows the selected run's tool activity, and **Design** holds its latest blueprint. Switch conversations while a run continues, or use **Steer** to add instructions. Closing the panel keeps your typed draft.
+Click **Toby** above the game view, or press **Ctrl+Shift+T**, to open the side panel. **Chat** shows recent messages, **Activity** shows the selected run's tool activity, and **Design** holds its latest blueprint. Switch conversations while a run continues, or use **Steer** to add instructions. Press **Ctrl+Enter** to send or steer. Closing the panel keeps your typed draft. Shortcuts are configurable in Factorio’s Controls settings.
 
 **Open blueprint**, or **Ctrl+Shift+B**, uses Factorio's blueprint editor. **Place ghosts** puts the design in your cursor and closes the panel so you can place it. Both preserve your held item through Factorio's clear-cursor operation and refuse when the item cannot be returned to your inventory. Neither supplies construction materials.
 

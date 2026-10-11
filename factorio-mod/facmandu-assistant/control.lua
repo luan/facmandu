@@ -64,10 +64,11 @@ local function panel(player)
  context.style.font_color={r=0.75,g=0.75,b=0.75}
  actions.add{type='empty-widget'}.style.horizontally_stretchable=true
  local stop=actions.add{type='button',name=PREFIX..'stop',caption='Stop',visible=false}
- local send=actions.add{type='button',name=PREFIX..'send',caption='Send',style='confirm_button',tooltip='Send a message to Toby'}
+ local send=actions.add{type='button',name=PREFIX..'send',caption='Send',style='confirm_button',tooltip='Send a message to Toby · Ctrl+Enter'}
  refs.message=composer;refs.stop=stop;refs.send=send;refs.context=context
  storage.gui[player.index]=refs
  player.opened=frame
+ composer.focus()
  return refs
 end
 local function selected(player)
@@ -112,7 +113,7 @@ local function update(player_index,state)
  refs.context.caption=player.surface.name
  refs.stop.visible=state.running==true
  refs.send.caption=state.running and 'Steer' or 'Send'
- refs.send.tooltip=state.running and 'Add instructions to the current run' or 'Send a message to Toby'
+ refs.send.tooltip=state.running and 'Steer the current run · Ctrl+Enter' or 'Send a message to Toby · Ctrl+Enter'
  refs.chats.items=#items>0 and items or {'New conversation'}
  for i,chat in ipairs(state.chats) do if chat.id==state.current then refs.chats.selected_index=i;break end end
  -- Progress updates never recreate a transcript the player is reading.
@@ -191,6 +192,13 @@ local function take_blueprint(player,inspect)
  if inspect then player.opened=player.cursor_stack end
 end
 script.on_event('facmandu-toby-design',function(event) take_blueprint(game.get_player(event.player_index),true) end)
+local function send(player)
+ local refs=storage.gui[player.index]
+ if not refs or not refs.frame.valid then return end
+ local text=refs.message.text:match('^%s*(.-)%s*$')
+ if #text>0 and #text<=6000 then emit(player,'send',text,selected(player));refs.message.text='';storage.drafts[player.index]='' end
+end
+script.on_event('facmandu-toby-send',function(event) send(game.get_player(event.player_index)) end)
 script.on_event(defines.events.on_gui_click,function(event)
  local element=event.element
  if not element.valid then return end
@@ -200,8 +208,7 @@ script.on_event(defines.events.on_gui_click,function(event)
  if name==PREFIX..'open' then open(player)
  elseif name==PREFIX..'close' then refs.frame.destroy()
  elseif name==PREFIX..'send' then
-  local text=refs.message.text:match('^%s*(.-)%s*$')
-  if #text>0 and #text<=6000 then emit(player,'send',text,selected(player));refs.message.text='';storage.drafts[player.index]='' end
+  send(player)
  elseif name==PREFIX..'new' then emit(player,'new')
  elseif name==PREFIX..'stop' then emit(player,'stop',nil,selected(player))
  elseif name==PREFIX..'blueprint' or name==PREFIX..'inspect-blueprint' then
