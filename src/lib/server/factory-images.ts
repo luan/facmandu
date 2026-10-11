@@ -27,7 +27,8 @@ export async function readFactoryImage(server: ManagedServer, id: string) {
 
 export async function renderFactoryBlueprint(
 	server: ManagedServer,
-	encoded: string
+	encoded: string,
+	waitMs = 60000
 ): Promise<FactoryImage> {
 	let data: ReturnType<typeof blueprintImageData>;
 	try {
@@ -130,7 +131,7 @@ export async function renderFactoryBlueprint(
 								'Sprites are still preparing. Follow Activity, then retry this view; rendering continues in the background.'
 							)
 						),
-					60000
+					waitMs
 				);
 			})
 		]);

@@ -142,7 +142,7 @@ export function serverAssistantTools(context: {
 		useTool({
 			name: 'factory_view',
 			description:
-				'Capture a read-only sprite-rendered view of an explored factory region. The image is attached to your model context and saved in Activity. Set display=true only when this inspection belongs in the answer; routine scouting stays in Activity. Use exact force/surface and world coordinates from factory lookups. Width/height are tiles, max 96 each; max 1000 blueprintable entities. The captured tick, area and origin identify the snapshot. This is a static factory layout, not a live screenshot: terrain, items on belts, animations, players and operating state are not shown. Combine it with current machine/production lookups. No save or entity is changed.',
+				'Capture a read-only sprite-rendered view of an explored factory region. A ready image is attached to your model context and saved in Activity. A cold preview returns pending immediately and renders in background Activity: continue with structured lookups instead of retrying. Set display=true only when this inspection belongs in the answer; routine scouting stays in Activity. Use exact force/surface and world coordinates from factory lookups. Width/height are tiles, max 96 each; max 1000 blueprintable entities. The captured tick, area and origin identify the snapshot. This is a static factory layout, not a live screenshot: terrain, items on belts, animations, players and operating state are not shown. Combine it with current machine/production lookups. No save or entity is changed.',
 			input: v.object({
 				force: v.string(),
 				surface: v.string(),

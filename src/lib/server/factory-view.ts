@@ -49,5 +49,14 @@ export async function captureFactoryView(server: ManagedServer, input: unknown, 
 	if (!reply.success) throw new ServerError(502, 'The server returned an invalid factory view');
 	if (!reply.data.ok) throw new ServerError(409, reply.data.error);
 	const { blueprint, ...snapshot } = reply.data.result;
-	return { ...snapshot, image: await renderFactoryBlueprint(server, blueprint) };
+	try {
+		return { ...snapshot, image: await renderFactoryBlueprint(server, blueprint, 2000) };
+	} catch (cause) {
+		if (!(cause instanceof ServerError) || cause.status !== 425) throw cause;
+		return {
+			...snapshot,
+			kind: 'factory-preview-pending' as const,
+			note: 'Preview is rendering in background Activity; no image is available yet. Do not retry while preparing. Continue with structured factory lookups; request the image later if needed.'
+		};
+	}
 }
