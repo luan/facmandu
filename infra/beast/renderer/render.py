@@ -70,13 +70,20 @@ def prepare(binary, mods, profile):
                     if names:
                         candidate = json.loads(contents.read(names[0]))
                         if candidate['name'] == name:
-                            candidates.append(candidate)
+                            candidates.append((candidate, False))
             folder = mods / name / 'info.json'
             if folder.exists():
-                candidates.append(json.loads(folder.read_text()))
-            if len(candidates) != 1:
-                raise RuntimeError(f'Expected one installed archive for {name}')
-            info = candidates[0]
+                candidate = json.loads(folder.read_text())
+                if candidate['name'] == name:
+                    candidates.append((candidate, True))
+            candidates = [entry for entry in candidates
+                          if not mod.get('version') or entry[0]['version'] == mod['version']]
+            if not candidates:
+                raise RuntimeError(f'No installed selected version for {name}')
+            # Match Facmandu's server snapshot: explicit pin, otherwise newest;
+            # an unpacked copy wins a same-version tie.
+            info, _ = max(candidates, key=lambda entry:
+                          (tuple(map(int, entry[0]['version'].split('.'))), entry[1]))
         manifest.append(dict(name=name, title=info.get('title', name), version=info['version'], builtin=builtin.exists(), category=info.get('category', ''), tags=[], downloads=0, owner=str(info.get('author', '')), updated=''))
     (profile / 'build/vanilla/manifest.json').write_text(json.dumps(dict(zips={}, mods=manifest)))
     folder = profile / 'profiles/vanilla'

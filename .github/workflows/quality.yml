@@ -23,7 +23,7 @@ jobs:
       - run: bun run lint
       - run: bun run check
       - run: bun test
-      - run: python3 -m unittest discover -s tests -p deployment_test.py
+      - run: python3 -m unittest discover -s tests -p '*_test.py'
       # Fengari rejects precision over two digits before calling sprintf-js.
       # Remove this exception when sprintf-js publishes a patched release.
       - run: bun audit --ignore GHSA-hp3w-g68c-fv3c
