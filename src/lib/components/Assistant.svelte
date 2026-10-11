@@ -1,4 +1,5 @@
 <script lang="ts">
+ import type { AssistantContextUsage } from '$lib/assistant-context';
  import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
  import Prompt from '$lib/components/Prompt.svelte';
  import { AssistantVoice, idleVoice } from '$lib/assistant-voice';
@@ -20,10 +21,12 @@
  let hasMore = $state(false);
  let olderLoading = $state(false);
  let compacted = $state(false);
+ let contextUsage = $state<AssistantContextUsage | null>(null);
+
  async function selectChat(id: string) {
   if (inProgress) return;
   voice.stop();
-  chat = id; turns = []; plans = []; combineablePlanIds = []; selectedMods = []; selectedTurn = ''; prompt = ''; error = ''; refreshError = ''; text = ''; activePrompt = ''; activeMods = []; activeResults = []; loading = true;
+  chat = id; contextUsage = null; turns = []; plans = []; combineablePlanIds = []; selectedMods = []; selectedTurn = ''; prompt = ''; error = ''; refreshError = ''; text = ''; activePrompt = ''; activeMods = []; activeResults = []; loading = true;
   await refresh(true, true);
  }
  async function createChat() {
@@ -76,6 +79,8 @@
  let previewOpen = $state(false);
  let models = $state<{ id: string; name: string; efforts: string[]; defaultEffort: string }[]>([]);
  let model = $state('');
+ const visibleContext = $derived(contextUsage?.model === model || gamePlayer ? contextUsage : null);
+ const contextPercent = $derived(visibleContext?.tokens !== null && visibleContext?.tokens !== undefined && visibleContext.window > 0 ? Math.round(visibleContext.tokens / visibleContext.window * 100) : null);
  let effort = $state('');
  const effortChoices = $derived(models.find(item => item.id === model)?.efforts ?? []);
  $effect(() => { if (!effortChoices.includes(effort)) effort = models.find(item => item.id === model)?.defaultEffort ?? ''; });
@@ -133,7 +138,7 @@
    const data = await response.json();
    if (!response.ok) throw new Error(data.message);
    if (selectedChat && chat !== selectedChat) return false;
-   chat = data.chat.id; gamePlayer = data.chat.gamePlayer ?? null; chats = data.chats; hasMore = data.hasMore; compacted = Boolean(data.chat.compactedAt); turns = data.turns;
+   chat = data.chat.id; gamePlayer = data.chat.gamePlayer ?? null; chats = data.chats; hasMore = data.hasMore; compacted = Boolean(data.chat.compactedAt); contextUsage = data.chat.contextUsage ?? null; turns = data.turns;
    plans = data.plans; combineablePlanIds = data.combineablePlanIds ?? [];
    if (data.models) { models = data.models; modelError = data.modelError; modelCatalogLoaded = true; }
    if (resetModel || !model || (data.models && !models.some(item => item.id === model))) model = models.some(item => item.id === data.model) ? data.model : models[0]?.id ?? '';
@@ -196,7 +201,7 @@
    const decoder = new TextDecoder(); let buffer = ''; let complete = false;
    for (;;) { const { done, value } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true });
     let newline = buffer.indexOf('\n');
-    while (newline >= 0) { const event = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1); if (event.compacted) compacted = true; if (event.results) activeResults = event.results; if (event.mods) activeMods = event.mods; if (event.delta) text += event.delta; if (event.progress) progress = event.progress; if (event.answer) text = event.answer; if (event.error) error = event.error; if (event.done || event.error) complete = true; newline = buffer.indexOf('\n'); }
+    while (newline >= 0) { const event = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1); if (event.compacted) compacted = true; if (event.contextUsage) contextUsage = event.contextUsage; if (event.results) activeResults = event.results; if (event.mods) activeMods = event.mods; if (event.delta) text += event.delta; if (event.progress) progress = event.progress; if (event.answer) text = event.answer; if (event.error) error = event.error; if (event.done || event.error) complete = true; newline = buffer.indexOf('\n'); }
     if (complete) break;
    }
    if (error) throw new Error(error);
@@ -408,9 +413,9 @@
     <TooltipButton tooltip={inProgress ? 'Response in progress' : 'Review selected mods and their dependencies together'} size="sm" disabled={inProgress} onclick={reviewSelected}>Review selected</TooltipButton>
    </div>
   {/if}
-  {#if inProgress || voiceState.error || voiceState.active || voiceState.connecting || compacted}
+  {#if inProgress || voiceState.error || voiceState.active || voiceState.connecting}
   <div class="flex h-8 shrink-0 items-center gap-2 px-5 text-xs text-muted-foreground" role="status" aria-live="polite">
-   {#if inProgress}<LoaderCircleIcon class="size-3.5 animate-spin motion-reduce:animate-none" /><span class="truncate">{progress || 'Thinking…'}</span>{:else if voiceState.error}<span class="truncate text-destructive" title={voiceState.error}>{voiceState.error}</span>{:else if voiceState.active || voiceState.connecting}<MicIcon class="size-3.5" /><span class="truncate">{voiceState.status}</span>{:else if compacted}<span>Earlier context summarized</span>{/if}
+   {#if inProgress}<LoaderCircleIcon class="size-3.5 animate-spin motion-reduce:animate-none" /><span class="truncate">{progress || 'Thinking…'}</span>{:else if voiceState.error}<span class="truncate text-destructive" title={voiceState.error}>{voiceState.error}</span>{:else if voiceState.active || voiceState.connecting}<MicIcon class="size-3.5" /><span class="truncate">{voiceState.status}</span>{/if}
   </div>
   {/if}
   {#if voiceState.active || voiceState.connecting}
@@ -419,6 +424,13 @@
     <p class="line-clamp-2 break-words" title={voiceState.assistantCaption}><span class="mr-2 text-xs text-muted-foreground">Assistant</span>{voiceState.assistantCaption}</p>
    </div>
   {/if}
+  <section class="mx-auto flex w-full max-w-4xl shrink-0 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-xs text-muted-foreground" aria-label="Context window">
+   {#if visibleContext}
+    <span title="Tokens in the latest model request and its response, including cached input. Not cumulative usage.">Context {visibleContext.tokens === null ? 'not measured yet' : visibleContext.tokens.toLocaleString()} / {visibleContext.window > 0 ? visibleContext.window.toLocaleString() : 'unknown'} tokens{contextPercent !== null ? ` · ${contextPercent}%` : ''}</span>
+    {#if contextPercent !== null}<progress class="h-1.5 w-20 accent-primary" aria-label="Context used" max="100" value={Math.min(100, contextPercent)}></progress>{/if}
+    {#if visibleContext.compacting}<span>Compacting…</span>{:else if visibleContext.compactionFailed}<span class="text-destructive" role="status">Compaction failed; context retained</span>{:else}<span title={visibleContext.window > 0 ? `Automatic compaction above ${(visibleContext.window - visibleContext.reserve).toLocaleString()} tokens. Recent context stays verbatim; older context is summarized. Full chat history remains available.` : 'The provider has not supplied a context limit. Compaction can still recover a context overflow.'}>Auto compaction{compacted ? ' · Earlier context summarized' : ''}</span>{/if}
+   {:else}<span>Context usage appears after a response.</span>{/if}
+  </section>
   <form onsubmit={(event) => { event.preventDefault(); void send(); }} class="mx-auto w-full max-w-4xl shrink-0 border-t border-border p-4 space-y-3">
    {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
    {#if refreshError}<p role="status" class="text-sm text-muted-foreground">{refreshError} <button type="button" class="underline" onclick={() => void refresh()}>Retry</button></p>{/if}

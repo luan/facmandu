@@ -301,7 +301,7 @@ export async function finishServerTurn(
 			current.ready.resolve(null);
 			current.done.resolve();
 		}
-		stopWatching();
+		await stopWatching();
 		clearInterval(heartbeat);
 		const key = turn.chatId ?? keyOf(turn.userId, turn.serverId);
 		if (serverAssistantRequests.get(key) === controller) serverAssistantRequests.delete(key);

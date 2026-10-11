@@ -16,6 +16,11 @@ import { eq } from 'drizzle-orm';
 import * as v from 'valibot';
 import { env } from '$env/dynamic/private';
 import {
+	type AssistantContextUsage,
+	assistantContextLimit,
+	assistantContextTokens
+} from '$lib/assistant-context';
+import {
 	modlistRouteBody,
 	modlistRouteFromAnswers,
 	modlistRouteSchema,
@@ -471,6 +476,8 @@ type RuntimeState = {
 	runtime?: ReturnType<typeof start>;
 	observeStop?: () => void;
 	progress?: Map<string, (event: object) => void>;
+	contextUsage?: Map<string, AssistantContextUsage>;
+	contextWrites?: Map<string, Promise<unknown>>;
 };
 // Vite SSR reloads do not preserve import.meta.hot.data. Flue owns one runtime per process.
 const processState = globalThis as typeof globalThis & { __facmanduAgent?: RuntimeState };
@@ -478,24 +485,69 @@ processState.__facmanduAgent ??= { implementation: ModlistAssistant };
 const runtimeState = processState.__facmanduAgent;
 runtimeState.implementation = ModlistAssistant;
 runtimeState.progress ??= new Map();
+runtimeState.contextUsage ??= new Map();
+runtimeState.contextWrites ??= new Map();
+function saveContextUsage(chatId: string, usage: AssistantContextUsage, compacted = false) {
+	runtimeState.contextUsage?.set(chatId, usage);
+	runtimeState.progress?.get(chatId)?.({ contextUsage: usage });
+	// Preserve event order when persistence is slower than successive model calls.
+	const write = (runtimeState.contextWrites?.get(chatId) ?? Promise.resolve())
+		.then(() =>
+			db
+				.update(assistantChat)
+				.set({ contextUsage: usage, ...(compacted ? { compactedAt: new Date() } : {}) })
+				.where(eq(assistantChat.id, chatId))
+		)
+		.catch(() => {});
+	runtimeState.contextWrites?.set(chatId, write);
+	void write.finally(() => {
+		if (runtimeState.contextWrites?.get(chatId) === write)
+			runtimeState.contextWrites.delete(chatId);
+	});
+}
 runtimeState.observeStop?.();
 runtimeState.observeStop = observe((event, context) => {
-	if (event.type === 'compaction_start')
+	const usage = runtimeState.contextUsage?.get(context.id);
+	if (
+		event.type === 'turn' &&
+		event.purpose === 'agent' &&
+		!event.isError &&
+		event.response.usage &&
+		usage
+	)
+		saveContextUsage(context.id, {
+			...usage,
+			tokens: assistantContextTokens(event.response.usage)
+		});
+	if (event.type === 'compaction_start') {
 		runtimeState.progress?.get(context.id)?.({ progress: 'Summarizing earlier context…' });
+		if (usage)
+			saveContextUsage(context.id, { ...usage, compacting: true, compactionFailed: false });
+	}
 	if (event.type === 'compaction') {
-		runtimeState.progress?.get(context.id)?.({ progress: 'Thinking…', compacted: !event.isError });
-		if (!event.isError)
-			void db
-				.update(assistantChat)
-				.set({ compactedAt: new Date() })
-				.where(eq(assistantChat.id, context.id))
-				.catch(() => {});
+		runtimeState.progress?.get(context.id)?.({
+			progress: 'Thinking…',
+			compacted: !event.isError
+		});
+		if (usage)
+			saveContextUsage(
+				context.id,
+				{
+					...usage,
+					tokens: event.isError ? usage.tokens : null,
+					compactionFailed: event.isError,
+					compacting: false
+				},
+				!event.isError
+			);
 	}
 });
 export function watchCompaction(chatId: string, send: (event: object) => void) {
 	runtimeState.progress?.set(chatId, send);
-	return () => {
+	return async () => {
 		runtimeState.progress?.delete(chatId);
+		runtimeState.contextUsage?.delete(chatId);
+		await runtimeState.contextWrites?.get(chatId);
 	};
 }
 
@@ -527,6 +579,15 @@ export async function agentHandle(
 					gamePlayer: target.gamePlayer
 				};
 	await registerAssistantProvider(context, loaded, effort);
+	const id =
+		chatId ?? `${userId}-${typeof target === 'string' ? target : `server-${target.serverId}`}-chat`;
+	const usage = assistantContextLimit(
+		details.id,
+		loaded.model.contextWindow,
+		loaded.model.maxTokens
+	);
+	runtimeState.contextUsage?.set(id, usage);
+	runtimeState.progress?.get(id)?.({ contextUsage: usage });
 	if (!runtimeState.runtime) {
 		const directory = resolve(env.FACMANDU_AGENT_DATA ?? '.data/agent');
 		mkdirSync(directory, { recursive: true, mode: 0o700 });

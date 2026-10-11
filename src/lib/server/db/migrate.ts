@@ -84,6 +84,12 @@ CREATE TABLE IF NOT EXISTS recommendation_feedback (
 	await migrateChats(client);
 	if (
 		!(await client.execute('PRAGMA table_info(assistant_chat)')).rows.some(
+			(row) => row.name === 'context_usage'
+		)
+	)
+		await client.execute('ALTER TABLE assistant_chat ADD COLUMN context_usage TEXT');
+	if (
+		!(await client.execute('PRAGMA table_info(assistant_chat)')).rows.some(
 			(row) => row.name === 'game_player'
 		)
 	)

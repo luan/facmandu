@@ -8,6 +8,7 @@ import {
 	unique,
 	uniqueIndex
 } from 'drizzle-orm/sqlite-core';
+import type { AssistantContextUsage } from '$lib/assistant-context';
 
 export const user = sqliteTable('user', {
 	id: text('id').primaryKey(),
@@ -347,5 +348,6 @@ export const assistantChat = sqliteTable('assistant_chat', {
 	title: text('title').notNull().default('New chat'),
 	createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 	updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
-	compactedAt: integer('compacted_at', { mode: 'timestamp_ms' })
+	compactedAt: integer('compacted_at', { mode: 'timestamp_ms' }),
+	contextUsage: text('context_usage', { mode: 'json' }).$type<AssistantContextUsage>()
 });

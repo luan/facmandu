@@ -57,11 +57,22 @@ test('additive migration preserves list data, infers compatibility, and is idemp
 			(await client.execute('SELECT game_player FROM assistant_chat')).rows[0]?.game_player,
 			null
 		);
+		assert.equal(
+			(await client.execute('SELECT context_usage FROM assistant_chat')).rows[0]?.context_usage,
+			null
+		);
+		await client.execute(
+			`UPDATE assistant_chat SET context_usage = '{"model":"test","tokens":1234}'`
+		);
 		await client.execute("UPDATE assistant_chat SET game_player = 'Alice'");
 		await migrate(client, initialSchema);
 		assert.equal(
 			(await client.execute('SELECT game_player FROM assistant_chat')).rows[0]?.game_player,
 			'Alice'
+		);
+		assert.equal(
+			(await client.execute('SELECT context_usage FROM assistant_chat')).rows[0]?.context_usage,
+			'{"model":"test","tokens":1234}'
 		);
 		assert.equal(
 			(await client.execute('SELECT chat_id FROM modlist_plan')).rows[0]?.chat_id,

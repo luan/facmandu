@@ -749,7 +749,7 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 				} finally {
 					clearTimeout(timeout);
 					running.delete(key);
-					stopWatching();
+					await stopWatching();
 					request.signal.removeEventListener('abort', disconnect);
 					if (!closed) {
 						closed = true;
