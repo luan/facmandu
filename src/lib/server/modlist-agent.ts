@@ -237,7 +237,7 @@ function ModlistAssistant() {
 			kind: 'signal',
 			type: 'answer-recovery',
 			attributes: { requestId: requestId ?? '' },
-			body: 'The previous model call ended without a complete answer. Continue the existing request using the recorded tool results. Do not repeat completed writes. Return a concise outcome or a concrete unresolved blocker.'
+			body: 'The previous model call hit its output limit or returned no answer; the user has not stopped the request. Resume unfinished authorized work from the recorded tool results. Do not repeat completed writes or ask for the same authorization again. Fix remaining design, validation and connection errors with tools. Finish only when the requested work is complete or a concrete external blocker prevents it, then report the concise outcome.'
 		});
 	});
 	if (context.serverId !== undefined) return serverAssistantTools(context);
