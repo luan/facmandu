@@ -3,6 +3,7 @@ import { builtinProviders } from '@earendil-works/pi-ai/providers/all';
 import { eq } from 'drizzle-orm';
 import { db } from './db';
 import { providerKey, user } from './db/schema';
+import { neuralwattProvider } from './neuralwatt';
 
 // These providers need endpoint, cloud identity, or account configuration.
 // Add them when the connection form can collect those fields; never use host credentials.
@@ -14,7 +15,7 @@ const configuredProviders = new Set([
 	'google-vertex',
 	'github-copilot'
 ]);
-export const apiProviders: Provider[] = builtinProviders().filter(
+export const apiProviders: Provider[] = [...builtinProviders(), neuralwattProvider].filter(
 	(provider) =>
 		provider.auth.apiKey?.login &&
 		provider.getModels().length &&

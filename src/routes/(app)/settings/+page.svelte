@@ -73,6 +73,7 @@
        <label for="provider-key" class="text-sm font-medium">API key</label>
        <Input id="provider-key" name="key" type="password" autocomplete="off" data-1p-ignore maxlength={4096} placeholder={selected.connected ? 'Replace saved key' : `${selected.name} API key`} disabled={pending} />
        {#if selected.id === 'openai'}<p class="text-sm text-muted-foreground">Also used for assistant routing and recommendations for lists you create.</p>{/if}
+       {#if selected.id === 'neuralwatt'}<p class="text-sm text-muted-foreground">Connect with an API key from <a href="https://portal.neuralwatt.com" target="_blank" rel="noreferrer" class="underline">NeuralWatt → Dashboard → API Keys</a>.</p>{/if}
        <div class="flex flex-wrap gap-2"><Button type="submit" disabled={pending}><KeyRoundIcon />{selected.connected ? 'Replace key' : 'Save key'}</Button>{#if selected.connected}<Button type="submit" variant="secondary" name="remove" value="true" disabled={pending}><TrashIcon />Remove</Button>{/if}</div>
       </form>
      {/if}
