@@ -162,19 +162,11 @@ export async function factoryBlueprint(
 				: parsed.data;
 	if (!(await serverStatus(server)).running)
 		throw new ServerError(409, 'Start this server to design or place a blueprint');
-	const raw = await rconScript(server, blueprintCommand(resolved, player));
-	let decoded: unknown;
-	try {
-		decoded = JSON.parse(raw.trim());
-	} catch {
-		throw new ServerError(502, 'The server did not return a blueprint result');
-	}
-	const reply = replySchema.safeParse(decoded);
-	if (!reply.success) throw new ServerError(502, 'The server returned an invalid blueprint result');
-	if (!reply.data.ok) throw new ServerError(409, reply.data.error);
+	const command = blueprintCommand(resolved, player);
+	let designId: string | undefined;
 	if (resolved.operation === 'create') {
 		const { operation: _operation, ...design } = resolved;
-		const designId = blueprintDesignHash(design);
+		designId = blueprintDesignHash(design);
 		const directory = join(server.directory, 'blueprint-drafts');
 		await mkdir(directory, { recursive: true, mode: 0o700 });
 		try {
@@ -185,6 +177,22 @@ export async function factoryBlueprint(
 		} catch (cause) {
 			if ((cause as NodeJS.ErrnoException).code !== 'EEXIST') throw cause;
 		}
+	}
+	const raw = await rconScript(server, command);
+	let decoded: unknown;
+	try {
+		decoded = JSON.parse(raw.trim());
+	} catch {
+		throw new ServerError(502, 'The server did not return a blueprint result');
+	}
+	const reply = replySchema.safeParse(decoded);
+	if (!reply.success) throw new ServerError(502, 'The server returned an invalid blueprint result');
+	if (!reply.data.ok)
+		throw new ServerError(
+			409,
+			`${reply.data.error}${designId ? ` Unvalidated draft saved: designId=${designId}. Revise it with create, designId and entityChanges or removedEntityIndices; do not retransmit the layout. No export or placement succeeded.` : ''}`
+		);
+	if (resolved.operation === 'create') {
 		const artifact = z
 			.object({ kind: z.literal('blueprint') })
 			.passthrough()

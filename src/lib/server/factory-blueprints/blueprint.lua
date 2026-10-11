@@ -190,7 +190,7 @@ local function blueprint(request)
   for j,b in ipairs(boxes) do
    if box.x1<b.x2 and box.x2>b.x1 and box.y1<b.y2 and box.y2>b.y1 then
     local other=request.entities[j]
-    error('Blueprint entities overlap: index '..i..' '..e.name..' at ('..e.position.x..', '..e.position.y..') with index '..j..' '..other.name..' at ('..other.position.x..', '..other.position.y..'). Move or remove the conflicting entity.',0)
+    error('Blueprint entities overlap: index '..i..' '..e.name..' at ('..e.position.x..', '..e.position.y..') with index '..j..' '..other.name..' at ('..other.position.x..', '..other.position.y..'). Entity '..i..' footprint ['..box.x1..', '..box.y1..'] to ['..box.x2..', '..box.y2..']; entity '..j..' footprint ['..b.x1..', '..b.y1..'] to ['..b.x2..', '..b.y2..']. Remove an unnecessary conflicting entity by index or move it completely outside the other footprint.',0)
    end
   end
   boxes[#boxes+1]=box

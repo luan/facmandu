@@ -64,7 +64,7 @@ local M = {}
 
 M.manifest = {
   find_entities = {
-    desc = "Where one force's entities are on one surface: positions with a ready [gps=...] tag. Filter by entity name, type (assembling-machine, furnace, mining-drill, lab, roboport, rocket-silo), the recipe a crafting machine is set to, or the item or fluid its recipe makes (where are grenades made: product=grenade). A recipe or product search covers every crafting machine on the surface by itself; a type beside it is not needed. Ghosts match too, by what they will become, and rows say ghost=true; ghost=true or false narrows to ghosts or built. With x, y and radius, omit filters to inspect all infrastructure in that bounded area, including stored-supply endpoints. types counts every matched entity type, including omitted rows; use a type filter to inspect those entities. Otherwise give at least one filter. Product searches find crafting machines, not items in chests or fluids in tanks. truncated=true means the scan stopped before the end of the surface, so the rows are what it saw and nothing in the reply says a thing is absent. An unknown name comes back found=false with suggestions of close names. For a count, entity_count is cheaper: it asks the engine for a number instead of walking positions.",
+    desc = "Where one force's entities are on one surface: positions with a ready [gps=...] tag. Filter by entity name, type (assembling-machine, furnace, mining-drill, lab, roboport, rocket-silo), the recipe a crafting machine is set to, or the item or fluid its recipe makes (where are grenades made: product=grenade). A recipe or product search covers every crafting machine on the surface by itself; a type beside it is not needed. Ghosts match too, by what they will become, and rows say ghost=true; ghost=true or false narrows to ghosts or built. With x, y and radius, omit filters to inspect all infrastructure in that bounded area, including stored-supply endpoints. types counts every matched entity type, including omitted rows; use a type filter to inspect those entities. details=true includes built supply inventories, stored fluids, belt capacity and power headroom, prioritizing supply and connection endpoints. Fluid amounts in connected segments are shared; do not sum pipe/tank rows as independent stock. Otherwise give at least one filter. Product searches find crafting machines, not items in chests or fluids in tanks. truncated=true means the scan stopped before the end of the surface, so the rows are what it saw and nothing in the reply says a thing is absent. An unknown name comes back found=false with suggestions of close names. For a count, entity_count is cheaper: it asks the engine for a number instead of walking positions.",
     tier = "2",
     params = {
       surface = "string! surface name or index, e.g. nauvis",
@@ -76,6 +76,7 @@ M.manifest = {
       recipe  = "string recipe name a crafting machine is set to, e.g. repair-pack",
       product = "string item or fluid name a crafting machine's recipe makes, e.g. military-science-pack",
       ghost   = "boolean true for ghosts only, false for built entities only; omit for both",
+      details = "boolean include bounded stored supplies, belt capacity and native power headroom; requires a local x/y/radius",
       limit   = "integer positions to return, default " .. DEFAULT_SHOWN .. ", max " .. MAX_SHOWN,
     },
   },
@@ -202,6 +203,8 @@ local function find_entities(a)
     end
     position = {x=a.x,y=a.y}
   end
+  if a.details~=nil and type(a.details)~='boolean' then error('details must be boolean',0) end
+  if a.details and not position then error('details requires a bounded local x/y/radius',0) end
   local ghost   = a.ghost
   if ghost ~= nil and type(ghost) ~= "boolean" then error("ghost must be true or false", 0) end
   if not (position or name or etype or recipe or product) then
@@ -269,6 +272,17 @@ local function find_entities(a)
     local kind = real_type(entity)
     types[kind] = (types[kind] or 0) + 1
   end
+  if a.details then
+    local priority={container=1,['logistic-container']=1,['storage-tank']=2,['space-platform-hub']=2,roboport=3,['transport-belt']=4,['underground-belt']=4,splitter=4,['electric-pole']=5,['assembling-machine']=6,furnace=6}
+    table.sort(matches,function(a,b)
+      local pa,pb=priority[real_type(a)] or 7,priority[real_type(b)] or 7
+      if pa~=pb then return pa<pb end
+      local da=(a.position.x-position.x)^2+(a.position.y-position.y)^2
+      local db=(b.position.x-position.x)^2+(b.position.y-position.y)^2
+      if da~=db then return da<db end
+      return (a.unit_number or 0)<(b.unit_number or 0)
+    end)
+  end
   local shown = bounded.cut(matches, bounded.limit(a.limit, DEFAULT_SHOWN, MAX_SHOWN))
   local rows = {}
   for i, entity in ipairs(shown) do
@@ -277,6 +291,26 @@ local function find_entities(a)
     if is_ghost(entity) then row.ghost = true end
     local set = recipe_of(entity)
     if set then row.recipe = set.name end
+    if a.details and not is_ghost(entity) then
+      if entity.type=='container' or entity.type=='logistic-container' or entity.type=='space-platform-hub' then
+        local inventory=entity.get_inventory(entity.type=='space-platform-hub' and defines.inventory.hub_main or defines.inventory.chest)
+        local contents=inventory and inventory.get_contents() or {}
+        table.sort(contents,function(a,b) if a.count~=b.count then return a.count>b.count end return a.name<b.name end)
+        row.contents={total_kinds=#contents,items=bounded.cut(contents,12),truncated=#contents>12}
+      elseif entity.type=='storage-tank' or entity.type=='pipe' or entity.type=='pipe-to-ground' then
+        row.stored_fluids=entity.get_fluid_contents()
+      elseif entity.type=='transport-belt' or entity.type=='underground-belt' then
+        row.capacity_per_min=entity.prototype.belt_speed*480*60
+        row.stored_items=entity.get_item_count()
+      elseif entity.type=='electric-pole' then
+        local major,minor=(script.active_mods.base or ''):match('^(%d+)%.(%d+)')
+        if tonumber(major) and (tonumber(major)>2 or (tonumber(major)==2 and tonumber(minor)>=1)) then
+          local network=entity.electric_network
+          local flow=network and network.parent_network.flow_last_tick
+          if flow then row.power={satisfaction=flow.consumption_satisfaction,available_generation_w=bounded.round(flow.maximum_production*60,0),requested_consumption_w=bounded.round(flow.maximum_consumption*60,0)} end
+        end
+      end
+    end
     rows[i] = row
   end
   return {

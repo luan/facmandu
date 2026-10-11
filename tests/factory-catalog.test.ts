@@ -179,3 +179,30 @@ test('native lookup contracts declare scope and preserve exact local targets', (
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 });
+
+test('local detailed searches expose finite supplies before scenery without requiring per-entity reads', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const root = resolve('src/lib/server/factory-query');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ package.path=${JSON.stringify(`${root}/?.lua;`)}..package.path
+ defines={inventory={chest=1}}
+ local force={name='player'}
+ local chest={valid=true,name='steel-chest',type='container',force=force,unit_number=2,direction=0,position={x=1,y=1},get_inventory=function() return {get_contents=function() return {{name='coal',count=400,quality='normal'}} end} end}
+ local tank={valid=true,name='storage-tank',type='storage-tank',force=force,unit_number=3,direction=0,position={x=2,y=1},get_fluid_contents=function() return {['petroleum-gas']=10000} end}
+ local solar={valid=true,name='solar-panel',type='solar-panel',force=force,unit_number=1,direction=0,position={x=0,y=0}}
+ local surface={name='nauvis',valid=true,find_entities_filtered=function() return {solar,tank,chest} end}
+ game={forces={player=force},surfaces={nauvis=surface}}
+ prototypes={entity={}}
+ local find=require('scripts.tools.locate').functions.find_entities
+ local result=find{force='player',surface='nauvis',x=0,y=0,radius=10,details=true,limit=2}
+ assert(result.total==3 and result.shown==2 and result.omitted==1)
+ assert(result.entities[1].unit_number==2 and result.entities[1].contents.items[1].count==400)
+ assert(result.entities[2].stored_fluids['petroleum-gas']==10000)
+ assert(not pcall(find,{force='player',surface='nauvis',name='steel-chest',details=true}))
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
