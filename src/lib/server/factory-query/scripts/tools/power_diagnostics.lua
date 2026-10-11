@@ -58,6 +58,7 @@ local function inspect(a)
     end
   end
   local row = { found = true, force = force.name, surface = surface.name,
+    surface_conditions={daytime=surface.daytime,always_day=surface.always_day,freeze_daytime=surface.freeze_daytime,solar_power_multiplier=surface.solar_power_multiplier},
     name = entity.name, unit_number = entity.unit_number,
     x = entity.position.x, y = entity.position.y,
     network_id = id, radius = radius, scanned = #nearby,

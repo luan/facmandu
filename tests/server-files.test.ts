@@ -95,7 +95,8 @@ test('startup resumes a complete newer autosave under the original name and resp
 		rconPort: 27015,
 		selectedModlist: null
 	};
-	const archive = (text: string) => zipSync({ 'world.txt': strToU8(text) });
+	const archive = (text: string) =>
+		zipSync({ 'world.txt': strToU8(text) }, { mtime: new Date('2020-01-01T00:00:00Z') });
 	const put = async (name: string, contents: Uint8Array, modified: number) => {
 		await writeFile(join(directory, 'saves', name), contents);
 		await utimes(join(directory, 'saves', name), modified, modified);

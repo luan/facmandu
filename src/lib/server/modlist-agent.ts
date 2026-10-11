@@ -74,7 +74,6 @@ type Context = {
 	model: string;
 	chatId?: string;
 	gamePlayer?: string;
-	compactionReserve?: number;
 } & ({ listId: string; serverId?: never } | { serverId: string; listId?: never });
 const providerName = (context: Context) => {
 	const target = `${context.userId}-${context.serverId ? `server-${context.serverId}` : context.listId}`;
@@ -209,9 +208,17 @@ function registerCodexProvider(
 function ModlistAssistant() {
 	const context = useInitialData<Context>();
 	const providerId = providerName(context);
+	const chatId =
+		context.chatId ??
+		`${context.userId}-${context.serverId ? `server-${context.serverId}` : context.listId}-chat`;
 	useModel(`${providerId}/assistant`, {
 		thinkingLevel: 'medium',
-		compaction: { keepRecentTokens: 8000, reserveTokens: context.compactionReserve }
+		// Instance seeds stay immutable; use the active model's metadata so existing
+		// chats and model switches receive the same compaction policy as new chats.
+		compaction: {
+			keepRecentTokens: 8000,
+			reserveTokens: runtimeState.contextUsage?.get(chatId)?.reserve
+		}
 	});
 	if (context.serverId !== undefined) return serverAssistantTools(context);
 	const listId = context.listId;
@@ -466,7 +473,6 @@ ModlistAssistant.initialData = v.union([
 		userId: v.string(),
 		listId: v.string(),
 		model: v.string(),
-		compactionReserve: v.optional(v.number()),
 		chatId: v.optional(v.string())
 	}),
 	v.object({
@@ -474,7 +480,6 @@ ModlistAssistant.initialData = v.union([
 		serverId: v.string(),
 		gamePlayer: v.optional(v.string()),
 		model: v.string(),
-		compactionReserve: v.optional(v.number()),
 		chatId: v.optional(v.string())
 	})
 ]);
@@ -583,14 +588,13 @@ export async function agentHandle(
 	);
 	const context: Context =
 		typeof target === 'string'
-			? { userId, listId: target, model: details.id, chatId, compactionReserve: usage.reserve }
+			? { userId, listId: target, model: details.id, chatId }
 			: {
 					userId,
 					serverId: target.serverId,
 					model: details.id,
 					chatId,
-					gamePlayer: target.gamePlayer,
-					compactionReserve: usage.reserve
+					gamePlayer: target.gamePlayer
 				};
 	await registerAssistantProvider(context, loaded, effort);
 	const id =
