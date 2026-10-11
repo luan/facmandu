@@ -21,7 +21,7 @@ local M = {}
 
 M.manifest = {
   item_rate = {
-    desc = "How fast one item is being made and used: production and consumption rate of one item for one force on one surface, items per minute over all qualities, averaged over the window. A rate, never a total: for how much was made use production_since. Unknown surface: found=false.",
+    desc = "Recent production and consumption rate of one item on one surface, items/min over all qualities. Five-second windows can show bursts; use at least one_minute to check sustained capacity. Production is not delivery: also inspect output routing and destination counts over game ticks before claiming a full belt. For totals use production_since. Unknown surface: found=false.",
     params = {
       surface = "string! surface name or index, e.g. nauvis",
       item    = "string! item prototype name",
@@ -60,6 +60,9 @@ local function item_rate(a)
     found = true,
     force = force.name, surface = surface.name, item = a.item, window = a.window,
     all_qualities = true,
+    observed_at_tick = game.tick,
+    averaging_window_ticks = window.ticks,
+    rate_scope = 'Force production, not output-belt delivery',
     produced_per_min = bounded.round(produced, 2),
     consumed_per_min = bounded.round(consumed, 2),
     net_per_min = bounded.round(produced - consumed, 2),

@@ -69,10 +69,13 @@ import {
 import { listServers, requireServer } from './servers';
 import { decodeToolStream } from './tool-arguments';
 
-type Context = { userId: string; model: string; chatId?: string; gamePlayer?: string } & (
-	| { listId: string; serverId?: never }
-	| { serverId: string; listId?: never }
-);
+type Context = {
+	userId: string;
+	model: string;
+	chatId?: string;
+	gamePlayer?: string;
+	compactionReserve?: number;
+} & ({ listId: string; serverId?: never } | { serverId: string; listId?: never });
 const providerName = (context: Context) => {
 	const target = `${context.userId}-${context.serverId ? `server-${context.serverId}` : context.listId}`;
 	return `codex-${context.chatId && context.chatId !== `${target}-chat` ? context.chatId : target}`;
@@ -208,7 +211,7 @@ function ModlistAssistant() {
 	const providerId = providerName(context);
 	useModel(`${providerId}/assistant`, {
 		thinkingLevel: 'medium',
-		compaction: { keepRecentTokens: 8000 }
+		compaction: { keepRecentTokens: 8000, reserveTokens: context.compactionReserve }
 	});
 	if (context.serverId !== undefined) return serverAssistantTools(context);
 	const listId = context.listId;
@@ -463,6 +466,7 @@ ModlistAssistant.initialData = v.union([
 		userId: v.string(),
 		listId: v.string(),
 		model: v.string(),
+		compactionReserve: v.optional(v.number()),
 		chatId: v.optional(v.string())
 	}),
 	v.object({
@@ -470,6 +474,7 @@ ModlistAssistant.initialData = v.union([
 		serverId: v.string(),
 		gamePlayer: v.optional(v.string()),
 		model: v.string(),
+		compactionReserve: v.optional(v.number()),
 		chatId: v.optional(v.string())
 	})
 ]);
@@ -571,24 +576,25 @@ export async function agentHandle(
 	const loaded = await loadAssistantModel(userId, selectedModel);
 	const details = loaded.entry;
 	const effort = details.efforts.find((item) => item === selectedEffort) ?? details.defaultEffort;
-	const context: Context =
-		typeof target === 'string'
-			? { userId, listId: target, model: details.id, chatId }
-			: {
-					userId,
-					serverId: target.serverId,
-					model: details.id,
-					chatId,
-					gamePlayer: target.gamePlayer
-				};
-	await registerAssistantProvider(context, loaded, effort);
-	const id =
-		chatId ?? `${userId}-${typeof target === 'string' ? target : `server-${target.serverId}`}-chat`;
 	const usage = assistantContextLimit(
 		details.id,
 		loaded.model.contextWindow,
 		loaded.model.maxTokens
 	);
+	const context: Context =
+		typeof target === 'string'
+			? { userId, listId: target, model: details.id, chatId, compactionReserve: usage.reserve }
+			: {
+					userId,
+					serverId: target.serverId,
+					model: details.id,
+					chatId,
+					gamePlayer: target.gamePlayer,
+					compactionReserve: usage.reserve
+				};
+	await registerAssistantProvider(context, loaded, effort);
+	const id =
+		chatId ?? `${userId}-${typeof target === 'string' ? target : `server-${target.serverId}`}-chat`;
 	runtimeState.contextUsage?.set(id, usage);
 	runtimeState.progress?.get(id)?.({ contextUsage: usage });
 	if (!runtimeState.runtime) {

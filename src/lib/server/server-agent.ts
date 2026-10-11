@@ -52,7 +52,9 @@ export function serverAssistantTools(context: {
 		requestId: string;
 		targets: FactoryTargets;
 	}>('factory-query-targets', { requestId: '', targets: {} });
-	let targets = requestId && observed.requestId === requestId ? observed.targets : {};
+	// Coordinates are a read optimization, not authority. Native reads recheck the
+	// ID and scope; writes still require a fresh inspection and expected state.
+	let targets = observed.targets;
 	const server = async () => {
 		const instance = await requireServer(context.userId, context.serverId);
 		if (context.gamePlayer) await requireGamePlayer(instance, context.userId, context.gamePlayer);
@@ -495,7 +497,7 @@ export function serverAssistantTools(context: {
 	useTool({
 		name: 'factory_lookup',
 		description:
-			'Run one documented read-only factory lookup. Pass a force name when required. Read the catalog first. For entity inspections, unit_number returned by find_entities in this request can replace x/y; native inspection still rechecks that exact ID at its observed position. Set display=true only when a native table, chart or map-location card meaningfully helps the answer; routine evidence stays in Tool activity. Results are bounded; a truncated scan cannot prove absence.',
+			'Run one documented read-only factory lookup. Pass a force name when required. Read the catalog first. For entity inspections, previously discovered unit_number can replace x/y; native inspection rechecks that exact ID, force, surface and observed position. Moved or missing targets require a new search. Set display=true only for evidence that helps the answer; routine evidence stays in Activity. Results are bounded; a truncated scan cannot prove absence.',
 		input: v.object({
 			tool: v.pipe(v.string(), v.maxLength(80)),
 			display: v.optional(v.boolean(), false),

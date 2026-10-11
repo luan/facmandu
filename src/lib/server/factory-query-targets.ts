@@ -25,7 +25,7 @@ export function rememberFactoryTargets(previous: FactoryTargets, result: unknown
 		targets.delete(id);
 		targets.set(id, entity);
 	}
-	// Keep 500 targets per request; extend only if bounded discovery needs a wider working area.
+	// Keep 500 observed targets per chat; native reads recheck their scope and IDs.
 	return Object.fromEntries([...targets].slice(-500));
 }
 
