@@ -106,7 +106,8 @@ local function blueprint(request)
       connections[#connections+1]={fluidbox_index=box.index,production_type=box.production_type,filter=box.filter and box.filter.name,positions=connection.positions,adjacent_pipe_positions=#adjacent>0 and adjacent or nil,connection_type=connection.connection_type,flow_direction=connection.flow_direction,direction=connection.direction,alt_direction=connection.alt_direction,alt_position=connection.alt_position}
      end
     end
-    entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,collision_box=p.collision_box,crafting_categories=p.crafting_categories,belt_items_per_second=p.belt_speed and p.belt_speed*480,fluid_connections=connections,inserter_connections=inserter_connections(p),unlocked=unlocked(available,p),blueprint_settings_example=control_example(p.type)}
+    local custom_vectors;if p.type=='inserter' then custom_vectors=p.allow_custom_vectors end
+    entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,collision_box=p.collision_box,crafting_categories=p.crafting_categories,belt_items_per_second=p.belt_speed and p.belt_speed*480,fluid_connections=connections,inserter_connections=inserter_connections(p),allow_custom_vectors=custom_vectors,unlocked=unlocked(available,p),blueprint_settings_example=control_example(p.type)}
    elseif name=='space-platform-foundation' and prototypes.tile[name] then
     entities[#entities+1]={name=name,type='tile',width=1,height=1,unlocked=unlocked(available,prototypes.tile[name])}
    else

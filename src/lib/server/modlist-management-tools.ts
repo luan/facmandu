@@ -3,7 +3,11 @@ import { useDelivery, useTool } from '@flue/runtime';
 import { eq } from 'drizzle-orm';
 import * as v from 'valibot';
 import { compareVersions, supportsFactorio } from '$lib/dependencies';
-import { recommendationCandidates, recommendationRelease } from '$lib/recommendations';
+import {
+	type RecommendationMod,
+	recommendationCandidates,
+	recommendationRelease
+} from '$lib/recommendations';
 import { db } from './db';
 import { user } from './db/schema';
 import { searchFactorioMods } from './factorio-search';
@@ -38,38 +42,44 @@ export async function inspectList(userId: string, listId: string) {
 	};
 }
 export function modlistManagementTools(
-	context: { userId: string; chatId?: string },
+	context: { userId: string; chatId?: string; gamePlayer?: string },
 	resolveList: () => Promise<string>,
-	groups: ReadonlySet<string>
+	groups: ReadonlySet<string>,
+	readMods?: () => Promise<{ factorioVersion: string; mods: RecommendationMod[] }>
 ) {
+	const readContext =
+		readMods ??
+		(async () => {
+			const { list, mods } = await authorizedList(context.userId, await resolveList());
+			return { factorioVersion: list.factorioVersion, mods: mods.filter((item) => !item.icebox) };
+		});
 	const delivery = useDelivery();
 	const requestId = delivery.kind === 'signal' ? delivery.attributes?.requestId : undefined;
-	useTool({
-		name: 'inspect_list',
-		description:
-			'Read the current mod list, enabled/locked mods, descriptions and dependency issues. Read before advising or changing anything.',
-		async run() {
-			const listId = await resolveList();
-			return { output: await inspectList(context.userId, listId) };
-		}
-	});
+	if (!context.gamePlayer)
+		useTool({
+			name: 'inspect_list',
+			description:
+				'Read the current mod list, enabled/locked mods, descriptions and dependency issues. Read before advising or changing anything.',
+			async run() {
+				const listId = await resolveList();
+				return { output: await inspectList(context.userId, listId) };
+			}
+		});
 	useTool({
 		name: 'inspect_mod',
 		description:
 			'Refresh portal metadata and releases for one exact mod name. Describe its concrete contribution, overlap, requirements and compatibility in this list.',
 		input: v.object({ name: v.pipe(v.string(), v.maxLength(100)) }),
 		async run({ data }) {
-			const listId = await resolveList();
-			const { list, mods } = await authorizedList(context.userId, listId);
+			const { factorioVersion, mods: active } = await readContext();
 			const { data: mod, warning } = await getPortalMod(data.name, true);
 			if (!mod) throw new Error('Mod not found');
-			const active = mods.filter((item) => !item.icebox);
 			const candidate = recommendationCandidates(active).find((item) => item.name === mod.name) ?? {
 				name: mod.name,
 				requirements: [],
 				recommendedBy: []
 			};
-			const release = recommendationRelease(mod.releases, candidate, active, list.factorioVersion);
+			const release = recommendationRelease(mod.releases, candidate, active, factorioVersion);
 			return {
 				output: {
 					kind: 'mods',
@@ -81,7 +91,7 @@ export function modlistManagementTools(
 							reason: '',
 							thumbnail: mod.thumbnail ?? null,
 							version: warning ? null : (release?.version ?? null),
-							factorioVersion: list.factorioVersion,
+							factorioVersion,
 							enabled: active.some((item) => item.name === mod.name && item.enabled)
 						}
 					],
@@ -106,8 +116,7 @@ export function modlistManagementTools(
 				'Search the Factorio portal for mods that match a concrete request. Results are cached. Do not assume a search result is compatible.',
 			input: v.object({ query: v.pipe(v.string(), v.minLength(1), v.maxLength(200)) }),
 			async run({ data }) {
-				const listId = await resolveList();
-				const { list } = await authorizedList(context.userId, listId);
+				const { factorioVersion } = await readContext();
 				const account = await db
 					.select({ username: user.factorioUsername, token: user.factorioToken })
 					.from(user)
@@ -115,7 +124,7 @@ export function modlistManagementTools(
 					.get();
 				return {
 					output: await searchFactorioMods(
-						new URLSearchParams({ q: data.query, version: list.factorioVersion, page_size: '10' }),
+						new URLSearchParams({ q: data.query, version: factorioVersion, page_size: '10' }),
 						account?.username && account.token
 							? { username: account.username, token: account.token }
 							: undefined
@@ -140,9 +149,7 @@ export function modlistManagementTools(
 			)
 		}),
 		async run({ data }) {
-			const listId = await resolveList();
-			const { list, mods } = await authorizedList(context.userId, listId);
-			const activeMods = mods.filter((mod) => !mod.icebox);
+			const { factorioVersion, mods: activeMods } = await readContext();
 			const candidates = new Map(
 				recommendationCandidates(activeMods).map((candidate) => [candidate.name, candidate])
 			);
@@ -156,10 +163,10 @@ export function modlistManagementTools(
 					if (!info) throw new Error(`Mod not found: ${item.name}`);
 					const candidate = candidates.get(info.name);
 					const release = candidate
-						? recommendationRelease(info.releases, candidate, activeMods, list.factorioVersion)
+						? recommendationRelease(info.releases, candidate, activeMods, factorioVersion)
 						: info.releases
 								.filter((release) =>
-									supportsFactorio(release.info_json.factorio_version, list.factorioVersion)
+									supportsFactorio(release.info_json.factorio_version, factorioVersion)
 								)
 								.sort((a, b) => compareVersions(b.version, a.version) ?? 0)[0];
 					return {
@@ -169,8 +176,8 @@ export function modlistManagementTools(
 						reason: item.reason,
 						thumbnail: info.thumbnail ?? null,
 						version: release?.version ?? null,
-						factorioVersion: list.factorioVersion,
-						enabled: mods.some((mod) => mod.name === info.name && mod.enabled && !mod.icebox)
+						factorioVersion,
+						enabled: activeMods.some((mod) => mod.name === info.name && mod.enabled)
 					};
 				})
 			);

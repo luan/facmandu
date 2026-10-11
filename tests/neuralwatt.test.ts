@@ -48,11 +48,15 @@ test('NeuralWatt uses explicit account keys and serializes reasoning and tools',
 	const payload = captured as {
 		model: string;
 		reasoning_effort: string;
+		thinking_token_budget: number;
+		max_tokens: number;
 		messages: { role: string }[];
 		tools: { function: { name: string } }[];
 	};
 	assert.equal(payload.model, 'deepseek-v4.1-flash');
 	assert.equal(payload.reasoning_effort, 'low');
+	assert.equal(payload.thinking_token_budget, 2048);
+	assert.equal(payload.max_tokens, 65_536);
 	assert.equal(payload.messages[0]?.role, 'system');
 	assert.equal(payload.tools[0]?.function.name, 'inspect');
 });

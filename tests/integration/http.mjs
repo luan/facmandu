@@ -815,6 +815,12 @@ const fixture = createServer(async (request, response) => {
 																										}
 																									]
 																								});
+			if (currentRequest.includes('fixture-empty-answer') && item.type === 'message')
+				item.content[0].text = currentInput.some((input) =>
+					JSON.stringify(input).includes('answer-recovery')
+				)
+					? 'Recovered complete answer.'
+					: '';
 			const preamble =
 				wantsServerSaves && item.type === 'function_call'
 					? {
@@ -2351,6 +2357,26 @@ done
 		'review hashes, running-server protection, operation locks, exact installs and idempotent re-review'
 	);
 	const serverAssistantPath = `${secondPath}/assistant`;
+	const metadataReply = await request(serverAssistantPath, {
+		cookie: cookies.owner,
+		method: 'POST',
+		form: { prompt: 'fixture-inspect-card: inspect companion on this server', model: 'gpt-6-sol' }
+	});
+	assert.equal(metadataReply.status, 200);
+	const metadataStream = await metadataReply.text();
+	assert.match(metadataStream, /companion/u);
+	assert.doesNotMatch(metadataStream, /Choose a mod list/u);
+	const metadataHistory = await json(serverAssistantPath, { cookie: cookies.owner });
+	assert.ok(metadataHistory.turns[0].mods.some((mod) => mod.name === 'companion'));
+	assert.equal(
+		(
+			await client.execute({
+				sql: 'SELECT selected_modlist FROM native_server WHERE id = ?',
+				args: [secondPath.split('/').at(-1)]
+			})
+		).rows[0].selected_modlist,
+		null
+	);
 	assert.equal((await request(serverAssistantPath, { cookie: cookies.stranger })).status, 403);
 	const serverReply = await request(serverAssistantPath, {
 		cookie: cookies.owner,
@@ -2359,9 +2385,9 @@ done
 	});
 	assert.equal(serverReply.status, 200);
 	assert.match(await serverReply.text(), /Fixture contextual explanation/u);
-	assert.equal((await json(serverAssistantPath, { cookie: cookies.owner })).turns.length, 1);
+	assert.equal((await json(serverAssistantPath, { cookie: cookies.owner })).turns.length, 2);
 	const serverHistory = await json(`${serverAssistantPath}?models=0`, { cookie: cookies.owner });
-	assert.equal(serverHistory.turns.length, 1);
+	assert.equal(serverHistory.turns.length, 2);
 	assert.equal('models' in serverHistory, false);
 	const serverVoice = {
 		chat: serverHistory.chat.id,
@@ -2378,6 +2404,18 @@ done
 	const serverVoiceReply = await action('/api/assistant/voice', cookies.owner, serverVoice);
 	assert.equal(await serverVoiceReply.text(), 'v=0\r\nfixture-voice-answer');
 
+	const emptyReply = await request(serverAssistantPath, {
+		cookie: cookies.owner,
+		method: 'POST',
+		form: { prompt: 'fixture-empty-answer', model: 'gpt-6-sol' }
+	});
+	assert.equal(emptyReply.status, 200);
+	assert.match(await emptyReply.text(), /Recovered complete answer/u);
+	const recoveredAnswer = (await json(serverAssistantPath, { cookie: cookies.owner })).turns.find(
+		(turn) => turn.prompt === 'fixture-empty-answer'
+	);
+	assert.equal(recoveredAnswer.state, 'done');
+	assert.equal(recoveredAnswer.answer, 'Recovered complete answer.');
 	assert.equal((await json(`${serverPath}/assistant`, { cookie: cookies.owner })).turns.length, 0);
 	passed('server assistant access and per-instance conversation isolation');
 	for (const [prompt, expectedTool] of [

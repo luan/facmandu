@@ -5,6 +5,7 @@ import {
 	init,
 	observe,
 	setProvider,
+	useAgentFinish,
 	useDelivery,
 	useInitialData,
 	useModel,
@@ -220,12 +221,29 @@ function ModlistAssistant() {
 			reserveTokens: runtimeState.contextUsage?.get(chatId)?.reserve
 		}
 	});
+	const delivery = useDelivery();
+	const requestId = delivery.kind === 'signal' ? delivery.attributes?.requestId : undefined;
+	const [recovery, setRecovery] = usePersistentState('answer-recovery', {
+		requestId: '',
+		attempts: 0
+	});
+	useAgentFinish(({ append }) => {
+		const last = runtimeState.lastTurn?.get(chatId);
+		if (!last || (last.text && last.finishReason !== 'length')) return;
+		const attempts = recovery.requestId === (requestId ?? '') ? recovery.attempts : 0;
+		if (attempts >= 2) throw new Error('Model returned no complete answer after recovery');
+		setRecovery({ requestId: requestId ?? '', attempts: attempts + 1 });
+		append({
+			kind: 'signal',
+			type: 'answer-recovery',
+			attributes: { requestId: requestId ?? '' },
+			body: 'The previous model call ended without a complete answer. Continue the existing request using the recorded tool results. Do not repeat completed writes. Return a concise outcome or a concrete unresolved blocker.'
+		});
+	});
 	if (context.serverId !== undefined) return serverAssistantTools(context);
 	const listId = context.listId;
 	const groups = useAssistantToolGroups(modlistToolGroups);
 	modlistManagementTools(context, async () => context.listId, groups);
-	const delivery = useDelivery();
-	const requestId = delivery.kind === 'signal' ? delivery.attributes?.requestId : undefined;
 	const [selectedServerId, selectServer] = usePersistentState<string | null>('linked-server', null);
 	let serverInstructions = '';
 	if (groups.has('server')) {
@@ -491,6 +509,7 @@ type RuntimeState = {
 	progress?: Map<string, (event: object) => void>;
 	contextUsage?: Map<string, AssistantContextUsage>;
 	contextWrites?: Map<string, Promise<unknown>>;
+	lastTurn?: Map<string, { text: boolean; finishReason?: string }>;
 };
 // Vite SSR reloads do not preserve import.meta.hot.data. Flue owns one runtime per process.
 const processState = globalThis as typeof globalThis & { __facmanduAgent?: RuntimeState };
@@ -500,6 +519,7 @@ runtimeState.implementation = ModlistAssistant;
 runtimeState.progress ??= new Map();
 runtimeState.contextUsage ??= new Map();
 runtimeState.contextWrites ??= new Map();
+runtimeState.lastTurn ??= new Map();
 function saveContextUsage(chatId: string, usage: AssistantContextUsage, compacted = false) {
 	runtimeState.contextUsage?.set(chatId, usage);
 	runtimeState.progress?.get(chatId)?.({ contextUsage: usage });
@@ -521,6 +541,14 @@ function saveContextUsage(chatId: string, usage: AssistantContextUsage, compacte
 runtimeState.observeStop?.();
 runtimeState.observeStop = observe((event, context) => {
 	const usage = runtimeState.contextUsage?.get(context.id);
+	if (event.type === 'turn' && event.purpose === 'agent' && !event.isError)
+		runtimeState.lastTurn?.set(context.id, {
+			text:
+				event.response.output?.content.some(
+					(part) => part.type === 'text' && Boolean(part.text.trim())
+				) ?? false,
+			finishReason: event.response.finishReason
+		});
 	if (
 		event.type === 'turn' &&
 		event.purpose === 'agent' &&

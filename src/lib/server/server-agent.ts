@@ -27,7 +27,7 @@ import {
 import { assertGameAction, requireGamePlayer } from './game-player';
 import { modlistManagementTools } from './modlist-management-tools';
 import { serverAssistantOperationTools } from './server-agent-operations';
-import { ServerError } from './server-files';
+import { ServerError, serverConfig } from './server-files';
 import { serverMods } from './server-mods';
 import { serverStatus } from './server-process';
 import { requireServer } from './servers';
@@ -67,7 +67,7 @@ export function serverAssistantTools(context: {
 	);
 	const operations =
 		!context.gamePlayer && groups.has('server') ? serverAssistantOperationTools(context) : '';
-	if (!context.gamePlayer && groups.has('server'))
+	if (context.gamePlayer || groups.has('server'))
 		modlistManagementTools(
 			context,
 			async () => {
@@ -79,7 +79,22 @@ export function serverAssistantTools(context: {
 					);
 				return instance.selectedModlist;
 			},
-			new Set(['discover', 'changes'])
+			new Set(context.gamePlayer ? ['discover'] : ['discover', 'changes']),
+			async () => {
+				const instance = await server();
+				const [config, installed] = await Promise.all([
+					serverConfig(instance),
+					serverMods(instance)
+				]);
+				return {
+					factorioVersion: config.version?.version.split('.').slice(0, 2).join('.') ?? 'unknown',
+					mods: installed.mods.map((mod) => ({
+						name: mod.name,
+						enabled: mod.enabled,
+						dependencies: null
+					}))
+				};
+			}
 		);
 	const result = (tool: string, title: string, value: unknown, display = false) => ({
 		output: {

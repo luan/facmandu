@@ -54,6 +54,7 @@ local function inspect(a)
   table.sort(items,function(a,b) if a.count~=b.count then return a.count>b.count end return a.name<b.name end)
   row.contents={total_kinds=#items,items=bounded.cut(items,12),truncated=#items>12}
  elseif e.type=='inserter' then
+  row.allow_custom_vectors=e.prototype.allow_custom_vectors
   row.pickup_position=e.pickup_position;row.drop_position=e.drop_position
   row.pickup_target=reference(e.pickup_target);row.drop_target=reference(e.drop_target)
   row.connected_to_power_source=e.is_connected_to_electric_network();row.energy_j=e.energy
