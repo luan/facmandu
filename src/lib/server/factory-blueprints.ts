@@ -5,12 +5,12 @@ import { z } from 'zod';
 import {
 	type BlueprintRequest,
 	blueprintDesignSchema,
-	blueprintEntitySchema,
 	blueprintReferenceSchema,
 	blueprintRequestSchema,
 	blueprintRowsSchema,
 	blueprintTargetSchema,
-	expandBlueprintRows
+	expandBlueprintRows,
+	reviseBlueprintDesign
 } from '$lib/blueprints';
 import type { ManagedServer } from './db/schema';
 import source from './factory-blueprints/blueprint.lua?raw';
@@ -140,26 +140,11 @@ export async function factoryBlueprint(
 				'Blueprint draft does not match this force or its recorded design'
 			);
 		if (reference.operation === 'create') {
-			const entities = saved.entities.map((entity) => ({ ...entity }));
-			for (const patch of reference.entityChanges) {
-				if (!entities[patch.index - 1])
-					throw new ServerError(400, 'Entity patch index is outside this draft');
-				entities[patch.index - 1] = blueprintEntitySchema.parse({
-					...entities[patch.index - 1],
-					...patch.changes
-				});
+			try {
+				resolved = reviseBlueprintDesign(saved, reference);
+			} catch (cause) {
+				throw new ServerError(400, cause instanceof Error ? cause.message : 'Invalid revision');
 			}
-			const revised = {
-				...saved,
-				label: reference.label ?? saved.label,
-				entities: [...entities, ...reference.addedEntities],
-				operation: 'create'
-			};
-			resolved = reference.addedEntityRows
-				? expandBlueprintRows(
-						blueprintRowsSchema.parse({ ...revised, entityRows: reference.addedEntityRows })
-					)
-				: blueprintRequestSchema.parse(revised);
 		} else {
 			const { designId: _id, ...target } = reference;
 			resolved = blueprintRequestSchema.parse({ ...saved, ...target });

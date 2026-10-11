@@ -156,6 +156,7 @@ export const blueprintReferenceSchema = z.discriminatedUnion('operation', [
 			.array(z.strictObject({ index: z.number().int().min(1).max(200), changes: entityPatch }))
 			.max(200)
 			.default([]),
+		removedEntityIndices: z.array(z.number().int().min(1).max(200)).max(200).default([]),
 		addedEntities: z.array(blueprintEntitySchema).max(200).default([]),
 		addedEntityRows: entityRows.optional()
 	}),
@@ -172,6 +173,49 @@ export const blueprintReferenceSchema = z.discriminatedUnion('operation', [
 		expectedDesign: z.string().regex(/^[a-f0-9]{64}$/)
 	})
 ]);
+export function reviseBlueprintDesign(
+	saved: z.infer<typeof blueprintDesignSchema>,
+	revision: z.infer<(typeof blueprintReferenceSchema.options)[0]>
+): BlueprintRequest {
+	if (saved.force !== revision.force) throw new Error('Blueprint draft belongs to another force');
+	const removed = new Set(revision.removedEntityIndices);
+	for (const index of removed)
+		if (!saved.entities[index - 1]) throw new Error('Removed entity index is outside this draft');
+	const entities = saved.entities.map((entity) => ({ ...entity }));
+	for (const patch of revision.entityChanges) {
+		if (!entities[patch.index - 1]) throw new Error('Entity patch index is outside this draft');
+		if (removed.has(patch.index)) throw new Error('Cannot patch and remove the same entity');
+		entities[patch.index - 1] = blueprintEntitySchema.parse({
+			...entities[patch.index - 1],
+			...patch.changes
+		});
+	}
+	const indices = new Map<number, number>();
+	for (let index = 1; index <= entities.length; index++)
+		if (!removed.has(index)) indices.set(index, indices.size + 1);
+	const remapWire = (connection: z.infer<typeof wire>): z.infer<typeof wire>[] => {
+		const from = indices.get(connection[0]);
+		const to = indices.get(connection[2]);
+		return from && to ? [[from, connection[1], to, connection[3]]] : [];
+	};
+	const revised = {
+		...saved,
+		label: revision.label ?? saved.label,
+		operation: 'create',
+		wires: saved.wires.flatMap(remapWire),
+		entities: [
+			...entities.flatMap((entity, index) =>
+				removed.has(index + 1) ? [] : [{ ...entity, wires: entity.wires?.flatMap(remapWire) }]
+			),
+			...revision.addedEntities
+		]
+	};
+	return revision.addedEntityRows
+		? expandBlueprintRows(
+				blueprintRowsSchema.parse({ ...revised, entityRows: revision.addedEntityRows })
+			)
+		: blueprintRequestSchema.parse(revised);
+}
 export const blueprintInputSchema = z.union([
 	blueprintRequestSchema,
 	blueprintReferenceSchema,

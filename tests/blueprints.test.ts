@@ -5,11 +5,14 @@ import { test } from 'node:test';
 import { lauxlib, lua, lualib, to_luastring } from 'fengari';
 import {
 	blueprintArtifactSchema,
+	blueprintDesignSchema,
 	blueprintInputSchema,
+	blueprintReferenceSchema,
 	blueprintRequestSchema,
 	blueprintRowsSchema,
 	blueprintTargetSchema,
-	expandBlueprintRows
+	expandBlueprintRows,
+	reviseBlueprintDesign
 } from '../src/lib/blueprints';
 import { blueprintCommand } from '../src/lib/server/factory-blueprints';
 
@@ -19,6 +22,63 @@ const design = {
 	entities: [{ name: 'transport-belt', position: { x: 0.5, y: 0.5 }, direction: 4 as const }]
 };
 const target = { ...design, surface: 'nauvis', position: { x: 20, y: 20 } };
+test('draft removal preserves settings and remaps retained wires while adding compact rows', () => {
+	const saved = blueprintDesignSchema.parse({
+		force: 'player',
+		label: 'Connected draft',
+		entities: [
+			{ name: 'pipe', position: { x: 0.5, y: 0.5 } },
+			{
+				name: 'fast-inserter',
+				position: { x: 1.5, y: 0.5 },
+				pickup_position: { x: 0, y: 2 },
+				filters: [{ index: 1, name: 'iron-plate' }],
+				use_filters: true,
+				wires: [[2, 1, 3, 2]]
+			},
+			{ name: 'decider-combinator', position: { x: 2.5, y: 0 } }
+		],
+		wires: [
+			[1, 1, 3, 1],
+			[2, 2, 3, 1]
+		]
+	});
+	const revision = blueprintReferenceSchema.parse({
+		operation: 'create',
+		designId: 'a'.repeat(64),
+		force: 'player',
+		removedEntityIndices: [1],
+		entityChanges: [{ index: 2, changes: { direction: 8 } }],
+		addedEntityRows: [
+			{
+				entity: { ...design.entities[0], position: { x: 3.5, y: 0.5 } },
+				count: 2,
+				step: { x: 1, y: 0 }
+			}
+		]
+	});
+	if (revision.operation !== 'create') throw new Error('Expected revision');
+	const revised = reviseBlueprintDesign(saved, revision);
+	if (revised.operation !== 'create') throw new Error('Expected design');
+	assert.equal(revised.entities.length, 4);
+	assert.deepEqual(revised.wires, [[1, 2, 2, 1]]);
+	assert.deepEqual(revised.entities[0], {
+		...saved.entities[1],
+		direction: 8,
+		wires: [[1, 1, 2, 2]]
+	});
+	assert.equal(saved.entities.length, 3);
+	assert.equal(saved.entities[1]?.direction, 0);
+	assert.deepEqual(revised.entities[3]?.position, { x: 4.5, y: 0.5 });
+	assert.throws(
+		() => reviseBlueprintDesign(saved, { ...revision, removedEntityIndices: [4] }),
+		/outside this draft/
+	);
+	assert.throws(
+		() => reviseBlueprintDesign(saved, { ...revision, removedEntityIndices: [2] }),
+		/patch and remove/
+	);
+});
 test('native blueprint drafts report both belt sides, rotated endpoints and custom reach without building', () => {
 	const state = lauxlib.luaL_newstate();
 	lualib.luaL_openlibs(state);
