@@ -1,6 +1,6 @@
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
-import { useTool } from '@flue/runtime';
+import { useDelivery, usePersistentState, useTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { z } from 'zod';
 import { serverToolGroups } from '$lib/assistant-routing';
@@ -11,6 +11,11 @@ import { factoryBlueprint } from './factory-blueprints';
 import { renderFactoryBlueprint } from './factory-images';
 import { factoryPlanInput, planFactory } from './factory-planning';
 import { factoryQuery } from './factory-query';
+import {
+	type FactoryTargets,
+	rememberFactoryTargets,
+	resolveFactoryTarget
+} from './factory-query-targets';
 import { captureFactoryView } from './factory-view';
 import {
 	createFactoryWatch,
@@ -39,6 +44,13 @@ export function serverAssistantTools(context: {
 	gamePlayer?: string;
 	chatId?: string;
 }) {
+	const delivery = useDelivery();
+	const requestId = delivery.kind === 'signal' ? (delivery.attributes?.requestId ?? '') : '';
+	const [observed, setObserved] = usePersistentState<{
+		requestId: string;
+		targets: FactoryTargets;
+	}>('factory-query-targets', { requestId: '', targets: {} });
+	let targets = requestId && observed.requestId === requestId ? observed.targets : {};
 	const server = async () => {
 		const instance = await requireServer(context.userId, context.serverId);
 		if (context.gamePlayer) await requireGamePlayer(instance, context.userId, context.gamePlayer);
@@ -382,7 +394,7 @@ export function serverAssistantTools(context: {
 					throw new Error(
 						`Unknown argument: ${key}. Parameters for ${data.tool}: ${JSON.stringify(tool.params ?? {})}`
 					);
-			const args = { ...data.args };
+			let args = { ...data.args };
 			if (context.gamePlayer) {
 				const { player } = await requireGamePlayer(instance, context.userId, context.gamePlayer);
 				if (args.force && args.force !== player.force) throw new Error('Use your own force');
@@ -390,6 +402,7 @@ export function serverAssistantTools(context: {
 			}
 			let result: Awaited<ReturnType<typeof factoryQuery>>;
 			try {
+				if (data.tool.startsWith('inspect_')) args = resolveFactoryTarget(args, targets);
 				result = await factoryQuery(instance, { op: 'call', tool: data.tool, args });
 			} catch (cause) {
 				if (cause instanceof ServerError && cause.status === 400)
@@ -397,6 +410,10 @@ export function serverAssistantTools(context: {
 						`${cause.message}. Parameters for ${data.tool}: ${JSON.stringify(tool.params ?? {})}`
 					);
 				throw cause;
+			}
+			if (data.tool === 'find_entities' && requestId) {
+				targets = rememberFactoryTargets(targets, result);
+				setObserved({ requestId, targets });
 			}
 			return {
 				output: {
