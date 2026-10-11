@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
-import { renderFactoryBlueprint } from '$lib/server/factory-images';
+import { FactoryImagePending, renderFactoryBlueprint } from '$lib/server/factory-images';
 import { ServerError } from '$lib/server/server-files';
 import { requireServer } from '$lib/server/servers';
 import type { RequestHandler } from './$types';
@@ -13,8 +13,10 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		.safeParse(await request.json());
 	if (!body.success) error(400, 'Invalid blueprint');
 	try {
-		return json(await renderFactoryBlueprint(server, body.data.blueprint));
+		return json(await renderFactoryBlueprint(server, body.data.blueprint, 1000));
 	} catch (cause) {
+		if (cause instanceof FactoryImagePending)
+			return json({ id: cause.imageId, pending: true }, { status: 202 });
 		if (cause instanceof ServerError) error(cause.status, cause.message);
 		throw cause;
 	}

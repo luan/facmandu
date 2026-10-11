@@ -2,7 +2,8 @@
  import { factoryImageUrl, type FactoryImage } from '$lib/factory-images';
  import { ZoomInIcon, ZoomOutIcon, RotateCcwIcon } from '@lucide/svelte';
  import TooltipButton from './ui/button/tooltip-button.svelte';
- let { image, serverId, label }: {image:FactoryImage | Pick<FactoryImage,'id'>;serverId:string;label:string}=$props();
+ import Button from './ui/button/button.svelte';
+ let { image, serverId, label, onretry, retrying=false }: {image:FactoryImage | Pick<FactoryImage,'id'>;serverId:string;label:string;onretry?:()=>void;retrying?:boolean}=$props();
  let zoom=$state(1); let unavailable=$state(false); let ready=$state(false);
  $effect(()=>{
   const url=factoryImageUrl(serverId,image);const known='width' in image;zoom=1;unavailable=false;ready=known;
@@ -30,7 +31,7 @@
  <!-- svelte-ignore a11y_no_noninteractive_tabindex (The scrollable image supports keyboard panning.) -->
  <!-- biome-ignore lint/a11y/noNoninteractiveTabindex: allow keyboard scrolling of the zoomed image -->
  <section class="max-h-[65vh] min-h-64 overflow-auto p-4" aria-label={label} tabindex="0">
-  {#if unavailable}<p role="alert" class="p-4 text-sm text-muted-foreground">This image is unavailable. Capture another factory view.</p>{:else if !ready}<p role="status" class="p-4 text-sm text-muted-foreground">Rendering factory view…</p>{:else}
+  {#if unavailable}<div class="p-4 text-sm text-muted-foreground"><p role="alert">Preview unavailable.</p>{#if onretry}<Button size="sm" class="mt-3" disabled={retrying} onclick={onretry}>{retrying?'Rendering…':'Retry preview'}</Button>{:else}<p>Capture another factory view.</p>{/if}</div>{:else if !ready}<p role="status" class="p-4 text-sm text-muted-foreground">Rendering factory view…</p>{:else}
   <img loading="lazy" src={factoryImageUrl(serverId,image)} alt={label} width={'width' in image ? image.width : undefined} height={'height' in image ? image.height : undefined} style={`width:${zoom*100}%;max-width:none;height:auto;image-rendering:pixelated`} onerror={()=>unavailable=true} />
   {/if}
  </section>

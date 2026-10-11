@@ -3,13 +3,13 @@
  import { CopyIcon, DownloadIcon, CheckIcon } from '@lucide/svelte';
  import Button from './ui/button/button.svelte';
  import FactoryImage from './FactoryImage.svelte';
- import { factoryImageSchema, type FactoryImage as ImageData } from '$lib/factory-images';
+ import { factoryImageSchema, factoryImagePendingSchema, type FactoryImage as ImageData } from '$lib/factory-images';
  let { blueprint, serverId }: {blueprint:BlueprintArtifact;serverId?:string} = $props();
- let rendered=$state<ImageData>();
+ let rendered=$state<ImageData | {id:string;pending:true}>();
  $effect(()=>{blueprint.blueprint;rendered=undefined;error='';});
  let rendering=$state(false);
  const image=$derived(rendered??blueprint.image);
- async function render() { if(!serverId)return;rendering=true;error='';try{const response=await fetch(`/api/servers/${encodeURIComponent(serverId)}/images`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blueprint:blueprint.blueprint})});if(!response.ok)throw new Error(response.status===425?'Sprites are preparing. Follow Activity, then retry.':'Could not render this layout. Check the renderer’s supported mod sprites.');rendered=factoryImageSchema.parse(await response.json());}catch(cause){error=cause instanceof Error?cause.message:'Could not render preview';}finally{rendering=false;}}
+ async function render() { if(!serverId)return;rendering=true;error='';try{const response=await fetch(`/api/servers/${encodeURIComponent(serverId)}/images`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blueprint:blueprint.blueprint})});if(!response.ok)throw new Error(response.status===425?'Sprites are preparing. Follow Activity, then retry.':'Could not render this layout. Check the renderer’s supported mod sprites.');rendered=(response.status===202?factoryImagePendingSchema:factoryImageSchema).parse(await response.json());}catch(cause){error=cause instanceof Error?cause.message:'Could not render preview';}finally{rendering=false;}}
  let copied=$state(false);
  let error=$state('');
  const footprint=$derived([...blueprint.entities,...blueprint.tiles.map(tile=>({position:{x:tile.position.x+0.5,y:tile.position.y+0.5},width:1,height:1}))]);
@@ -27,7 +27,7 @@
 </script>
 <section class="overflow-hidden border border-border bg-white/[0.025] text-sm" aria-label={blueprint.label}>
  <header class="flex flex-wrap items-center justify-between gap-3 border-b border-border p-3"><h3 class="font-semibold">Blueprint design · {blueprint.label}</h3><span class="text-xs text-muted-foreground">{blueprint.entities.length} entities{blueprint.tiles.length ? ` · ${blueprint.tiles.length} foundation tiles` : ''} · Native blueprint</span></header>
- {#if image && serverId}<FactoryImage {image} {serverId} label={`Sprite layout for ${blueprint.label}`} />{:else}
+ {#if image && serverId}<FactoryImage {image} {serverId} label={`Sprite layout for ${blueprint.label}`} onretry={()=>void render()} retrying={rendering} />{:else}
  <svg class="h-80 w-full bg-black/20" viewBox={`${bounds.left} ${bounds.top} ${bounds.right-bounds.left} ${bounds.bottom-bounds.top}`} role="img" aria-label={`Layout for ${blueprint.label}`}>
   {#each blueprint.tiles as tile}<rect x={tile.position.x} y={tile.position.y} width="1" height="1" fill="#414141" stroke="#737373" stroke-width="0.04"><title>{tile.name}</title></rect>{/each}
   {#each blueprint.entities as entity}
