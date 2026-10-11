@@ -238,7 +238,15 @@ local function blueprint(request)
   for _,key in ipairs(settings) do
    local wanted=entities[i][key]
    local actual=e[key]
-   if actual and (key=='pickup_position' or key=='drop_position') then actual={x=actual.x or actual[1],y=actual.y or actual[2]} end
+   if wanted and (key=='pickup_position' or key=='drop_position') then
+    if actual then actual={x=actual.x or actual[1],y=actual.y or actual[2]}
+    else
+     -- Native exports omit prototype-default reach, rotated with the entity.
+     for _,connection in ipairs(inserter_connections(prototypes.entity[e.name]) or {}) do
+      if connection.direction==entities[i].direction then actual=key=='pickup_position' and connection.pickup_offset or connection.drop_offset;break end
+     end
+    end
+   end
    local mismatch=wanted~=nil and difference(actual,wanted,key,key)
    if mismatch then error('Factorio changed or rejected '..mismatch..' for '..e.name..'; read blueprint_operation catalog for native settings examples',0) end
   end

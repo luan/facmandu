@@ -135,10 +135,19 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
  local belt=prototype('transport-belt',1);belt.belt_speed=0.03125
  local box=prototype('container',3);box.tile_height=1;box.supports_direction=false
  prototypes={entity={plant=plant,inserter=inserter,belt=belt,box=box}}
+ local omit_vectors=false
  game={forces={player={recipes={{enabled=true,products={{type='item',name='building'}}}}}},create_inventory=function()
   local saved
   return {{set_stack=function() end,set_blueprint_entities=function(value) saved=value end,
-   get_blueprint_entities=function() return saved end,get_blueprint_tiles=function() return {} end,
+   get_blueprint_entities=function()
+    if not omit_vectors then return saved end
+    local result={}
+    for i,e in ipairs(saved) do
+     local copy={};for k,v in pairs(e) do copy[k]=v end
+     copy.pickup_position=nil;copy.drop_position=nil;result[i]=copy
+    end
+    return result
+   end,get_blueprint_tiles=function() return {} end,
    export_stack=function() return '0native' end,cost_to_build={{name='building',count=5}}}}
  end}
  ${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
@@ -177,6 +186,22 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
   local isolated=blueprint{operation='create',force='player',label='External',entities={entity('inserter',2.5,2.5,0)}}
   assert(not isolated.inserter_transfers[1].pickup_entity and not isolated.inserter_transfers[1].drop_entity)
  end
+ omit_vectors=true
+ for _,vectors in ipairs({
+  {0,{x=0,y=-1},{x=0,y=1.2}},
+  {4,{x=1,y=0},{x=-1.2,y=0}},
+  {8,{x=0,y=1},{x=0,y=-1.2}},
+  {12,{x=-1,y=0},{x=1.2,y=0}}
+ }) do
+  local result=blueprint{operation='create',force='player',label='Default reach',entities={
+   {name='inserter',position={x=0.5,y=0.5},direction=vectors[1],pickup_position=vectors[2],drop_position=vectors[3]}
+  }}
+  assert(result.kind=='blueprint')
+ end
+ local ok,err=pcall(blueprint,{operation='create',force='player',label='Lost custom reach',entities={
+  {name='inserter',position={x=0.5,y=0.5},direction=8,pickup_position={x=0,y=2}}
+ }})
+ assert(not ok and err:match('pickup_position'))
  `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
