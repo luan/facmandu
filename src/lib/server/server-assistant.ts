@@ -4,6 +4,7 @@ import {
 	type FactoryResult,
 	factoryResultSchema
 } from '$lib/assistant-results';
+import { assistantErrorMessage } from './assistant-error';
 import { submissionEvents } from './assistant-events';
 import { db } from './db';
 import { assistantChat, serverAssistantTurn as turnTable } from './db/schema';
@@ -191,9 +192,7 @@ export async function finishServerTurn(
 			'Server assistant failed:',
 			cause instanceof Error ? cause.message.split('\n')[0]?.slice(0, 200) : 'Unknown error'
 		);
-		const answer = controller.signal.aborted
-			? 'Response stopped.'
-			: 'Could not finish this response. Try again.';
+		const answer = controller.signal.aborted ? 'Response stopped.' : assistantErrorMessage(cause);
 		await db
 			.update(turnTable)
 			.set({ state: 'error', answer, results: JSON.stringify(results) })

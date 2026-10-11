@@ -7,6 +7,7 @@ import {
 	factoryResultSchema
 } from '$lib/assistant-results';
 import { chatHistory, newChat, resolveChat, touchChat } from '$lib/server/assistant-chats';
+import { assistantErrorMessage } from '$lib/server/assistant-error';
 import { submissionEvents } from '$lib/server/assistant-events';
 import { assistantModelCatalog } from '$lib/server/assistant-models';
 import { authenticationForm, requireSameOrigin } from '$lib/server/auth';
@@ -738,7 +739,7 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 					);
 					const message = controller.signal.aborted
 						? 'Stopped. You can send another message.'
-						: 'Could not finish this response. Try again.';
+						: assistantErrorMessage(cause);
 					await db
 						.update(assistantTurn)
 						.set({ answer: message, state: 'error' })

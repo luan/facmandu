@@ -337,7 +337,7 @@
      <section class="space-y-4" aria-label="Conversation turn">
       <div class="flex justify-end"><p class="max-w-[90%] whitespace-pre-wrap break-words border border-border bg-white/5 px-4 py-3 text-sm leading-relaxed">{turn.prompt}</p></div>
       {#if turn.state === 'error'}
-       <div class="flex flex-wrap items-center gap-3"><p class="text-sm text-destructive">Could not finish this response.</p>{#if !gamePlayer}<Button variant="outline" size="sm" disabled={busy} onclick={() => { prompt = turn.prompt; void send(); }}><RefreshCwIcon class="size-4" />Retry</Button>{/if}</div>
+       <div class="flex flex-wrap items-center gap-3"><p class="text-sm text-destructive">{turn.answer || 'Could not finish this response.'}</p>{#if !gamePlayer}<Button variant="outline" size="sm" disabled={busy} onclick={() => { prompt = turn.prompt; void send(); }}><RefreshCwIcon class="size-4" />Retry</Button>{/if}</div>
       {:else}<div class="pr-2"><AssistantMessage text={turn.answer} /></div>{/if}
       {@render modCards(turn.mods, turn.id)}
       {#if !serverId}
