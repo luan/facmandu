@@ -21,6 +21,33 @@ local function dimensions(p, direction)
  if direction==4 or direction==12 then w,h=h,w end
  return w,h
 end
+local function custom_inserter_range(force,p)
+ if p.type~='inserter' or not script or not script.active_mods or not script.active_mods.Smart_Inserters then return nil end
+ local function setting(name) return settings.startup[name] and settings.startup[name].value end
+ local maximum,mode=setting('si-max-inserters-range'),setting('si-range-adder')
+ if type(maximum)~='number' or type(mode)~='string' then error('Smart Inserters range settings are unavailable',0) end
+ local function distance(v)
+  return math.max(math.abs(math.floor((v.x or v[1])+0.5)),math.abs(math.floor((v.y or v[2])+0.5)))
+ end
+ local footprint=(math.max(p.tile_width,p.tile_height)-1)/2
+ local native=math.max(distance(p.inserter_pickup_position),distance(p.inserter_drop_position))-footprint
+ local minimum=1
+ if mode=='inserter' or mode=='inserter-with-rebase' then maximum=native
+ elseif mode=='incremental' or mode=='incremental-with-rebase' then maximum=maximum+native
+ elseif mode~='equal' and mode~='rebase' then error('Unknown Smart Inserters range mode',0) end
+ if mode=='rebase' or mode=='incremental-with-rebase' or mode=='inserter-with-rebase' then minimum=native end
+ local increment=5
+ if setting('si-range-technologies') then
+  increment=0
+  for level=5,1,-1 do
+   local tech=force.technologies['si-unlock-range-'..level]
+   if tech and tech.researched and not tech.prototype.hidden then increment=level;break end
+  end
+ end
+ -- Match Smart Inserters 2.1 range settings and researched reach. Other mods need
+ -- their own documented range API; native allow_custom_vectors alone has no cap.
+ return math.min(maximum,minimum+increment)+footprint
+end
 local function can_request_ghost(force,surface,entity,position,box,offset)
  if surface.can_place_entity{name=entity.name,position=position,direction=entity.direction,force=force,build_check_type=defines.build_check_type.manual} then return true end
  if not surface.platform or surface.platform.force~=force then return false end
@@ -129,7 +156,7 @@ local function blueprint(request)
      end
     end
     local custom_vectors;if p.type=='inserter' then custom_vectors=p.allow_custom_vectors end
-    entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,supports_direction=p.supports_direction,collision_box=p.collision_box,crafting_categories=p.crafting_categories,belt_items_per_second=p.belt_speed and p.belt_speed*480,mining_radius=p.mining_drill_radius,mining_speed=p.mining_speed,resource_categories=p.resource_categories,output_offset=p.vector_to_place_result,max_underground_distance=p.max_underground_distance,fluid_connections=connections,inserter_connections=inserter_connections(p),allow_custom_vectors=custom_vectors,unlocked=unlocked(available,p),blueprint_settings_example=control_example(p.type)}
+    entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,supports_direction=p.supports_direction,collision_box=p.collision_box,crafting_categories=p.crafting_categories,belt_items_per_second=p.belt_speed and p.belt_speed*480,mining_radius=p.mining_drill_radius,mining_speed=p.mining_speed,resource_categories=p.resource_categories,output_offset=p.vector_to_place_result,max_underground_distance=p.max_underground_distance,fluid_connections=connections,inserter_connections=inserter_connections(p),allow_custom_vectors=custom_vectors,custom_vector_max_distance=custom_inserter_range(force,p),unlocked=unlocked(available,p),blueprint_settings_example=control_example(p.type)}
    elseif name=='space-platform-foundation' and prototypes.tile[name] then
     entities[#entities+1]={name=name,type='tile',width=1,height=1,unlocked=unlocked(available,prototypes.tile[name])}
    else
@@ -194,6 +221,15 @@ local function blueprint(request)
   if e.type and not directional_type then error('Input/output type is only valid for underground belts and loaders',0) end
   if directional_type and not e.type then error('Specify input/output for underground belt or loader',0) end
   if (e.pickup_position or e.drop_position or e.use_filters~=nil or e.filter_mode or e.override_stack_size) and p.type~='inserter' then error('Inserter settings require an inserter',0) end
+  local reach=custom_inserter_range(force,p)
+  if reach then
+   for _,key in ipairs({'pickup_position','drop_position'}) do
+    local vector=e[key]
+    if vector and (math.abs(math.floor(vector.x+0.5))>reach or math.abs(math.floor(vector.y+0.5))>reach) then
+     error('Inserter '..i..' '..key..' exceeds configured Smart Inserters reach '..reach..' tiles. Route belts or move the inserter within that range.',0)
+    end
+   end
+  end
   for _,filter in ipairs(e.filters or {}) do
    if not prototypes.item[filter.name] or (filter.quality and not prototypes.quality[filter.quality]) then error('Unknown filter item or quality',0) end
   end

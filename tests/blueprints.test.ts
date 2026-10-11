@@ -227,6 +227,22 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
  }})
  assert(not ok and err:match('pickup_position'))
  omit_vectors=false
+ script={active_mods={Smart_Inserters='2.1.0'}}
+ settings={startup={['si-max-inserters-range']={value=3},['si-range-adder']={value='equal'},['si-range-technologies']={value=false}}}
+ local reach_design={operation='create',force='player',label='Legal reach',entities={{name='inserter',position={x=0.5,y=0.5},direction=0,drop_position={x=0,y=3.2}}}}
+ assert(blueprint(reach_design).kind=='blueprint')
+ for _,distance in ipairs({4,10,14}) do
+  reach_design.entities[1].drop_position.y=distance
+  local valid,message=pcall(blueprint,reach_design)
+  assert(not valid and message:match('configured Smart Inserters reach 3'))
+ end
+ settings.startup['si-range-technologies'].value=true
+ game.forces.player.technologies={['si-unlock-range-1']={researched=true,prototype={hidden=false}}}
+ reach_design.entities[1].drop_position.y=3.2
+ assert(not pcall(blueprint,reach_design))
+ reach_design.entities[1].drop_position.y=2.2
+ assert(blueprint(reach_design).kind=='blueprint')
+ script=nil
  defines={build_check_type={manual=1}}
  local force=game.forces.player;force.name='player';force.logistic_networks={}
  local charted=true
