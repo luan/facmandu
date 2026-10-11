@@ -119,6 +119,7 @@ export async function stopFactorio(server: ManagedServer) {
 export async function factorioArguments(server: ManagedServer) {
 	const binary = await executable(server);
 	const data = join(binary, '..', '..', '..', 'data');
+	await mkdir(join(server.directory, '.factorio', 'saves'), { recursive: true });
 	const config = join(server.directory, '.factorio', 'facmandu.ini');
 	await writeFile(
 		config,
