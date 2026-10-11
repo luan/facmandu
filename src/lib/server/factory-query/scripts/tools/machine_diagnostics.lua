@@ -5,7 +5,7 @@ local bounded = require("scripts.tools.bounded")
 local M = {}
 M.manifest = {
   inspect_machine = {
-    desc = "Inspect one built crafting machine at exact map coordinates: actual status, active state, recipe, progress, input/output inventories, fluids, modules, and electric connection. Stored ingredients are observations, not a throughput or bottleneck prediction. If ambiguous, use a returned unit_number.",
+    desc = "Inspect one built crafting machine at exact map coordinates: actual status, active state, recipe, progress, input/output inventories, fluids, native world pipe connection targets, modules, and electric connection. Stored ingredients are observations, not a throughput or bottleneck prediction. If ambiguous, use a returned unit_number.",
     tier = "2",
     params = {
       surface = "string! surface name or index", x = "number! map x", y = "number! map y",
@@ -66,6 +66,20 @@ local function inspect_machine(a)
   for name, amount in pairs(fluids) do fluid_rows[#fluid_rows + 1] = { name = name, amount = bounded.round(amount, 2) } end
   table.sort(fluid_rows, function(x, y) return x.name < y.name end)
   row.fluids = { total_kinds = #fluid_rows, fluids = bounded.cut(fluid_rows, 12) }
+  -- 2.1 exposes recipe-specific fluid storages directly; 2.0 needs its legacy fluidbox adapter.
+  local major,minor=(script.active_mods.base or ''):match('^(%d+)%.(%d+)')
+  if tonumber(major) and (tonumber(major)>2 or (tonumber(major)==2 and tonumber(minor)>=1)) then
+    local ports={}
+    for index=1,math.min(entity.fluids_count,32) do
+      local filter=entity.get_fluid_filter(index)
+      local filter_value=filter and {name=filter.fluid and filter.fluid.name,minimum_temperature=filter.minimum_temperature,maximum_temperature=filter.maximum_temperature} or nil
+      for _,connection in ipairs(entity.get_fluid_box_pipe_connections(index) or {}) do
+        local target=connection.target
+        ports[#ports+1]={fluid_storage_index=index,filter=filter_value,flow_direction=connection.flow_direction,connection_type=connection.connection_type,port_position=connection.position,pipe_position=connection.target_position,connected_to=target and target.valid and {name=target.name,unit_number=target.unit_number,position=target.position} or nil}
+      end
+    end
+    row.fluid_ports={total=#ports,shown=math.min(#ports,32),truncated=#ports>32,connections=bounded.cut(ports,32),position_reference='World coordinates. pipe_position is the intended neighboring pipe center; connected_to is the actual connection, if any.'}
+  end
   return row
 end
 M.functions = { inspect_machine = inspect_machine }
