@@ -189,6 +189,19 @@ test('native lookup contracts declare scope and preserve exact local targets', (
     prototype={get_product_amount=function() return 1 end}}
    local shadowed=functions.planning_recipes({force='player',product='glass'})
    assert(shadowed.total==0 and shadowed.suggestions[1]=='kr-glass')
+   game.surfaces.nauvis.find_entities_filtered=function(filter)
+    assert(filter.force=='player' and filter.radius==8 and #filter.type==5)
+    local function transport(count,id)
+     return {name='transport-belt',type='transport-belt',position={x=id+0.5,y=0.5},unit_number=id,direction=4,
+      get_item_count=function(stack) assert(stack.name=='kr-glass' and stack.quality=='normal');return count end}
+    end
+    return {transport(0,1),transport(8,2)}
+   end
+   local carrying={force='player',surface='nauvis',carrying='kr-glass',x=0,y=0,radius=8}
+   local route=functions.find_entities(carrying)
+   assert(route.total==1 and route.entities[1].unit_number==2 and route.entities[1].carried_count==8)
+   carrying.ghost=true;assert(not pcall(functions.find_entities,carrying))
+   carrying.ghost=nil;carrying.radius=nil;assert(not pcall(functions.find_entities,carrying))
 
   `)
 	);

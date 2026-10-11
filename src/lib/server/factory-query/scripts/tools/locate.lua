@@ -28,6 +28,8 @@ local bounded        = require("scripts.tools.bounded")
 local SCAN_CAP      = 2000
 local DEFAULT_SHOWN = 5
 local MAX_SHOWN     = 50
+local TRANSPORT_TYPES={'transport-belt','underground-belt','splitter','loader','loader-1x1'}
+local transport_types={} for _,kind in ipairs(TRANSPORT_TYPES) do transport_types[kind]=true end
 
 -- nearby: the circle locate_player reads around a character. 32 tiles is a
 -- generous "next to", and a radius read of a circle that size is bounded by
@@ -75,6 +77,7 @@ M.manifest = {
       type    = "string entity type, e.g. assembling-machine, furnace, mining-drill",
       recipe  = "string recipe name a crafting machine is set to, e.g. repair-pack",
       product = "string item or fluid name a crafting machine's recipe makes, e.g. military-science-pack",
+      carrying = "string exact item currently carried by built belts, underground belts, splitters or loaders, normal quality; requires local x/y/radius. Use this to locate an existing product bus, then inspect its connections. Occupancy is not delivery rate; empty belts are not found. Omit product/recipe filters.",
       ghost   = "boolean true for ghosts only, false for built entities only; omit for both",
       details = "boolean include bounded stored supplies, belt capacity and native power headroom; requires a local x/y/radius",
       limit   = "integer positions to return, default " .. DEFAULT_SHOWN .. ", max " .. MAX_SHOWN,
@@ -195,6 +198,7 @@ local function find_entities(a)
   local etype   = optional_string(a.type, "type")
   local recipe  = optional_string(a.recipe, "recipe")
   local product = optional_string(a.product, "product")
+  local carrying = optional_string(a.carrying, "carrying")
   local position
   if a.x ~= nil or a.y ~= nil or a.radius ~= nil then
     if type(a.x) ~= 'number' or type(a.y) ~= 'number' or type(a.radius) ~= 'number'
@@ -205,9 +209,12 @@ local function find_entities(a)
   end
   if a.details~=nil and type(a.details)~='boolean' then error('details must be boolean',0) end
   if a.details and not position then error('details requires a bounded local x/y/radius',0) end
+  if carrying and not position then error('carrying requires a bounded local x/y/radius',0) end
   local ghost   = a.ghost
   if ghost ~= nil and type(ghost) ~= "boolean" then error("ghost must be true or false", 0) end
-  if not (position or name or etype or recipe or product) then
+  if carrying and (recipe or product or ghost==true) then error('carrying requires built transport; omit product, recipe and ghost=true',0) end
+  if carrying and etype and not transport_types[etype] then error('carrying requires a transport-belt, underground-belt, splitter or loader type',0) end
+  if not (position or name or etype or recipe or product or carrying) then
     error("give a bounded x/y/radius or at least one of name, type, recipe or product", 0)
   end
   if name and not prototypes.entity[name] then
@@ -224,6 +231,9 @@ local function find_entities(a)
     return { found = false, force = force.name, surface = surface.name, product = product,
              reason = "no item or fluid by that name: use the internal name, for example military-science-pack",
              suggestions = suggestions(prototypes.item, product) }
+  end
+  if carrying and not prototypes.item[carrying] then
+    return {found=false,force=force.name,surface=surface.name,carrying=carrying,reason='Unknown item prototype',suggestions=suggestions(prototypes.item,carrying)}
   end
 
   -- Built entities and ghosts are two engine passes, because a name or type
@@ -247,15 +257,17 @@ local function find_entities(a)
   -- types scanned 335 and found all six.
   local types = etype
   if not (name or etype) and (recipe or product) then types = CRAFTER_TYPES end
+  if not (name or etype) and carrying then types=TRANSPORT_TYPES end
 
   if name or types then
     if ghost ~= true then scan({ name = name, type = types }) end
-    if ghost ~= false then scan({ ghost_name = name, ghost_type = types }) end
+    if ghost ~= false and not carrying then scan({ ghost_name = name, ghost_type = types }) end
   else
     scan({})
   end
 
   local matches = {}
+  local carried_counts={}
   for _, entity in ipairs(scanned) do
     local keep = ghost == nil or is_ghost(entity) == ghost
     if keep and (recipe or product) then
@@ -263,6 +275,11 @@ local function find_entities(a)
       keep = set ~= nil
         and (not recipe or set.name == recipe)
         and (not product or makes(prototypes.recipe[set.name] or set, product))
+    end
+    if keep and carrying then
+      local count=not is_ghost(entity) and transport_types[entity.type] and entity.get_item_count{name=carrying,quality='normal'} or 0
+      keep=count>0
+      carried_counts[entity]=count
     end
     if keep then matches[#matches + 1] = entity end
   end
@@ -289,6 +306,7 @@ local function find_entities(a)
     local x, y, tag = gps(entity.position, surface.name)
     local row = { name = real_name(entity), type = real_type(entity), unit_number = entity.unit_number, direction = entity.direction, x = x, y = y, gps = tag }
     if is_ghost(entity) then row.ghost = true end
+    if carrying then row.carried_count=carried_counts[entity] end
     local set = recipe_of(entity)
     if set then row.recipe = set.name end
     if a.details and not is_ghost(entity) then
@@ -315,7 +333,7 @@ local function find_entities(a)
   end
   return {
     found = true, force = force.name, surface = surface.name,
-    name = name, type = etype, recipe = recipe, product = product, ghost = ghost,
+    name = name, type = etype, recipe = recipe, product = product, carrying=carrying,ghost = ghost,
     position = position, radius = a.radius,
     scanned = #scanned, truncated = #scanned >= SCAN_CAP,
     total = #matches, shown = #rows, omitted = #matches - #rows, types = types, entities = rows,
