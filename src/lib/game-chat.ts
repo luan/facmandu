@@ -1,5 +1,5 @@
 const CHAT_LINE =
-	/^\s*(?:\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}|\d+\.\d+) \[CHAT\] ([A-Za-z0-9_-]{3,30}):\s*@assistant(?:\s+|$)(.*)$/iu;
+	/^\s*(?:\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}|\d+\.\d+) \[CHAT\] ([A-Za-z0-9_-]{3,30}):\s*@(?:assistant(?:\s+|$))?\s*(.*)$/iu;
 const RICH_TAG =
 	/^\[(?:(?:item|fluid|recipe|technology|entity)=[a-z0-9_-]{1,100}|gps=-?\d{1,9}(?:\.\d{1,3})?,-?\d{1,9}(?:\.\d{1,3})?,[a-z0-9_-]{1,100})\]$/iu;
 const RICH_TAGS = /\[[^\]\r\n]*\]/gu;

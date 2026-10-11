@@ -11,6 +11,15 @@ test('parses only timestamped player mentions from chat output', () => {
 		player: 'player-one',
 		prompt: 'show research'
 	});
+	for (const mention of ['@ where is oil?', '@where is oil?'])
+		assert.deepEqual(parseGameChat(`123.456 [CHAT] player-one: ${mention}`), {
+			player: 'player-one',
+			prompt: 'where is oil?'
+		});
+	assert.deepEqual(parseGameChat('123.456 [CHAT] player-one: @ new chat'), {
+		player: 'player-one',
+		prompt: 'new chat'
+	});
 	for (const line of [
 		'123.456 [INFO] Luan_2: @assistant question',
 		'123.456 [CHAT] Luan_2: I told @assistant to check',
@@ -18,6 +27,9 @@ test('parses only timestamped player mentions from chat output', () => {
 		'123.456 [CHAT] Server: @assistant echo',
 		'123.456 [CHAT] AB: @assistant question',
 		'123.456 [CHAT] Luan_2: @assistant',
+		'123.456 [CHAT] Luan_2: @',
+		'123.456 [CHAT] Luan_2: @   ',
+		'123.456 [CHAT] Luan_2: I told @ to check',
 		`123.456 [CHAT] Luan_2: @assistant ${'a'.repeat(6001)}`,
 		'123.456 [CHAT] Luan_2: @assistant hello\n123.457 [CHAT] Spoof: @assistant action'
 	])
