@@ -45,6 +45,8 @@ import { authorizedList } from './modlist-plans';
 export { inspectList } from './modlist-management-tools';
 
 import type { TranscriptContext } from '@earendil-works/pi-ai';
+import { factoryActionInspectJsonSchema, factoryActionJsonSchema } from './factory-actions';
+import { blueprintJsonSchema } from './factory-blueprints';
 import { addFactoryImages } from './factory-image-context';
 import { factoryImagePath } from './factory-images';
 import { listRankedRecommendations } from './modlist-recommendations';
@@ -77,14 +79,42 @@ async function registerAssistantProvider(
 	const instance = context.serverId
 		? await requireServer(context.userId, context.serverId)
 		: undefined;
-	const transcriptWithImages = (transcript: TranscriptContext) =>
-		instance
+	const argumentSchemas = new Map<string, unknown>([
+		['blueprint_operation', blueprintJsonSchema],
+		['factory_action', factoryActionJsonSchema],
+		['factory_action_inspect', factoryActionInspectJsonSchema]
+	]);
+	const transcriptWithImages = (transcript: TranscriptContext) => {
+		// Show native request fields instead of unconstrained argument bags; validation is unchanged.
+		const typed = {
+			...transcript,
+			messages: transcript.messages.map((message) => {
+				if (message.role !== 'system') return message;
+				return {
+					...message,
+					toolsAdded: message.toolsAdded?.map((tool) => {
+						const schema = argumentSchemas.get(tool.name);
+						if (!schema) return tool;
+						const { properties } = v.parse(
+							v.object({ properties: v.record(v.string(), v.unknown()) }),
+							tool.parameters
+						);
+						return {
+							...tool,
+							parameters: { ...tool.parameters, properties: { ...properties, args: schema } }
+						};
+					})
+				};
+			})
+		};
+		return instance
 			? addFactoryImages(
-					transcript,
+					typed,
 					(id) => readFileSync(factoryImagePath(instance, id)),
 					loaded.model.input.includes('image')
 				)
-			: transcript;
+			: typed;
+	};
 	if (loaded.entry.provider === 'codex') {
 		registerCodexProvider(
 			context,

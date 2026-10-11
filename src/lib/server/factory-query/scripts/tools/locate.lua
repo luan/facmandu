@@ -27,7 +27,7 @@ local bounded        = require("scripts.tools.bounded")
 
 local SCAN_CAP      = 2000
 local DEFAULT_SHOWN = 5
-local MAX_SHOWN     = 10
+local MAX_SHOWN     = 50
 
 -- nearby: the circle locate_player reads around a character. 32 tiles is a
 -- generous "next to", and a radius read of a circle that size is bounded by
@@ -68,6 +68,9 @@ M.manifest = {
     tier = "2",
     params = {
       surface = "string! surface name or index, e.g. nauvis",
+      x       = "number search center x; requires y and radius",
+      y       = "number search center y; requires x and radius",
+      radius  = "number local search radius, 1 to 96 tiles; requires x and y",
       name    = "string entity prototype name, e.g. lab, assembling-machine-2",
       type    = "string entity type, e.g. assembling-machine, furnace, mining-drill",
       recipe  = "string recipe name a crafting machine is set to, e.g. repair-pack",
@@ -118,7 +121,7 @@ end
 
 local function gps(position, surface_name)
   local x, y = math.floor(position.x + 0.5), math.floor(position.y + 0.5)
-  return x, y, string.format("[gps=%d,%d,%s]", x, y, surface_name)
+  return position.x, position.y, string.format("[gps=%d,%d,%s]", x, y, surface_name)
 end
 
 -- What a player stands beside is something a force placed. Scenery and
@@ -159,7 +162,7 @@ local function nearest_builds(surface, position, radius, own_character)
   local rows = {}
   for i, near in ipairs(bounded.cut(found, NEARBY_SHOWN)) do
     local x, y, tag = gps(near.entity.position, surface.name)
-    local row = { name = real_name(near.entity), type = real_type(near.entity),
+    local row = { name = real_name(near.entity), type = real_type(near.entity), unit_number = near.entity.unit_number, direction = near.entity.direction,
                   distance = bounded.round(near.distance, 1), x = x, y = y, gps = tag }
     if is_ghost(near.entity) then row.ghost = true end
     rows[i] = row
@@ -190,6 +193,14 @@ local function find_entities(a)
   local etype   = optional_string(a.type, "type")
   local recipe  = optional_string(a.recipe, "recipe")
   local product = optional_string(a.product, "product")
+  local position
+  if a.x ~= nil or a.y ~= nil or a.radius ~= nil then
+    if type(a.x) ~= 'number' or type(a.y) ~= 'number' or type(a.radius) ~= 'number'
+      or math.abs(a.x) > 1000000 or math.abs(a.y) > 1000000 or a.radius < 1 or a.radius > 96 then
+      error('local searches require numeric x, y and radius (1 to 96)', 0)
+    end
+    position = {x=a.x,y=a.y}
+  end
   local ghost   = a.ghost
   if ghost ~= nil and type(ghost) ~= "boolean" then error("ghost must be true or false", 0) end
   if not (name or etype or recipe or product) then
@@ -217,6 +228,7 @@ local function find_entities(a)
   -- or type, one pass over everything covers both.
   local scanned = {}
   local function scan(filter)
+    filter.position, filter.radius = position, a.radius
     filter.force, filter.limit = force.name, SCAN_CAP - #scanned
     if filter.limit <= 0 then return end
     for _, entity in ipairs(surface.find_entities_filtered(filter)) do scanned[#scanned + 1] = entity end
@@ -255,7 +267,7 @@ local function find_entities(a)
   local rows = {}
   for i, entity in ipairs(shown) do
     local x, y, tag = gps(entity.position, surface.name)
-    local row = { name = real_name(entity), x = x, y = y, gps = tag }
+    local row = { name = real_name(entity), type = real_type(entity), unit_number = entity.unit_number, direction = entity.direction, x = x, y = y, gps = tag }
     if is_ghost(entity) then row.ghost = true end
     local set = recipe_of(entity)
     if set then row.recipe = set.name end
@@ -264,6 +276,7 @@ local function find_entities(a)
   return {
     found = true, force = force.name, surface = surface.name,
     name = name, type = etype, recipe = recipe, product = product, ghost = ghost,
+    position = position, radius = a.radius,
     scanned = #scanned, truncated = #scanned >= SCAN_CAP,
     total = #matches, shown = #rows, entities = rows,
   }

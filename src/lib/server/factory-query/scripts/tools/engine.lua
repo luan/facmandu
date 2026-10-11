@@ -59,6 +59,11 @@ for _, module in ipairs(MODULES) do
     if type(fn) ~= "function" then
       error("[ai-agent-bridge] tool " .. name .. " is in a manifest with no function behind it")
     end
+    -- The original companion injected force; Facmandu requires callers to select it explicitly.
+    entry.params = entry.params or {}
+    entry.params.force = name == "list_forces"
+      and "string optional asking force, defaults to player"
+      or "string! exact force name returned by list_forces"
     MANIFEST[name] = entry
     FUNCTIONS[name] = fn
   end

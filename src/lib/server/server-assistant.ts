@@ -25,6 +25,7 @@ export async function finishServerTurn(
 ) {
 	let timeout: ReturnType<typeof setTimeout> | undefined;
 	const results: FactoryResult[] = [];
+	const toolNames = new Map<string, string>();
 	const stopWatching = watchCompaction(turn.chatId ?? keyOf(turn.userId, turn.serverId), send);
 	try {
 		const chat = turn.chatId
@@ -121,6 +122,20 @@ export async function finishServerTurn(
 				onEvent: submissionEvents(receipt, (chunk) => {
 					if (chunk.type === 'message-delta' && chunk.kind === 'text')
 						send({ delta: chunk.delta, progress: 'Responding…' });
+					if (chunk.type === 'tool-input') toolNames.set(chunk.toolCallId, chunk.toolName);
+					if (chunk.type === 'tool-output-error') {
+						const tool = toolNames.get(chunk.toolCallId) ?? 'Tool';
+						results.push({
+							kind: 'factory-result',
+							tool,
+							title: `${tool} failed`,
+							result: { error: chunk.errorText }
+						});
+						send({
+							results: results.filter((item) => item.tool !== 'mod_cards'),
+							progress: 'Recovering from tool error…'
+						});
+					}
 					if (chunk.type === 'tool-input')
 						send({
 							progress:
