@@ -127,4 +127,8 @@ test('inserter rotation requires exact inspected state and a cardinal direction'
 	for (const direction of [-4, 1, 16])
 		assert.equal(factoryActionSchema.safeParse({ ...input, direction }).success, false);
 	assert.equal(factoryActionInspectSchema.safeParse(input).success, false);
+	const ghost = { ...input, operation: 'ghost_cancel' };
+	assert.equal(factoryActionSchema.safeParse(ghost).success, true);
+	assert.equal(factoryActionInspectSchema.safeParse(ghost).success, false);
+	assert.equal(factoryActionSchema.safeParse({ ...ghost, expectedTick: undefined }).success, false);
 });

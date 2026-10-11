@@ -270,15 +270,27 @@ local function logistic_inspect(request)
   return { operation = request.operation, before = snapshot, after = snapshot }
 end
 
-local function inspected_inserter(request)
+local function inspected_inserter(request, ghost)
   local surface = game.surfaces[request.surface]
   if not surface then fail("Surface no longer exists") end
   -- Rotation is limited to built inserters; wider entities need collision and fluid checks.
-  for _,entity in ipairs(surface.find_entities_filtered{position=request.position,radius=0.1,type="inserter",limit=8}) do
+  for _,entity in ipairs(surface.find_entities_filtered{position=request.position,radius=0.1,type=ghost and "entity-ghost" or "inserter",limit=8}) do
     if entity.unit_number == request.unitNumber and entity.force.name == request.force
-      and entity.position.x == request.position.x and entity.position.y == request.position.y then return entity end
+      and entity.position.x == request.position.x and entity.position.y == request.position.y
+      and (not ghost or entity.ghost_type == "inserter") then return entity end
   end
   fail("Inserter changed; inspect it again")
+end
+
+local function ghost_action(request)
+  local entity = inspected_inserter(request, true)
+  local before = {unitNumber=entity.unit_number,force=entity.force.name,surface=entity.surface.name,
+    position=entity.position,name=entity.ghost_name,direction=entity.direction,tick=game.tick}
+  if request.operation == "ghost_inspect" then return {operation=request.operation,before=before,after=before} end
+  if before.direction ~= request.expectedDirection or request.expectedTick > game.tick
+    or game.tick-request.expectedTick > 3600 then fail("Ghost inspection expired or direction changed; inspect it again") end
+  if not entity.destroy() then fail("Factorio refused ghost cancellation") end
+  return {operation=request.operation,before=before,after={cancelled=true}}
 end
 
 local function inserter_snapshot(entity)
@@ -305,6 +317,7 @@ end
 
 local function action(request)
   local operation = request.operation
+  if operation == "ghost_inspect" or operation == "ghost_cancel" then return ghost_action(request) end
   if operation == "entity_inspect" or operation == "entity_rotate" then return inserter_action(request) end
   if operation == "research_inspect" then return research_inspect(request) end
   if operation == "train_inspect" then return train_inspect(request) end
