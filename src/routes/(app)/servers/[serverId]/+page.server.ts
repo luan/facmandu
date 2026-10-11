@@ -112,6 +112,7 @@ export const actions: Actions = {
 						model: stringField(form, 'model'),
 						effort: stringField(form, 'effort'),
 						actions: stringField(form, 'actions'),
+						chatMode: stringField(form, 'chatMode') || 'mentions',
 						players: stringField(form, 'players')
 							.split(/[\s,]+/u)
 							.filter(Boolean)
@@ -129,6 +130,10 @@ export const actions: Actions = {
 							(parsed.data.effort && !model.efforts.some((effort) => effort === parsed.data.effort))
 						)
 							return fail(400, { message: 'Choose an available model and effort' });
+					}
+					if (parsed.data.enabled && parsed.data.chatMode === 'ambient') {
+						const { accountProviderKey } = await import('$lib/server/assistant-providers');
+						await accountProviderKey(event.locals.user?.id ?? '', 'neuralwatt');
 					}
 					await updateServerConfig(server, { gameAssistant: parsed.data });
 					await refreshInGameAssistants();

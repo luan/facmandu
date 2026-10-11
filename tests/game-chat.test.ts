@@ -11,7 +11,7 @@ test('parses only timestamped player mentions from chat output', () => {
 		player: 'player-one',
 		prompt: 'show research'
 	});
-	for (const mention of ['@ where is oil?', '@where is oil?'])
+	for (const mention of ['@ where is oil?', '@where is oil?', '@toby where is oil?'])
 		assert.deepEqual(parseGameChat(`123.456 [CHAT] player-one: ${mention}`), {
 			player: 'player-one',
 			prompt: 'where is oil?'
@@ -55,4 +55,29 @@ test('bounds UTF-8 output to three intact chunks and marks truncation', () => {
 	assert.ok(reply[0]?.includes('[item=iron-plate]'));
 	assert.ok(reply[2]?.endsWith('See the web chat for the full reply.'));
 	assert.ok(reply.every((chunk) => !chunk.includes('�')));
+});
+
+test('Toby panel events require their native mod source and bounded structured input', async () => {
+	const { parseGameUi } = await import('../src/lib/game-chat');
+	const data = JSON.stringify({
+		player: 'player-one',
+		operation: 'send',
+		prompt: 'More glass',
+		chat: 'chat-one',
+		sequence: 1
+	});
+	assert.equal(
+		parseGameUi(`123.456 Script @__facmandu-assistant__/control.lua:5: [FACMANDU_UI] ${data}`)
+			?.prompt,
+		'More glass'
+	);
+	assert.equal(parseGameUi(`123.456 [CHAT] player-one: [FACMANDU_UI] ${data}`), null);
+	assert.equal(
+		parseGameUi(`123.456 Script @__another_mod__/control.lua:5: [FACMANDU_UI] ${data}`),
+		null
+	);
+	assert.equal(
+		parseGameUi('123.456 Script @__facmandu-assistant__/control.lua:5: [FACMANDU_UI] broken'),
+		null
+	);
 });

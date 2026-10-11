@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { and, desc, eq } from 'drizzle-orm';
-import { gameReply, parseGameChat } from '$lib/game-chat';
+import { gameReply, parseGameChat, parseGameUi } from '$lib/game-chat';
+import { routeAmbientChat } from './ambient-chat';
 import { db } from './db';
 import { genID } from './db/ids';
 import { assistantChat, type ManagedServer, managedServer, serverAssistantTurn } from './db/schema';
@@ -18,6 +19,13 @@ import { type LogLine, subscribeLogs } from './server-logs';
 import { rconScript } from './server-rcon';
 import { canManageServer } from './servers';
 
+type GameMessage = {
+	player: string;
+	prompt: string;
+	ambient?: true;
+	chatId?: string;
+	fresh?: boolean;
+};
 type Session = {
 	stop: () => void;
 	controllers: Set<AbortController>;
@@ -25,18 +33,117 @@ type Session = {
 	fingerprint: string;
 	pending: Map<string, { chat: Promise<string | null>; done: Promise<void> }>;
 	recent: number[];
+	ambientRecent: number[];
+	routing: Set<string>;
+	uiRecent: number[];
+	panels: Map<string, string>;
 	players: Map<string, number>;
 };
 const sessions = new Map<string, Session>();
 let timer: ReturnType<typeof setInterval> | undefined;
 let scanning: Promise<void> | undefined;
 
-async function reply(server: ManagedServer, player: string, answer: string) {
+async function reply(server: ManagedServer, player: string, answer: string, sourceChat?: string) {
 	for (const text of gameReply(answer))
 		await rconScript(
 			server,
-			`/silent-command local p=game.get_player(${JSON.stringify(player)}); if p and p.connected then p.force.print(${JSON.stringify(`Assistant: ${text}`)}) end`
+			`/silent-command local p=game.get_player(${JSON.stringify(player)}); if p and p.connected then p.force.print(${JSON.stringify(`Toby: ${text}`)}) end`
 		);
+	const session = sessions.get(server.id);
+	if (session)
+		await syncPanel(server, session, player, undefined, answer, sourceChat).catch(() => {});
+}
+async function syncPanel(
+	server: ManagedServer,
+	session: Session,
+	player: string,
+	selected?: string,
+	progress?: string,
+	sourceChat?: string
+) {
+	await requireGamePlayer(server, session.config.ownerId, player);
+	const chats = await db
+		.select()
+		.from(assistantChat)
+		.where(
+			and(
+				eq(assistantChat.userId, session.config.ownerId),
+				eq(assistantChat.serverId, server.id),
+				eq(assistantChat.gamePlayer, player)
+			)
+		)
+		.orderBy(desc(assistantChat.updatedAt))
+		.limit(8);
+	const current =
+		chats.find((chat) => chat.id === (selected ?? session.panels.get(player))) ?? chats[0];
+	if (current) session.panels.set(player, current.id);
+	const turn = current
+		? await db
+				.select()
+				.from(serverAssistantTurn)
+				.where(eq(serverAssistantTurn.chatId, current.id))
+				.orderBy(desc(serverAssistantTurn.createdAt))
+				.get()
+		: null;
+	const state = {
+		current: current?.id,
+		status:
+			(!sourceChat || sourceChat === current?.id ? progress?.slice(0, 500) : undefined) ??
+			(turn?.state === 'running' ? 'Working…' : 'Ready'),
+		answer: (turn?.answer ?? '').slice(0, 6000),
+		chats: chats.map((chat) => ({ id: chat.id, title: chat.title.slice(0, 200) }))
+	};
+	if (sessions.get(server.id) !== session) return;
+	const encoded = JSON.stringify(JSON.stringify(state));
+	await rconScript(
+		server,
+		`/silent-command local p=game.get_player(${JSON.stringify(player)}); local i=remote.interfaces['facmandu-assistant']; if p and p.connected and i and i.update_player then remote.call('facmandu-assistant','update_player',p.index,helpers.json_to_table(${encoded})) end`
+	);
+}
+async function receiveUi(
+	server: ManagedServer,
+	session: Session,
+	line: LogLine,
+	message: NonNullable<ReturnType<typeof parseGameUi>>
+) {
+	await requireGamePlayer(server, session.config.ownerId, message.player);
+	if (sessions.get(server.id) !== session) return;
+	if (message.chat) {
+		const allowed = await db
+			.select()
+			.from(assistantChat)
+			.where(
+				and(
+					eq(assistantChat.id, message.chat),
+					eq(assistantChat.userId, session.config.ownerId),
+					eq(assistantChat.serverId, server.id),
+					eq(assistantChat.gamePlayer, message.player)
+				)
+			)
+			.get();
+		if (!allowed) return;
+	}
+	if (message.operation === 'refresh' || message.operation === 'select') {
+		await syncPanel(server, session, message.player, message.chat);
+		return;
+	}
+	if (message.operation === 'new') {
+		const chat = await chatFor(server, session.config.ownerId, message.player, true);
+		await syncPanel(server, session, message.player, chat.id);
+		return;
+	}
+	if (message.operation === 'stop') {
+		const chat = message.chat ?? (await session.pending.get(message.player)?.chat);
+		if (chat) serverAssistantRequests.get(chat)?.abort();
+		await syncPanel(server, session, message.player, chat ?? undefined, 'Stopped');
+		return;
+	}
+	if (message.operation === 'send' && message.prompt)
+		admit(server, session, line, {
+			player: message.player,
+			prompt: message.prompt,
+			chatId: message.chat
+		});
 }
 async function chatFor(server: ManagedServer, ownerId: string, player: string, fresh = false) {
 	const existing = !fresh
@@ -70,7 +177,7 @@ async function answer(
 	server: ManagedServer,
 	session: Session,
 	line: LogLine,
-	message: { player: string; prompt: string },
+	message: GameMessage,
 	ready: (chat: string | null) => void
 ) {
 	const ownerId = session.config.ownerId;
@@ -81,7 +188,21 @@ async function answer(
 		await reply(server, message.player, 'Started a new chat.');
 		return;
 	}
-	const chat = await chatFor(server, ownerId, message.player);
+	const chat = message.chatId
+		? await db
+				.select()
+				.from(assistantChat)
+				.where(
+					and(
+						eq(assistantChat.id, message.chatId),
+						eq(assistantChat.userId, ownerId),
+						eq(assistantChat.serverId, server.id),
+						eq(assistantChat.gamePlayer, message.player)
+					)
+				)
+				.get()
+		: await chatFor(server, ownerId, message.player, message.fresh);
+	if (!chat) return;
 	if (sessions.get(server.id) !== session) return;
 	if (serverAssistantRequests.has(chat.id) || serverAssistantRequests.size >= 8) {
 		await reply(server, message.player, 'The assistant is busy. Try again shortly.');
@@ -112,7 +233,10 @@ async function answer(
 		if (!turn) return;
 		await db
 			.update(assistantChat)
-			.set({ updatedAt: new Date() })
+			.set({
+				updatedAt: new Date(),
+				...(chat.title.startsWith('In game ·') ? { title: message.prompt.slice(0, 100) } : {})
+			})
 			.where(eq(assistantChat.id, chat.id));
 		if (sessions.get(server.id) !== session) {
 			await db
@@ -121,6 +245,9 @@ async function answer(
 				.where(eq(serverAssistantTurn.id, id));
 			return;
 		}
+		await syncPanel(server, session, message.player, undefined, 'Working…', chat.id).catch(
+			() => {}
+		);
 		await finishServerTurn(
 			turn,
 			controller,
@@ -129,7 +256,7 @@ async function answer(
 				if (controller.signal.aborted || sessions.get(server.id) !== session) return;
 				await requireGamePlayer(server, ownerId, message.player);
 				if (controller.signal.aborted || sessions.get(server.id) !== session) return;
-				await reply(server, message.player, progress);
+				await reply(server, message.player, progress, chat.id);
 			}
 		);
 		// Changing settings or disconnecting never replays a response or pending game action.
@@ -140,7 +267,7 @@ async function answer(
 			.from(serverAssistantTurn)
 			.where(eq(serverAssistantTurn.id, id))
 			.get();
-		if (completed) await reply(server, message.player, completed.answer);
+		if (completed) await reply(server, message.player, completed.answer, chat.id);
 	} finally {
 		session.controllers.delete(controller);
 		if (serverAssistantRequests.get(chat.id) === controller)
@@ -148,8 +275,82 @@ async function answer(
 	}
 }
 function receive(server: ManagedServer, session: Session, line: LogLine) {
-	const message = parseGameChat(line.text);
+	const ui = parseGameUi(line.text);
+	if (ui) {
+		session.uiRecent = session.uiRecent.filter((time) => Date.now() - time < 60_000);
+		if (session.uiRecent.length >= 60) return;
+		session.uiRecent.push(Date.now());
+		void receiveUi(server, session, line, ui).catch((cause) =>
+			console.error(
+				'Toby panel request failed:',
+				cause instanceof Error ? cause.message : 'Unknown error'
+			)
+		);
+		return;
+	}
+
+	const message = parseGameChat(line.text, session.config.chatMode === 'ambient');
 	if (!message || sessions.get(server.id) !== session) return;
+	if (message.ambient) {
+		const now = Date.now();
+		session.ambientRecent = session.ambientRecent.filter((time) => now - time < 60_000);
+		if (
+			session.routing.size >= 4 ||
+			session.routing.has(message.player) ||
+			session.ambientRecent.length >= 30
+		)
+			return;
+		session.routing.add(message.player);
+		session.ambientRecent.push(now);
+		void (async () => {
+			await requireGamePlayer(server, session.config.ownerId, message.player);
+			const chats = await db
+				.select()
+				.from(assistantChat)
+				.where(
+					and(
+						eq(assistantChat.userId, session.config.ownerId),
+						eq(assistantChat.serverId, server.id),
+						eq(assistantChat.gamePlayer, message.player)
+					)
+				)
+				.orderBy(desc(assistantChat.updatedAt))
+				.limit(8);
+			const candidates = await Promise.all(
+				chats.map(async (chat) => {
+					const last = await db
+						.select({ prompt: serverAssistantTurn.prompt, answer: serverAssistantTurn.answer })
+						.from(serverAssistantTurn)
+						.where(eq(serverAssistantTurn.chatId, chat.id))
+						.orderBy(desc(serverAssistantTurn.createdAt))
+						.get();
+					return {
+						id: chat.id,
+						prompt: (last?.prompt ?? chat.title).slice(-1500),
+						answer: (last?.answer ?? '').slice(-1500),
+						running: serverAssistantRequests.has(chat.id)
+					};
+				})
+			);
+			const selected = await routeAmbientChat(session.config.ownerId, message.prompt, candidates);
+			if (selected === 'ignore' || sessions.get(server.id) !== session) return;
+			admit(server, session, line, {
+				...message,
+				...(selected === 'new' ? { fresh: true } : { chatId: selected })
+			});
+		})()
+			.catch((cause) =>
+				console.error(
+					'Ambient chat routing failed:',
+					cause instanceof Error ? cause.message.split('\n')[0]?.slice(0, 200) : 'Unknown error'
+				)
+			)
+			.finally(() => session.routing.delete(message.player));
+		return;
+	}
+	admit(server, session, line, message);
+}
+function admit(server: ManagedServer, session: Session, line: LogLine, message: GameMessage) {
 	const now = Date.now();
 	session.recent = session.recent.filter((time) => now - time < 60_000);
 	if (
@@ -166,13 +367,27 @@ function receive(server: ManagedServer, session: Session, line: LogLine) {
 	session.recent.push(now);
 	deliver(server, session, line, message);
 }
-function deliver(
-	server: ManagedServer,
-	session: Session,
-	line: LogLine,
-	message: { player: string; prompt: string }
-) {
-	const pending = session.pending.get(message.player);
+function deliver(server: ManagedServer, session: Session, line: LogLine, message: GameMessage) {
+	const pending = !message.fresh ? session.pending.get(message.player) : undefined;
+	if (/^(?:stop|cancel|stop response)$/iu.test(message.prompt)) {
+		void (async () => {
+			const chat = message.chatId ?? (await pending?.chat);
+			const controller = chat ? serverAssistantRequests.get(chat) : undefined;
+			controller?.abort();
+			await reply(server, message.player, controller ? 'Stopped.' : 'No response is running.');
+		})().catch(() => {});
+		return;
+	}
+	if (message.chatId) {
+		if (serverAssistantRequests.has(message.chatId)) {
+			void steerServerTurn(
+				message.chatId,
+				message.prompt,
+				`game-steer-${server.id}-${line.id}`
+			).catch(() => {});
+		} else launch(server, session, line, message);
+		return;
+	}
 	if (pending) {
 		void (async () => {
 			await requireGamePlayer(server, session.config.ownerId, message.player);
@@ -199,12 +414,7 @@ function deliver(
 	}
 	launch(server, session, line, message);
 }
-function launch(
-	server: ManagedServer,
-	session: Session,
-	line: LogLine,
-	message: { player: string; prompt: string }
-) {
+function launch(server: ManagedServer, session: Session, line: LogLine, message: GameMessage) {
 	const ready = Promise.withResolvers<string | null>();
 	const done = Promise.withResolvers<void>();
 	const pending = { chat: ready.promise, done: done.promise };
@@ -258,6 +468,10 @@ async function scanServers() {
 			controllers: new Set(),
 			pending: new Map(),
 			recent: [],
+			ambientRecent: [],
+			routing: new Set(),
+			uiRecent: [],
+			panels: new Map(),
 			players: new Map()
 		};
 		sessions.set(server.id, session);

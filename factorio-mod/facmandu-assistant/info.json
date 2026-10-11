@@ -1,0 +1,9 @@
+{
+	"name": "facmandu-assistant",
+	"version": "0.1.0",
+	"title": "Toby · Facmandu Assistant",
+	"author": "Luan",
+	"factorio_version": "2.1",
+	"description": "In-game chat, conversations and progress for Toby in Facmandu. Uses your server's assistant permissions. No free items or research.",
+	"dependencies": ["base >= 2.1.0"]
+}

@@ -2636,6 +2636,8 @@ done
 	passed('mid-run web steering preserves follow-ups and finishes after the browser disconnects');
 	const gameSockets = new Set();
 	const gameReplies = [];
+	const panelUpdates = [];
+	const panelWaiters = new Map();
 	const gameWaiters = new Map();
 	const gameRcon = createTcpServer((socket) => {
 		gameSockets.add(socket);
@@ -2681,10 +2683,27 @@ done
 					gameWaiters.get(player)?.resolve(command);
 					gameWaiters.delete(player);
 					reply(id, 0, '');
+				} else if (command.includes("remote.call('facmandu-assistant'")) {
+					const encoded = /helpers\.json_to_table\(("(?:[^"\\]|\\.)*")\)/u.exec(command)?.[1];
+					assert.ok(encoded, command);
+					const data = JSON.parse(JSON.parse(encoded));
+					const player = /game\.get_player\("([^"]+)"\)/u.exec(command)?.[1];
+					panelUpdates.push({ player, data });
+					panelWaiters.get(player)?.resolve(data);
+					panelWaiters.delete(player);
+					reply(id, 0, '');
 				} else throw new Error(`Unexpected in-game RCON command: ${command}`);
 			}
 		});
 	});
+	const nextPanelUpdate = (player) => {
+		const waiter = Promise.withResolvers();
+		panelWaiters.set(player, waiter);
+		const timeout = setTimeout(() => waiter.reject(new Error('No Toby panel update')), 10000);
+		return waiter.promise.finally(() => clearTimeout(timeout));
+	};
+	const uiLine = (player, operation, sequence, extra = {}) =>
+		`107.000 Script @__facmandu-assistant__/control.lua:5: [FACMANDU_UI] ${JSON.stringify({ player, operation, sequence, ...extra })}\n`;
 	const nextGameReply = (player) => {
 		const waiter = Promise.withResolvers();
 		gameWaiters.set(player, waiter);
@@ -2717,10 +2736,7 @@ done
 		);
 		const aliceReply = nextGameReply('Alice');
 		await appendFile(gameLog, '101.000 [CHAT] Alice: @ fixture-game-alice: where is iron?\n');
-		assert.match(
-			await aliceReply,
-			/Assistant: Iron nearby: \[item=iron-plate\] \[gps=12,34,nauvis\]/u
-		);
+		assert.match(await aliceReply, /Toby: Iron nearby: \[item=iron-plate\] \[gps=12,34,nauvis\]/u);
 		const gameHistory = await json(`${serverPath}/assistant`, { cookie: cookies.owner });
 		const aliceChat = gameHistory.chats.find((chat) => chat.gamePlayer === 'Alice');
 		assert.ok(aliceChat, JSON.stringify(gameHistory.chats));
@@ -2790,7 +2806,7 @@ done
 		await charlieReply;
 		const newChatReply = nextGameReply('Bob');
 		await appendFile(gameLog, '104.000 [CHAT] Bob: @assistant new chat\n');
-		assert.match(await newChatReply, /Assistant: Started a new chat\./u);
+		assert.match(await newChatReply, /Toby: Started a new chat\./u);
 		const bobChats = (
 			await json(`${serverPath}/assistant`, { cookie: cookies.owner })
 		).chats.filter((chat) => chat.gamePlayer === 'Bob');
@@ -2845,6 +2861,35 @@ done
 		);
 		passed(
 			'in-game steering bypasses the idle cooldown and updates the active response without replay'
+		);
+		const panelRefresh = nextPanelUpdate('PanelUser');
+		await appendFile(gameLog, uiLine('PanelUser', 'refresh', 1));
+		assert.deepEqual((await panelRefresh).chats, []);
+		const panelNew = nextPanelUpdate('PanelUser');
+		await appendFile(gameLog, uiLine('PanelUser', 'new', 2));
+		const newPanel = await panelNew;
+		assert.equal(newPanel.chats.length, 1);
+		const uiReply = nextGameReply('PanelUser');
+		await appendFile(
+			gameLog,
+			uiLine('PanelUser', 'send', 3, {
+				chat: newPanel.current,
+				prompt: 'fixture-game-alice: where is iron?'
+			})
+		);
+		assert.match(await uiReply, /Toby: Iron nearby/u);
+		const selectedPanel = nextPanelUpdate('PanelUser');
+		await appendFile(gameLog, uiLine('PanelUser', 'select', 4, { chat: newPanel.current }));
+		assert.equal((await selectedPanel).current, newPanel.current);
+		assert.ok(
+			panelUpdates.every(
+				(update) =>
+					update.player !== 'PanelUser' ||
+					update.data.chats.every((chat) => chat.id === newPanel.current)
+			)
+		);
+		passed(
+			'Toby native-panel messages use connected player identity, private conversation selection and the existing assistant dispatch'
 		);
 		await action(`${serverPath}?/manage`, cookies.owner, { ...gameSettings, enabled: 'off' });
 		passed(

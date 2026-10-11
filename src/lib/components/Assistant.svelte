@@ -348,11 +348,11 @@
  </section>
 {/snippet}
 <Sheet.Root bind:open>
- <Sheet.Trigger class={buttonVariants({ variant: 'secondary', size: 'sm' })}><MessageSquareIcon class="size-4" />Assistant</Sheet.Trigger>
+ <Sheet.Trigger class={buttonVariants({ variant: 'secondary', size: 'sm' })}><MessageSquareIcon class="size-4" />Toby</Sheet.Trigger>
  <Sheet.Content class="!w-full !max-w-none !gap-0 overflow-hidden flex flex-col">
   <Sheet.Header class="shrink-0 !px-5 !py-4">
    <div class="flex items-center gap-3 pr-6">
-    <Sheet.Title class="flex shrink-0 items-center gap-2"><MessageSquareIcon class="size-5" />Assistant</Sheet.Title>
+    <Sheet.Title class="flex shrink-0 items-center gap-2"><MessageSquareIcon class="size-5" />Toby</Sheet.Title>
     <div class="min-w-0 flex-1"><p class="truncate text-sm font-medium">{chats.find(item => item.id === chat)?.title || 'New conversation'}</p>{#if contextLabel}<p class="truncate text-xs text-muted-foreground">{contextLabel}</p>{/if}</div>
     <Button variant="ghost" size="sm" class="lg:hidden" aria-expanded={sidebar === 'history'} onclick={() => sidebar = sidebar === 'history' ? null : 'history'}>Chats</Button>
     <Button variant="ghost" size="sm" class="lg:hidden" aria-expanded={sidebar === 'activity'} onclick={() => sidebar = sidebar === 'activity' ? null : 'activity'}>Activity</Button>
@@ -446,7 +446,7 @@
   {#if voiceState.active || voiceState.connecting}
    <div class="grid h-24 shrink-0 grid-rows-2 gap-1 border-t border-border bg-white/5 px-5 py-2 text-sm" role="log" aria-live="off" aria-label="Voice captions">
     <p class="line-clamp-2 break-words" title={voiceState.userCaption}><span class="mr-2 text-xs text-muted-foreground">You</span>{voiceState.userCaption}</p>
-    <p class="line-clamp-2 break-words" title={voiceState.assistantCaption}><span class="mr-2 text-xs text-muted-foreground">Assistant</span>{voiceState.assistantCaption}</p>
+    <p class="line-clamp-2 break-words" title={voiceState.assistantCaption}><span class="mr-2 text-xs text-muted-foreground">Toby</span>{voiceState.assistantCaption}</p>
    </div>
   {/if}
   <section class="mx-auto flex w-full max-w-4xl shrink-0 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-xs text-muted-foreground" aria-label="Context window">

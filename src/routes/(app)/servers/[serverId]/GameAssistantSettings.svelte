@@ -10,6 +10,7 @@
  let enabled = $state(untrack(() => config.enabled));
  let model = $state(untrack(() => config.model || models.find((item) => item.id.includes('luna'))?.id || models[0]?.id || ''));
  let effort = $state(untrack(() => config.effort || models.find((item) => item.id === model)?.defaultEffort || ''));
+ let chatMode = $state(untrack(() => config.chatMode));
  let actions = $state(untrack(() => config.actions));
  let players = $state(untrack(() => config.players.join('\n')));
  const selected = $derived(models.find((item) => item.id === model));
@@ -26,6 +27,8 @@
     <label class="grid gap-2 text-sm">Model<select name="model" class={input} bind:value={model} onchange={chooseModel} disabled={!models.length}>{#each models as item}<option value={item.id}>{item.name}</option>{/each}</select></label>
     <label class="grid gap-2 text-sm">Effort<select name="effort" class={input} bind:value={effort} disabled={!selected?.efforts.length}>{#each selected?.efforts ?? [] as level}<option value={level}>{({ minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' } as Record<string, string>)[level] ?? level}</option>{/each}</select></label>
    </div>
+   <label class="grid gap-2 text-sm">Chat activation<select name="chatMode" class={input} bind:value={chatMode}><option value="mentions">Only messages starting with @</option><option value="ambient">Ambient · Clef routes ordinary chat</option></select></label>
+   {#if chatMode === 'ambient'}<p class="text-xs text-muted-foreground">Ordinary player chat and recent assistant context are sent to your NeuralWatt account for routing. Game changes still require an explicit request and follow the Factory actions permissions. Uncertain messages are ignored.</p>{/if}
    <label class="grid gap-2 text-sm">Factory actions<select name="actions" class={input} bind:value={actions}><option value="off">Questions only</option><option value="admins">Factorio administrators</option><option value="allowlist">Selected players</option></select></label>
    {#if actions === 'allowlist'}<label class="grid gap-2 text-sm">Allowed player names<textarea name="players" class={input} rows="3" bind:value={players} placeholder="One Factorio player name per line"></textarea></label>{:else}<input name="players" type="hidden" value={players} />{/if}
    <p class="text-xs text-muted-foreground">Uses your connected model account. Actions affect only the player's force; server administration is unavailable. Players can start fresh with @ new chat.</p>

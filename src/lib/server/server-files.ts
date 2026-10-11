@@ -34,6 +34,7 @@ export const gameAssistantSchema = z.object({
 	model: z.string().default(''),
 	effort: z.string().default(''),
 	actions: z.enum(['off', 'admins', 'allowlist']).default('off'),
+	chatMode: z.enum(['mentions', 'ambient']).default('mentions'),
 	players: z
 		.array(z.string().regex(/^[A-Za-z0-9_-]{3,30}$/u))
 		.max(100)
