@@ -57,6 +57,20 @@ class DeploymentTests(unittest.TestCase):
         with patch.object(deploy, "fetch_json", return_value={"workflow_runs": [passing, {**passing, "run_attempt": 2, "conclusion": "failure"}]}):
             self.assertFalse(deploy.ci_passed(revision))
 
+    def test_release_runs_the_built_server_on_the_existing_private_listener(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory).resolve()
+            with patch('pathlib.Path.home', return_value=home), patch.object(deploy, 'run'):
+                deploy.install_dropin('a' * 40)
+            text = (home / '.config/systemd/user/facmandu-dev.service.d/50-release.conf').read_text()
+            self.assertIn(' run start\n', text)
+            self.assertIn('Environment=HOST=127.0.0.1\n', text)
+            self.assertIn('Environment=PORT=5173\n', text)
+            self.assertIn('Environment=ORIGIN=https://factorio.luan.sh\n', text)
+            self.assertIn('Environment=BODY_SIZE_LIMIT=105M\n', text)
+            self.assertIn('Environment=FACMANDU_AGENT_DATA=', text)
+            self.assertNotIn(' run dev\n', text)
+
     def test_deployment_waits_for_web_and_in_game_assistant_work(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory).resolve()

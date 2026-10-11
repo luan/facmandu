@@ -84,10 +84,9 @@ def health(revision):
             urllib.request.urlopen("http://127.0.0.1:5173" + path, timeout=10)
         except urllib.error.HTTPError as cause:
             cause.close()
-            if cause.code == 403:
+            if cause.code in (403, 404):
                 continue
         raise RuntimeError("Private source boundary failed")
-    # A cold Vite release compiles the page/CSS after the DB endpoint is ready.
     # Retry transport timeouts, but never accept a broken page or boundary check.
     for attempt in range(6):
         try:
@@ -108,7 +107,12 @@ def install_dropin(revision):
     path = Path.home() / ".config/systemd/user/facmandu-dev.service.d/50-release.conf"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("[Service]\nWorkingDirectory=" + str(ROOT / "current") + "\n"
-                    "ExecStart=\nExecStart=/usr/bin/bun --no-env-file --env-file=" + str(APP_STATE / ".env") + " run dev\n"
+                    "ExecStart=\nExecStart=/usr/bin/bun --no-env-file --env-file=" + str(APP_STATE / ".env") + " run start\n"
+                    "Environment=NODE_ENV=production\n"
+                    "Environment=HOST=127.0.0.1\n"
+                    "Environment=PORT=5173\n"
+                    "Environment=ORIGIN=https://factorio.luan.sh\n"
+                    "Environment=BODY_SIZE_LIMIT=105M\n"
                     "Environment=FACMANDU_REVISION=" + revision + "\n"
                     "Environment=FACMANDU_DEV_ENV_DIR=" + str(APP_STATE) + "\n"
                     "Environment=FACMANDU_AGENT_DATA=" + str(SOURCE / ".data/agent") + "\n")

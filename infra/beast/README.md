@@ -14,7 +14,9 @@ Deployments defer while server or mod-list assistant work is running, and check 
 before restarting the web app.
 
 After preparation it atomically switches the release symlink and restarts the
-existing `facmandu-dev.service`. The health endpoint must report the exact SHA and
+existing `facmandu-dev.service` using the built production server. It retains the
+private loopback listener, public origin, 100 MB save upload support and persistent
+agent state. No page compilation or development asset server runs in production. The health endpoint must report the exact SHA and
 working database access; login and private Vite source boundaries are checked too.
 Failures restore the previous symlink and service drop-in, then restart the prior
 app. The script never restarts Factorio or changes its saves, mods, or settings.
