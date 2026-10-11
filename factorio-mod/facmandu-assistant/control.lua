@@ -180,6 +180,17 @@ script.on_event('facmandu-toby-toggle',function(event)
  local frame=player.gui.screen[PREFIX..'panel']
  if frame then frame.destroy() else open(player) end
 end)
+local function take_blueprint(player,inspect)
+ local state=storage.players[player.index]
+ if not state or not state.blueprint then player.print('This conversation has no blueprint yet.');return end
+ if not player.clear_cursor() then player.print('Clear some inventory space before taking the blueprint.');return end
+ local ok,result=pcall(player.cursor_stack.import_stack,state.blueprint)
+ if not ok or result~=0 then player.print('Factorio could not import this blueprint.');return end
+ local frame=player.gui.screen[PREFIX..'panel']
+ if frame then frame.destroy() end
+ if inspect then player.opened=player.cursor_stack end
+end
+script.on_event('facmandu-toby-design',function(event) take_blueprint(game.get_player(event.player_index),true) end)
 script.on_event(defines.events.on_gui_click,function(event)
  local element=event.element
  if not element.valid then return end
@@ -194,14 +205,7 @@ script.on_event(defines.events.on_gui_click,function(event)
  elseif name==PREFIX..'new' then emit(player,'new')
  elseif name==PREFIX..'stop' then emit(player,'stop',nil,selected(player))
  elseif name==PREFIX..'blueprint' or name==PREFIX..'inspect-blueprint' then
-  local state=storage.players[player.index]
-  if state and state.blueprint then
-   if not player.clear_cursor() then player.print('Clear some inventory space before taking the blueprint.');return end
-   local ok,result=pcall(player.cursor_stack.import_stack,state.blueprint)
-   if not ok or result~=0 then player.print('Factorio could not import this blueprint.');return end
-   if name==PREFIX..'inspect-blueprint' then player.opened=player.cursor_stack
-   else refs.frame.destroy() end
-  end
+  take_blueprint(player,name==PREFIX..'inspect-blueprint')
  end
 end)
 script.on_event(defines.events.on_gui_text_changed,function(event)
