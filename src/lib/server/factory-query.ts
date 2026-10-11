@@ -18,6 +18,7 @@ function luaString(value: string) {
 
 // Each command owns its modules and registry. Nothing is installed in the save,
 // and third-party remote interfaces cannot add callable tools.
+// Sources use line comments only; multiline strings require Lua-aware compaction.
 const bundle = `local registry = {}
 local remote = { interfaces = {} }
 function remote.add_interface(name, functions) registry[name] = functions; remote.interfaces[name] = functions end
@@ -32,7 +33,11 @@ ${Object.entries(sources)
 					.replace('./factory-query/', '')
 					.replace(/\.lua$/u, '')
 					.replaceAll('/', '.')
-			)} ] = function()\n${source}\nend`
+			)} ] = function()\n${source
+				.split('\n')
+				.filter((line) => line.trim() && !line.trimStart().startsWith('--'))
+				.map((line) => line.trim())
+				.join('\n')}\nend`
 	)
 	.join(',\n')}
 }

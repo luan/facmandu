@@ -30,7 +30,7 @@ async function reply(server: ManagedServer, player: string, answer: string) {
 	for (const text of gameReply(answer))
 		await rconScript(
 			server,
-			`/silent-command local p=game.get_player(${JSON.stringify(player)}); if p and p.connected then p.print(${JSON.stringify(`Assistant: ${text}`)}) end`
+			`/silent-command local p=game.get_player(${JSON.stringify(player)}); if p and p.connected then p.force.print(${JSON.stringify(`Assistant: ${text}`)}) end`
 		);
 }
 async function chatFor(server: ManagedServer, ownerId: string, player: string, fresh = false) {
