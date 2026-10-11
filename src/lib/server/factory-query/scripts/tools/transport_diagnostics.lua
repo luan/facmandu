@@ -78,7 +78,17 @@ local function inspect(a)
   end
   local neighbours=e.belt_neighbours
   row.inputs={};row.outputs={}
-  for _,entity in pairs(neighbours.inputs) do row.inputs[#row.inputs+1]=reference(entity) end
+  if e.type=='transport-belt' then row.belt_shape=e.belt_shape end
+  for _,entity in pairs(neighbours.inputs) do
+   local input=reference(entity)
+   input.direction=entity.direction
+   if e.type=='transport-belt' and entity.type=='transport-belt' then
+    local perpendicular=(entity.direction-e.direction)%8==4
+    input.connection=perpendicular and (e.belt_shape=='straight' and 'side-loading' or 'turn') or 'inline'
+    input.feeds_lanes=input.connection=='side-loading' and 1 or 2
+   end
+   row.inputs[#row.inputs+1]=input
+  end
   for _,entity in pairs(neighbours.outputs) do row.outputs[#row.outputs+1]=reference(entity) end
  else
   row.stored_fluids=e.get_fluid_contents()

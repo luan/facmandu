@@ -3,6 +3,38 @@ import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { lauxlib, lua, lualib, to_luastring } from 'fengari';
 
+test('native belt inspection distinguishes a two-lane turn from one-lane side-loading', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const root = resolve('src/lib/server/factory-query');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ package.path=${JSON.stringify(`${root}/?.lua;`)}..package.path
+ defines={entity_status={working=1}}
+ local incoming={valid=true,name='belt',type='transport-belt',direction=0,position={x=0.5,y=1.5}}
+ local line={get_item_count=function() return 0 end,get_contents=function() return {} end}
+ local belt={valid=true,name='belt',type='transport-belt',direction=4,status=1,position={x=0.5,y=0.5},
+  prototype={belt_speed=0.03125},belt_shape='straight',belt_neighbours={inputs={incoming},outputs={}},
+  get_item_count=function() return 0 end,get_max_transport_line_index=function() return 2 end,
+  get_transport_line=function() return line end}
+ prototypes={entity={belt={}}}
+ local surface={name='nauvis',valid=true,find_entities_filtered=function() return {belt} end}
+ game={forces={player={name='player'}},surfaces={nauvis=surface}}
+ local inspect=require('scripts.tools.transport_diagnostics').functions.inspect_transport
+ local args={force='player',surface='nauvis',x=0.5,y=0.5,name='belt'}
+ local result=inspect(args)
+ assert(result.inputs[1].connection=='side-loading' and result.inputs[1].feeds_lanes==1)
+ assert(result.inputs[1].direction==0 and result.lane_items_per_second==7.5)
+ belt.belt_shape='left';result=inspect(args)
+ assert(result.inputs[1].connection=='turn' and result.inputs[1].feeds_lanes==2)
+ incoming.direction=4;belt.belt_shape='straight';result=inspect(args)
+ assert(result.inputs[1].connection=='inline' and result.inputs[1].feeds_lanes==2)
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
+
 test('exact factory centers select the intended belt while overlapping or approximate targets remain ambiguous', () => {
 	const state = lauxlib.luaL_newstate();
 	lualib.luaL_openlibs(state);
