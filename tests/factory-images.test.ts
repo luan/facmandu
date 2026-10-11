@@ -6,7 +6,11 @@ import {
 	type ToolResultMessage,
 	type TranscriptContext
 } from '@earendil-works/pi-ai';
-import { factoryImageSchema, factoryViewRequestSchema } from '../src/lib/factory-images';
+import {
+	factoryImageArtifactSchema,
+	factoryImageSchema,
+	factoryViewRequestSchema
+} from '../src/lib/factory-images';
 import { addFactoryImages } from '../src/lib/server/factory-image-context';
 import { blueprintImageData, pngDimensions } from '../src/lib/server/factory-image-data';
 
@@ -84,6 +88,21 @@ test('a pending snapshot becomes model-visible when its original image finishes 
 		context.messages.some(
 			(item) => item.role === 'toolResult' && item.content.some((part) => part.type === 'image')
 		),
+		false
+	);
+});
+test('pending blueprint previews retain only a validated image reference until rendering finishes', () => {
+	const artifact = { kind: 'factory-image', label: 'Draft', image: { id, pending: true } };
+	assert.equal(factoryImageArtifactSchema.safeParse(artifact).success, true);
+	assert.equal(
+		factoryImageArtifactSchema.safeParse({
+			...artifact,
+			image: { id: '../private', pending: true }
+		}).success,
+		false
+	);
+	assert.equal(
+		factoryImageArtifactSchema.safeParse({ ...artifact, image: { id, pending: false } }).success,
 		false
 	);
 });

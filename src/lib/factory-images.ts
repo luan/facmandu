@@ -8,6 +8,9 @@ export const factoryImageSchema = factoryImageReferenceSchema.extend({
 	height: z.number().int().min(1).max(1536)
 });
 export type FactoryImage = z.infer<typeof factoryImageSchema>;
+export const factoryImagePendingSchema = factoryImageReferenceSchema.extend({
+	pending: z.literal(true)
+});
 export const factoryViewRequestSchema = z.strictObject({
 	force: z.string().min(1).max(200),
 	surface: z.string().min(1).max(200),
@@ -44,5 +47,5 @@ export const factoryImageUrl = (
 export const factoryImageArtifactSchema = z.object({
 	kind: z.literal('factory-image'),
 	label: z.string(),
-	image: factoryImageSchema
+	image: factoryImageSchema.or(factoryImagePendingSchema)
 });

@@ -5,11 +5,12 @@ import * as v from 'valibot';
 import { z } from 'zod';
 import { serverToolGroups } from '$lib/assistant-routing';
 import { blueprintArtifactSchema } from '$lib/blueprints';
+import type { FactoryImage } from '$lib/factory-images';
 import { useAssistantToolGroups } from './assistant-tool-groups';
 import { fetchPublicWeb, schoolBlueprint, searchBlueprints, webPageText } from './assistant-web';
 import { factoryAction, factoryActionInspect } from './factory-actions';
 import { factoryBlueprint } from './factory-blueprints';
-import { renderFactoryBlueprint } from './factory-images';
+import { FactoryImagePending, renderFactoryBlueprint } from './factory-images';
 import { factoryPlanInput, planFactory } from './factory-planning';
 import { factoryQuery } from './factory-query';
 import {
@@ -263,13 +264,21 @@ export function serverAssistantTools(context: {
 				)
 			}),
 			async run({ data }) {
+				const instance = await server();
+				let image: FactoryImage | { id: string; pending: true };
+				try {
+					image = await renderFactoryBlueprint(instance, data.blueprint);
+				} catch (cause) {
+					if (!(cause instanceof FactoryImagePending)) throw cause;
+					image = { id: cause.imageId, pending: true };
+				}
 				return result(
 					'render_blueprint',
 					data.label,
 					{
 						kind: 'factory-image',
 						label: data.label,
-						image: await renderFactoryBlueprint(await server(), data.blueprint)
+						image
 					},
 					true
 				);
@@ -314,7 +323,10 @@ export function serverAssistantTools(context: {
 						};
 					} catch (cause) {
 						if (!(cause instanceof ServerError)) throw cause;
-						rendered = { ...artifact.data, renderError: cause.message };
+						rendered =
+							cause instanceof FactoryImagePending
+								? { ...artifact.data, image: { id: cause.imageId, pending: true } }
+								: { ...artifact.data, renderError: cause.message };
 					}
 				}
 				const output = result(

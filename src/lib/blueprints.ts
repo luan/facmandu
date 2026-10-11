@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { factoryImageSchema } from './factory-images';
+import { factoryImagePendingSchema, factoryImageSchema } from './factory-images';
 
 const name = z.string().min(1).max(200);
 const coordinate = z.number().min(-10000).max(10000).multipleOf(0.5);
@@ -229,7 +229,7 @@ export const blueprintArtifactSchema = z
 			.string()
 			.regex(/^[a-f0-9]{64}$/)
 			.optional(),
-		image: factoryImageSchema.optional(),
+		image: factoryImageSchema.or(factoryImagePendingSchema).optional(),
 		renderError: z.string().optional(),
 		label: z.string(),
 		blueprint: z.string().startsWith('0'),

@@ -3,14 +3,13 @@ import { z } from 'zod';
 import { factoryImageReferenceSchema } from '$lib/factory-images';
 import { pngDimensions } from './factory-image-data';
 
+const reference = factoryImageReferenceSchema.extend({ pending: z.boolean().optional() });
 const imageResult = z.union([
 	z.object({
 		kind: z.literal('factory-result'),
-		result: z.object({ kind: z.string().optional(), image: factoryImageReferenceSchema })
+		result: z.object({ kind: z.string().optional(), image: reference })
 	}),
-	z
-		.object({ kind: z.string().optional(), image: factoryImageReferenceSchema })
-		.transform((result) => ({ result }))
+	z.object({ kind: z.string().optional(), image: reference }).transform((result) => ({ result }))
 ]);
 // Load at the provider boundary: transcripts store small immutable image references, not base64 JSON.
 export function addFactoryImages(
@@ -33,7 +32,9 @@ export function addFactoryImages(
 				if (parsed.success)
 					images.set(index, {
 						id: parsed.data.result.image.id,
-						pending: parsed.data.result.kind === 'factory-preview-pending'
+						pending:
+							parsed.data.result.kind === 'factory-preview-pending' ||
+							parsed.data.result.image.pending === true
 					});
 			} catch {
 				/* Other tool text is not an image reference. */
