@@ -319,7 +319,6 @@ function planView(view: ResultView, data: Data) {
 		title: humanName(target.name) || 'Target',
 		prototype:
 			target.type === 'fluid' ? prototype('fluid', target.name) : prototype('item', target.name),
-		subtitle: string(target.type),
 		badge:
 			data.status === 'complete'
 				? 'Planned'
@@ -347,7 +346,7 @@ function planView(view: ResultView, data: Data) {
 	if (steps.length)
 		view.tables.push({
 			title: 'Build steps',
-			columns: ['Recipe', 'Crafts / min', 'Machines'],
+			columns: ['Recipe', 'Crafts / min', 'Machine equivalents'],
 			rows: steps.map((step) => [
 				humanName(step.recipe),
 				rate(step.crafts_per_min),
@@ -1288,12 +1287,20 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 	return view;
 }
 
-// Keep installation evidence available without presenting every intermediate snapshot as an outcome.
+// Intermediate inspections remain in Activity, including older chats that displayed every capture.
 export function assistantResultGroups(results: readonly FactoryResult[]) {
 	const installation = results.findLastIndex((item) => item.tool === 'apply_server_mod_list');
 	const review = results.findLastIndex((item) => item.tool === 'prepare_server_mod_list');
+	const inspection = results.findLastIndex(
+		(item) => item.tool === 'factory_view' && item.display === true
+	);
+	const plan = results.findLastIndex(
+		(item) => item.tool === 'production_plan' && item.display === true
+	);
 	const visible = (item: FactoryResult, index: number) =>
-		item.display === true ||
+		(item.display === true &&
+			(item.tool !== 'factory_view' || index === inspection) &&
+			(item.tool !== 'production_plan' || index === plan)) ||
 		(index === review && review > installation) ||
 		item.tool === 'create_server_from_list' ||
 		item.tool === 'retry_server_setup';

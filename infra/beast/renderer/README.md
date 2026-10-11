@@ -11,3 +11,5 @@ Each atlas includes only the requested entity types and referenced icons. ZIP gr
 `factory_view` captures at most 1,000 entities in an explored 96×96 region through an ephemeral native blueprint. It returns the source game tick, area and blueprint-to-world offset. The model receives the exact PNG served to the authorized browser, with at most two recent images per model request. Images are static factory layouts: terrain, items on belts, players, animations and machine operating state are not represented. Use live factory lookups for those facts. Missing entities, tiles, qualities or render errors fail explicitly; no vanilla sprite is substituted.
 
 Blueprint creation and construction ghost placement remain separate. Rendering has no permission to place entities or start the hosting server.
+
+Prototype icons use the same headless prototype dump and matching graphics. The adapter exports item, fluid, recipe, entity and technology icons into an atomic cache; recipes without explicit icons inherit their native main-product icon. The headless binary does not support `--dump-icon-sprites`. Missing icons are not replaced with generic symbols.

@@ -19,5 +19,5 @@
   <img src={factoryImageUrl(serverId,image)} alt={label} width={image.width} height={image.height} style={`width:${zoom*100}%;max-width:none;height:auto;image-rendering:pixelated`} onerror={()=>unavailable=true} />
   {/if}
  </section>
- <div class="border-t border-border px-3 py-2 text-xs text-muted-foreground">Sprite layout · Scroll to pan · <a class="text-primary" href={factoryImageUrl(serverId,image)} target="_blank" rel="noopener noreferrer">Open full image</a></div>
+ <div class="border-t border-border px-3 py-2 text-xs text-muted-foreground"><a class="text-primary" href={factoryImageUrl(serverId,image)} target="_blank" rel="noopener noreferrer">Open full image</a></div>
 </div>

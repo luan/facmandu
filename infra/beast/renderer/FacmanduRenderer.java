@@ -11,6 +11,9 @@ import com.demod.dcba.CommandReporting;
 import com.demod.factorio.FactorioData;
 import com.demod.fbsr.EntityRendererFactory;
 import com.demod.fbsr.FBSR;
+import com.demod.fbsr.FactorioManager;
+import com.demod.fbsr.IconManager;
+import com.demod.fbsr.AtlasManager;
 import com.demod.fbsr.Profile;
 import com.demod.fbsr.RenderRequest;
 import com.demod.fbsr.bs.BSBlueprint;
@@ -35,7 +38,36 @@ public final class FacmanduRenderer {
             collectIcons(input, icons);
             System.setProperty("facmandu.icons", new org.json.JSONArray(icons).toString());
             Profile profile = Profile.vanilla();
-            if (args[0].equals("build")) {
+            if (args[0].equals("icons")) {
+                profile.setFactorioData(new FactorioData(profile.getFileDumpDataJson(), profile.getDumpFactorioVersion()));
+                FactorioManager manager = new FactorioManager(List.of(profile));
+                profile.setFactorioManager(manager);
+                profile.setAtlasManager(new AtlasManager());
+                if (!manager.initializePrototypes()) throw new IllegalStateException("Cannot load icon prototypes");
+                IconManager iconManager = new IconManager(manager);
+                manager.setIconManager(iconManager);
+                iconManager.initialize();
+                for (String kind : input.keySet()) {
+                    Path folder = Path.of(args[2], kind);
+                    Files.createDirectories(folder);
+                    for (Object value : input.getJSONArray(kind)) {
+                        String name = value.toString();
+                        if (name.contains("/") || name.contains("\\") || name.equals(".") || name.equals("..")) continue;
+                        var definitions = switch (kind) {
+                            case "item" -> iconManager.lookupItem(name);
+                            case "fluid" -> iconManager.lookupFluid(name);
+                            case "recipe" -> iconManager.lookupRecipe(name);
+                            case "entity" -> iconManager.lookupEntity(name);
+                            case "technology" -> iconManager.lookupTechnology(name);
+                            default -> throw new IllegalArgumentException("Unknown icon kind");
+                        };
+                        if (definitions.isEmpty()) continue;
+                        var icon = definitions.get(0).getLoader().apply("");
+                        if (!ImageIO.write(icon, "PNG", folder.resolve(name + ".png").toFile()))
+                            throw new IllegalStateException("Cannot encode icon " + name);
+                    }
+                }
+            } else if (args[0].equals("build")) {
                 // Unsupported prototypes must not prevent supported layouts from rendering.
                 // A requested unsupported entity is rejected below, never drawn as a placeholder.
                 FactorioData data = new FactorioData(profile.getFileDumpDataJson(), profile.getDumpFactorioVersion());

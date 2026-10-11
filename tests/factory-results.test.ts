@@ -189,6 +189,8 @@ test('production plans show build rates, inputs and unresolved choices', () => {
 		window: 'one_minute'
 	});
 	assert.equal(plan.cards[0]?.badge, 'Choose recipes');
+	assert.equal(plan.cards[0]?.subtitle, undefined);
+	assert.deepEqual(plan.tables[0]?.columns, ['Recipe', 'Crafts / min', 'Machine equivalents']);
 	assert.deepEqual(plan.tables[0]?.rows[0], [
 		'Electronic circuit',
 		'120/min',
@@ -526,4 +528,29 @@ test('blueprint placement reports incomplete work and actionable blocked coordin
 	});
 	assert.equal(blocked.cards[0]?.badge, 'Blocked');
 	assert.deepEqual(blocked.tables[0]?.rows, [['Transport belt', '50.5', '50.5', 'Occupied']]);
+});
+
+test('only the latest displayed factory inspection is inline and all captures remain available', () => {
+	const capture = (tick: number, display = true) => ({
+		kind: 'factory-result' as const,
+		tool: 'factory_view',
+		title: 'Inspection',
+		display,
+		result: { tick }
+	});
+	const first = capture(1);
+	const second = capture(2);
+	const scouting = capture(3, false);
+	const design = { ...first, tool: 'blueprint_operation' };
+	const plan = { ...first, tool: 'production_plan' };
+	const revisedPlan = { ...second, tool: 'production_plan' };
+	const results = [first, plan, design, second, revisedPlan, scouting];
+	assert.deepEqual(assistantResultGroups(results), {
+		primary: [design, second, revisedPlan],
+		details: [first, plan, scouting]
+	});
+	assert.deepEqual(
+		results.map((item) => item.result.tick),
+		[1, 1, 1, 2, 2, 3]
+	);
 });

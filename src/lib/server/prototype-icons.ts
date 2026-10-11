@@ -1,17 +1,7 @@
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import {
-	copyFile,
-	mkdir,
-	readdir,
-	readFile,
-	realpath,
-	rename,
-	rm,
-	stat,
-	symlink,
-	writeFile
-} from 'node:fs/promises';
+import { mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { ManagedServer } from './db/schema';
@@ -79,20 +69,6 @@ export async function prototypeFingerprint(server: ManagedServer): Promise<strin
 		.digest('hex');
 }
 
-async function snapshotMods(source: string, destination: string) {
-	await mkdir(destination);
-	for (const entry of await readdir(source, { withFileTypes: true })) {
-		const from = join(source, entry.name);
-		const to = join(destination, entry.name);
-		const info = await stat(from);
-		if (info.isDirectory() || entry.name.endsWith('.zip')) {
-			await symlink(await realpath(from), to, info.isDirectory() ? 'dir' : 'file');
-		} else if (info.isFile()) {
-			await copyFile(from, to);
-		}
-	}
-}
-
 async function exportIcons(server: ManagedServer, fingerprint: string): Promise<string> {
 	const cache = join(server.directory, 'icon-cache');
 	const ready = join(cache, fingerprint);
@@ -106,28 +82,21 @@ async function exportIcons(server: ManagedServer, fingerprint: string): Promise<
 	const writeData = join(staging, 'write');
 	await mkdir(writeData, { recursive: true });
 	try {
-		const binary = await executable(server);
-		const config = join(staging, 'config.ini');
-		const mods = join(staging, 'mods');
-		await snapshotMods(join(server.directory, 'mods'), mods);
-		await writeFile(
-			config,
-			`[path]\nread-data=${join(binary, '..', '..', '..', 'data')}\nwrite-data=${writeData}\n`,
-			{ mode: 0o600 }
-		);
 		await run(
-			'xvfb-run',
+			'python3',
 			[
-				'-a',
-				binary,
-				'--config',
-				config,
-				'--mod-directory',
-				mods,
-				'--disable-audio',
-				'--dump-icon-sprites'
+				join(homedir(), '.local/share/facmandu-renderer/current/render.py'),
+				'--icons',
+				'--binary',
+				await executable(server),
+				'--mods',
+				join(server.directory, 'mods'),
+				'--profile',
+				join(server.directory, 'sprite-cache', fingerprint),
+				'--output',
+				join(writeData, 'script-output')
 			],
-			{ timeout: 180_000, maxBuffer: 4 * 1024 * 1024 }
+			{ timeout: 600_000, maxBuffer: 4 * 1024 * 1024 }
 		);
 		if ((await prototypeFingerprint(server)) !== fingerprint)
 			throw new ServerError(409, 'Server mods changed during icon export');

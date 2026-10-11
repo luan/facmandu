@@ -102,9 +102,13 @@ def prepare(binary, mods, profile):
 
 def main():
     parser = argparse.ArgumentParser()
-    for name in ('binary', 'mods', 'profile', 'input', 'output'):
+    parser.add_argument('--icons', action='store_true')
+    for name in ('binary', 'mods', 'profile', 'output'):
         parser.add_argument('--' + name, required=True, type=Path)
+    parser.add_argument('--input', type=Path)
     args = parser.parse_args()
+    if not args.icons and args.input is None:
+        parser.error('--input is required for blueprint rendering')
     args.profile.mkdir(parents=True, exist_ok=True, mode=0o700)
     installation = Path(__file__).resolve().parent
     java = ['nice', '-n', '15', 'java', '-Xmx3g', '-XX:ActiveProcessorCount=2', '-Djava.awt.headless=true', '-cp',
@@ -113,6 +117,22 @@ def main():
     with (Path.home() / '.local/share/facmandu-renderer/.render.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         prepare(args.binary.resolve(), args.mods.resolve(), args.profile.resolve())
+        if args.icons:
+            dump = json.loads((args.profile / 'build/vanilla/data/script-output/data-raw-dump.json').read_text())
+            hierarchy = json.loads((installation / 'type-hierarchy.json').read_text())
+            def names(branch):
+                result = set()
+                for kind, children in branch.items():
+                    result.update(dump.get(kind, {}))
+                    result.update(names(children))
+                return result
+            requested = {kind: sorted(set(dump.get(kind, {})) | names(hierarchy[kind])) for kind in ('item', 'entity')}
+            requested.update({kind: sorted(dump.get(kind, {})) for kind in ('recipe', 'fluid', 'technology')})
+            icon_input = args.profile / 'icons.json'
+            icon_input.write_text(json.dumps(requested))
+            del dump
+            run(*java, 'icons', str(icon_input.resolve()), str(args.output.resolve()), cwd=args.profile)
+            return
         blueprint = json.loads(args.input.read_text())
         names = sorted({e['name'] for e in blueprint['entities']})
         tiles = sorted({e['name'] for e in blueprint.get('tiles', [])})

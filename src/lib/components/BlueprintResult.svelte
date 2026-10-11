@@ -25,7 +25,7 @@
  }
 </script>
 <section class="overflow-hidden border border-border bg-white/[0.025] text-sm" aria-label={blueprint.label}>
- <header class="flex flex-wrap items-center justify-between gap-3 border-b border-border p-3"><h3 class="font-semibold">{blueprint.label}</h3><span class="text-xs text-muted-foreground">{blueprint.entities.length} entities · Native blueprint</span></header>
+ <header class="flex flex-wrap items-center justify-between gap-3 border-b border-border p-3"><h3 class="font-semibold">Blueprint design · {blueprint.label}</h3><span class="text-xs text-muted-foreground">{blueprint.entities.length} entities · Native blueprint</span></header>
  {#if image && serverId}<FactoryImage {image} {serverId} label={`Sprite layout for ${blueprint.label}`} />{:else}
  <svg class="h-80 w-full bg-black/20" viewBox={`${bounds.left} ${bounds.top} ${bounds.right-bounds.left} ${bounds.bottom-bounds.top}`} role="img" aria-label={`Layout for ${blueprint.label}`}>
   {#each blueprint.entities as entity}
@@ -39,7 +39,7 @@
  {#if serverId}<div class="p-3"><Button size="sm" disabled={rendering} onclick={()=>void render()}>{rendering?'Rendering sprites…':'Render sprite preview'}</Button></div>{/if}
  {/if}
  <div class="space-y-3 border-t border-border p-3">
-  <p class="text-xs text-muted-foreground">Validated by this server’s Factorio engine. Static layout preview; operating state is not shown. Export validation does not verify throughput or supply connections.</p>
+  <p class="text-xs text-muted-foreground">Import checked by Factorio. This design preview does not confirm construction, connections or throughput.</p>
   <details><summary class="cursor-pointer text-xs">Construction materials</summary><ul class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">{#each blueprint.cost as item}<li>{item.count} × {item.name}</li>{/each}</ul></details>
   <div class="flex gap-2"><Button size="sm" onclick={() => void copy()}>{#if copied}<CheckIcon />{:else}<CopyIcon />{/if}Copy blueprint</Button><Button size="sm" variant="outline" onclick={download}><DownloadIcon />Download</Button></div>
   {#if error}<p role="alert" class="text-xs text-destructive">{error}</p>{/if}
