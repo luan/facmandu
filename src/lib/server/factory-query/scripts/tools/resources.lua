@@ -45,7 +45,8 @@ local function find(a)
  table.sort(patches,function(a,b) return a.distance<b.distance end)
  local result={}
  for i=1,math.min(12,#patches) do result[i]=patches[i] end
- return {force=force.name,surface=surface.name,scanned=#scanned,charted_tiles=shown,truncated=#scanned==8192,total_patches=#patches,shown=#result,patches=result,note='Bounds describe only scanned, charted resource tiles. Inspect obstacles and drill coverage before placing a mine.'}
+ local mining=p.mineable_properties or {}
+ return {force=force.name,surface=surface.name,resource={category=p.resource_category,mining_time=mining.mining_time,products=mining.products,required_fluid=mining.required_fluid,fluid_amount=mining.fluid_amount},force_mining_productivity_bonus=force.mining_drill_productivity_bonus,scanned=#scanned,charted_tiles=shown,truncated=#scanned==8192,total_patches=#patches,shown=#result,patches=result,note='Bounds describe only scanned, charted resource tiles. Mining fields are native prototype values and force productivity; placed drills can have additional modules and effects. Inspect obstacles and drill coverage before placing a mine.'}
 end
 M.functions={find_resource_patches=find}
 return M

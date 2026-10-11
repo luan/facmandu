@@ -231,9 +231,9 @@ test('resource discovery groups charted neutral deposits and rejects unbounded s
 		to_luastring(`
  package.path=${JSON.stringify(`${root}/?.lua;`)}..package.path
  local surface={name='nauvis',valid=true}
- local force={name='player',is_chunk_charted=function(_,chunk) return chunk.x<2 end}
+ local force={name='player',mining_drill_productivity_bonus=0.2,is_chunk_charted=function(_,chunk) return chunk.x<2 end}
  game={forces={player=force},surfaces={nauvis=surface}}
- prototypes={entity={stone={type='resource'},belt={type='transport-belt'}}}
+ prototypes={entity={stone={type='resource',resource_category='basic-solid',mineable_properties={mining_time=2.5,products={{name='stone',type='item',amount=2}}}},belt={type='transport-belt'}}}
  surface.find_entities_filtered=function(filter)
   assert(filter.force=='neutral' and filter.type=='resource' and filter.limit==8192)
   return {
@@ -250,6 +250,8 @@ test('resource discovery groups charted neutral deposits and rejects unbounded s
  assert(found.patches[1].tiles==2 and found.patches[1].amount==300)
  assert(found.patches[1].position.x==10.5 and found.patches[1].bounds.right==12)
  assert(found.patches[2].amount==400)
+ assert(found.resource.mining_time==2.5 and found.resource.products[1].amount==2)
+ assert(found.resource.category=='basic-solid' and found.force_mining_productivity_bonus==0.2)
  args.radius=513;assert(not pcall(find,args))
  args.radius=0/0;assert(not pcall(find,args))
  args.radius=256;args.name='belt';assert(not pcall(find,args))
