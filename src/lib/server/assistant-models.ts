@@ -22,6 +22,7 @@ export type AssistantModel = {
 	name: string;
 	efforts: ThinkingLevel[];
 	defaultEffort: ThinkingLevel;
+	effortLabels?: Partial<Record<ThinkingLevel, string>>;
 	provider: AssistantProviderId;
 };
 
@@ -40,6 +41,7 @@ type CatalogModel = {
 	name: string;
 	efforts: ThinkingLevel[];
 	defaultEffort: ThinkingLevel;
+	effortLabels?: Partial<Record<ThinkingLevel, string>>;
 };
 
 type Source = {
@@ -138,6 +140,7 @@ export async function assistantModelCatalog(userId: string): Promise<AssistantMo
 					name: source.namespaced ? `${source.label} · ${model.name}` : model.name,
 					efforts: model.efforts,
 					defaultEffort: model.defaultEffort,
+					effortLabels: model.effortLabels,
 					provider: source.provider
 				});
 		} catch (cause) {

@@ -330,6 +330,7 @@ const effortOrder: ThinkingLevel[] = ['minimal', 'low', 'medium', 'high', 'xhigh
 export function deriveEfforts(model: object): {
 	efforts: ThinkingLevel[];
 	defaultEffort: ThinkingLevel;
+	effortLabels?: Partial<Record<ThinkingLevel, string>>;
 } {
 	const thinkingLevelMap = (model as { thinkingLevelMap?: Record<string, string | null> })
 		.thinkingLevelMap;
@@ -337,8 +338,16 @@ export function deriveEfforts(model: object): {
 		(effort) => thinkingLevelMap?.[effort] !== undefined && thinkingLevelMap?.[effort] !== null
 	);
 	if (!efforts.length) return { efforts: ['medium'], defaultEffort: 'medium' };
+	const effortLabels = Object.fromEntries(
+		efforts
+			.filter((effort) => thinkingLevelMap?.[effort] === 'none')
+			.map((effort) => [effort, 'No thinking'])
+	);
 	return {
 		efforts,
-		defaultEffort: efforts.includes('medium') ? 'medium' : (efforts[0] ?? 'medium')
+		defaultEffort: efforts.includes('medium')
+			? 'medium'
+			: (efforts.find((effort) => thinkingLevelMap?.[effort] !== 'none') ?? efforts[0] ?? 'medium'),
+		...(Object.keys(effortLabels).length ? { effortLabels } : {})
 	};
 }

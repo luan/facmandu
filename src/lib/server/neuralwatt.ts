@@ -20,7 +20,7 @@ const provider = createProvider({
 			// answer. Enable vision after that same image query returns usable output.
 			input: ['text'],
 			reasoning: true,
-			thinkingLevelMap: { low: 'low', high: 'high', xhigh: 'xhigh', max: 'max' },
+			thinkingLevelMap: { minimal: 'none', low: 'low', high: 'high', xhigh: 'xhigh', max: 'max' },
 			contextWindow: 1048560,
 			maxTokens: 393216,
 			cost: { input: 0.15, output: 0.6, cacheRead: 0.015, cacheWrite: 0 },

@@ -111,6 +111,17 @@ if (process.env.FACMANDU_PROVIDER_TEST_CHILD !== '1') {
 		);
 	});
 
+	test('NeuralWatt exposes no-thinking as an explicit choice without changing its default', async () => {
+		await client.execute("INSERT INTO user(id) VALUES ('neural-ui')");
+		await client.execute(
+			"INSERT INTO provider_key VALUES ('neural-ui','neuralwatt','fixture-key')"
+		);
+		const selected = await loadAssistantModel('neural-ui', 'api:neuralwatt:deepseek-v4.1-flash');
+		assert.equal(selected.entry.effortLabels?.minimal, 'No thinking');
+		assert.equal(selected.entry.defaultEffort, 'low');
+		assert.ok(selected.entry.efforts.includes('minimal'));
+	});
+
 	test('Meta identity retains the API key returned by its verification exchange', async () => {
 		const originalFetch = globalThis.fetch;
 		globalThis.fetch = (input) => {

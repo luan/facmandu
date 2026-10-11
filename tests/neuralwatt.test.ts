@@ -61,3 +61,22 @@ test('NeuralWatt uses explicit account keys and serializes reasoning and tools',
 	assert.equal(payload.messages[0]?.role, 'system');
 	assert.equal(payload.tools[0]?.function.name, 'inspect');
 });
+
+test('NeuralWatt no-thinking uses the native none control without forced termination', async () => {
+	let captured: unknown;
+	const model = neuralwattProvider.getModels()[0];
+	assert.ok(model);
+	await neuralwattProvider
+		.streamSimple(model, normalizeContext({ messages: [] }), {
+			apiKey: 'fixture-key',
+			reasoning: 'minimal',
+			onPayload(payload) {
+				captured = payload;
+				throw new Error('fixture');
+			}
+		})
+		.result();
+	const payload = captured as { reasoning_effort: string; thinking_token_budget?: number };
+	assert.equal(payload.reasoning_effort, 'none');
+	assert.equal(payload.thinking_token_budget, undefined);
+});
