@@ -3352,6 +3352,23 @@ done
 	assert.match(compactText, /"compacted":true/);
 	const compactedChat = await json(freshPath, { cookie: cookies.owner });
 	assert.ok(compactedChat.chat.compactedAt);
+	assert.match(compactText, /"compacting":true/);
+	assert.equal(compactedChat.chat.contextUsage.model, 'gpt-6-sol');
+	assert.ok(
+		compactText
+			.trim()
+			.split('\n')
+			.map((line) => JSON.parse(line))
+			.some((event) => event.contextUsage?.tokens > 0)
+	);
+	assert.equal(
+		compactedChat.chat.contextUsage.tokens,
+		null,
+		'Compaction invalidates the old occupancy until the next measured request'
+	);
+	assert.ok(compactedChat.chat.contextUsage.window > 0);
+	assert.equal(compactedChat.chat.contextUsage.compacting, false);
+	assert.equal(compactedChat.chat.contextUsage.compactionFailed, false);
 	assert.equal(compactedChat.turns.length, 3, 'Compaction preserves visible history');
 	passed(
 		'Flue compacts the main conversation and persists its marker without deleting chat history'
