@@ -189,3 +189,47 @@ test('configured inserters preserve settings and bind placement to inspected con
 		false
 	);
 });
+
+test('collector filters and native combinator sections survive the tool boundary', () => {
+	const entities = [
+		{
+			name: 'asteroid-collector',
+			position: { x: 0.5, y: 0.5 },
+			direction: 0,
+			'chunk-filter': [{ index: 1, name: 'oxide-asteroid-chunk' }],
+			control_behavior: {
+				circuit_read_contents: true,
+				include_hands: true,
+				circuit_enabled: true,
+				circuit_condition: {
+					first_signal: { type: 'virtual', name: 'signal-A' },
+					comparator: '>',
+					constant: 0
+				}
+			}
+		},
+		{
+			name: 'constant-combinator',
+			position: { x: 4.5, y: 0.5 },
+			direction: 0,
+			control_behavior: {
+				sections: {
+					sections: [
+						{
+							index: 1,
+							filters: [{ index: 1, type: 'item', name: 'oxide-asteroid-chunk', count: 1 }]
+						}
+					]
+				}
+			}
+		}
+	];
+	assert.deepEqual(blueprintTargetSchema.parse({ ...target, entities }).entities, entities);
+	assert.equal(
+		blueprintTargetSchema.safeParse({
+			...target,
+			entities: [{ ...entities[0], 'chunk-filter': [{ index: 0, name: 'oxide-asteroid-chunk' }] }]
+		}).success,
+		false
+	);
+});

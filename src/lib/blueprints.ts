@@ -27,6 +27,13 @@ export const blueprintEntitySchema = z.strictObject({
 		)
 		.max(100)
 		.optional(),
+	'chunk-filter': z
+		.array(z.strictObject({ index: z.number().int().min(1).max(1000), name }))
+		.max(100)
+		.describe(
+			'Static asteroid-collector chunk filters; circuit-controlled filters use control_behavior.circuit_set_filters instead'
+		)
+		.optional(),
 	use_filters: z.boolean().optional(),
 	filter_mode: z.enum(['whitelist', 'blacklist']).optional(),
 	pickup_position: vector
@@ -36,7 +43,12 @@ export const blueprintEntitySchema = z.strictObject({
 		.describe('Inserter drop vector relative to its center, not world coordinates')
 		.optional(),
 	override_stack_size: z.number().int().min(0).max(255).optional(),
-	control_behavior: z.record(z.string().min(1).max(100), z.json()).optional(),
+	control_behavior: z
+		.record(z.string().min(1).max(100), z.json())
+		.describe(
+			'Native blueprint format, not runtime LuaControlBehavior fields. Read blueprint_operation catalog examples: collector circuit_set_filters (not set_filter); constant combinator sections.sections[].filters (not control_behavior.filters).'
+		)
+		.optional(),
 	wires: z
 		.array(wire)
 		.max(100)

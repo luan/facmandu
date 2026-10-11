@@ -75,6 +75,11 @@ local function construction_report(force,surface,entities,offset,cost)
  -- A positive result requires one network to cover and stock the whole layout; split-network builds need allocation checks.
  return {single_network_ready=ready,entities=#entities,networks=networks,total_networks=total,production_verified=false,note='Normal-quality stock is not reserved. Coverage and materials do not verify power, input/output connections or throughput.'}
 end
+local function control_example(kind)
+ if kind=='asteroid-collector' then return {['chunk-filter']={{index=1,name='oxide-asteroid-chunk'}},control_behavior={circuit_set_filters=false,circuit_read_contents=true,include_hands=true,circuit_enabled=true,circuit_condition={first_signal={type='virtual',name='signal-A'},comparator='>',constant=0}}} end
+ if kind=='constant-combinator' then return {control_behavior={sections={sections={{index=1,filters={{index=1,type='item',name='oxide-asteroid-chunk',quality='normal',comparator='=',count=1}}}}}}} end
+ if kind=='decider-combinator' then return {control_behavior={decider_conditions={conditions={{first_signal={type='item',name='oxide-asteroid-chunk'},comparator='<',constant=5}},outputs={{signal={type='virtual',name='signal-A'},copy_count_from_input=false,constant=1}},else_outputs={}}}} end
+end
 local function blueprint(request)
  local force=game.forces[request.force]
  if not force then error('Unknown force',0) end
@@ -95,7 +100,7 @@ local function blueprint(request)
       connections[#connections+1]={positions=connection.positions,connection_type=connection.connection_type,flow_direction=connection.flow_direction}
      end
     end
-    entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,collision_box=p.collision_box,crafting_categories=p.crafting_categories,belt_items_per_second=p.belt_speed and p.belt_speed*480,fluid_connections=connections,inserter_connections=inserter_connections(p),unlocked=unlocked(available,p)}
+    entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,collision_box=p.collision_box,crafting_categories=p.crafting_categories,belt_items_per_second=p.belt_speed and p.belt_speed*480,fluid_connections=connections,inserter_connections=inserter_connections(p),unlocked=unlocked(available,p),blueprint_settings_example=control_example(p.type)}
    elseif name=='space-platform-foundation' and prototypes.tile[name] then
     entities[#entities+1]={name=name,type='tile',width=1,height=1,unlocked=unlocked(available,prototypes.tile[name])}
    else
@@ -104,15 +109,22 @@ local function blueprint(request)
   end
   return {force=force.name,entities=entities}
  end
- local defaults={use_filters=false,filter_mode='whitelist',override_stack_size=0,circuit_set_filters=false,circuit_read_hand_contents=false,circuit_set_stack_size=false,circuit_enabled=false,connect_to_logistic_network=false,comparator='=',quality='normal'}
- local function contains(actual,wanted,key)
-  if actual==nil and defaults[key]~=nil then actual=defaults[key] end
-  if type(wanted)~='table' then return actual==wanted end
-  if type(actual)~='table' then return false end
-  for k,v in pairs(wanted) do if not contains(actual[k],v,k) then return false end end
-  return true
+ -- Native exports omit defaults, including include_hands=true in Factorio 2.1.21.
+ local defaults={use_filters=false,filter_mode='whitelist',override_stack_size=0,circuit_set_filters=false,circuit_read_hand_contents=false,circuit_read_contents=false,circuit_set_stack_size=false,circuit_enabled=false,connect_to_logistic_network=false,include_hands=true,is_on=true,active=true,multiplier=1,compare_type='or',copy_count_from_input=true,quality='normal'}
+ local function difference(actual,wanted,path,key)
+  if actual==nil then
+   actual=defaults[key]
+   if key=='type' and (path:match('%.first_signal%.type$') or path:match('%.second_signal%.type$') or path:match('%.signal%.type$') or path:match('%.filters%.%d+%.type$')) then actual='item' end
+   if key=='constant' and path:match('%.outputs%.%d+%.constant$') then actual=1 end
+   if key=='comparator' then actual=path:match('%.filters%.%d+%.comparator$') and '=' or '<' end
+  end
+  if type(wanted)~='table' then return actual~=wanted and path or nil end
+  if actual==nil then actual={} end
+  if type(actual)~='table' then return path end
+  for k,v in pairs(wanted) do local mismatch=difference(actual[k],v,path..'.'..k,k);if mismatch then return mismatch end end
  end
- local settings={'filters','use_filters','filter_mode','pickup_position','drop_position','override_stack_size','control_behavior'}
+ local function contains(actual,wanted) return difference(actual,wanted,'','')==nil end
+ local settings={'filters','use_filters','filter_mode','pickup_position','drop_position','override_stack_size','control_behavior','chunk-filter'}
  local entities,preview,boxes,warnings={},{},{},{}
  local warned={}
  local function warn(text) if not warned[text] then warnings[#warnings+1]=text;warned[text]=true end end
@@ -156,6 +168,10 @@ local function blueprint(request)
   for _,filter in ipairs(e.filters or {}) do
    if not prototypes.item[filter.name] or (filter.quality and not prototypes.quality[filter.quality]) then error('Unknown filter item or quality',0) end
   end
+  if e['chunk-filter'] then
+   if p.type~='asteroid-collector' then error('chunk-filter requires an asteroid collector',0) end
+   for _,filter in ipairs(e['chunk-filter']) do if not prototypes.asteroid_chunk[filter.name] then error('Unknown asteroid chunk filter',0) end end
+  end
   for _,wire in ipairs(e.wires or {}) do
    if not request.entities[wire[1]] or not request.entities[wire[3]] or (wire[1]~=i and wire[3]~=i) then error('Wire endpoints must refer to this blueprint entity and another existing entity',0) end
   end
@@ -189,7 +205,8 @@ local function blueprint(request)
    local wanted=entities[i][key]
    local actual=e[key]
    if actual and (key=='pickup_position' or key=='drop_position') then actual={x=actual.x or actual[1],y=actual.y or actual[2]} end
-   if wanted~=nil and not contains(actual,wanted,key) then error('Factorio changed or rejected '..key..' for '..e.name,0) end
+   local mismatch=wanted~=nil and difference(actual,wanted,key,key)
+   if mismatch then error('Factorio changed or rejected '..mismatch..' for '..e.name..'; read blueprint_operation catalog for native settings examples',0) end
   end
  end
  local function wire_set(list)
