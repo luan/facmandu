@@ -1,4 +1,6 @@
-local supported = {['assembling-machine']=true, furnace=true, ['transport-belt']=true, ['underground-belt']=true, splitter=true, inserter=true, pipe=true, ['pipe-to-ground']=true, ['electric-pole']=true, container=true, ['logistic-container']=true, ['storage-tank']=true, pump=true, ['asteroid-collector']=true, ['solar-panel']=true, accumulator=true}
+local function supported(p)
+ return p and #(p.items_to_place_this or {})>0 and not p.has_flag('not-blueprintable')
+end
 local function unlocked_items(force)
  local items={}
  for _,recipe in pairs(force.recipes) do
@@ -86,7 +88,7 @@ local function blueprint(request)
   local entities={}
   for _,name in ipairs(request.names) do
    local p=prototypes.entity[name]
-   if p and supported[p.type] then
+   if supported(p) then
     local connections={}
     for _,box in pairs(p.fluidbox_prototypes or {}) do
      for _,connection in pairs(box.pipe_connections) do
@@ -97,7 +99,7 @@ local function blueprint(request)
    elseif name=='space-platform-foundation' and prototypes.tile[name] then
     entities[#entities+1]={name=name,type='tile',width=1,height=1,unlocked=unlocked(available,prototypes.tile[name])}
    else
-    entities[#entities+1]={name=name,error='Unknown or unsupported production entity'}
+    entities[#entities+1]={name=name,error='Unknown or non-blueprintable entity'}
    end
   end
   return {force=force.name,entities=entities}
@@ -120,7 +122,7 @@ local function blueprint(request)
  end
  for i,e in ipairs(request.entities) do
   local p=prototypes.entity[e.name]
-  if not p or not supported[p.type] then error('Unknown or unsupported production entity: '..e.name,0) end
+  if not supported(p) then error('Unknown or non-blueprintable entity: '..e.name,0) end
   if not unlocked(available,p) then
    if request.operation~='create' then error('Construction item is not unlocked: '..e.name,0) end
    warn('Construction item is not unlocked: '..e.name)
@@ -138,8 +140,9 @@ local function blueprint(request)
     warn('Recipe is not unlocked: '..e.recipe)
    end
   end
-  if e.type and p.type~='underground-belt' then error('Input/output type is only valid for underground belts',0) end
-  if p.type=='underground-belt' and not e.type then error('Specify input/output for underground belt',0) end
+  local directional_type=p.type=='underground-belt' or p.type=='loader' or p.type=='loader-1x1'
+  if e.type and not directional_type then error('Input/output type is only valid for underground belts and loaders',0) end
+  if directional_type and not e.type then error('Specify input/output for underground belt or loader',0) end
   local w,h=dimensions(p,e.direction)
   if (e.position.x-w/2)%1~=0 or (e.position.y-h/2)%1~=0 then error('Entity is not aligned to the tile grid: '..e.name,0) end
   local box={x1=e.position.x-w/2,y1=e.position.y-h/2,x2=e.position.x+w/2,y2=e.position.y+h/2}
@@ -255,7 +258,10 @@ local function blueprint(request)
     local recipe=ghost.get_recipe()
     if not recipe or recipe.name~=e.recipe then error('Factorio refused the ghost recipe',0) end
    end
-   if e.type and ghost.belt_to_ground_type~=e.type then error('Factorio refused the underground belt type',0) end
+   if e.type then
+    local actual=ghost.ghost_type=='underground-belt' and ghost.belt_to_ground_type or ghost.loader_type
+    if actual~=e.type then error('Factorio refused the input/output type',0) end
+   end
    if actor then ghost.last_user=actor end
    script.raise_script_built{entity=ghost}
    if not ghost.valid or ghost.type~='entity-ghost' or ghost.ghost_name~=e.name or ghost.position.x~=position.x or ghost.position.y~=position.y then error('A mod changed the placed ghost; inspect the result',0) end
