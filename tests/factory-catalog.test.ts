@@ -159,6 +159,8 @@ test('native lookup contracts declare scope and preserve exact local targets', (
     placement={enabled=true,products={}}
    }
    prototypes.entity={}
+   prototypes.item={['plastic-bar']={},['kr-glass']={},['kr-glass-bottle']={}}
+   prototypes.fluid={['glass-melt']={}}
    for _,name in ipairs({'chemical-plant','electrochemical-plant'}) do
     prototypes.entity[name]={name=name,type='assembling-machine',items_to_place_this={{name=name,count=1}},get_crafting_speed=function() return 1 end}
    end
@@ -174,6 +176,19 @@ test('native lookup contracts declare scope and preserve exact local targets', (
    assert(functions.planning_recipes({force='player',product='plastic-bar'}).total==1)
    local exact=functions.planning_recipes({force='player',product='plastic-bar',recipe='recycling'})
    assert(exact.recipes[1].name=='recycling' and exact.recipes[1].hidden)
+   local unknown=functions.planning_recipes({force='player',product='glass'})
+   assert(unknown.found==false and unknown.total==0 and unknown.recipes[1]==nil)
+   assert(unknown.suggestions[1]=='kr-glass' and unknown.suggestions[2]=='glass-melt')
+   local fluid=functions.planning_recipes({force='player',product='glass',type='fluid'})
+   assert(#fluid.suggestions==1 and fluid.suggestions[1]=='glass-melt')
+   local missing=functions.planning_recipes({force='player',product='absent-product'})
+   assert(missing.found==false and #missing.suggestions==0)
+   prototypes.item.glass={}
+   force.recipes.glass={name='kr-glass',enabled=true,hidden=false,category='smelting',energy=1,
+    ingredients={},products={{name='kr-glass',type='item',amount=1}},productivity_bonus=0,
+    prototype={get_product_amount=function() return 1 end}}
+   local shadowed=functions.planning_recipes({force='player',product='glass'})
+   assert(shadowed.total==0 and shadowed.suggestions[1]=='kr-glass')
 
   `)
 	);

@@ -101,15 +101,15 @@ local function suggestions(table_, query)
   for fragment in tostring(query):lower():gmatch("[%l%d]+") do
     if #fragment >= 3 then
       for name in pairs(table_) do
-        if not seen[name] and name:find(fragment, 1, true) then
+        if not seen[name] and name:lower():find(fragment, 1, true) then
           seen[name] = true
           out[#out + 1] = name
-          if #out >= MAX_SUGGESTIONS then return out end
         end
       end
     end
   end
-  table.sort(out)
+  table.sort(out, function(a,b) if #a~=#b then return #a<#b end return a<b end)
+  while #out > MAX_SUGGESTIONS do table.remove(out) end
   return out
 end
 
@@ -366,5 +366,6 @@ local function locate_player(a)
 end
 
 M.functions = { find_entities = find_entities, locate_player = locate_player }
+M.suggestions = suggestions
 
 return M

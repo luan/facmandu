@@ -1,12 +1,13 @@
 -- Read force-specific recipes and compatible base-speed crafting machines.
 local force_lookup = require("scripts.tools.force_lookup")
+local suggestions = require("scripts.tools.locate").suggestions
 local M = {}
 local MAX_RECIPES = 12
 local MAX_MACHINES = 24
 
 M.manifest = {
   planning_recipes = {
-    desc = "Recipes for one item or fluid in this save, including recipe unlock state, expected products, ingredients and prototype-compatible base-speed machines. Machine availability is owned (at least one exists), craftable (a placement-item recipe is enabled), unavailable, or unknown (no placement item). construction_stock counts normal-quality placement items across this force's provider/storage networks, not unlocked recipes or already-built machines; coverage is checked during blueprint inspection. Read-only planning data; normal quality, no modules or beacons. A truncated result must not be used to select a recipe.",
+    desc = "Recipes for one item or fluid in this save, including recipe unlock state, expected products, ingredients and prototype-compatible base-speed machines. Unknown products and products without crafting recipes return real alternative prototype-name suggestions; inspect the matching alternative before asking the player for a mod's internal name. Machine availability is owned (at least one exists), craftable (a placement-item recipe is enabled), unavailable, or unknown (no placement item). construction_stock counts normal-quality placement items across this force's provider/storage networks, not unlocked recipes or already-built machines; coverage is checked during blueprint inspection. Read-only planning data; normal quality, no modules or beacons. A truncated result must not be used to select a recipe.",
     params = {
       product = "string! item or fluid prototype name",
       type = "string item or fluid; omit to search both",
@@ -124,6 +125,12 @@ local function planning_recipes(a)
   local force = force_lookup.require_force(a.force)
   if type(a.product) ~= "string" or a.product == "" then error("product is required", 0) end
   if a.type ~= nil and a.type ~= "item" and a.type ~= "fluid" then error("type must be item or fluid", 0) end
+  if not ((a.type~='fluid' and (prototypes.item or {})[a.product]) or (a.type~='item' and (prototypes.fluid or {})[a.product])) then
+    local names={}
+    if a.type~='fluid' then for name in pairs(prototypes.item or {}) do names[name]=true end end
+    if a.type~='item' then for name in pairs(prototypes.fluid or {}) do names[name]=true end end
+    return {force=force.name,product=a.product,type=a.type,found=false,recipes={},total=0,truncated=false,enabled_total=0,enabled_shown=0,suggestions=suggestions(names,a.product),reason='Unknown product prototype; retry a matching suggestion'}
+  end
   local candidates = {}
   local source = a.recipe and (force.recipes[a.recipe] and {force.recipes[a.recipe]} or {}) or force.recipes
   for _, recipe in pairs(source) do
@@ -141,6 +148,16 @@ local function planning_recipes(a)
     return a.name < b.name
   end)
   local total = #candidates
+  local alternatives
+  if total==0 then
+    local products={}
+    for _,recipe in pairs(force.recipes) do
+      if not recipe.hidden then for _,part in pairs(recipe.products) do
+        if part.name~=a.product and (not a.type or part.type==a.type) then products[part.name]=true end
+      end end
+    end
+    alternatives=suggestions(products,a.product)
+  end
   local enabled_total = 0
   for _, recipe in ipairs(candidates) do if recipe.enabled then enabled_total = enabled_total + 1 end end
   local rows = {}
@@ -172,7 +189,7 @@ local function planning_recipes(a)
   end
   return { force = force.name, product = a.product, type = a.type, recipes = rows,
            total = total, truncated = total > #rows,
-           enabled_total = enabled_total, enabled_shown = enabled_shown }
+           enabled_total = enabled_total, enabled_shown = enabled_shown, suggestions=alternatives }
 end
 
 M.functions = { planning_recipes = planning_recipes }
