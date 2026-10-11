@@ -69,10 +69,18 @@ test('native lookup contracts declare scope and preserve exact local targets', (
    assert(functions.locate_player({force='player',player='other'}).found==false)
    local force=game.forces.player
    force.get_entity_count=function() return 0 end
-   force.logistic_networks={nauvis={{get_item_count=function(stack,inventory)
+   force.logistic_networks={nauvis={{network_id=1,cells={},all_logistic_robots=0,available_logistic_robots=0,
+    all_construction_robots=50,available_construction_robots=50,get_contents=function()
+     local items={{name='chemical-plant',count=40}}
+     for i=1,8 do items[#items+1]={name='part-'..i,count=100} end
+     return items
+    end,get_item_count=function(stack,inventory)
     assert(stack.quality=='normal' and (inventory=='providers' or inventory=='storage'))
     return stack.name=='chemical-plant' and 20 or 0
    end}}}
+   local stock=functions.logistics_summary({force='player',surface='nauvis'}).networks[1]
+   assert(stock.distinct_items==9 and stock.contents_shown==8 and stock.contents_omitted==1)
+   for _,item in ipairs(stock.contents) do assert(item.name~='chemical-plant') end
    force.recipes={
     plastic={name='plastic',enabled=true,hidden=false,category='chemistry',energy=1,
      ingredients={},products={{name='plastic-bar',type='item',amount=2}},productivity_bonus=0,

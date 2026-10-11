@@ -35,7 +35,7 @@ local M = {}
 
 M.manifest = {
   logistics_summary = {
-    desc = "Logistic networks of one force on one surface, busiest first: robots, idle robots, cells, eight largest item stacks over all qualities (do we have enough bots, what is in the chests). Unknown surface: found=false.",
+    desc = "Logistic networks of one force on one surface, busiest first: robots, idle robots, cells, a sample of the eight largest item stacks over all qualities. contents_omitted counts unlisted item kinds; an item missing from this sample is not absent. For construction machines, planning_recipes returns exact normal-quality construction_stock. Unknown surface: found=false.",
     params = {
       surface  = "string! surface name or index, e.g. nauvis",
       limit    = "integer networks, default " .. DEFAULT_NETWORKS .. ", max " .. MAX_NETWORKS,
@@ -64,6 +64,7 @@ local function network_row(network, with_contents)
     local contents, distinct = contents_of.largest(network, CONTENTS_PER_NETWORK)
     row.distinct_items = distinct
     row.contents_shown = #contents
+    row.contents_omitted = distinct - #contents
     row.contents = contents
   end
   return row
