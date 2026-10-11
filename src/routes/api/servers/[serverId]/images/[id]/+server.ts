@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { readFactoryImage } from '$lib/server/factory-images';
+import { factoryImageRendering, readFactoryImage } from '$lib/server/factory-images';
 import { ServerError } from '$lib/server/server-files';
 import { requireServer } from '$lib/server/servers';
 import type { RequestHandler } from './$types';
@@ -18,7 +18,11 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 		});
 	} catch (cause) {
 		if (cause instanceof ServerError) error(cause.status, cause.message);
-		if ((cause as NodeJS.ErrnoException).code === 'ENOENT') error(404, 'Factory image not found');
+		if ((cause as NodeJS.ErrnoException).code === 'ENOENT')
+			error(
+				factoryImageRendering(server.id, params.id) ? 425 : 404,
+				'Factory image is preparing or unavailable'
+			);
 		throw cause;
 	}
 };

@@ -1,7 +1,9 @@
 import { z } from 'zod';
 
-export const factoryImageSchema = z.object({
-	id: z.string().regex(/^[a-f0-9]{64}$/),
+export const factoryImageReferenceSchema = z.object({
+	id: z.string().regex(/^[a-f0-9]{64}$/)
+});
+export const factoryImageSchema = factoryImageReferenceSchema.extend({
 	width: z.number().int().min(1).max(1536),
 	height: z.number().int().min(1).max(1536)
 });
@@ -30,8 +32,14 @@ export const factoryViewSchema = z.object({
 	count: z.number().int().positive().max(1000),
 	image: factoryImageSchema
 });
-export const factoryImageUrl = (serverId: string, image: FactoryImage) =>
-	`/api/servers/${encodeURIComponent(serverId)}/images/${image.id}`;
+export const factoryPreviewPendingSchema = factoryViewSchema.omit({ image: true }).extend({
+	kind: z.literal('factory-preview-pending'),
+	image: factoryImageReferenceSchema
+});
+export const factoryImageUrl = (
+	serverId: string,
+	image: z.infer<typeof factoryImageReferenceSchema>
+) => `/api/servers/${encodeURIComponent(serverId)}/images/${image.id}`;
 
 export const factoryImageArtifactSchema = z.object({
 	kind: z.literal('factory-image'),

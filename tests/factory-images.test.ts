@@ -49,6 +49,44 @@ const message = (imageId = id, toolName = 'factory_view'): ToolResultMessage => 
 test('blueprint rendering preserves mod names, recipes and native quality settings', () => {
 	assert.deepEqual(blueprintImageData(encode(layout)), layout);
 });
+test('a pending snapshot becomes model-visible when its original image finishes without recapturing', () => {
+	const pending = message();
+	pending.content = [
+		{
+			type: 'text',
+			text: JSON.stringify({
+				kind: 'factory-result',
+				result: { kind: 'factory-preview-pending', image: { id } }
+			})
+		}
+	];
+	const context = normalizeContext({ messages: [pending] });
+	const preparing = addFactoryImages(context, () => {
+		throw new Error('Not ready');
+	});
+	const before = preparing.messages.find((item) => item.role === 'toolResult');
+	assert.equal(
+		before?.content.some((part) => part.type === 'image'),
+		false
+	);
+	assert.match(JSON.stringify(before?.content), /do not recapture/);
+	const completed = addFactoryImages(context, () => png);
+	const after = completed.messages.find((item) => item.role === 'toolResult');
+	assert.deepEqual(
+		after?.content.find((part) => part.type === 'image'),
+		{
+			type: 'image',
+			data: png.toString('base64'),
+			mimeType: 'image/png'
+		}
+	);
+	assert.equal(
+		context.messages.some(
+			(item) => item.role === 'toolResult' && item.content.some((part) => part.type === 'image')
+		),
+		false
+	);
+});
 test('blueprint title changes reuse the same rendered layout', () => {
 	assert.deepEqual(
 		blueprintImageData(encode({ ...layout, label: 'Draft', description: 'First', icons: [] })),

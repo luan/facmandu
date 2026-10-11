@@ -1,14 +1,16 @@
 import type { TranscriptContext } from '@earendil-works/pi-ai';
 import { z } from 'zod';
-import { factoryImageSchema } from '$lib/factory-images';
+import { factoryImageReferenceSchema } from '$lib/factory-images';
 import { pngDimensions } from './factory-image-data';
 
 const imageResult = z.union([
 	z.object({
 		kind: z.literal('factory-result'),
-		result: z.object({ image: factoryImageSchema })
+		result: z.object({ kind: z.string().optional(), image: factoryImageReferenceSchema })
 	}),
-	z.object({ image: factoryImageSchema }).transform(({ image }) => ({ result: { image } }))
+	z
+		.object({ kind: z.string().optional(), image: factoryImageReferenceSchema })
+		.transform((result) => ({ result }))
 ]);
 // Load at the provider boundary: transcripts store small immutable image references, not base64 JSON.
 export function addFactoryImages(
@@ -16,7 +18,7 @@ export function addFactoryImages(
 	read: (id: string) => Buffer,
 	vision = true
 ): TranscriptContext {
-	const images = new Map<number, string>();
+	const images = new Map<number, { id: string; pending: boolean }>();
 	for (const [index, message] of context.messages.entries()) {
 		if (
 			message.role !== 'toolResult' ||
@@ -28,7 +30,11 @@ export function addFactoryImages(
 			if (part.type !== 'text') continue;
 			try {
 				const parsed = imageResult.safeParse(JSON.parse(part.text));
-				if (parsed.success) images.set(index, parsed.data.result.image.id);
+				if (parsed.success)
+					images.set(index, {
+						id: parsed.data.result.image.id,
+						pending: parsed.data.result.kind === 'factory-preview-pending'
+					});
 			} catch {
 				/* Other tool text is not an image reference. */
 			}
@@ -39,11 +45,11 @@ export function addFactoryImages(
 	return {
 		...context,
 		messages: context.messages.map((message, index) => {
-			const id = selected.get(index);
-			if (!id || message.role !== 'toolResult') return message;
+			const selectedImage = selected.get(index);
+			if (!selectedImage || message.role !== 'toolResult') return message;
 			try {
 				if (!vision) throw new Error('This model does not support images');
-				const png = read(id);
+				const png = read(selectedImage.id);
 				pngDimensions(png);
 				return {
 					...message,
@@ -60,7 +66,9 @@ export function addFactoryImages(
 						{
 							type: 'text' as const,
 							text: vision
-								? 'The referenced factory image is unavailable. Do not claim to have viewed it; capture another factory_view.'
+								? selectedImage.pending
+									? 'The factory image is still preparing or unavailable. Continue with structured queries; do not recapture or claim to have viewed it.'
+									: 'The referenced factory image is unavailable. Do not claim to have viewed it; capture another factory_view.'
 								: 'This model does not support image input. The harness displays the snapshot, but you have not viewed it. Use structured factory queries.'
 						}
 					]

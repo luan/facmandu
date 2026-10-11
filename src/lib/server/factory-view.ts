@@ -5,7 +5,7 @@ import {
 	factoryViewSchema
 } from '$lib/factory-images';
 import type { ManagedServer } from './db/schema';
-import { renderFactoryBlueprint } from './factory-images';
+import { FactoryImagePending, renderFactoryBlueprint } from './factory-images';
 import source from './factory-view.lua?raw';
 import { ServerError } from './server-files';
 import { serverStatus } from './server-process';
@@ -52,11 +52,12 @@ export async function captureFactoryView(server: ManagedServer, input: unknown, 
 	try {
 		return { ...snapshot, image: await renderFactoryBlueprint(server, blueprint, 2000) };
 	} catch (cause) {
-		if (!(cause instanceof ServerError) || cause.status !== 425) throw cause;
+		if (!(cause instanceof FactoryImagePending)) throw cause;
 		return {
 			...snapshot,
 			kind: 'factory-preview-pending' as const,
-			note: 'Preview is rendering in background Activity; no image is available yet. Do not retry while preparing. Continue with structured factory lookups; request the image later if needed.'
+			image: { id: cause.imageId },
+			note: 'Preview is rendering. It will appear automatically when ready; continue with structured lookups instead of recapturing.'
 		};
 	}
 }

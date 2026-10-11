@@ -15,6 +15,13 @@ import { executable } from './server-process';
 const run = promisify(execFile);
 const renders = new Map<string, Promise<FactoryImage>>();
 const renderer = join(homedir(), '.local/share/facmandu-renderer/current/render.py');
+export class FactoryImagePending extends ServerError {
+	constructor(readonly imageId: string) {
+		super(425, 'Factory image is still rendering');
+	}
+}
+export const factoryImageRendering = (serverId: string, id: string) =>
+	renders.has(`${serverId}:${id}`);
 export const factoryImagePath = (server: ManagedServer, id: string) => {
 	if (!/^[a-f0-9]{64}$/u.test(id)) throw new ServerError(400, 'Invalid image identifier');
 	return join(server.directory, 'factory-images', `${id}.png`);
@@ -123,16 +130,7 @@ export async function renderFactoryBlueprint(
 		return await Promise.race([
 			pending,
 			new Promise<never>((_resolve, reject) => {
-				timer = setTimeout(
-					() =>
-						reject(
-							new ServerError(
-								425,
-								'Sprites are still preparing. Follow Activity, then retry this view; rendering continues in the background.'
-							)
-						),
-					waitMs
-				);
+				timer = setTimeout(() => reject(new FactoryImagePending(id)), waitMs);
 			})
 		]);
 	} finally {

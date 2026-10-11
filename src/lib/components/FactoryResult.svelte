@@ -6,12 +6,12 @@
  import { blueprintArtifactSchema } from '$lib/blueprints';
  import BlueprintResult from './BlueprintResult.svelte';
  import FactoryImage from './FactoryImage.svelte';
- import { factoryViewSchema, factoryImageArtifactSchema } from '$lib/factory-images';
+ import { factoryViewSchema, factoryPreviewPendingSchema, factoryImageArtifactSchema } from '$lib/factory-images';
  import PrototypeIcon from './PrototypeIcon.svelte';
  import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
  let { item, serverId }: { item: FactoryResult; serverId?: string } = $props();
  const renderedImage = $derived(factoryImageArtifactSchema.safeParse(item.result));
- const snapshot = $derived(factoryViewSchema.safeParse(item.result));
+ const snapshot = $derived(factoryViewSchema.or(factoryPreviewPendingSchema).safeParse(item.result));
  const blueprint = $derived(blueprintArtifactSchema.safeParse(item.result));
  const view = $derived(presentFactoryResult(item));
  const Icon = $derived(({ research: FlaskConicalIcon, players: UsersIcon, production: ChartNoAxesCombinedIcon, location: MapPinIcon, server: ServerIcon })[view.icon]);
