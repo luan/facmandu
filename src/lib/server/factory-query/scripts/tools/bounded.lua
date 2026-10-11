@@ -14,6 +14,12 @@
 
 local M = {}
 
+function M.text(value, limit)
+  if #value <= limit then return value end
+  while limit > 0 and value:byte(limit + 1) >= 128 and value:byte(limit + 1) <= 191 do limit = limit - 1 end
+  return value:sub(1, limit)
+end
+
 --- The row cap every force sweep shares. A scenario mod can run dozens of
 --- forces, so a sweep that answers for all of them still has to stop
 --- somewhere, and it must stop at the same place in every tool.

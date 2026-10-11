@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { and, desc, eq } from 'drizzle-orm';
-import { gameReply, parseGameChat, parseGameUi } from '$lib/game-chat';
+import { factoryResultSchema } from '$lib/assistant-results';
+import { blueprintArtifactSchema } from '$lib/blueprints';
+import { gameReply, gameText, parseGameChat, parseGameUi } from '$lib/game-chat';
 import { routeAmbientChat } from './ambient-chat';
 import { db } from './db';
 import { genID } from './db/ids';
@@ -88,10 +90,12 @@ async function syncPanel(
 	const state = {
 		current: current?.id,
 		status:
-			(!sourceChat || sourceChat === current?.id ? progress?.slice(0, 500) : undefined) ??
-			(turn?.state === 'running' ? 'Working…' : 'Ready'),
-		answer: (turn?.answer ?? '').slice(0, 6000),
-		chats: chats.map((chat) => ({ id: chat.id, title: chat.title.slice(0, 200) }))
+			(!sourceChat || sourceChat === current?.id
+				? progress && gameText(progress, 500)
+				: undefined) ?? (turn?.state === 'running' ? 'Working…' : 'Ready'),
+		answer: gameText(turn?.answer ?? '', 6000),
+		blueprint: panelBlueprint(turn?.results ?? '[]'),
+		chats: chats.map((chat) => ({ id: chat.id, title: gameText(chat.title, 200) }))
 	};
 	if (sessions.get(server.id) !== session) return;
 	const encoded = JSON.stringify(JSON.stringify(state));
@@ -99,6 +103,21 @@ async function syncPanel(
 		server,
 		`/silent-command local p=game.get_player(${JSON.stringify(player)}); local i=remote.interfaces['facmandu-assistant']; if p and p.connected and i and i.update_player then remote.call('facmandu-assistant','update_player',p.index,helpers.json_to_table(${encoded})) end`
 	);
+}
+function panelBlueprint(results: string): string | undefined {
+	try {
+		const data: unknown = JSON.parse(results);
+		if (!Array.isArray(data)) return;
+		for (const entry of data.toReversed()) {
+			const result = factoryResultSchema.safeParse(entry);
+			if (!result.success || !result.data.display) continue;
+			const blueprint = blueprintArtifactSchema.safeParse(result.data.result);
+			if (blueprint.success && blueprint.data.blueprint.length <= 65536)
+				return blueprint.data.blueprint;
+		}
+	} catch {
+		/* A damaged historic result must not prevent chat updates. */
+	}
 }
 async function receiveUi(
 	server: ManagedServer,

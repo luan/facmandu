@@ -102,3 +102,14 @@ export function parseGameUi(text: string) {
 		return null;
 	}
 }
+// Native GUI strings are capped in UTF-8 bytes, not JavaScript code units.
+export function gameText(value: string, bytes: number): string {
+	let result = '';
+	let size = 0;
+	for (const char of value) {
+		size += Buffer.byteLength(char);
+		if (size > bytes) break;
+		result += char;
+	}
+	return result;
+}

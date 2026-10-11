@@ -290,7 +290,7 @@ test('planner adapters use only documented reads and keep private plans and othe
  native.call=function(interface,method,index)
   if interface=='fp-interface' then
    assert(method=='export_current_factory' and index==1)
-   return {name='glass',blueprint_strings={'huge omitted string'},top_floor={lines={{machine={amount=8}}}}}
+   return {name='glass',note=string.rep('中',200),blueprint_strings={'huge omitted string'},top_floor={lines={{machine={amount=8}}}}}
   end
   assert(interface=='helmod_interface' and method=='get_models')
   return {
@@ -305,6 +305,7 @@ test('planner adapters use only documented reads and keep private plans and othe
  local args={force='player',player='alice',planner='factoryplanner'}
  local plan=tools.read_factory_plan(args)
  assert(plan.plan.top_floor.lines[1].machine.amount==8 and not plan.plan.blueprint_strings)
+ assert(plan.truncated and plan.plan.note==string.rep('中',166))
  args.planner='helmod'
  local list=tools.read_factory_plan(args)
  assert(list.total==2 and #list.plans==2)

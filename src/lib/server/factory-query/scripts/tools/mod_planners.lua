@@ -1,5 +1,6 @@
 -- Only these documented read interfaces are callable; mods cannot advertise actions.
 local force_lookup = require('scripts.tools.force_lookup')
+local bounded = require('scripts.tools.bounded')
 local M = {}
 function M.provider(native_remote)
  local manifest = {
@@ -62,7 +63,7 @@ function M.provider(native_remote)
    budget=budget-1
    if budget<0 or depth>12 then truncated=true;return nil end
    local kind=type(value)
-   if kind=='string' then if #value>500 then truncated=true;return value:sub(1,500) end return value end
+   if kind=='string' then if #value>500 then truncated=true;return bounded.text(value,500) end return value end
    if kind=='number' or kind=='boolean' then return value end
    if kind~='table' then return nil end
    if seen[value] then truncated=true;return nil end

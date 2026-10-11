@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { gameReply, parseGameChat } from '../src/lib/game-chat';
+import { gameReply, gameText, parseGameChat } from '../src/lib/game-chat';
+
+test('native panel strings keep Unicode intact within their byte budget', () => {
+	assert.equal(gameText('a🦊中z', 7), 'a🦊');
+	assert.equal(gameText('a🦊中z', 8), 'a🦊中');
+	assert.equal(gameText('á'.repeat(3000), 500), 'á'.repeat(250));
+});
 
 test('parses only timestamped player mentions from chat output', () => {
 	assert.deepEqual(parseGameChat('2026-09-30 12:34:56 [CHAT] Luan_2: @Assistant Where is oil?'), {

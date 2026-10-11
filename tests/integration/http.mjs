@@ -2656,11 +2656,11 @@ done
 	assert.equal(tobyZip.status, 200);
 	const tobyFiles = unzipSync(new Uint8Array(await tobyZip.arrayBuffer()));
 	assert.equal(
-		JSON.parse(Buffer.from(tobyFiles['facmandu-assistant_0.1.0/info.json']).toString()).title,
+		JSON.parse(Buffer.from(tobyFiles['facmandu-assistant_0.2.0/info.json']).toString()).title,
 		'Toby · Facmandu Assistant'
 	);
 	assert.ok(
-		Buffer.from(tobyFiles['facmandu-assistant_0.1.0/control.lua'])
+		Buffer.from(tobyFiles['facmandu-assistant_0.2.0/control.lua'])
 			.toString()
 			.includes('FACMANDU_UI')
 	);
@@ -2682,14 +2682,14 @@ done
 	);
 	await action(`${secondPath}?/manage`, cookies.owner, { operation: 'installToby' });
 	assert.deepEqual(
-		unzipSync(await readFile(join(machineDirs[1], 'mods/facmandu-assistant_0.1.0.zip'))),
+		unzipSync(await readFile(join(machineDirs[1], 'mods/facmandu-assistant_0.2.0.zip'))),
 		tobyFiles
 	);
 	assert.deepEqual(
 		(await readState(1, 'mods/mod-list.json')).mods.find(
 			(mod) => mod.name === 'facmandu-assistant'
 		),
-		{ name: 'facmandu-assistant', version: '0.1.0', enabled: true }
+		{ name: 'facmandu-assistant', version: '0.2.0', enabled: true }
 	);
 	assert.deepEqual(
 		await readFile(join(machineDirs[1], 'saves/context-world.zip')),
@@ -2946,9 +2946,33 @@ done
 			})
 		);
 		assert.match(await uiReply, /Toby: Iron nearby/u);
+		const panelDesign = {
+			kind: 'blueprint',
+			label: 'Glass',
+			blueprint: '0eJw=',
+			entities: [{ name: 'transport-belt', position: { x: 0.5, y: 0.5 }, width: 1, height: 1 }],
+			cost: [{ name: 'transport-belt', count: 1 }]
+		};
+		await client.execute({
+			sql: 'UPDATE server_assistant_turn SET results = ? WHERE chat_id = ?',
+			args: [
+				JSON.stringify([
+					{ kind: 'factory-result', title: 'Blueprint', display: true, result: panelDesign },
+					{
+						kind: 'factory-result',
+						title: 'Intermediate draft',
+						display: false,
+						result: { ...panelDesign, blueprint: '0draft' }
+					}
+				]),
+				newPanel.current
+			]
+		});
 		const selectedPanel = nextPanelUpdate('PanelUser');
 		await appendFile(gameLog, uiLine('PanelUser', 'select', 4, { chat: newPanel.current }));
-		assert.equal((await selectedPanel).current, newPanel.current);
+		const selectedState = await selectedPanel;
+		assert.equal(selectedState.current, newPanel.current);
+		assert.equal(selectedState.blueprint, panelDesign.blueprint);
 		assert.ok(
 			panelUpdates.every(
 				(update) =>
