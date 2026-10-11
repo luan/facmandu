@@ -119,7 +119,7 @@ public final class FacmanduRenderer {
                     throw new IllegalStateException("Missing sprites: " + result.unknownEntities.elementSet()
                         + result.unknownTiles.elementSet() + result.unknownQualities.elementSet());
                 }
-                if (!reporting.getExceptions().isEmpty()) throw new IllegalStateException("Sprite rendering failed", reporting.getExceptions().get(0));
+                if (!reporting.getExceptions().isEmpty()) throw new IllegalStateException("Sprite rendering failed: " + reporting.getExceptions().get(0).getMessage(), reporting.getExceptions().get(0));
                 if (!ImageIO.write(result.image, "PNG", Path.of(args[2]).toFile())) throw new IllegalStateException("Cannot encode PNG");
             } else {
                 throw new IllegalArgumentException("Expected build or render");

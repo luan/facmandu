@@ -47,3 +47,9 @@ old = 'String.format("%02d", (int) Math.round(i) % 100)'
 assert s.count(old) == 2
 s = s.replace(old, 'Integer.toString((int)x)', 1).replace(old, 'Integer.toString((int)y)', 1)
 p.write_text(s)
+# Cargo-bay connections can deliberately have no sprite variations in current mod prototypes.
+p = root / 'Factorio-FBSR/FactorioBlueprintStringRenderer/src/com/demod/fbsr/entity/CargoBayConnectionsRendering.java'
+s = p.read_text()
+old = 'int variation = rand.nextInt(protoSprites.getVariationCount());'
+assert old in s
+p.write_text(s.replace(old, 'if (protoSprites.getVariationCount() == 0) continue;\n\t\t\t' + old))
