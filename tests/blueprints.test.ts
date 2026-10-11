@@ -34,7 +34,8 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
  inserter.inserter_pickup_position={x=0,y=-1}
  inserter.inserter_drop_position={x=0,y=1.2}
  local belt=prototype('transport-belt',1);belt.belt_speed=0.03125
- prototypes={entity={plant=plant,inserter=inserter,belt=belt}}
+ local box=prototype('container',3);box.tile_height=1;box.supports_direction=false
+ prototypes={entity={plant=plant,inserter=inserter,belt=belt,box=box}}
  game={forces={player={recipes={{enabled=true,products={{type='item',name='building'}}}}}},create_inventory=function()
   local saved
   return {{set_stack=function() end,set_blueprint_entities=function(value) saved=value end,
@@ -42,6 +43,10 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
    export_stack=function() return '0native' end,cost_to_build={{name='building',count=5}}}}
  end}
  ${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
+ local fixed=blueprint{operation='create',force='player',label='Nondirectional',entities={
+  {name='box',position={x=1.5,y=0.5},direction=4}
+ }}
+ assert(fixed.entities[1].direction==0 and fixed.entities[1].width==3 and fixed.entities[1].height==1)
  for rotation=0,12,4 do
   local function point(x,y)
    if rotation==4 then return {x=-y,y=x} end
@@ -60,10 +65,16 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
   assert(a.pickup_entity==1 and a.drop_entity==3 and a.drop_belt_side=='right')
   assert(b.pickup_entity==5 and b.drop_entity==3 and b.drop_belt_side=='left')
   assert(a.belt_lane_items_per_second==7.5 and b.belt_lane_items_per_second==7.5)
+  assert(not result.warnings)
   local result=blueprint{operation='create',force='player',label='Custom',entities={
    entity('plant',2.5,0.5,0),entity('inserter',2.5,2.5,0,0.8),entity('belt',2.5,3.5,4)
   }}
   assert(result.inserter_transfers[1].drop_belt_side=='left')
+  local single_lane=blueprint{operation='create',force='player',label='One lane',entities={
+   entity('inserter',2.5,2.5,0),entity('belt',2.5,3.5,4),entity('belt',3.5,3.5,4),
+   entity('inserter',4.5,2.5,0),entity('belt',4.5,3.5,4)
+  }}
+  assert(#single_lane.warnings==1 and single_lane.warnings[1]:match('7.5 items/s'))
   local isolated=blueprint{operation='create',force='player',label='External',entities={entity('inserter',2.5,2.5,0)}}
   assert(not isolated.inserter_transfers[1].pickup_entity and not isolated.inserter_transfers[1].drop_entity)
  end
@@ -382,11 +393,13 @@ test('saved blueprint references retain omitted entity settings and require exac
 		operation: 'create',
 		force: 'player',
 		designId,
-		entityChanges: [{ index: 1, changes: { recipe: 'plastic-bar' } }]
+		entityChanges: [{ index: 1, changes: { recipe: 'plastic-bar' } }],
+		addedEntityRows: [{ entity: design.entities[0], count: 10, step: { x: 1, y: 0 } }]
 	});
 	if (!('designId' in revision) || revision.operation !== 'create')
 		throw new Error('Expected reference');
 	assert.deepEqual(revision.entityChanges[0]?.changes, { recipe: 'plastic-bar' });
+	assert.equal(revision.addedEntityRows?.[0]?.count, 10);
 	for (const invalid of [
 		{ ...revision, designId: '../secret' },
 		{ ...revision, entityChanges: [{ index: 0, changes: { direction: 4 } }] },

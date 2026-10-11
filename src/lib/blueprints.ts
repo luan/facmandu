@@ -13,7 +13,7 @@ const wire = z.tuple([
 export const blueprintEntitySchema = z.strictObject({
 	name,
 	position: z.strictObject({ x: coordinate, y: coordinate }),
-	direction: z.union([z.literal(0), z.literal(4), z.literal(8), z.literal(12)]).default(0),
+	direction: z.literal([0, 4, 8, 12]).default(0),
 	recipe: name.optional(),
 	type: z.enum(['input', 'output']).optional(),
 	filters: z
@@ -156,7 +156,8 @@ export const blueprintReferenceSchema = z.discriminatedUnion('operation', [
 			.array(z.strictObject({ index: z.number().int().min(1).max(200), changes: entityPatch }))
 			.max(200)
 			.default([]),
-		addedEntities: z.array(blueprintEntitySchema).max(200).default([])
+		addedEntities: z.array(blueprintEntitySchema).max(200).default([]),
+		addedEntityRows: entityRows.optional()
 	}),
 	designReference.extend({
 		operation: z.literal('inspect'),

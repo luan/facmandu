@@ -6,7 +6,6 @@ import {
 	type BlueprintRequest,
 	blueprintDesignSchema,
 	blueprintEntitySchema,
-	blueprintInputSchema,
 	blueprintReferenceSchema,
 	blueprintRequestSchema,
 	blueprintRowsSchema,
@@ -102,7 +101,15 @@ export async function factoryBlueprint(
 	input: unknown,
 	player?: { name: string; requireAdmin: boolean }
 ) {
-	const parsed = blueprintInputSchema.safeParse(input);
+	const schema =
+		typeof input === 'object' && input !== null && !Array.isArray(input)
+			? 'designId' in input
+				? blueprintReferenceSchema
+				: 'entityRows' in input
+					? blueprintRowsSchema
+					: blueprintRequestSchema
+			: blueprintRequestSchema;
+	const parsed = schema.safeParse(input);
 	if (!parsed.success)
 		throw new ServerError(
 			400,
@@ -142,17 +149,26 @@ export async function factoryBlueprint(
 					...patch.changes
 				});
 			}
-			resolved = blueprintRequestSchema.parse({
+			const revised = {
 				...saved,
 				label: reference.label ?? saved.label,
 				entities: [...entities, ...reference.addedEntities],
 				operation: 'create'
-			});
+			};
+			resolved = reference.addedEntityRows
+				? expandBlueprintRows(
+						blueprintRowsSchema.parse({ ...revised, entityRows: reference.addedEntityRows })
+					)
+				: blueprintRequestSchema.parse(revised);
 		} else {
 			const { designId: _id, ...target } = reference;
 			resolved = blueprintRequestSchema.parse({ ...saved, ...target });
 		}
-	} else resolved = 'entityRows' in parsed.data ? expandBlueprintRows(parsed.data) : parsed.data;
+	} else
+		resolved =
+			'entityRows' in parsed.data
+				? expandBlueprintRows(blueprintRowsSchema.parse(parsed.data))
+				: parsed.data;
 	if (!(await serverStatus(server)).running)
 		throw new ServerError(409, 'Start this server to design or place a blueprint');
 	const raw = await rconScript(server, blueprintCommand(resolved, player));

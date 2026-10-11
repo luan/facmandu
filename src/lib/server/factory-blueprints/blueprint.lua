@@ -107,7 +107,7 @@ local function blueprint(request)
      end
     end
     local custom_vectors;if p.type=='inserter' then custom_vectors=p.allow_custom_vectors end
-    entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,collision_box=p.collision_box,crafting_categories=p.crafting_categories,belt_items_per_second=p.belt_speed and p.belt_speed*480,fluid_connections=connections,inserter_connections=inserter_connections(p),allow_custom_vectors=custom_vectors,unlocked=unlocked(available,p),blueprint_settings_example=control_example(p.type)}
+    entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,supports_direction=p.supports_direction,collision_box=p.collision_box,crafting_categories=p.crafting_categories,belt_items_per_second=p.belt_speed and p.belt_speed*480,fluid_connections=connections,inserter_connections=inserter_connections(p),allow_custom_vectors=custom_vectors,unlocked=unlocked(available,p),blueprint_settings_example=control_example(p.type)}
    elseif name=='space-platform-foundation' and prototypes.tile[name] then
     entities[#entities+1]={name=name,type='tile',width=1,height=1,unlocked=unlocked(available,prototypes.tile[name])}
    else
@@ -182,7 +182,9 @@ local function blueprint(request)
   for _,wire in ipairs(e.wires or {}) do
    if not request.entities[wire[1]] or not request.entities[wire[3]] or (wire[1]~=i and wire[3]~=i) then error('Wire endpoints must refer to this blueprint entity and another existing entity',0) end
   end
-  local w,h=dimensions(p,e.direction)
+  -- Factorio omits rotation for nondirectional prototypes, including ordinary pipes and chests.
+  local direction=p.supports_direction==false and 0 or e.direction
+  local w,h=dimensions(p,direction)
   if (e.position.x-w/2)%1~=0 or (e.position.y-h/2)%1~=0 then error('Entity is not aligned to the tile grid: '..e.name,0) end
   local box={x1=e.position.x-w/2,y1=e.position.y-h/2,x2=e.position.x+w/2,y2=e.position.y+h/2}
   for j,b in ipairs(boxes) do
@@ -192,8 +194,8 @@ local function blueprint(request)
    end
   end
   boxes[#boxes+1]=box
-  entities[i]={entity_number=i,name=e.name,position=e.position,direction=e.direction,recipe=e.recipe,type=e.type}
-  preview[i]={name=e.name,position=e.position,direction=e.direction,recipe=e.recipe,type=e.type,width=w,height=h}
+  entities[i]={entity_number=i,name=e.name,position=e.position,direction=direction,recipe=e.recipe,type=e.type}
+  preview[i]={name=e.name,position=e.position,direction=direction,recipe=e.recipe,type=e.type,width=w,height=h}
   for _,key in ipairs(settings) do entities[i][key]=e[key];preview[i][key]=e[key] end
   local wires={}
   for _,wire in ipairs(e.wires or {}) do wires[#wires+1]=wire end
@@ -228,7 +230,11 @@ local function blueprint(request)
  local normalized=stack.get_blueprint_entities() or {}
  if not normalized or #normalized~=#entities then error('Factorio rejected blueprint entities',0) end
  for i,e in ipairs(normalized) do
-  if e.name~=entities[i].name or e.position.x~=entities[i].position.x or e.position.y~=entities[i].position.y or (e.direction or 0)~=entities[i].direction or e.recipe~=entities[i].recipe or e.type~=entities[i].type then error('Factorio changed blueprint settings; adjust the design',0) end
+  for _,key in ipairs({'name','direction','recipe','type'}) do
+   local actual=key=='direction' and (e.direction or 0) or e[key]
+   if actual~=entities[i][key] then error('Factorio changed entity '..i..' ('..entities[i].name..') '..key..': requested '..tostring(entities[i][key])..', native '..tostring(actual)..'. Adjust that setting.',0) end
+  end
+  if e.position.x~=entities[i].position.x or e.position.y~=entities[i].position.y then error('Factorio changed entity '..i..' ('..e.name..') position; adjust its tile alignment',0) end
   for _,key in ipairs(settings) do
    local wanted=entities[i][key]
    local actual=e[key]
@@ -254,7 +260,7 @@ local function blueprint(request)
  for _,item in pairs(stack.cost_to_build) do cost[#cost+1]={name=item.name,count=item.count} end
  table.sort(cost,function(a,b)return a.name<b.name end)
  if request.operation=='create' then
-  local transfers={}
+  local transfers,rows={},{}
   local function target_at(position)
    for i,b in ipairs(boxes) do
     if position.x>=b.x1 and position.x<b.x2 and position.y>=b.y1 and position.y<b.y2 then return i end
@@ -281,6 +287,26 @@ local function blueprint(request)
      capacity=prototypes.entity[belt.name].belt_speed*240
     end
     transfers[#transfers+1]={inserter=i,pickup=pickup,drop=drop,pickup_entity=pickup_index,drop_entity=drop_index,drop_belt_side=side,belt_lane_items_per_second=capacity}
+    if side then
+     local last=drop_index
+     local headings={[0]={0,-1},[4]={1,0},[8]={0,1},[12]={-1,0}}
+     local heading=headings[belt.direction]
+     while true do
+      local at=entities[last].position
+      local next_index=target_at{x=at.x+heading[1],y=at.y+heading[2]}
+      local next_entity=next_index and entities[next_index]
+      if not next_entity or next_index==last or prototypes.entity[next_entity.name].type~='transport-belt' or next_entity.direction~=belt.direction then break end
+      last=next_index
+     end
+     rows[last]=rows[last] or {left=0,right=0,center=0}
+     rows[last][side]=rows[last][side]+1
+    end
+   end
+  end
+  for last,row in pairs(rows) do
+   if row.center==0 and row.left+row.right>=2 and (row.left==0 or row.right==0) then
+    local side=row.left>0 and 'left' or 'right'
+    warn('All '..(row.left+row.right)..' planned inserters feeding the straight belt row ending at entity '..last..' use its '..side..' lane ('..(prototypes.entity[entities[last].name].belt_speed*240)..' items/s). No planned inserter feeds its other lane; check the requested output rate and existing-world feeds before placement.')
    end
   end
   -- Planned endpoints do not prove curved-belt routing or connections to the existing factory.
