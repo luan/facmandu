@@ -233,3 +233,25 @@ test('collector filters and native combinator sections survive the tool boundary
 		false
 	);
 });
+
+test('blueprint-level wires are accepted and remain bound to placement inspection', () => {
+	const configured = {
+		...target,
+		wires: [[1, 1, 2, 1]],
+		entities: [
+			{ name: 'constant-combinator', position: { x: 0.5, y: 0.5 }, direction: 0 },
+			{ name: 'inserter', position: { x: 2.5, y: 0.5 }, direction: 0 }
+		]
+	};
+	const parsed = blueprintTargetSchema.parse(configured);
+	const expectedDesign = createHash('sha256').update(JSON.stringify(parsed)).digest('hex');
+	const request = blueprintRequestSchema.parse({
+		...configured,
+		operation: 'place',
+		expectedTick: 10,
+		expectedDesign
+	});
+	if (request.operation !== 'place') throw new Error('Expected placement');
+	assert.ok(blueprintCommand(request).startsWith('/silent-command'));
+	assert.throws(() => blueprintCommand({ ...request, wires: [] }), /Blueprint changed/);
+});

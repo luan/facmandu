@@ -67,6 +67,7 @@ export const blueprintTileSchema = z.strictObject({
 // Modules and train schedules need explicit request/settings support before being added.
 export const blueprintDesignSchema = z.strictObject({
 	force: name,
+	wires: z.array(wire).max(1000).default([]),
 	label: z.string().min(1).max(120),
 	entities: z.array(blueprintEntitySchema).max(200).default([]),
 	tiles: z.array(blueprintTileSchema).max(1024).default([])

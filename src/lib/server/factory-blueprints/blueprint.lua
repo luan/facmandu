@@ -185,7 +185,16 @@ local function blueprint(request)
   entities[i]={entity_number=i,name=e.name,position=e.position,direction=e.direction,recipe=e.recipe,type=e.type}
   preview[i]={name=e.name,position=e.position,direction=e.direction,recipe=e.recipe,type=e.type,width=w,height=h}
   for _,key in ipairs(settings) do entities[i][key]=e[key];preview[i][key]=e[key] end
-  entities[i].wires=e.wires;preview[i].wires=e.wires
+  local wires={}
+  for _,wire in ipairs(e.wires or {}) do wires[#wires+1]=wire end
+  entities[i].wires=#wires>0 and wires or nil;preview[i].wires=entities[i].wires
+ end
+ for _,wire in ipairs(request.wires or {}) do
+  local source,target=entities[wire[1]],entities[wire[3]]
+  if not source or not target then error('Wire endpoints must refer to existing blueprint entity indices',0) end
+  source.wires=source.wires or {}
+  source.wires[#source.wires+1]=wire
+  preview[wire[1]].wires=source.wires
  end
  inventory=game.create_inventory(1)
  local stack=inventory[1]

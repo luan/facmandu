@@ -30,6 +30,7 @@ export function blueprintCommand(
 						force: input.force,
 						label: input.label,
 						entities: input.entities,
+						wires: input.wires,
 						tiles: input.tiles
 					})
 				: createHash('sha256')
@@ -39,6 +40,7 @@ export function blueprintCommand(
 									force: input.force,
 									label: input.label,
 									entities: input.entities,
+									wires: input.wires,
 									tiles: input.tiles,
 									surface: input.surface,
 									position: input.position
@@ -73,7 +75,14 @@ export async function factoryBlueprint(
 	player?: { name: string; requireAdmin: boolean }
 ) {
 	const parsed = blueprintRequestSchema.safeParse(input);
-	if (!parsed.success) throw new ServerError(400, 'Invalid blueprint request');
+	if (!parsed.success)
+		throw new ServerError(
+			400,
+			`Invalid blueprint request: ${parsed.error.issues
+				.slice(0, 3)
+				.map((issue) => `${issue.path.join('.') || 'args'}: ${issue.message}`)
+				.join('; ')}`
+		);
 	if (!(await serverStatus(server)).running)
 		throw new ServerError(409, 'Start this server to design or place a blueprint');
 	const raw = await rconScript(server, blueprintCommand(parsed.data, player));
