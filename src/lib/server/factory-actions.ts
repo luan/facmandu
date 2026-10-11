@@ -40,8 +40,11 @@ const logistic = z.object({
 	slotIndex: index,
 	expectedRequest: request.nullable()
 });
+const entity = logistic.pick({ unitNumber: true, force: true, surface: true, position: true });
+const direction = z.union([z.literal(0), z.literal(4), z.literal(8), z.literal(12)]);
 
 export const factoryActionInspectSchema = z.discriminatedUnion('operation', [
+	entity.extend({ operation: z.literal('entity_inspect') }),
 	z.object({ operation: z.literal('research_inspect'), force: label }),
 	z.object({ operation: z.literal('train_inspect'), trainId: train.shape.trainId }),
 	z.object({
@@ -55,6 +58,12 @@ export const factoryActionInspectSchema = z.discriminatedUnion('operation', [
 ]);
 
 export const factoryActionSchema = z.discriminatedUnion('operation', [
+	entity.extend({
+		operation: z.literal('entity_rotate'),
+		expectedDirection: direction,
+		expectedTick: z.number().int().nonnegative(),
+		direction
+	}),
 	research.extend({ operation: z.literal('research_add'), technology: name }),
 	research.extend({ operation: z.literal('research_move'), from: index, to: index }),
 	research.extend({ operation: z.literal('research_remove'), position: index }),
@@ -87,6 +96,8 @@ export const factoryActionJsonSchema = z.toJSONSchema(factoryActionSchema);
 export const factoryActionInspectJsonSchema = z.toJSONSchema(factoryActionInspectSchema);
 
 export const factoryActionInspectManifest = {
+	entity_inspect:
+		'Inspect one built inserter by unitNumber, force, surface and exact position. Returns direction, pickup/drop positions and tick for rotation preconditions.',
 	research_inspect:
 		'Read the entire ordered queue for a force before changing it. Returns queue names for expectedQueue.',
 	train_inspect: 'Read an exact train by trainId before changing its control or destination.',
@@ -95,6 +106,8 @@ export const factoryActionInspectManifest = {
 } satisfies Record<FactoryActionInspect['operation'], string>;
 
 export const factoryActionManifest = {
+	entity_rotate:
+		'Rotate one built inserter to cardinal direction 0, 4, 8 or 12 using native rotation. Supply exact entity_inspect target, expectedDirection and expectedTick. Inspect again afterward to verify pickup and drop. Cannot rotate other entity types or ghosts.',
 	research_add:
 		'Queue one researchable lab technology. Supply force, expectedQueue, technology. Crafting trigger technologies cannot be queued.',
 	research_move:
@@ -181,6 +194,18 @@ const logisticResultSchema = z.object({
 	before: z.object({ request: request.optional() }).passthrough(),
 	after: z.object({ request: request.optional() }).passthrough()
 });
+const entitySnapshot = entity.extend({
+	name,
+	direction,
+	tick: z.number().int().nonnegative(),
+	pickup: logistic.shape.position,
+	drop: logistic.shape.position
+});
+const entityResultSchema = z.object({
+	operation: z.enum(['entity_inspect', 'entity_rotate']),
+	before: entitySnapshot,
+	after: entitySnapshot
+});
 
 async function execute(
 	server: ManagedServer,
@@ -199,6 +224,11 @@ async function execute(
 	const reply = replySchema.safeParse(decoded);
 	if (!reply.success) throw new ServerError(502, 'The server did not return a valid action result');
 	if (!reply.data.ok) throw new ServerError(409, reply.data.error);
+	if (input.operation.startsWith('entity_')) {
+		const result = entityResultSchema.safeParse(reply.data.result);
+		if (!result.success) throw new ServerError(502, 'The server returned an invalid entity result');
+		return result.data;
+	}
 	if (input.operation.startsWith('research_')) {
 		const result = researchResultSchema.safeParse(reply.data.result);
 		if (!result.success)

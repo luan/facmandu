@@ -83,7 +83,7 @@ export function serverAssistantTools(context: {
 		useTool({
 			name: 'factory_action_catalog',
 			description:
-				'Read the exact schemas for research queue, train control/destination and logistic request operations. Read this before inspecting or changing a target. These are validated operations, not arbitrary Lua.',
+				'Read the exact schemas for inserter rotation, research queue, train control/destination and logistic request operations. Read this before inspecting or changing a target. These are validated operations, not arbitrary Lua.',
 			async run() {
 				await server();
 				return {
@@ -96,9 +96,14 @@ export function serverAssistantTools(context: {
 		useTool({
 			name: 'factory_action_inspect',
 			description:
-				'Read current research, train or requester state and exact action preconditions. Pass an operation and args from factory_action_catalog. Never invent expected state.',
+				'Read current inserter, research, train or requester state and exact action preconditions. Pass an operation and args from factory_action_catalog. Never invent expected state.',
 			input: v.object({
-				operation: v.picklist(['research_inspect', 'train_inspect', 'logistic_inspect']),
+				operation: v.picklist([
+					'entity_inspect',
+					'research_inspect',
+					'train_inspect',
+					'logistic_inspect'
+				]),
 				args: v.record(v.string(), v.unknown())
 			}),
 			async run({ data }) {
@@ -112,9 +117,10 @@ export function serverAssistantTools(context: {
 		useTool({
 			name: 'factory_action',
 			description:
-				'Perform an explicitly requested research, train or logistic request change. First inspect its exact target and expected state. Read factory_action_catalog for each operation schema. A stale snapshot is rejected; inspect again before retrying. Questions do not authorize changes.',
+				'Perform an explicitly requested inserter rotation, research, train or logistic request change. First inspect its exact target and expected state. Read factory_action_catalog for each operation schema. A stale snapshot is rejected; inspect again before retrying. Questions do not authorize changes.',
 			input: v.object({
 				operation: v.picklist([
+					'entity_rotate',
 					'research_add',
 					'research_move',
 					'research_remove',

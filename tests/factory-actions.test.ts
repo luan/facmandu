@@ -102,3 +102,29 @@ test('action input is encoded as data inside a silent command', () => {
 	assert.ok(command.includes('Research queue changed; inspect it again'));
 	assert.ok(command.includes('rcon.print(reply)'));
 });
+
+test('inserter rotation requires exact inspected state and a cardinal direction', () => {
+	const input = {
+		operation: 'entity_rotate',
+		unitNumber: 12,
+		force: 'player',
+		surface: 'nauvis',
+		position: { x: 0.5, y: 4.5 },
+		expectedDirection: 0,
+		expectedTick: 100,
+		direction: 8
+	};
+	assert.equal(factoryActionSchema.safeParse(input).success, true);
+	for (const field of [
+		'unitNumber',
+		'force',
+		'surface',
+		'position',
+		'expectedDirection',
+		'expectedTick'
+	])
+		assert.equal(factoryActionSchema.safeParse({ ...input, [field]: undefined }).success, false);
+	for (const direction of [-4, 1, 16])
+		assert.equal(factoryActionSchema.safeParse({ ...input, direction }).success, false);
+	assert.equal(factoryActionInspectSchema.safeParse(input).success, false);
+});
