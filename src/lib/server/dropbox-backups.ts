@@ -252,7 +252,7 @@ export async function backupToDropbox(server: ManagedServer, userId: string, aut
 			'Content-Type': 'application/octet-stream',
 			'Dropbox-API-Arg': JSON.stringify({
 				path,
-				mode: current ? { '.tag': 'update', update: current.rev } : 'add',
+				mode: current ? { '.tag': 'update', update: previous?.revision ?? current.rev } : 'add',
 				autorename: false,
 				strict_conflict: true,
 				content_hash: hash

@@ -208,7 +208,8 @@ const fixture = createServer(async (request, response) => {
 				const existing = dropboxFiles.get(arg.path.toLowerCase());
 				if (existing) {
 					assert.equal(arg.mode['.tag'], 'update');
-					assert.equal(arg.mode.update, existing.metadata.rev);
+					if (arg.mode.update !== existing.metadata.rev)
+						return send({ error_summary: 'path/conflict/' }, 409);
 				} else assert.equal(arg.mode, 'add');
 				assert.equal(arg.autorename, false);
 				assert.equal(arg.strict_conflict, true);
@@ -4676,6 +4677,29 @@ done
 			'Failed snapshots are retained outside playable saves'
 		);
 		rejectCloudUpload = false;
+		const verifiedCloud = dropboxFiles.get(cloudChoice.path_lower);
+		const outsideBytes = Buffer.from(zipSync({ 'world/level.dat': strToU8('outside edit') }));
+		dropboxFiles.set(cloudChoice.path_lower, {
+			bytes: outsideBytes,
+			metadata: {
+				...verifiedCloud.metadata,
+				rev: 'deadbeef002',
+				content_hash: cloudHash(outsideBytes),
+				size: outsideBytes.length
+			}
+		});
+		assert.equal((await cloudOperation('backup')).state, 'error');
+		assert.deepEqual(dropboxFiles.get(cloudChoice.path_lower).bytes, outsideBytes);
+		assert.equal(
+			JSON.parse(await readFile(join(cloudDirectory, 'cloud-backup.json'), 'utf8')).revision,
+			cloudChoice.rev,
+			'An outside revision is not adopted without verifying its contents'
+		);
+		assert.deepEqual(
+			await readFile(join(cloudDirectory, 'cloud-recovery.zip')),
+			Buffer.from(cloudOriginal)
+		);
+		dropboxFiles.set(cloudChoice.path_lower, verifiedCloud);
 		assert.equal(dropboxFiles.size, 1);
 		const beforeBadRestore = await readFile(cloudConfigPath, 'utf8');
 		const crossServer = {
