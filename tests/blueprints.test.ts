@@ -254,6 +254,44 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
  charted=false
  local unexplored=blueprint(inspection)
  assert(not unexplored.ready and unexplored.blocked[1].sampled_tiles==nil and unexplored.blocked[1].nearby_entities==nil)
+ charted=true
+ defines.build_check_type.blueprint_ghost=2;defines.inventory={hub_main=1}
+ surface.platform={force=force,hub={get_inventory=function() return nil end}}
+ local own_foundation=true;local native_allowed=true;local ghost_checks=0
+ local tile='empty-space'
+ surface.get_tile=function() return {name=tile} end
+ surface.find_entities_filtered=function(filter)
+  if filter.type=='tile-ghost' then
+   assert(filter.force==force)
+   return own_foundation and {{ghost_name='space-platform-foundation',position={x=0.5,y=0.5}}} or {}
+  end
+  return {}
+ end
+ surface.can_place_entity=function(check)
+  if check.build_check_type~=2 then return false end
+  assert(check.name=='belt' and check.forced==false)
+  ghost_checks=ghost_checks+1;return native_allowed
+ end
+ local waiting=blueprint(inspection)
+ assert(waiting.ready and not waiting.construction.hub_stock_ready)
+ own_foundation=false;local before_checks=ghost_checks
+ assert(not blueprint(inspection).ready and ghost_checks==before_checks)
+ own_foundation=true;native_allowed=false;assert(not blueprint(inspection).ready)
+ native_allowed=true;tile='space-platform-foundation';before_checks=ghost_checks
+ assert(not blueprint(inspection).ready and ghost_checks==before_checks)
+ tile='empty-space'
+ local created=0
+ surface.count_entities_filtered=function() return 0 end
+ surface.create_entity=function(input)
+  assert(input.name=='entity-ghost' and input.inner_name=='belt')
+  created=created+1
+  return {valid=true,type='entity-ghost',ghost_name='belt',position=input.position}
+ end
+ script={raise_script_built=function() end}
+ inspection.operation='place';inspection.expectedTick=100;inspection.expectedDesign='site'
+ assert(blueprint(inspection).complete and created==1)
+ own_foundation=false
+ assert(not pcall(blueprint,inspection) and created==1)
  `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));

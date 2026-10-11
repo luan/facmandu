@@ -21,6 +21,28 @@ local function dimensions(p, direction)
  if direction==4 or direction==12 then w,h=h,w end
  return w,h
 end
+local function can_request_ghost(force,surface,entity,position,box,offset)
+ if surface.can_place_entity{name=entity.name,position=position,direction=entity.direction,force=force,build_check_type=defines.build_check_type.manual} then return true end
+ if not surface.platform or surface.platform.force~=force then return false end
+ local area={{box.x1+offset.x,box.y1+offset.y},{box.x2+offset.x,box.y2+offset.y}}
+ local foundations={}
+ for _,ghost in ipairs(surface.find_entities_filtered{area=area,type='tile-ghost',force=force}) do
+  if ghost.ghost_name=='space-platform-foundation' then foundations[math.floor(ghost.position.x)..':'..math.floor(ghost.position.y)]=true end
+ end
+ local pending=false
+ for x=math.floor(area[1][1]),math.floor(area[2][1]-0.001) do
+  for y=math.floor(area[1][2]),math.floor(area[2][2]-0.001) do
+   local tile=surface.get_tile{x=x,y=y}
+   if tile.name~='space-platform-foundation' then
+    if tile.name~='empty-space' or not foundations[x..':'..y] then return false end
+    pending=true
+   end
+  end
+ end
+ -- Normal blueprint ghosts can wait above owned foundation ghosts. Script-ghost
+ -- checks also permit unsupported empty space and must never be used here.
+ return pending and surface.can_place_entity{name=entity.name,position=position,direction=entity.direction,force=force,build_check_type=defines.build_check_type.blueprint_ghost,forced=false}
+end
 local function inserter_connections(p)
  if p.type~='inserter' then return nil end
  local pickup,drop=p.inserter_pickup_position,p.inserter_drop_position
@@ -418,8 +440,7 @@ local function blueprint(request)
     if not surface.is_chunk_generated{x=x,y=y} or not force.is_chunk_charted(surface,{x=x,y=y}) then charted=false end
    end
   end
-  -- Check the real entity collision rules, not the permissive ghost collision mask.
-  if not charted or not surface.can_place_entity{name=e.name,position=position,direction=e.direction,force=force,build_check_type=defines.build_check_type.manual} then
+  if not charted or not can_request_ghost(force,surface,e,position,b,request.position) then
    local row={name=e.name,position=position,reason=charted and 'Occupied, unsuitable terrain or surface restrictions' or 'Outside explored, generated terrain'}
    -- Detail the first eight blocked sites; native placement remains authoritative.
    if charted and request.operation=='inspect' and #blocked<8 then
@@ -470,7 +491,7 @@ local function blueprint(request)
   local ok,err=pcall(function()
    local b=boxes[i]
    if surface.count_entities_filtered{area={{b.x1+request.position.x,b.y1+request.position.y},{b.x2+request.position.x,b.y2+request.position.y}},type="entity-ghost"}>0 then error("Site changed during placement",0) end
-   if not surface.can_place_entity{name=e.name,position=position,direction=e.direction,force=force,build_check_type=defines.build_check_type.manual} then error('Site changed during placement',0) end
+   if not can_request_ghost(force,surface,e,position,b,request.position) then error('Site changed during placement',0) end
    local creation={name='entity-ghost',inner_name=e.name,position=position,direction=e.direction,force=force,type=e.type,expires=false}
    for _,key in ipairs(settings) do creation[key]=e[key] end
    local ghost=surface.create_entity(creation)
