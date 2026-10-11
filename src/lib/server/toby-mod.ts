@@ -2,6 +2,7 @@ import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { zipSync } from 'fflate';
 import control from '../../../factorio-mod/facmandu-assistant/control.lua?raw';
+import data from '../../../factorio-mod/facmandu-assistant/data.lua?raw';
 import info from '../../../factorio-mod/facmandu-assistant/info.json';
 import readme from '../../../factorio-mod/facmandu-assistant/README.md?raw';
 import type { ManagedServer } from './db/schema';
@@ -17,6 +18,7 @@ export function tobyModArchive() {
 			Object.entries({
 				'info.json': JSON.stringify(info),
 				'control.lua': control,
+				'data.lua': data,
 				'README.md': readme
 			}).map(([name, source]) => [`${info.name}_${info.version}/${name}`, encode.encode(source)])
 		)

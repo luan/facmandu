@@ -2656,11 +2656,11 @@ done
 	assert.equal(tobyZip.status, 200);
 	const tobyFiles = unzipSync(new Uint8Array(await tobyZip.arrayBuffer()));
 	assert.equal(
-		JSON.parse(Buffer.from(tobyFiles['facmandu-assistant_0.2.0/info.json']).toString()).title,
-		'Toby · Facmandu Assistant'
+		JSON.parse(Buffer.from(tobyFiles['facmandu-assistant_0.0.1/info.json']).toString()).title,
+		'Toby · Development'
 	);
 	assert.ok(
-		Buffer.from(tobyFiles['facmandu-assistant_0.2.0/control.lua'])
+		Buffer.from(tobyFiles['facmandu-assistant_0.0.1/control.lua'])
 			.toString()
 			.includes('FACMANDU_UI')
 	);
@@ -2682,14 +2682,14 @@ done
 	);
 	await action(`${secondPath}?/manage`, cookies.owner, { operation: 'installToby' });
 	assert.deepEqual(
-		unzipSync(await readFile(join(machineDirs[1], 'mods/facmandu-assistant_0.2.0.zip'))),
+		unzipSync(await readFile(join(machineDirs[1], 'mods/facmandu-assistant_0.0.1.zip'))),
 		tobyFiles
 	);
 	assert.deepEqual(
 		(await readState(1, 'mods/mod-list.json')).mods.find(
 			(mod) => mod.name === 'facmandu-assistant'
 		),
-		{ name: 'facmandu-assistant', version: '0.2.0', enabled: true }
+		{ name: 'facmandu-assistant', version: '0.0.1', enabled: true }
 	);
 	assert.deepEqual(
 		await readFile(join(machineDirs[1], 'saves/context-world.zip')),
@@ -3042,6 +3042,18 @@ done
 		const selectedState = await selectedPanel;
 		assert.equal(selectedState.current, newPanel.current);
 		assert.equal(selectedState.blueprint, panelDesign.blueprint);
+		assert.equal(selectedState.design, 'Glass');
+		assert.equal(selectedState.running, false);
+		assert.deepEqual(
+			selectedState.messages.map((message) => message.role),
+			['user', 'assistant']
+		);
+		assert.match(selectedState.messages[0].text, /where is iron/u);
+		assert.match(selectedState.messages[1].text, /Iron nearby/u);
+		assert.deepEqual(
+			selectedState.activity.map((entry) => entry.text),
+			['Blueprint', 'Intermediate draft']
+		);
 		assert.ok(
 			panelUpdates.every(
 				(update) =>

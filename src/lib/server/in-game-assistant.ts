@@ -53,7 +53,7 @@ async function reply(server: ManagedServer, player: string, answer: string, sour
 		);
 	const session = sessions.get(server.id);
 	if (session)
-		await syncPanel(server, session, player, undefined, answer, sourceChat).catch(() => {});
+		await syncPanel(server, session, player, undefined, undefined, sourceChat).catch(() => {});
 }
 async function syncPanel(
 	server: ManagedServer,
@@ -79,14 +79,27 @@ async function syncPanel(
 	const current =
 		chats.find((chat) => chat.id === (selected ?? session.panels.get(player))) ?? chats[0];
 	if (current) session.panels.set(player, current.id);
-	const turn = current
+	const turns = current
 		? await db
 				.select()
 				.from(serverAssistantTurn)
 				.where(eq(serverAssistantTurn.chatId, current.id))
 				.orderBy(desc(serverAssistantTurn.createdAt))
-				.get()
-		: null;
+				.limit(8)
+		: [];
+	const turn = turns[0];
+	const messages: { role: 'user' | 'assistant'; text: string }[] = [];
+	let available = 12000;
+	for (const entry of turns) {
+		const answer = gameText(entry.answer, Math.min(6000, available));
+		available -= Buffer.byteLength(answer);
+		const prompt = gameText(entry.prompt, Math.min(2000, available));
+		available -= Buffer.byteLength(prompt);
+		if (answer) messages.unshift({ role: 'assistant', text: answer });
+		if (prompt) messages.unshift({ role: 'user', text: prompt });
+		if (!available) break;
+	}
+	const design = turns.map((entry) => panelDesign(entry.results)).find((entry) => entry);
 	const state = {
 		current: current?.id,
 		status:
@@ -94,7 +107,11 @@ async function syncPanel(
 				? progress && gameText(progress, 500)
 				: undefined) ?? (turn?.state === 'running' ? 'Working…' : 'Ready'),
 		answer: gameText(turn?.answer ?? '', 6000),
-		blueprint: panelBlueprint(turn?.results ?? '[]'),
+		running: turn?.state === 'running',
+		messages,
+		activity: panelActivity(turn?.results ?? '[]'),
+		blueprint: design?.blueprint,
+		design: design && gameText(design.label, 200),
 		chats: chats.map((chat) => ({ id: chat.id, title: gameText(chat.title, 200) }))
 	};
 	if (sessions.get(server.id) !== session) return;
@@ -104,7 +121,7 @@ async function syncPanel(
 		`/silent-command local p=game.get_player(${JSON.stringify(player)}); local i=remote.interfaces['facmandu-assistant']; if p and p.connected and i and i.update_player then remote.call('facmandu-assistant','update_player',p.index,helpers.json_to_table(${encoded})) end`
 	);
 }
-function panelBlueprint(results: string): string | undefined {
+function panelDesign(results: string): { blueprint: string; label: string } | undefined {
 	try {
 		const data: unknown = JSON.parse(results);
 		if (!Array.isArray(data)) return;
@@ -113,12 +130,24 @@ function panelBlueprint(results: string): string | undefined {
 			if (!result.success || !result.data.display) continue;
 			const blueprint = blueprintArtifactSchema.safeParse(result.data.result);
 			if (blueprint.success && blueprint.data.blueprint.length <= 65536)
-				return blueprint.data.blueprint;
+				return { blueprint: blueprint.data.blueprint, label: blueprint.data.label };
 		}
 	} catch {
 		/* A damaged historic result must not prevent chat updates. */
 	}
 	return undefined;
+}
+function panelActivity(results: string): { text: string }[] {
+	try {
+		const data: unknown = JSON.parse(results);
+		if (!Array.isArray(data)) return [];
+		return data.slice(-16).flatMap((entry) => {
+			const result = factoryResultSchema.safeParse(entry);
+			return result.success ? [{ text: gameText(result.data.title, 400) }] : [];
+		});
+	} catch {
+		return [];
+	}
 }
 async function receiveUi(
 	server: ManagedServer,
