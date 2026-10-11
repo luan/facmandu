@@ -24,18 +24,20 @@
  let contextUsage = $state<AssistantContextUsage | null>(null);
 
  async function selectChat(id: string) {
-  if (inProgress) return;
+  if (loading) return;
   voice.stop();
+  // Detach the view without cancelling the persisted run in the previous chat.
+  controller = undefined; busy = false; progress = '';
   chat = id; contextUsage = null; turns = []; plans = []; combineablePlanIds = []; selectedMods = []; selectedTurn = ''; prompt = ''; error = ''; refreshError = ''; text = ''; activePrompt = ''; activeMods = []; activeResults = []; loading = true;
   await refresh(true, true);
  }
  async function createChat() {
-  if (inProgress || loading) return;
+  if (loading) return;
   loading = true;
   try {
    const response = await fetch(endpoint, { method: 'POST', body: new URLSearchParams({ operation: 'new-chat' }) });
    if (!response.ok) throw new Error('Could not create chat. Retry.');
-   const created = await response.json(); const selected = { model, effort }; await selectChat(created.id); model = selected.model; effort = selected.effort;
+   const created = await response.json(); const selected = { model, effort }; loading = false; await selectChat(created.id); model = selected.model; effort = selected.effort;
   } catch (cause) { error = cause instanceof Error ? cause.message : 'Could not create chat'; }
   finally { loading = false; }
  }
@@ -148,12 +150,15 @@
    refreshError = '';
    return true;
   } catch {
+   if (selectedChat && chat !== selectedChat) return false;
    refreshError = 'Could not refresh conversation.';
    return false;
   } finally {
+   if (!selectedChat || chat === selectedChat) {
    loading = false;
    clearTimeout(pollTimer);
    if (open && !busy && (gamePlayer || turns.some(turn => turn.state === 'running') || (activePrompt && refreshError))) pollTimer = setTimeout(() => void refresh(), 1500);
+   }
   }
  }
  $effect(() => { if (open) { followOutput = true; void untrack(() => refresh(false, !modelCatalogLoaded)); } });
@@ -182,8 +187,8 @@
    finally { steeringBusy = false; }
    return;
   }
-  const message = prompt; prompt = '';
-  try { await ask(message); } catch { if (!prompt) prompt = message; }
+  const message = prompt; const requestChat = chat; prompt = '';
+  try { await ask(message); } catch { if (chat === requestChat && !prompt) prompt = message; }
  }
  async function ask(message: string): Promise<string> {
   if (inProgress || loading) throw new Error('The assistant is still working. Wait for its response, then ask again.');
@@ -191,6 +196,10 @@
   const previousPlanId = plans[0]?.id;
   activePrompt = message;
   const requestController = controller;
+  const requestChat = chat;
+  const ownsView = () => chat === requestChat && controller === requestController;
+  let answer = '';
+  let responseError = '';
   let accepted = false;
   try {
    const response = await fetch(endpoint, { method: 'POST', headers: { Accept: 'application/json' }, body: new URLSearchParams({ chat, prompt: message, model, effort }), signal: controller.signal });
@@ -201,13 +210,13 @@
    const decoder = new TextDecoder(); let buffer = ''; let complete = false;
    for (;;) { const { done, value } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true });
     let newline = buffer.indexOf('\n');
-    while (newline >= 0) { const event = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1); if (event.compacted) compacted = true; if (event.contextUsage) contextUsage = event.contextUsage; if (event.results) activeResults = event.results; if (event.mods) activeMods = event.mods; if (event.delta) text += event.delta; if (event.progress) progress = event.progress; if (event.answer) text = event.answer; if (event.error) error = event.error; if (event.done || event.error) complete = true; newline = buffer.indexOf('\n'); }
+    while (newline >= 0) { const event = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1); if (event.delta) answer += event.delta; if (event.answer) answer = event.answer; if (event.error) responseError = event.error; if (ownsView()) { if (event.compacted) compacted = true; if (event.contextUsage) contextUsage = event.contextUsage; if (event.results) activeResults = event.results; if (event.mods) activeMods = event.mods; text = answer; if (event.progress) progress = event.progress; if (event.error) error = event.error; } if (event.done || event.error) complete = true; newline = buffer.indexOf('\n'); }
     if (complete) break;
    }
-   if (error) throw new Error(error);
-   return text;
-  } catch (cause) { error = requestController.signal.aborted ? 'Stopped' : cause instanceof SyntaxError ? 'The response was interrupted. Retry.' : cause instanceof Error ? cause.message : 'Request failed'; throw new Error(error); }
-  finally { busy = false; controller = undefined; progress = ''; if (!accepted) { text = ''; activePrompt = ''; activeMods = []; activeResults = []; } await refresh(); if (!serverId && plans[0]?.applied && plans[0].id !== previousPlanId) await invalidate('app:modlist'); }
+   if (responseError) throw new Error(responseError);
+   return answer;
+  } catch (cause) { const message = requestController.signal.aborted ? 'Stopped' : cause instanceof SyntaxError ? 'The response was interrupted. Retry.' : cause instanceof Error ? cause.message : 'Request failed'; if (ownsView()) error = message; throw new Error(message); }
+  finally { if (ownsView()) { busy = false; controller = undefined; progress = ''; if (!accepted) { text = ''; activePrompt = ''; activeMods = []; activeResults = []; } await refresh(); if (!serverId && plans[0]?.applied && plans[0].id !== previousPlanId) await invalidate('app:modlist'); } }
  }
  async function apply(id: string) {
   busy = true; error = ''; progress = 'Applying changes…';
@@ -335,7 +344,7 @@
     <div class="min-w-0 flex-1"><p class="truncate text-sm font-medium">{chats.find(item => item.id === chat)?.title || 'New conversation'}</p>{#if contextLabel}<p class="truncate text-xs text-muted-foreground">{contextLabel}</p>{/if}</div>
     <Button variant="ghost" size="sm" class="lg:hidden" aria-expanded={sidebar === 'history'} onclick={() => sidebar = sidebar === 'history' ? null : 'history'}>Chats</Button>
     <Button variant="ghost" size="sm" class="lg:hidden" aria-expanded={sidebar === 'activity'} onclick={() => sidebar = sidebar === 'activity' ? null : 'activity'}>Activity</Button>
-    <TooltipButton tooltip={inProgress ? 'Finish or stop the response first' : 'New chat'} variant="ghost" size="icon" disabled={inProgress || loading} onclick={createChat}><PlusIcon /></TooltipButton>
+    <TooltipButton tooltip="New chat" variant="ghost" size="icon" disabled={loading} onclick={createChat}><PlusIcon /></TooltipButton>
    </div>
    <Sheet.Description class="sr-only">{serverId ? 'Ask about this server and its factory.' : 'Ask about mods or review changes to this list.'}</Sheet.Description>
   </Sheet.Header>
@@ -343,7 +352,7 @@
    <aside class="harness-history border-r border-border bg-black/10" data-open={sidebar === 'history'} aria-label="Conversations">
     <h2 class="px-4 pb-3 pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conversations</h2>
     <nav class="space-y-1 px-2 pb-4" aria-label="Chat history">
-     {#each chats as conversation (conversation.id)}<button type="button" class="w-full border border-transparent px-3 py-3 text-left text-sm hover:bg-white/5 disabled:opacity-50" class:active-chat={chat === conversation.id} aria-current={chat === conversation.id ? 'page' : undefined} disabled={inProgress || loading} onclick={() => { sidebar = null; void selectChat(conversation.id); }}><span class="line-clamp-2">{conversation.title}</span><span class="mt-1 block text-xs text-muted-foreground">{new Date(conversation.updatedAt).toLocaleDateString()}</span></button>{/each}
+     {#each chats as conversation (conversation.id)}<button type="button" class="w-full border border-transparent px-3 py-3 text-left text-sm hover:bg-white/5 disabled:opacity-50" class:active-chat={chat === conversation.id} aria-current={chat === conversation.id ? 'page' : undefined} disabled={loading} onclick={() => { sidebar = null; void selectChat(conversation.id); }}><span class="line-clamp-2">{conversation.title}</span><span class="mt-1 block text-xs text-muted-foreground">{new Date(conversation.updatedAt).toLocaleDateString()}</span></button>{/each}
     </nav>
    </aside>
    <main class="flex min-h-0 min-w-0 flex-col" aria-label="Assistant conversation">
@@ -434,7 +443,7 @@
   <form onsubmit={(event) => { event.preventDefault(); void send(); }} class="mx-auto w-full max-w-4xl shrink-0 border-t border-border p-4 space-y-3">
    {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
    {#if refreshError}<p role="status" class="text-sm text-muted-foreground">{refreshError} <button type="button" class="underline" onclick={() => void refresh()}>Retry</button></p>{/if}
-   {#if gamePlayer}<div class="flex items-center justify-between gap-3 text-sm text-muted-foreground"><span>In-game conversation with {gamePlayer}</span><Button variant="outline" size="sm" disabled={inProgress || loading} onclick={createChat}>New web chat</Button></div>{:else}
+   {#if gamePlayer}<div class="flex items-center justify-between gap-3 text-sm text-muted-foreground"><span>In-game conversation with {gamePlayer}</span><Button variant="outline" size="sm" disabled={loading} onclick={createChat}>New web chat</Button></div>{:else}
    {#if modelError}<p role="status" class="text-sm text-muted-foreground">{modelError}</p>{/if}
    <Prompt bind:value={prompt} label="Message" placeholder={serverId ? "Ask about this server…" : "Ask about this list…"} maxLength={6000} busy={inProgress} allowSteering={!!serverId} {send} disabledReason={loading ? 'Loading conversation' : steeringBusy ? 'Sending steering' : ''} stop={busy && controller ? stop : undefined}>
     {#snippet controls()}
