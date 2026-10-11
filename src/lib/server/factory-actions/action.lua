@@ -315,8 +315,67 @@ local function inserter_action(request)
   return {operation=request.operation,before=before,after=inserter_snapshot(entity)}
 end
 
+local function edit_entity(request, target)
+ local surface=game.surfaces[request.surface]
+ if not surface then fail('Surface no longer exists') end
+ for _,e in ipairs(surface.find_entities_filtered{position=target.position,radius=0.1,force=request.force,limit=16}) do
+  local name=e.type=='entity-ghost' and e.ghost_name or e.name
+  if e.unit_number==target.unitNumber and name==target.name and e.position.x==target.position.x and e.position.y==target.position.y then return e end
+ end
+ fail('Entity changed; inspect it again')
+end
+local function edit_snapshot(e)
+ local ghost=e.type=='entity-ghost'
+ local recipe=''
+ if e.type=='assembling-machine' or e.type=='furnace' or e.type=='rocket-silo' then local r=e.get_recipe();recipe=r and r.name or '' end
+ if ghost and (e.ghost_type=='assembling-machine' or e.ghost_type=='furnace' or e.ghost_type=='rocket-silo') then local r=e.get_recipe();recipe=r and r.name or '' end
+ return {unitNumber=e.unit_number,name=ghost and e.ghost_name or e.name,position=e.position,direction=e.direction,ghost=ghost,recipe=recipe,deconstructing=e.to_be_deconstructed()}
+end
+local function entity_edits(request)
+ local entities={}
+ local snapshots={}
+ for _,t in ipairs(request.targets or request.edits) do
+  local e=edit_entity(request,t)
+  local snapshot=edit_snapshot(e)
+  if request.operation=='entities_edit' then
+   if request.expectedTick>game.tick or game.tick-request.expectedTick>3600 then fail('Entity inspection expired; inspect again') end
+   for _,key in ipairs({'direction','ghost','recipe','deconstructing'}) do if snapshot[key]~=t[key] then fail('Entity state changed; inspect again') end end
+   if t.kind=='cancel_ghost' and not snapshot.ghost then fail('Only construction ghosts may be cancelled') end
+   if t.kind~='cancel_ghost' and snapshot.ghost then fail('This operation requires a built entity') end
+   if not snapshot.ghost then
+    local p=prototypes.entity[e.name]
+    if not p or not p.items_to_place_this or #p.items_to_place_this==0 or e.type=='character' or e.type=='car' or e.type=='spider-vehicle' or e.type=='locomotive' or e.type=='cargo-wagon' or e.type=='fluid-wagon' or e.type=='artillery-wagon' then fail('Select stationary player-built factory entities') end
+   end
+  end
+  entities[#entities+1]=e;snapshots[#snapshots+1]=snapshot
+ end
+ if request.operation=='entities_inspect' then return {operation=request.operation,tick=game.tick,entities=snapshots} end
+ local outcomes={}
+ for i,t in ipairs(request.edits) do
+  local e=entities[i]
+  local player=request.player and game.get_player(request.player.name) or nil
+  local ok,message=pcall(function()
+   if t.kind=='cancel_ghost' then if not e.destroy{raise_destroy=true} then fail('Factorio refused ghost cancellation') end
+   elseif t.kind=='deconstruct' then if not e.order_deconstruction(request.force,player) then fail('Factorio refused deconstruction') end
+   elseif t.kind=='cancel_deconstruction' then e.cancel_deconstruction(request.force,player);if e.to_be_deconstructed() then fail('Deconstruction remains marked') end
+   else
+    for step=1,3 do if e.direction==t.to then break end;if not e.rotatable or not e.rotate{by_player=player} then break end end
+    if e.direction~=t.to then
+     -- Native rotation may reject an intermediate orientation; restore the observed direction.
+     for step=1,3 do if e.direction==t.direction then break end;if not e.rotate{by_player=player} then break end end
+     fail('Factorio refused the requested rotation; inspect its current orientation')
+    end
+   end
+  end)
+  local state=t.kind=='rotate' and 'rotated' or t.kind=='deconstruct' and 'marked' or 'cancelled'
+  outcomes[#outcomes+1]={name=t.name,unitNumber=t.unitNumber,state=ok and state or 'refused',error=not ok and tostring(message) or nil}
+ end
+ return {operation=request.operation,tick=game.tick,outcomes=outcomes}
+end
+
 local function action(request)
   local operation = request.operation
+  if operation == "entities_inspect" or operation == "entities_edit" then return entity_edits(request) end
   if operation == "ghost_inspect" or operation == "ghost_cancel" then return ghost_action(request) end
   if operation == "entity_inspect" or operation == "entity_rotate" then return inserter_action(request) end
   if operation == "research_inspect" then return research_inspect(request) end

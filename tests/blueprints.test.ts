@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import {
 	blueprintArtifactSchema,
+	blueprintInputSchema,
 	blueprintRequestSchema,
 	blueprintTargetSchema
 } from '../src/lib/blueprints';
@@ -254,4 +255,31 @@ test('blueprint-level wires are accepted and remain bound to placement inspectio
 	if (request.operation !== 'place') throw new Error('Expected placement');
 	assert.ok(blueprintCommand(request).startsWith('/silent-command'));
 	assert.throws(() => blueprintCommand({ ...request, wires: [] }), /Blueprint changed/);
+});
+
+test('saved blueprint references retain omitted entity settings and require exact placement evidence', () => {
+	const designId = 'a'.repeat(64);
+	const revision = blueprintInputSchema.parse({
+		operation: 'create',
+		force: 'player',
+		designId,
+		entityChanges: [{ index: 1, changes: { recipe: 'plastic-bar' } }]
+	});
+	if (!('designId' in revision) || revision.operation !== 'create')
+		throw new Error('Expected reference');
+	assert.deepEqual(revision.entityChanges[0]?.changes, { recipe: 'plastic-bar' });
+	for (const invalid of [
+		{ ...revision, designId: '../secret' },
+		{ ...revision, entityChanges: [{ index: 0, changes: { direction: 4 } }] },
+		{ ...revision, entityChanges: [{ index: 1, changes: { items: { 'iron-plate': 1000 } } }] },
+		{ operation: 'place', force: 'player', designId, surface: 'nauvis', position: { x: 0, y: 0 } },
+		{
+			operation: 'inspect',
+			force: 'player',
+			designId,
+			surface: 'nauvis',
+			position: { x: 0.5, y: 0 }
+		}
+	])
+		assert.equal(blueprintInputSchema.safeParse(invalid).success, false);
 });

@@ -166,3 +166,25 @@ test('foundation-only previews preserve tiles and reject empty blueprints', () =
 		blueprintImageData(encode({ version: layout.version, entities: [], tiles: [] }))
 	);
 });
+
+test('compact blueprint tool outputs retain model vision without repeating the layout', () => {
+	const compact = message(id, 'blueprint_operation');
+	compact.content = [
+		{
+			type: 'text',
+			text: JSON.stringify({
+				designId: 'b'.repeat(64),
+				entities: 150,
+				importValidated: true,
+				placed: false,
+				image: { id, width: 128, height: 96 }
+			})
+		}
+	];
+	const context = normalizeContext({ messages: [compact] });
+	const updated = addFactoryImages(context, () => png);
+	const result = updated.messages[0];
+	if (result?.role !== 'toolResult') throw new Error('Expected tool result');
+	assert.equal(result.content[1]?.type, 'image');
+	assert.equal(context.messages[0]?.content.length, 1);
+});

@@ -43,7 +43,41 @@ const logistic = z.object({
 const entity = logistic.pick({ unitNumber: true, force: true, surface: true, position: true });
 const direction = z.union([z.literal(0), z.literal(4), z.literal(8), z.literal(12)]);
 
+const editSnapshot = z.object({
+	unitNumber: entity.shape.unitNumber,
+	name,
+	position: entity.shape.position,
+	direction: z.number().int().min(0).max(15),
+	ghost: z.boolean(),
+	recipe: z.string(),
+	deconstructing: z.boolean()
+});
+const editTargets = z
+	.array(editSnapshot.pick({ unitNumber: true, name: true, position: true }))
+	.min(1)
+	.max(16);
+const edits = z
+	.array(
+		z.discriminatedUnion('kind', [
+			editSnapshot.extend({ kind: z.literal('rotate'), to: direction }),
+			editSnapshot.extend({ kind: z.literal('deconstruct') }),
+			editSnapshot.extend({ kind: z.literal('cancel_deconstruction') }),
+			editSnapshot.extend({ kind: z.literal('cancel_ghost') })
+		])
+	)
+	.min(1)
+	.max(16)
+	.refine(
+		(targets) => new Set(targets.map((target) => target.unitNumber)).size === targets.length,
+		'An entity may appear only once'
+	);
 export const factoryActionInspectSchema = z.discriminatedUnion('operation', [
+	z.object({
+		operation: z.literal('entities_inspect'),
+		force: label,
+		surface: label,
+		targets: editTargets
+	}),
 	entity.extend({ operation: z.literal('entity_inspect') }),
 	entity.extend({ operation: z.literal('ghost_inspect') }),
 	z.object({ operation: z.literal('research_inspect'), force: label }),
@@ -59,6 +93,13 @@ export const factoryActionInspectSchema = z.discriminatedUnion('operation', [
 ]);
 
 export const factoryActionSchema = z.discriminatedUnion('operation', [
+	z.object({
+		operation: z.literal('entities_edit'),
+		force: label,
+		surface: label,
+		expectedTick: z.number().int().nonnegative(),
+		edits
+	}),
 	entity.extend({
 		operation: z.literal('entity_rotate'),
 		expectedDirection: direction,
@@ -102,6 +143,8 @@ export const factoryActionJsonSchema = z.toJSONSchema(factoryActionSchema);
 export const factoryActionInspectJsonSchema = z.toJSONSchema(factoryActionInspectSchema);
 
 export const factoryActionInspectManifest = {
+	entities_inspect:
+		'Inspect up to 16 exact built entities or construction ghosts by unitNumber, prototype name and position. Returns tick and snapshots for entities_edit.',
 	entity_inspect:
 		'Inspect one built inserter by unitNumber, force, surface and exact position. Returns direction, pickup/drop positions and tick for rotation preconditions.',
 	ghost_inspect:
@@ -114,6 +157,8 @@ export const factoryActionInspectManifest = {
 } satisfies Record<FactoryActionInspect['operation'], string>;
 
 export const factoryActionManifest = {
+	entities_edit:
+		'Edit up to 16 exact freshly inspected targets: rotate with native game rotation, mark built entities for normal robot deconstruction, cancel deconstruction, or cancel construction ghosts. Supply force, surface, expectedTick and edits copied from entities_inspect snapshots plus kind (and to for rotate). Rechecks every target before any write. Deconstruction queues robot work and retains normal material recovery; it never destroys a built entity or grants items. Return outcomes are per-target; verify completion before reconnecting a replacement.',
 	entity_rotate:
 		'Rotate one built inserter to cardinal direction 0, 4, 8 or 12 using native rotation. Supply exact entity_inspect target, expectedDirection and expectedTick. Inspect again afterward to verify pickup and drop. Cannot rotate other entity types or ghosts.',
 	ghost_cancel:
@@ -243,6 +288,28 @@ async function execute(
 	const reply = replySchema.safeParse(decoded);
 	if (!reply.success) throw new ServerError(502, 'The server did not return a valid action result');
 	if (!reply.data.ok) throw new ServerError(409, reply.data.error);
+	if (input.operation === 'entities_inspect' || input.operation === 'entities_edit') {
+		const result = z
+			.object({
+				operation: z.enum(['entities_inspect', 'entities_edit']),
+				tick: z.number().int(),
+				entities: z.array(editSnapshot).optional(),
+				outcomes: z
+					.array(
+						z.object({
+							name,
+							unitNumber: entity.shape.unitNumber,
+							state: z.enum(['rotated', 'marked', 'cancelled', 'refused']),
+							error: z.string().optional()
+						})
+					)
+					.optional()
+			})
+			.safeParse(reply.data.result);
+		if (!result.success)
+			throw new ServerError(502, 'The server returned an invalid entity edit result');
+		return result.data;
+	}
 	if (input.operation.startsWith('ghost_')) {
 		const result = ghostResultSchema.safeParse(reply.data.result);
 		if (!result.success) throw new ServerError(502, 'The server returned an invalid ghost result');

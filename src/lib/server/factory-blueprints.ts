@@ -1,8 +1,12 @@
 import { createHash } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { z } from 'zod';
 import {
 	type BlueprintRequest,
 	blueprintDesignSchema,
+	blueprintEntitySchema,
+	blueprintInputSchema,
 	blueprintRequestSchema,
 	blueprintTargetSchema
 } from '$lib/blueprints';
@@ -12,7 +16,7 @@ import { ServerError } from './server-files';
 import { serverStatus } from './server-process';
 import { rconScript } from './server-rcon';
 
-export const blueprintJsonSchema = z.toJSONSchema(blueprintRequestSchema);
+export const blueprintJsonSchema = z.toJSONSchema(blueprintInputSchema);
 export function blueprintDesignHash(input: unknown) {
 	return createHash('sha256')
 		.update(JSON.stringify(blueprintDesignSchema.parse(input)))
@@ -74,7 +78,7 @@ export async function factoryBlueprint(
 	input: unknown,
 	player?: { name: string; requireAdmin: boolean }
 ) {
-	const parsed = blueprintRequestSchema.safeParse(input);
+	const parsed = blueprintInputSchema.safeParse(input);
 	if (!parsed.success)
 		throw new ServerError(
 			400,
@@ -83,9 +87,51 @@ export async function factoryBlueprint(
 				.map((issue) => `${issue.path.join('.') || 'args'}: ${issue.message}`)
 				.join('; ')}`
 		);
+	let resolved: BlueprintRequest;
+	if ('designId' in parsed.data) {
+		const reference = parsed.data;
+		let saved: z.infer<typeof blueprintDesignSchema>;
+		try {
+			saved = blueprintDesignSchema.parse(
+				JSON.parse(
+					await readFile(
+						join(server.directory, 'blueprint-drafts', `${reference.designId}.json`),
+						'utf8'
+					)
+				)
+			);
+		} catch {
+			throw new ServerError(404, 'Blueprint draft not found on this server; create it again');
+		}
+		if (blueprintDesignHash(saved) !== reference.designId || saved.force !== reference.force)
+			throw new ServerError(
+				409,
+				'Blueprint draft does not match this force or its recorded design'
+			);
+		if (reference.operation === 'create') {
+			const entities = saved.entities.map((entity) => ({ ...entity }));
+			for (const patch of reference.entityChanges) {
+				if (!entities[patch.index - 1])
+					throw new ServerError(400, 'Entity patch index is outside this draft');
+				entities[patch.index - 1] = blueprintEntitySchema.parse({
+					...entities[patch.index - 1],
+					...patch.changes
+				});
+			}
+			resolved = blueprintRequestSchema.parse({
+				...saved,
+				label: reference.label ?? saved.label,
+				entities: [...entities, ...reference.addedEntities],
+				operation: 'create'
+			});
+		} else {
+			const { designId: _id, ...target } = reference;
+			resolved = blueprintRequestSchema.parse({ ...saved, ...target });
+		}
+	} else resolved = parsed.data;
 	if (!(await serverStatus(server)).running)
 		throw new ServerError(409, 'Start this server to design or place a blueprint');
-	const raw = await rconScript(server, blueprintCommand(parsed.data, player));
+	const raw = await rconScript(server, blueprintCommand(resolved, player));
 	let decoded: unknown;
 	try {
 		decoded = JSON.parse(raw.trim());
@@ -95,5 +141,24 @@ export async function factoryBlueprint(
 	const reply = replySchema.safeParse(decoded);
 	if (!reply.success) throw new ServerError(502, 'The server returned an invalid blueprint result');
 	if (!reply.data.ok) throw new ServerError(409, reply.data.error);
+	if (resolved.operation === 'create') {
+		const { operation: _operation, ...design } = resolved;
+		const designId = blueprintDesignHash(design);
+		const directory = join(server.directory, 'blueprint-drafts');
+		await mkdir(directory, { recursive: true, mode: 0o700 });
+		try {
+			await writeFile(join(directory, `${designId}.json`), JSON.stringify(design), {
+				flag: 'wx',
+				mode: 0o600
+			});
+		} catch (cause) {
+			if ((cause as NodeJS.ErrnoException).code !== 'EEXIST') throw cause;
+		}
+		const artifact = z
+			.object({ kind: z.literal('blueprint') })
+			.passthrough()
+			.parse(reply.data.result);
+		return { ...artifact, designId };
+	}
 	return reply.data.result;
 }

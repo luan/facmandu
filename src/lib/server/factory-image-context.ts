@@ -3,10 +3,13 @@ import { z } from 'zod';
 import { factoryImageSchema } from '$lib/factory-images';
 import { pngDimensions } from './factory-image-data';
 
-const imageResult = z.object({
-	kind: z.literal('factory-result'),
-	result: z.object({ image: factoryImageSchema })
-});
+const imageResult = z.union([
+	z.object({
+		kind: z.literal('factory-result'),
+		result: z.object({ image: factoryImageSchema })
+	}),
+	z.object({ image: factoryImageSchema }).transform(({ image }) => ({ result: { image } }))
+]);
 // Load at the provider boundary: transcripts store small immutable image references, not base64 JSON.
 export function addFactoryImages(
 	context: TranscriptContext,

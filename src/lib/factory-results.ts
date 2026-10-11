@@ -1132,6 +1132,28 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 		].includes(tool)
 	) {
 		serverOperationView(view, tool, data);
+	} else if (data.operation === 'entities_edit' || data.operation === 'entities_inspect') {
+		view.title = data.operation === 'entities_edit' ? 'Construction edits' : 'Entity inspection';
+		view.tables = [
+			{
+				title: data.operation === 'entities_edit' ? 'Requested edits' : 'Observed entities',
+				columns:
+					data.operation === 'entities_edit'
+						? ['Entity', 'Result', 'Issue']
+						: ['Entity', 'X', 'Y', 'Ghost'],
+				rows:
+					data.operation === 'entities_edit'
+						? rows(data.outcomes).map((e) => [humanName(e.name), string(e.state), string(e.error)])
+						: rows(data.entities).map((e) => [
+								humanName(e.name),
+								display(record(e.position).x),
+								display(record(e.position).y),
+								e.ghost ? 'Yes' : 'No'
+							])
+			}
+		];
+		if (rows(data.outcomes).some((e) => e.state === 'marked'))
+			view.notes = ['Marked for normal robot deconstruction; removal has not been verified.'];
 	} else if (
 		/^(research_(add|move|remove|cancel)|train_(manual|go_to)|logistic_(set_request|clear_request))$/u.test(
 			tool

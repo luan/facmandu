@@ -57,9 +57,22 @@ export function factoryCommand(request: Record<string, unknown>) {
 ${bundle}
 local request = helpers.json_to_table(${luaString(encoded)})
 if request.op == "catalog" then return functions.agent_tools_v1() end
-if request.op ~= "call" or type(request.tool) ~= "string" or not functions.agent_tools_v1().tools[request.tool] then error("Unknown lookup", 0) end
-if request.args ~= nil and type(request.args) ~= "table" then error("Arguments must be an object", 0) end
-return functions[request.tool](request.args or {})
+local function lookup(query)
+ if type(query.tool) ~= "string" or not functions.agent_tools_v1().tools[query.tool] then error("Unknown lookup",0) end
+ if query.args ~= nil and type(query.args) ~= "table" then error("Arguments must be an object",0) end
+ return functions[query.tool](query.args or {})
+end
+if request.op == "batch" then
+ if type(request.queries)~="table" or #request.queries<1 or #request.queries>16 then error("A batch needs 1 to 16 read queries",0) end
+ local results={}
+ for _,query in ipairs(request.queries) do
+  local success,value=pcall(lookup,query)
+  results[#results+1]={tool=query.tool,ok=success,result=success and value or nil,error=not success and tostring(value):match("^[^\\n]*") or nil}
+ end
+ return {tick=game.tick,results=results}
+end
+if request.op ~= "call" then error("Unknown lookup operation",0) end
+return lookup(request)
 end)
 local reply = helpers.table_to_json(ok and {ok=true, result=result} or {ok=false, error=tostring(result):match("^[^\\n]*")})
 if #reply > 65536 then reply = '{"ok":false,"error":"Result too large; narrow the query"}' end

@@ -102,10 +102,45 @@ export const blueprintRequestSchema = z
 		(input) => input.operation === 'catalog' || input.entities.length + input.tiles.length > 0,
 		'A blueprint needs entities or tiles'
 	);
+const designReference = z.strictObject({
+	designId: z.string().regex(/^[a-f0-9]{64}$/),
+	force: name
+});
+const entityPatch = blueprintEntitySchema
+	.partial()
+	.extend({ direction: blueprintEntitySchema.shape.direction.removeDefault().optional() });
+export const blueprintReferenceSchema = z.discriminatedUnion('operation', [
+	designReference.extend({
+		operation: z.literal('create'),
+		label: z.string().min(1).max(120).optional(),
+		entityChanges: z
+			.array(z.strictObject({ index: z.number().int().min(1).max(200), changes: entityPatch }))
+			.max(200)
+			.default([]),
+		addedEntities: z.array(blueprintEntitySchema).max(200).default([])
+	}),
+	designReference.extend({
+		operation: z.literal('inspect'),
+		surface: name,
+		position: blueprintTargetSchema.shape.position
+	}),
+	designReference.extend({
+		operation: z.literal('place'),
+		surface: name,
+		position: blueprintTargetSchema.shape.position,
+		expectedTick: z.number().int().nonnegative(),
+		expectedDesign: z.string().regex(/^[a-f0-9]{64}$/)
+	})
+]);
+export const blueprintInputSchema = z.union([blueprintRequestSchema, blueprintReferenceSchema]);
 export type BlueprintRequest = z.infer<typeof blueprintRequestSchema>;
 export const blueprintArtifactSchema = z
 	.object({
 		kind: z.literal('blueprint'),
+		designId: z
+			.string()
+			.regex(/^[a-f0-9]{64}$/)
+			.optional(),
 		image: factoryImageSchema.optional(),
 		renderError: z.string().optional(),
 		label: z.string(),

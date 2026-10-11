@@ -132,3 +132,47 @@ test('inserter rotation requires exact inspected state and a cardinal direction'
 	assert.equal(factoryActionInspectSchema.safeParse(ghost).success, false);
 	assert.equal(factoryActionSchema.safeParse({ ...ghost, expectedTick: undefined }).success, false);
 });
+
+test('native entity edits require fresh exact snapshots and reject duplicate or destructive commands', () => {
+	const snapshot = {
+		unitNumber: 12,
+		name: 'transport-belt',
+		position: { x: 0.5, y: 0.5 },
+		direction: 0,
+		ghost: false,
+		recipe: '',
+		deconstructing: false
+	};
+	const input = {
+		operation: 'entities_edit',
+		force: 'player',
+		surface: 'nauvis',
+		expectedTick: 120,
+		edits: [{ ...snapshot, kind: 'rotate', to: 4 }]
+	};
+	assert.equal(factoryActionSchema.safeParse(input).success, true);
+	for (const changed of [
+		{ ...input, expectedTick: undefined },
+		{ ...input, edits: [{ ...snapshot, kind: 'destroy' }] },
+		{ ...input, edits: [...input.edits, ...input.edits] },
+		{ ...input, edits: [{ ...snapshot, kind: 'rotate', to: 5 }] },
+		{
+			...input,
+			edits: Array.from({ length: 17 }, (_, index) => ({
+				...snapshot,
+				unitNumber: index + 1,
+				kind: 'deconstruct'
+			}))
+		}
+	])
+		assert.equal(factoryActionSchema.safeParse(changed).success, false);
+	assert.equal(
+		factoryActionInspectSchema.safeParse({
+			operation: 'entities_inspect',
+			force: 'player',
+			surface: 'nauvis',
+			targets: [{ unitNumber: 12, name: 'transport-belt', position: snapshot.position }]
+		}).success,
+		true
+	);
+});

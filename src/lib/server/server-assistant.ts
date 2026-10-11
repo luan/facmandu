@@ -232,6 +232,13 @@ export async function finishServerTurn(
 											? 'Reading factory…'
 											: 'Working…'
 					});
+				if (chunk.type === 'data-part' && chunk.name === 'factory-result') {
+					const parsed = factoryResultSchema.safeParse(chunk.data);
+					if (parsed.success) {
+						results.push(parsed.data);
+						send({ results: results.filter((item) => item.tool !== 'mod_cards') });
+					}
+				}
 				if (chunk.type === 'tool-output') {
 					send({ progress: 'Thinking…' });
 					const cards = assistantModsSchema.safeParse(chunk.output);
