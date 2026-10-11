@@ -34,28 +34,14 @@ const provider = createProvider({
 	]
 });
 
-// Bound each deliberation, not the whole agent run. Leave room for native
-// blueprint arguments and answers after the serving layer ends reasoning.
+// Bound one model call rather than the whole agent response. Truncated calls
+// continue through answer recovery. This route's forced thinking budget produced
+// degenerate output in native QA; reconsider it only after that regression passes.
 export const neuralwattProvider = {
 	...provider,
 	streamSimple: ((model, context, options) =>
 		provider.streamSimple(model, context, {
 			...options,
-			maxTokens: options?.maxTokens ?? 65_536,
-			onPayload: async (payload, selected) => {
-				const budgets = {
-					minimal: 1024,
-					low: 2048,
-					medium: 4096,
-					high: 8192,
-					xhigh: 16_384,
-					max: 32_768
-				};
-				const body =
-					payload && typeof payload === 'object' && options?.reasoning
-						? { ...payload, thinking_token_budget: budgets[options.reasoning] }
-						: payload;
-				return (await options?.onPayload?.(body, selected)) ?? body;
-			}
+			maxTokens: Math.min(options?.maxTokens ?? 65_536, 65_536)
 		})) satisfies typeof provider.streamSimple
 };

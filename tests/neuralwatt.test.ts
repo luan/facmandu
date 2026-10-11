@@ -37,6 +37,7 @@ test('NeuralWatt uses explicit account keys and serializes reasoning and tools',
 			{
 				apiKey: 'account-key',
 				reasoning: 'low',
+				maxTokens: 393216,
 				onPayload: (payload) => {
 					captured = payload;
 					throw new Error('fixture stops before network');
@@ -55,7 +56,7 @@ test('NeuralWatt uses explicit account keys and serializes reasoning and tools',
 	};
 	assert.equal(payload.model, 'deepseek-v4.1-flash');
 	assert.equal(payload.reasoning_effort, 'low');
-	assert.equal(payload.thinking_token_budget, 2048);
+	assert.equal(payload.thinking_token_budget, undefined);
 	assert.equal(payload.max_tokens, 65_536);
 	assert.equal(payload.messages[0]?.role, 'system');
 	assert.equal(payload.tools[0]?.function.name, 'inspect');
