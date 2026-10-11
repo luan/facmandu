@@ -68,6 +68,9 @@ test('Toby panel sends native player requests and preserves typed drafts across 
  handlers[3]({player_index=1,element={valid=true,name='facmandu-toby-blueprint'}})
  assert(imported=='0abc=' and not frame.valid)
  interface.open_player(1);frame=player.gui.screen['facmandu-toby-panel']
+ handlers[8]({player_index=1,element=storage.gui[1].message,control=true,shift=true})
+ assert(player.opened==player.cursor_stack and not frame.valid)
+ interface.open_player(1);frame=player.gui.screen['facmandu-toby-panel']
  handlers[5]({element=frame});assert(not frame.valid)
  `;
 	const status = lauxlib.luaL_dostring(state, to_luastring(script));

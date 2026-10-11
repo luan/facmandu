@@ -56,7 +56,7 @@ local function panel(player)
   if entry[1]=='conversation' then refs.history=content end
  end
  tabs.selected_tab_index=storage.tabs[player.index] or 1
- local composer=frame.add{type='textfield',name=PREFIX..'message',text=storage.drafts[player.index] or ''}
+ local composer=frame.add{type='textfield',name=PREFIX..'message',text=storage.drafts[player.index] or '',tooltip='Enter: send or steer · Ctrl+Shift+Enter: open blueprint'}
  composer.style.width=456;composer.style.height=36
  local actions=frame.add{type='flow',direction='horizontal'}
  actions.style.width=456
@@ -140,7 +140,7 @@ local function update(player_index,state)
   label(refs.design,state.design or 'Latest blueprint',410,'heading_2_label')
   label(refs.design,'Blueprint design',410)
   local actions=refs.design.add{type='flow',direction='vertical'}
-  actions.add{type='button',name=PREFIX..'inspect-blueprint',caption='Open blueprint',tooltip='Inspect the design in Factorio’s blueprint editor'}
+  actions.add{type='button',name=PREFIX..'inspect-blueprint',caption='Open blueprint',tooltip='Inspect in Factorio’s blueprint editor · Ctrl+Shift+Enter from the message input'}
   actions.add{type='button',name=PREFIX..'blueprint',caption='Place ghosts',style='confirm_button',tooltip='Put the design in your cursor. Construction uses your ordinary items.'}
   if #(state.materials or {})>0 then
    label(refs.design,'Construction materials',410,'heading_2_label')
@@ -199,7 +199,10 @@ local function send(player)
  if #text>0 and #text<=6000 then emit(player,'send',text,selected(player));refs.message.text='';storage.drafts[player.index]='' end
 end
 script.on_event(defines.events.on_gui_confirmed,function(event)
- if event.element.valid and event.element.name==PREFIX..'message' then send(game.get_player(event.player_index)) end
+ if event.element.valid and event.element.name==PREFIX..'message' then
+  local player=game.get_player(event.player_index)
+  if event.control and event.shift then take_blueprint(player,true) else send(player) end
+ end
 end)
 script.on_event(defines.events.on_gui_click,function(event)
  local element=event.element
