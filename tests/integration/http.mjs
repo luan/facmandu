@@ -158,6 +158,7 @@ let downloadStarted;
 let blockReleases;
 let releasesStarted;
 const dropboxFiles = new Map();
+const dropboxHistory = new Map();
 let dropboxRevision = 0;
 let corruptCloudDownload = false;
 let rejectCloudUpload = false;
@@ -204,14 +205,17 @@ const fixture = createServer(async (request, response) => {
 				: JSON.parse(bytes.toString());
 			if (key === '/dropbox/2/auth/token/revoke') return send(null);
 			if (key === '/dropbox/2/files/upload') {
-				assert.equal(arg.mode, 'add');
+				const existing = dropboxFiles.get(arg.path.toLowerCase());
+				if (existing) {
+					assert.equal(arg.mode['.tag'], 'update');
+					assert.equal(arg.mode.update, existing.metadata.rev);
+				} else assert.equal(arg.mode, 'add');
 				assert.equal(arg.autorename, false);
 				assert.equal(arg.strict_conflict, true);
 				assert.equal(arg.content_hash, cloudHash(bytes));
 				if (rejectCloudUpload === 'quota')
 					return send({ error_summary: 'path/insufficient_space/' }, 409);
-				if (rejectCloudUpload || dropboxFiles.has(arg.path.toLowerCase()))
-					return send({ error: 'conflict' }, 409);
+				if (rejectCloudUpload) return send({ error: 'conflict' }, 409);
 				const metadata = {
 					'.tag': 'file',
 					name: arg.path.split('/').at(-1),
@@ -222,6 +226,7 @@ const fixture = createServer(async (request, response) => {
 					server_modified: new Date().toISOString()
 				};
 				dropboxFiles.set(metadata.path_lower, { metadata, bytes });
+				dropboxHistory.set(metadata.rev, { metadata, bytes });
 				return send(metadata);
 			}
 			if (key === '/dropbox/2/files/list_folder')
@@ -232,12 +237,23 @@ const fixture = createServer(async (request, response) => {
 					cursor: 'done',
 					has_more: false
 				});
+			if (key === '/dropbox/2/files/list_revisions')
+				return send({
+					entries: [...dropboxHistory.values()]
+						.map((file) => file.metadata)
+						.filter((file) => file.path_lower === arg.path)
+						.reverse()
+				});
 			if (key === '/dropbox/2/files/get_metadata') {
-				const file = dropboxFiles.get(arg.path);
-				return file ? send(file.metadata) : send({ error: 'missing' }, 409);
+				const file = arg.path.startsWith('rev:')
+					? dropboxHistory.get(arg.path.slice(4))
+					: dropboxFiles.get(arg.path);
+				return file
+					? send(file.metadata)
+					: send({ error: { '.tag': 'path', path: { '.tag': 'not_found' } } }, 409);
 			}
 			if (key === '/dropbox/2/files/download') {
-				const file = [...dropboxFiles.values()].find(
+				const file = [...dropboxHistory.values()].find(
 					(file) => `rev:${file.metadata.rev}` === arg.path
 				);
 				if (!file) return send({ error: 'missing' }, 409);
@@ -4491,6 +4507,10 @@ done
 			'Dropbox OAuth uses PKCE, browser-bound single-use state, refresh tokens and original-session ownership without exposing credentials'
 		);
 
+		await action(`${serverPath}/cloud`, cookies.owner, {
+			operation: 'automatic',
+			enabled: 'false'
+		});
 		const cloudDirectory = machineDirs[0];
 		const cloudConfigPath = join(cloudDirectory, 'facmandu.json');
 		const cloudOriginal = zipSync({ 'world/level.dat': strToU8('original world') });
@@ -4554,6 +4574,12 @@ done
 		const cloudChoice = cloudList.saves[0];
 		assert.deepEqual(dropboxFiles.get(cloudChoice.path_lower).bytes, Buffer.from(cloudOriginal));
 		assert.equal((await json(`${secondPath}/cloud`, { cookie: cookies.owner })).saves.length, 0);
+		assert.equal((await cloudOperation('backup')).state, 'done');
+		assert.equal(dropboxHistory.size, 1, 'identical content does not create a revision');
+		await writeFile(
+			join(cloudDirectory, 'saves/cloud-original.zip'),
+			zipSync({ 'world/level.dat': strToU8('changed for backup failures') })
+		);
 		rejectCloudUpload = true;
 		assert.equal((await cloudOperation('backup')).state, 'error');
 		rejectCloudUpload = 'quota';
@@ -4579,6 +4605,11 @@ done
 			zipSync({ 'world/level.dat': strToU8('newer world') })
 		);
 		const newerWorld = await readFile(join(cloudDirectory, 'saves/cloud-original.zip'));
+		assert.equal((await cloudOperation('backup')).state, 'done');
+		assert.equal(dropboxFiles.size, 1);
+		const history = await json(`${serverPath}/cloud`, { cookie: cookies.owner });
+		assert.equal(history.saves.length, 2);
+		assert.equal(history.saves[1].rev, cloudChoice.rev);
 		const restoredEvent = await cloudOperation('restore', cloudChoice);
 		assert.equal(restoredEvent.state, 'done', restoredEvent.message);
 		const restoredConfig = JSON.parse(await readFile(cloudConfigPath, 'utf8'));
@@ -4598,7 +4629,7 @@ done
 			'#!/bin/sh\nprintf "ActiveState=active\nSubState=running\n"\n',
 			{ mode: 0o755 }
 		);
-		await action(`${serverPath}/cloud`, cookies.owner, { operation: 'backup' }, 409);
+		assert.equal((await cloudOperation('backup')).state, 'done');
 		await action(
 			`${serverPath}/cloud`,
 			cookies.owner,
@@ -4610,12 +4641,28 @@ done
 			'#!/bin/sh\nprintf "ActiveState=inactive\nSubState=dead\n"\n',
 			{ mode: 0o755 }
 		);
+		const automaticWorld = zipSync({ 'world/level.dat': strToU8('automatic checkpoint') });
+		await writeFile(join(cloudDirectory, 'saves', restoredConfig.save), automaticWorld);
+		await action(`${serverPath}/cloud`, cookies.owner, { operation: 'automatic', enabled: 'true' });
+		const automaticState = await until(
+			`${serverPath}/cloud`,
+			cookies.owner,
+			(value) => value.lastBackup?.hash === cloudHash(automaticWorld)
+		);
+		assert.equal(automaticState.automatic, true);
+		assert.equal(dropboxFiles.size, 1);
+		assert.equal(automaticState.saves.length, 4);
+		assert.deepEqual(dropboxFiles.get(cloudChoice.path_lower).bytes, Buffer.from(automaticWorld));
+		await action(`${serverPath}/cloud`, cookies.owner, {
+			operation: 'automatic',
+			enabled: 'false'
+		});
 		await action(`${serverPath}/cloud`, cookies.owner, { operation: 'disconnect' });
 		assert.equal((await json(`${serverPath}/cloud`, { cookie: cookies.owner })).connected, false);
 		assert.equal(dropboxFiles.size, 1);
 		await action(`${serverPath}/cloud`, cookies.owner, { operation: 'backup' }, 409);
 		passed(
-			'Dropbox backups never overwrite, restores reject wrong-server/stale/corrupt files, preserve newer worlds, stay stopped, and disconnect retains backups'
+			'Dropbox stable backups deduplicate content, retain revisions and restore exact history while preserving local worlds'
 		);
 	}
 	console.info(`${checks} HTTP workflow checks passed.`);

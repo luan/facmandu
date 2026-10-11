@@ -6,7 +6,7 @@ import { env } from '$env/dynamic/private';
 import { generateSessionToken, requireSameOrigin, setSessionTokenCookie } from './auth';
 import { db } from './db';
 import { dropboxAccount, dropboxLogin, session } from './db/schema';
-import { ServerError } from './server-files';
+import { ServerError, updateServerConfig } from './server-files';
 import { requireServer } from './servers';
 
 const cookieName = 'dropbox-link';
@@ -161,6 +161,9 @@ export async function finishDropbox(event: RequestEvent): Promise<Response> {
 	);
 	setSessionTokenCookie(event, sessionToken, renewedSession.expiresAt);
 	// A 200 document ends the cross-site redirect chain before using the Strict cookie.
+	await updateServerConfig(await requireServer(login.userId, login.serverId), {
+		cloudBackup: { enabled: true, ownerId: login.userId }
+	});
 	const target = `${destination}&amp;dropbox=connected`;
 	return new Response(
 		`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${target}"><title>Dropbox connected</title></head><body><p>Dropbox connected. <a href="${target}">Return to Saves</a></p></body></html>`,

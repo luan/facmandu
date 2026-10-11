@@ -2,6 +2,7 @@ import type { Handle } from '@sveltejs/kit';
 import { building } from '$app/environment';
 import * as auth from '$lib/server/auth.js';
 import { initializeDatabase } from '$lib/server/db';
+import { startDropboxBackups } from '$lib/server/dropbox-backups';
 import { startFactoryWatchSampler } from '$lib/server/factory-watches';
 import { startInGameAssistants } from '$lib/server/in-game-assistant';
 
@@ -10,6 +11,7 @@ if (!building)
 	void initializeDatabase()
 		.then(() => {
 			startFactoryWatchSampler();
+			startDropboxBackups();
 			startInGameAssistants();
 		})
 		.catch((cause) => console.error('Factory watch startup failed:', cause));
@@ -56,6 +58,7 @@ const handleSecurity: Handle = async ({ event, resolve }) => {
 export const handle: Handle = async ({ event, resolve }) => {
 	await initializeDatabase();
 	startFactoryWatchSampler();
+	startDropboxBackups();
 	startInGameAssistants();
 	// Chain the handlers
 	return handleSecurity({ event, resolve: (event) => handleAuth({ event, resolve }) });

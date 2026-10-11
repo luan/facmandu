@@ -10,11 +10,13 @@ import {
 } from '$lib/server/dropbox';
 import {
 	backupToDropbox,
+	cloudBackupState,
 	cloudFileSchema,
 	listDropboxSaves,
-	restoreFromDropbox
+	restoreFromDropbox,
+	sampleDropboxBackups
 } from '$lib/server/dropbox-backups';
-import { ServerError } from '$lib/server/server-files';
+import { ServerError, serverConfig, updateServerConfig } from '$lib/server/server-files';
 import { requireStopped } from '$lib/server/server-process';
 import { reserveServer, serverTask } from '$lib/server/server-tasks';
 import { requireServer } from '$lib/server/servers';
@@ -31,6 +33,8 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
 		return json({
 			configured: dropboxConfigured(),
 			connected: true,
+			automatic: (await serverConfig(server)).cloudBackup.enabled,
+			lastBackup: await cloudBackupState(server),
 			...(await listDropboxSaves(
 				server,
 				await dropboxAccess(userId),
@@ -53,7 +57,7 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 	const server = await requireServer(userId, params.serverId);
 	const form = await authenticationForm(request);
 	const operation = form.get('operation');
-	if (!['backup', 'restore', 'disconnect'].includes(String(operation)))
+	if (!['backup', 'restore', 'disconnect', 'automatic'].includes(String(operation)))
 		error(400, 'Invalid cloud operation');
 	const release = reserveServer(server.id, 'Transferring cloud save');
 	if (!release) error(409, serverTask(server.id) || 'Server busy');
@@ -63,8 +67,21 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 			await disconnectDropbox(userId);
 			return json({ message: 'Dropbox disconnected. Backups were kept.' });
 		}
-		await requireStopped(server);
+		if (operation === 'restore') await requireStopped(server);
 		if (!(await hasDropbox(userId))) error(409, 'Connect Dropbox first');
+		if (operation === 'automatic') {
+			await updateServerConfig(server, {
+				cloudBackup: { enabled: form.get('enabled') !== 'false', ownerId: userId }
+			});
+			if (form.get('enabled') !== 'false')
+				queueMicrotask(
+					() =>
+						void sampleDropboxBackups().catch((cause) =>
+							console.error('Automatic Dropbox backup failed:', cause)
+						)
+				);
+			return json({ message: 'Automatic backup setting saved.' });
+		}
 		const choice =
 			operation === 'restore' ? cloudFileSchema.parse(JSON.parse(String(form.get('save')))) : null;
 		const report = (state: 'running' | 'done' | 'error', message: string) =>

@@ -41,6 +41,9 @@ export const gameAssistantSchema = z.object({
 });
 export type GameAssistantConfig = z.infer<typeof gameAssistantSchema>;
 export const configSchema = z.object({
+	cloudBackup: z
+		.object({ enabled: z.boolean().default(false), ownerId: z.string().default('') })
+		.prefault({}),
 	gameAssistant: gameAssistantSchema.prefault({}),
 	bindAddress: z
 		.string()

@@ -8,6 +8,7 @@
  let { serverId, running, busyReason }: { serverId: string; running: boolean; busyReason: string } = $props();
  let connected = $state(false);
  let configured = $state(false);
+ let automatic = $state(false);
  let loading = $state(true);
  let pending = $state(false);
  let message = $state('');
@@ -21,26 +22,26 @@
   loading = true; message = '';
   try {
    const response = await fetch(`/servers/${serverId}/cloud${more && cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(45_000) });
-   const data: { connected?: boolean; configured?: boolean; saves: CloudSave[]; cursor: string | null; message?: string } = await response.json();
-   connected = data.connected ?? connected; configured = data.configured ?? configured;
+   const data: { connected?: boolean; configured?: boolean; automatic?: boolean; saves: CloudSave[]; cursor: string | null; message?: string } = await response.json();
+   connected = data.connected ?? connected; configured = data.configured ?? configured; automatic = data.automatic ?? automatic;
    if (!response.ok) throw new Error(data.message || 'Could not load Dropbox backups');
    saves = more ? [...saves, ...data.saves] : data.saves; cursor = data.cursor;
   } catch (cause) { message = cause instanceof Error ? cause.message : 'Could not load Dropbox backups'; }
   finally { loading = false; }
  }
  $effect(() => { void serverId; void completed; void load(); });
- async function transfer(operation: 'backup' | 'restore' | 'disconnect') {
-  if (pending || busyReason || (operation !== 'disconnect' && running)) return;
+ async function transfer(operation: 'backup' | 'restore' | 'disconnect' | 'automatic') {
+  if (pending || busyReason || (operation === 'restore' && running)) return;
   pending = true;
   try {
-   const body = new FormData(); body.set('operation', operation);
+   const body = new FormData(); body.set('operation', operation); if (operation === 'automatic') body.set('enabled', String(!automatic));
    if (restore) body.set('save', JSON.stringify(restore));
    const response = await fetch(`/servers/${serverId}/cloud`, { method: 'POST', body, headers: { Accept: 'application/json' } });
    const data: { message?: string } = await response.json();
    if (!response.ok) throw new Error(data.message || 'Could not start cloud transfer');
    restore = null;
    toast.success(data.message || 'Cloud transfer started. Follow progress in Activity.');
-   if (operation === 'disconnect') await load();
+   if (operation === 'disconnect' || operation === 'automatic') await load();
   } catch (cause) { toast.error(cause instanceof Error ? cause.message : 'Cloud transfer failed'); }
   finally { pending = false; }
  }
@@ -50,7 +51,8 @@
   <h2 class="inline-flex items-center gap-2 font-semibold"><CloudIcon class="size-4" />Dropbox backups</h2>
   <div class="flex flex-wrap items-center gap-2">
    {#if connected}
-    <Button size="sm" variant="outline" disabled={!!reason || pending} onclick={() => void transfer('backup')} title={reason}><UploadIcon class="size-4" />Back up current world</Button>
+    <Button size="sm" variant="ghost" aria-pressed={automatic} disabled={pending || !!busyReason} onclick={() => void transfer('automatic')}>Automatic backups {automatic ? 'on' : 'off'}</Button>
+    <Button size="sm" variant="outline" disabled={!!busyReason || pending} onclick={() => void transfer('backup')} title={busyReason}><UploadIcon class="size-4" />Back up current world</Button>
     <Button size="sm" variant="ghost" disabled={pending || !!busyReason} onclick={() => void transfer('disconnect')}>Disconnect</Button>
    {:else if configured}
     <form method="POST" action={`/api/dropbox/start?serverId=${encodeURIComponent(serverId)}`}><Button size="sm" type="submit">Connect Dropbox</Button></form>
@@ -59,14 +61,14 @@
   </div>
  </div>
  <div class="space-y-3 p-3 text-sm">
-  <p class="text-muted-foreground">Versioned copies in your Facmandu Dropbox folder. Transfers require a stopped server. Restoring preserves the current world and selects a separate save for the next start; mods and mod settings stay as configured.</p>
+  <p class="text-muted-foreground">Completed saves are backed up automatically when enabled. Dropbox retains history under one filename. Restore requires a stopped server. Restoring preserves the current world and selects a separate save for the next start; mods and mod settings stay as configured.</p>
   {#if loading}<p role="status">Loading Dropbox backups…</p>
   {:else if message}<p role="alert" class="text-destructive">{message}</p>{#if connected}<form method="POST" action={`/api/dropbox/start?serverId=${encodeURIComponent(serverId)}`}><Button type="submit" size="sm" variant="outline">Reconnect Dropbox</Button></form>{/if}
   {:else if !configured}<p>Dropbox setup is not configured on this host.</p>
   {:else if !connected}<p>Connect your Dropbox account to back up and restore this server’s saves.</p>
   {:else}
    <ul class="divide-y divide-border">
-    {#each saves as save (save.path_lower)}
+    {#each saves as save (save.rev)}
      <li class="flex items-center gap-3 py-3">
       <div class="min-w-0 flex-1"><p class="break-all font-medium">{save.name}</p><p class="text-muted-foreground">{new Date(save.server_modified).toLocaleString()} · {(save.size / 1024 / 1024).toFixed(1)} MB</p></div>
       <Button variant="outline" size="sm" disabled={!!reason || pending} title={reason} onclick={() => restore = save}><DownloadIcon class="size-4" />Restore</Button>

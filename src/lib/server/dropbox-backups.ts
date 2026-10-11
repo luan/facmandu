@@ -1,14 +1,25 @@
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { link, open, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { link, open, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import { cloudSaveLimit, dropboxContentHash, validateCloudSave } from '../dropbox-saves';
+import { publishActivity } from './activity';
+import { db } from './db';
 import type { ManagedServer } from './db/schema';
-import { dropboxAccess, dropboxRequest, requireDropboxResponse } from './dropbox';
-import { ServerError, safeFileName, serverConfig, updateServerConfig } from './server-files';
+import { managedServer } from './db/schema';
+import { dropboxAccess, dropboxRequest, hasDropbox, requireDropboxResponse } from './dropbox';
+import {
+	ServerError,
+	safeFileName,
+	serverConfig,
+	updateServerConfig,
+	writeJson
+} from './server-files';
 import { requireStopped } from './server-process';
 import { savePath, serverSaves } from './server-saves';
+import { reserveServer } from './server-tasks';
+import { canManageServer } from './servers';
 
 export const cloudFileSchema = z.object({
 	name: z.string().max(255),
@@ -70,6 +81,23 @@ export async function listDropboxSaves(server: ManagedServer, access: string, cu
 			}
 		})
 		.toSorted((a, b) => b.server_modified.localeCompare(a.server_modified));
+	const current = saves.find((file) => file.name === 'cloud-current.zip');
+	if (current) {
+		const response = await dropboxRequest(access, 'files/list_revisions', {
+			path: current.path_lower,
+			mode: 'path',
+			limit: 100
+		});
+		await requireDropboxResponse(response);
+		const history = z.object({ entries: z.array(cloudFileSchema) }).parse(await response.json());
+		return {
+			saves: [
+				...history.entries.map((file) => scopedFile(server, file)),
+				...saves.filter((file) => file !== current)
+			],
+			cursor: page.has_more ? page.cursor : null
+		};
+	}
 	return { saves, cursor: page.has_more ? page.cursor : null };
 }
 async function currentSave(server: ManagedServer) {
@@ -147,16 +175,71 @@ function snapshotName(source: string, prefix = 'cloud') {
 		.replace(/[^a-z0-9_-]/giu, '-')
 		.slice(0, 45)}-${new Date().toISOString().replace(/[:.]/gu, '-')}-${randomUUID()}.zip`;
 }
-// Initial cloud transfers require a stopped server. Add live checkpoints only after
-// the same restore guarantees have been verified with asynchronous RCON saves.
-export async function backupToDropbox(server: ManagedServer, userId: string) {
-	await requireStopped(server);
-	const access = await dropboxAccess(userId);
+const backupStateSchema = z.object({
+	source: z.string(),
+	stamp: z.string(),
+	revision: z.string(),
+	hash: z.string()
+});
+const statePath = (server: ManagedServer) => join(server.directory, 'cloud-backup.json');
+export async function cloudBackupState(server: ManagedServer) {
+	try {
+		return backupStateSchema.parse(JSON.parse(await readFile(statePath(server), 'utf8')));
+	} catch (cause) {
+		if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return null;
+		throw cause;
+	}
+}
+async function saveStamp(server: ManagedServer, source: string) {
+	const file = await stat(savePath(server, source));
+	return `${file.ino}:${file.size}:${file.mtimeMs}`;
+}
+export async function backupToDropbox(server: ManagedServer, userId: string, automatic = false) {
 	const source = await currentSave(server);
+	const stamp = await saveStamp(server, source);
+	const previous = await cloudBackupState(server);
+	if (automatic && previous?.source === source && previous.stamp === stamp)
+		return { source, backup: 'cloud-current.zip', unchanged: true };
+	const access = await dropboxAccess(userId);
 	const bytes = await readStableSave(server, source);
-	const name = snapshotName(source);
-	await publishSave(server, name, bytes);
 	const hash = dropboxContentHash(bytes);
+	const name = 'cloud-current.zip';
+	const path = `${folder(server)}/${name}`;
+	const metadata = await dropboxRequest(access, 'files/get_metadata', { path });
+	let current: CloudSave | null = null;
+	if (metadata.status === 409) {
+		const problem = z
+			.object({
+				error: z.object({
+					'.tag': z.literal('path'),
+					path: z.object({ '.tag': z.literal('not_found') })
+				})
+			})
+			.safeParse(await metadata.json());
+		if (!problem.success)
+			throw new ServerError(
+				409,
+				'Could not inspect the existing Dropbox backup. Nothing was overwritten.'
+			);
+	} else {
+		await requireDropboxResponse(metadata);
+		current = scopedFile(server, cloudFileSchema.parse(await metadata.json()));
+	}
+	if (current?.content_hash === hash && current.size === bytes.length) {
+		await writeJson(statePath(server), { source, stamp, revision: current.rev, hash });
+		return { source, backup: name, unchanged: true };
+	}
+	// Keep one recovery copy per distinct save, including failed uploads. Existing backups stay intact.
+	const recovery = `cloud-recovery-${hash}.zip`;
+	try {
+		await publishSave(server, recovery, bytes);
+	} catch (cause) {
+		if (
+			(cause as NodeJS.ErrnoException).code !== 'EEXIST' ||
+			dropboxContentHash(await readStableSave(server, recovery)) !== hash
+		)
+			throw cause;
+	}
 	const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
 		method: 'POST',
 		redirect: 'error',
@@ -164,8 +247,8 @@ export async function backupToDropbox(server: ManagedServer, userId: string) {
 			Authorization: `Bearer ${access}`,
 			'Content-Type': 'application/octet-stream',
 			'Dropbox-API-Arg': JSON.stringify({
-				path: `${folder(server)}/${name}`,
-				mode: 'add',
+				path,
+				mode: current ? { '.tag': 'update', update: current.rev } : 'add',
 				autorename: false,
 				strict_conflict: true,
 				content_hash: hash
@@ -179,9 +262,10 @@ export async function backupToDropbox(server: ManagedServer, userId: string) {
 	if (uploaded.name !== name || uploaded.content_hash !== hash || uploaded.size !== bytes.length)
 		throw new ServerError(
 			502,
-			'Dropbox backup integrity check failed. The local snapshot was kept.'
+			'Dropbox backup integrity check failed. The local recovery copy was kept.'
 		);
-	return { source, backup: name };
+	await writeJson(statePath(server), { source, stamp, revision: uploaded.rev, hash });
+	return { source, backup: name, unchanged: false };
 }
 async function boundedDownload(response: Response) {
 	const reader = response.body?.getReader();
@@ -207,7 +291,7 @@ export async function restoreFromDropbox(server: ManagedServer, userId: string, 
 	scopedFile(server, choice);
 	const access = await dropboxAccess(userId);
 	const metadataResponse = await dropboxRequest(access, 'files/get_metadata', {
-		path: choice.path_lower
+		path: `rev:${choice.rev}`
 	});
 	await requireDropboxResponse(metadataResponse);
 	const current = scopedFile(server, cloudFileSchema.parse(await metadataResponse.json()));
@@ -216,7 +300,7 @@ export async function restoreFromDropbox(server: ManagedServer, userId: string, 
 		current.content_hash !== choice.content_hash ||
 		current.size !== choice.size
 	)
-		throw new ServerError(409, 'This cloud backup changed. Refresh and choose it again.');
+		throw new ServerError(409, 'This cloud revision no longer matches. No save was replaced.');
 	const response = await fetch('https://content.dropboxapi.com/2/files/download', {
 		method: 'POST',
 		redirect: 'error',
@@ -253,3 +337,76 @@ export async function restoreFromDropbox(server: ManagedServer, userId: string, 
 	await updateServerConfig(server, { save: restored, resumeAutosave: false });
 	return { restored, backup };
 }
+
+const sampler = globalThis as typeof globalThis & {
+	__facmanduCloudTimer?: ReturnType<typeof setInterval>;
+	__facmanduCloudBusy?: boolean;
+};
+export async function sampleDropboxBackups() {
+	if (sampler.__facmanduCloudBusy) return;
+	sampler.__facmanduCloudBusy = true;
+	try {
+		for (const server of await db.select().from(managedServer)) {
+			const config = await serverConfig(server);
+			if (
+				!config.cloudBackup.enabled ||
+				!canManageServer(config.cloudBackup.ownerId) ||
+				!(await hasDropbox(config.cloudBackup.ownerId))
+			)
+				continue;
+			const release = reserveServer(server.id, 'Backing up completed save to Dropbox');
+			if (!release) continue;
+			try {
+				const result = await backupToDropbox(server, config.cloudBackup.ownerId, true);
+				if (!result.unchanged)
+					publishActivity({
+						scope: 'server',
+						targetId: server.id,
+						task: 'cloud-save',
+						state: 'done',
+						message: 'Completed save backed up to Dropbox',
+						completed: 1,
+						total: 1
+					});
+			} catch (cause) {
+				// A save still being written is retried; it must never replace the last verified cloud revision.
+				if (
+					cause instanceof ServerError &&
+					[404, 409, 422].includes(cause.status) &&
+					/No current world|Selected save not found|changed while copying|Save is incomplete/.test(
+						cause.message
+					)
+				)
+					continue;
+				publishActivity({
+					scope: 'server',
+					targetId: server.id,
+					task: 'cloud-save',
+					state: 'error',
+					message: cause instanceof Error ? cause.message : 'Automatic Dropbox backup failed',
+					completed: 0,
+					total: 1
+				});
+			} finally {
+				release();
+			}
+		}
+	} finally {
+		sampler.__facmanduCloudBusy = false;
+	}
+}
+export function startDropboxBackups() {
+	if (sampler.__facmanduCloudTimer) return;
+	const sample = () =>
+		void sampleDropboxBackups().catch((cause) =>
+			console.error('Automatic Dropbox backup failed:', cause)
+		);
+	sampler.__facmanduCloudTimer = setInterval(sample, 60_000);
+	sampler.__facmanduCloudTimer.unref();
+	sample();
+}
+if (import.meta.hot)
+	import.meta.hot.dispose(() => {
+		if (sampler.__facmanduCloudTimer) clearInterval(sampler.__facmanduCloudTimer);
+		sampler.__facmanduCloudTimer = undefined;
+	});
