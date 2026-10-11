@@ -118,6 +118,7 @@ function panelBlueprint(results: string): string | undefined {
 	} catch {
 		/* A damaged historic result must not prevent chat updates. */
 	}
+	return undefined;
 }
 async function receiveUi(
 	server: ManagedServer,
