@@ -270,20 +270,23 @@ local function logistic_inspect(request)
   return { operation = request.operation, before = snapshot, after = snapshot }
 end
 
-local function inspected_inserter(request, ghost)
+local function stationary_factory_entity(e)
+ local p=prototypes.entity[e.name]
+ return p and p.items_to_place_this and #p.items_to_place_this>0 and e.type~='character' and e.type~='car' and e.type~='spider-vehicle' and e.type~='locomotive' and e.type~='cargo-wagon' and e.type~='fluid-wagon' and e.type~='artillery-wagon'
+end
+local function inspected_entity(request, ghost)
   local surface = game.surfaces[request.surface]
   if not surface then fail("Surface no longer exists") end
-  -- Rotation is limited to built inserters; wider entities need collision and fluid checks.
-  for _,entity in ipairs(surface.find_entities_filtered{position=request.position,radius=0.1,type=ghost and "entity-ghost" or "inserter",limit=8}) do
+  for _,entity in ipairs(surface.find_entities_filtered{position=request.position,radius=0.1,force=request.force,limit=16}) do
     if entity.unit_number == request.unitNumber and entity.force.name == request.force
       and entity.position.x == request.position.x and entity.position.y == request.position.y
-      and (not ghost or entity.ghost_type == "inserter") then return entity end
+      and ((ghost and entity.type=="entity-ghost") or (not ghost and entity.type~="entity-ghost" and stationary_factory_entity(entity))) then return entity end
   end
-  fail("Inserter changed; inspect it again")
+  fail("Entity changed; inspect it again")
 end
 
 local function ghost_action(request)
-  local entity = inspected_inserter(request, true)
+  local entity = inspected_entity(request, true)
   local before = {unitNumber=entity.unit_number,force=entity.force.name,surface=entity.surface.name,
     position=entity.position,name=entity.ghost_name,direction=entity.direction,tick=game.tick}
   if request.operation == "ghost_inspect" then return {operation=request.operation,before=before,after=before} end
@@ -293,18 +296,18 @@ local function ghost_action(request)
   return {operation=request.operation,before=before,after={cancelled=true}}
 end
 
-local function inserter_snapshot(entity)
+local function entity_snapshot(entity)
   return {unitNumber=entity.unit_number,force=entity.force.name,surface=entity.surface.name,
     position=entity.position,name=entity.name,direction=entity.direction,tick=game.tick,
-    pickup=entity.pickup_position,drop=entity.drop_position}
+    pickup=entity.type=="inserter" and entity.pickup_position or nil,drop=entity.type=="inserter" and entity.drop_position or nil}
 end
 
-local function inserter_action(request)
-  local entity = inspected_inserter(request)
-  local before = inserter_snapshot(entity)
+local function entity_action(request)
+  local entity = inspected_entity(request)
+  local before = entity_snapshot(entity)
   if request.operation == "entity_rotate" then
     if before.direction ~= request.expectedDirection or request.expectedTick > game.tick
-      or game.tick-request.expectedTick > 3600 then fail("Inserter inspection expired or direction changed; inspect it again") end
+      or game.tick-request.expectedTick > 3600 then fail("Entity inspection expired or direction changed; inspect it again") end
     local player = request.player and game.get_player(request.player.name) or nil
     for step=1,3 do
       if entity.direction == request.direction then break end
@@ -312,7 +315,7 @@ local function inserter_action(request)
     end
     if not entity.valid or entity.direction ~= request.direction then fail("Rotation did not reach the requested direction; inspect it again") end
   end
-  return {operation=request.operation,before=before,after=inserter_snapshot(entity)}
+  return {operation=request.operation,before=before,after=entity_snapshot(entity)}
 end
 
 local function edit_entity(request, target)
@@ -343,8 +346,7 @@ local function entity_edits(request)
    if t.kind=='cancel_ghost' and not snapshot.ghost then fail('Only construction ghosts may be cancelled') end
    if t.kind~='cancel_ghost' and snapshot.ghost then fail('This operation requires a built entity') end
    if not snapshot.ghost then
-    local p=prototypes.entity[e.name]
-    if not p or not p.items_to_place_this or #p.items_to_place_this==0 or e.type=='character' or e.type=='car' or e.type=='spider-vehicle' or e.type=='locomotive' or e.type=='cargo-wagon' or e.type=='fluid-wagon' or e.type=='artillery-wagon' then fail('Select stationary player-built factory entities') end
+    if not stationary_factory_entity(e) then fail('Select stationary player-built factory entities') end
    end
   end
   entities[#entities+1]=e;snapshots[#snapshots+1]=snapshot
@@ -377,7 +379,7 @@ local function action(request)
   local operation = request.operation
   if operation == "entities_inspect" or operation == "entities_edit" then return entity_edits(request) end
   if operation == "ghost_inspect" or operation == "ghost_cancel" then return ghost_action(request) end
-  if operation == "entity_inspect" or operation == "entity_rotate" then return inserter_action(request) end
+  if operation == "entity_inspect" or operation == "entity_rotate" then return entity_action(request) end
   if operation == "research_inspect" then return research_inspect(request) end
   if operation == "train_inspect" then return train_inspect(request) end
   if operation == "logistic_inspect" then return logistic_inspect(request) end

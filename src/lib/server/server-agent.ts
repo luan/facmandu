@@ -136,7 +136,7 @@ export function serverAssistantTools(context: {
 		useTool({
 			name: 'factory_action_inspect',
 			description:
-				'Read current inserter, inserter ghost, research, train or requester state and exact action preconditions. Use the operation and request fields declared in args. Never invent expected state.',
+				'Read current factory entity, construction ghost, research, train or requester state and exact action preconditions. Use the operation and request fields declared in args. Never invent expected state.',
 			input: v.object({
 				operation: v.picklist([
 					'entity_inspect',

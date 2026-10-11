@@ -146,9 +146,9 @@ export const factoryActionInspectManifest = {
 	entities_inspect:
 		'Inspect up to 16 exact built entities or construction ghosts by unitNumber, prototype name and position. Returns tick and snapshots for entities_edit.',
 	entity_inspect:
-		'Inspect one built inserter by unitNumber, force, surface and exact position. Returns direction, pickup/drop positions and tick for rotation preconditions.',
+		'Inspect one stationary player-built factory entity by unitNumber, force, surface and exact position. Returns direction and tick for rotation preconditions, plus pickup/drop positions for inserters.',
 	ghost_inspect:
-		'Inspect one inserter construction ghost by unitNumber, force, surface and exact position before cancelling it.',
+		'Inspect one construction ghost by unitNumber, force, surface and exact position before cancelling it.',
 	research_inspect:
 		'Read the entire ordered queue for a force before changing it. Returns queue names for expectedQueue.',
 	train_inspect: 'Read an exact train by trainId before changing its control or destination.',
@@ -160,9 +160,9 @@ export const factoryActionManifest = {
 	entities_edit:
 		'Edit up to 16 exact freshly inspected targets: rotate with native game rotation, mark built entities for normal robot deconstruction, cancel deconstruction, or cancel construction ghosts. Supply force, surface, expectedTick and edits copied from entities_inspect snapshots plus kind (and to for rotate). Rechecks every target before any write. Deconstruction queues robot work and retains normal material recovery; it never destroys a built entity or grants items. Return outcomes are per-target; verify completion before reconnecting a replacement.',
 	entity_rotate:
-		'Rotate one built inserter to cardinal direction 0, 4, 8 or 12 using native rotation. Supply exact entity_inspect target, expectedDirection and expectedTick. Inspect again afterward to verify pickup and drop. Cannot rotate other entity types or ghosts.',
+		'Rotate one stationary player-built factory entity to cardinal direction 0, 4, 8 or 12 using native rotation. Supply exact entity_inspect target, expectedDirection and expectedTick. Inspect again afterward to verify orientation and inserter pickup/drop. Native rotation enforces game constraints; cannot rotate ghosts or vehicles.',
 	ghost_cancel:
-		'Cancel one exact inspected inserter ghost using expectedDirection and expectedTick. Never removes a built entity or other ghost types.',
+		'Cancel one exact inspected construction ghost using expectedDirection and expectedTick. Never removes a built entity.',
 	research_add:
 		'Queue one researchable lab technology. Supply force, expectedQueue, technology. Crafting trigger technologies cannot be queued.',
 	research_move:
@@ -253,8 +253,8 @@ const entitySnapshot = entity.extend({
 	name,
 	direction,
 	tick: z.number().int().nonnegative(),
-	pickup: logistic.shape.position,
-	drop: logistic.shape.position
+	pickup: logistic.shape.position.optional(),
+	drop: logistic.shape.position.optional()
 });
 const entityResultSchema = z.object({
 	operation: z.enum(['entity_inspect', 'entity_rotate']),
