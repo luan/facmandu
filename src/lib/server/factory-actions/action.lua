@@ -381,6 +381,15 @@ end
 
 local function action(request)
   local operation = request.operation
+  if operation=='task_add' or operation=='task_update' then
+    local interface=remote.interfaces['facmandu-task-list']
+    if not interface or not interface.read or not interface.add or not interface.update then fail('Install the Toby Task List adapter in server settings') end
+    if operation=='task_add' then
+      local result=remote.call('facmandu-task-list','add',request.force,request.title,request.description,request.status)
+      return {operation=operation,task=result.task,created=result.created}
+    end
+    return {operation=operation,task=remote.call('facmandu-task-list','update',request.force,request.id,request.expected,request.title,request.description,request.status,request.completed)}
+  end
   if operation == "entities_inspect" or operation == "entities_edit" then return entity_edits(request) end
   if operation == "ghost_inspect" or operation == "ghost_cancel" then return ghost_action(request) end
   if operation == "entity_inspect" or operation == "entity_rotate" then return entity_action(request) end

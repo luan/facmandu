@@ -528,7 +528,7 @@
 		</Card.Root>
 	</div>
 
- {#if data.gameAssistant}{#key JSON.stringify(data.gameAssistant)}<GameAssistantSettings config={data.gameAssistant} models={data.gameModels} toby={data.toby} running={data.status.running} action={manageAction} {submit} {busyReason} />{/key}{/if}
+ {#if data.gameAssistant}{#key JSON.stringify(data.gameAssistant)}<GameAssistantSettings config={data.gameAssistant} models={data.gameModels} toby={data.toby} running={data.status.running} mods={data.mods} serverId={data.server.id} action={manageAction} {submit} {busyReason} />{/key}{/if}
 
 	<Card.Root>
 		<Card.Header>

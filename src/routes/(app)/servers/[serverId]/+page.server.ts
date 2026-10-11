@@ -41,6 +41,7 @@ import {
 import { selectVersion, uninstallVersion } from '$lib/server/server-versions';
 import { editableSettings, settingFields, settingKind } from '$lib/server/server-view';
 import { canManageServer, publicServer, requireServer } from '$lib/server/servers';
+import { installTobyIntegration } from '$lib/server/toby-integrations';
 import { installTobyMod } from '$lib/server/toby-mod';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -96,6 +97,7 @@ export const actions: Actions = {
 					'toggleMod',
 					'installMod',
 					'installToby',
+					'installTobyIntegration',
 					'uninstallMod',
 					'deleteMod',
 					'selectVersion'
@@ -104,6 +106,14 @@ export const actions: Actions = {
 			)
 				return fail(409, { message: 'Wait for this server’s mod update to finish' });
 			switch (operation) {
+				case 'installTobyIntegration': {
+					if (name !== 'TaskList') return fail(400, { message: 'Unknown Toby integration' });
+					await installTobyIntegration(server, name);
+					return {
+						message:
+							'Task List connected to Toby. Install the matching client package before joining.'
+					};
+				}
 				case 'installToby': {
 					await installTobyMod(server);
 					return {

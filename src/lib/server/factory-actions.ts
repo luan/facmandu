@@ -42,6 +42,12 @@ const logistic = z.object({
 });
 const entity = logistic.pick({ unitNumber: true, force: true, surface: true, position: true });
 const direction = z.union([z.literal(0), z.literal(4), z.literal(8), z.literal(12)]);
+const taskFields = z.object({
+	title: z.string().min(1).max(200),
+	description: z.string().max(2000),
+	status: z.enum(['not_started', 'in_progress', 'paused', 'blocked']),
+	completed: z.boolean()
+});
 
 const editSnapshot = z.object({
 	unitNumber: entity.shape.unitNumber,
@@ -98,6 +104,13 @@ export const factoryActionInspectSchema = z.discriminatedUnion('operation', [
 ]);
 
 export const factoryActionSchema = z.discriminatedUnion('operation', [
+	taskFields.omit({ completed: true }).extend({ operation: z.literal('task_add'), force: label }),
+	taskFields.extend({
+		operation: z.literal('task_update'),
+		force: label,
+		id: z.number().int().positive(),
+		expected: taskFields
+	}),
 	z.object({
 		operation: z.literal('entities_edit'),
 		force: label,
@@ -164,6 +177,10 @@ export const factoryActionInspectManifest = {
 } satisfies Record<FactoryActionInspect['operation'], string>;
 
 export const factoryActionManifest = {
+	task_add:
+		'Add a shared force task to Task List using title, description and status (not_started, in_progress, paused, blocked). Identical active tasks are reused. Changes use the native mod and refresh its normal GUI; no world construction is implied.',
+	task_update:
+		'Update a shared force task using id, title, description, status and completed. Copy expected title, description, status and completed from a fresh task_list read; concurrent edits are rejected. Private player tasks are inaccessible.',
 	entities_edit:
 		'Edit up to 16 exact freshly inspected targets: rotate with native game rotation, mark built entities for normal robot deconstruction, cancel deconstruction, or cancel construction ghosts. Supply force, surface, expectedTick and edits copied from entities_inspect snapshots plus kind (and to for rotate). Rechecks every target before any write. Deconstruction queues robot work and retains normal material recovery; it never destroys a built entity or grants items. Return outcomes are per-target; verify completion before reconnecting a replacement.',
 	entity_rotate:
@@ -295,6 +312,20 @@ async function execute(
 	const reply = replySchema.safeParse(decoded);
 	if (!reply.success) throw new ServerError(502, 'The server did not return a valid action result');
 	if (!reply.data.ok) throw new ServerError(409, reply.data.error);
+	if (input.operation.startsWith('task_')) {
+		const result = z
+			.object({
+				operation: z.enum(['task_add', 'task_update']),
+				task: taskFields.extend({
+					id: z.number().int().positive(),
+					assignee: z.string().optional()
+				}),
+				created: z.boolean().optional()
+			})
+			.safeParse(reply.data.result);
+		if (!result.success) throw new ServerError(502, 'The server returned an invalid task result');
+		return result.data;
+	}
 	if (input.operation === 'entities_inspect' || input.operation === 'entities_edit') {
 		const result = z
 			.object({

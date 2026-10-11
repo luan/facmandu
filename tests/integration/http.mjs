@@ -2702,6 +2702,75 @@ done
 	passed(
 		'Toby installs the authenticated client package on a stopped server without changing its save'
 	);
+	const taskListOriginal = zipSync({
+		'TaskList_0.6.0/info.json': strToU8(
+			JSON.stringify({
+				name: 'TaskList',
+				version: '0.6.0',
+				factorio_version: '2.1',
+				dependencies: ['base', 'flib']
+			})
+		),
+		'TaskList_0.6.0/control.lua': strToU8('-- Native Task List control\n'),
+		'TaskList_0.6.0/LICENSE': strToU8('MIT fixture license retained')
+	});
+	await writeFile(join(machineDirs[1], 'mods/TaskList_0.6.0.zip'), taskListOriginal);
+	await action(
+		`${secondPath}?/manage`,
+		cookies.stranger,
+		{ operation: 'installTobyIntegration', name: 'TaskList' },
+		403
+	);
+	await action(
+		`${secondPath}?/manage`,
+		cookies.owner,
+		{ operation: 'installTobyIntegration', name: '../outside' },
+		400
+	);
+	await action(`${secondPath}?/manage`, cookies.owner, {
+		operation: 'installTobyIntegration',
+		name: 'TaskList'
+	});
+	const taskListPatched = unzipSync(
+		await readFile(join(machineDirs[1], 'mods/TaskList_0.6.1.zip'))
+	);
+	assert.equal(
+		JSON.parse(Buffer.from(taskListPatched['TaskList_0.6.1/info.json']).toString()).version,
+		'0.6.1'
+	);
+	assert.match(
+		Buffer.from(taskListPatched['TaskList_0.6.1/control.lua']).toString(),
+		/require\('facmandu-toby'\)/
+	);
+	assert.match(
+		Buffer.from(taskListPatched['TaskList_0.6.1/facmandu-toby.lua']).toString(),
+		/facmandu-task-list/
+	);
+	assert.equal(
+		Buffer.from(taskListPatched['TaskList_0.6.1/LICENSE']).toString(),
+		'MIT fixture license retained'
+	);
+	assert.deepEqual(
+		await readFile(join(machineDirs[1], 'downloads/mods/TaskList_0.6.0.zip')),
+		Buffer.from(taskListOriginal)
+	);
+	const taskListDownload = await request(`${secondPath}/toby-task-list`, { cookie: cookies.owner });
+	assert.equal(taskListDownload.status, 200);
+	assert.deepEqual(
+		unzipSync(new Uint8Array(await taskListDownload.arrayBuffer())),
+		taskListPatched
+	);
+	assert.equal(
+		(await request(`${secondPath}/toby-task-list`, { cookie: cookies.stranger })).status,
+		403
+	);
+	assert.deepEqual(
+		await readFile(join(machineDirs[1], 'saves/context-world.zip')),
+		Buffer.from(preservedSave)
+	);
+	passed(
+		'Task List adapter retains upstream source and license, preserves the original package and save, and provides matching private client downloads'
+	);
 	const gameSockets = new Set();
 	const gameReplies = [];
 	const panelUpdates = [];

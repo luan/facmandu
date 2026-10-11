@@ -6,7 +6,7 @@
  import * as Card from '$lib/components/ui/card';
  import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
  import type { ServerView } from '$lib/server/server-view';
- let { config, models, toby, running, action, submit, busyReason }: { config: NonNullable<ServerView['gameAssistant']>; models: ServerView['gameModels']; toby: ServerView['toby']; running: boolean; action: string; submit: SubmitFunction; busyReason: string } = $props();
+ let { config, models, toby, running, mods, serverId, action, submit, busyReason }: { config: NonNullable<ServerView['gameAssistant']>; models: ServerView['gameModels']; toby: ServerView['toby']; running: boolean; mods: ServerView['mods']; serverId: string; action: string; submit: SubmitFunction; busyReason: string } = $props();
  let enabled = $state(untrack(() => config.enabled));
  let model = $state(untrack(() => config.model || models.find((item) => item.id.includes('luna'))?.id || models[0]?.id || ''));
  let effort = $state(untrack(() => config.effort || models.find((item) => item.id === model)?.defaultEffort || ''));
@@ -45,6 +45,20 @@
     <a href="/api/toby-mod" class="text-sm underline">Download for game clients</a>
    </div>
    <p class="text-xs text-muted-foreground">Every client needs the same mod. Install while stopped; your save is unchanged.</p>
+   {#if mods.some((mod) => mod.name === 'TaskList' && mod.enabled)}
+    <div class="space-y-2 border-t pt-3">
+     <p class="text-sm">Task List · shared force tasks</p>
+     <div class="flex flex-wrap items-center gap-3">
+      <form method="POST" {action} use:enhance={submit}>
+       <input type="hidden" name="operation" value="installTobyIntegration" />
+       <input type="hidden" name="name" value="TaskList" />
+       <TooltipButton type="submit" tooltip={busyReason || (running ? 'Stop the server before changing a mod' : 'Install Task List 0.6.1 with Toby task APIs')} disabled={!!busyReason || running}>Connect Task List</TooltipButton>
+      </form>
+      <a href={`/servers/${serverId}/toby-task-list`} class="text-sm underline">Download matching client mod</a>
+     </div>
+     <p class="text-xs text-muted-foreground">Adds Toby’s adapter to Task List 0.6.0 and retains the original archive. Factory Planner and Helmod plans are readable through their existing APIs.</p>
+    </div>
+   {/if}
   </div>
  </Card.Content>
 </Card.Root>
