@@ -324,6 +324,62 @@ local function blueprint(request)
  if not surface then error('Unknown surface',0) end
  if surface.platform and surface.platform.force~=force then error('This platform belongs to another force',0) end
  if #tiles>0 and (not surface.platform or surface.platform.force~=force) then error('Foundation requires a space platform belonging to this force',0) end
+ if request.operation=='check' then
+  if not prototypes.item[request.item] then error('Output measurement requires a real item prototype',0) end
+  local report={operation='check_build',tick=game.tick,surface=surface.name,force=force.name,constructed=0,requested=#entities,ghosts=0,missing={},faults={},faults_total=0,machines={},machines_total=0,machine_status_counts={},terminal_belts={},terminal_belts_total=0,settings_verified=false}
+  local function issue(list,row) if #list<16 then list[#list+1]=row end end
+  local function status(e) for name,id in pairs(defines.entity_status) do if id==e.status then return name end end end
+  for index,wanted in ipairs(entities) do
+   local position={x=wanted.position.x+request.position.x,y=wanted.position.y+request.position.y}
+   local found
+   for _,e in pairs(surface.find_entities_filtered{position=position,name=wanted.name,force=force}) do
+    if e.position.x==position.x and e.position.y==position.y then found=e;break end
+   end
+   if not found then
+    local ghost=false
+    for _,e in pairs(surface.find_entities_filtered{position=position,type='entity-ghost',force=force}) do
+     if e.ghost_name==wanted.name and e.position.x==position.x and e.position.y==position.y then ghost=true;break end
+    end
+    if ghost then report.ghosts=report.ghosts+1 end
+    issue(report.missing,{index=index,name=wanted.name,position=position,reason=ghost and 'Awaiting construction' or 'No matching entity or ghost'})
+   else
+    report.constructed=report.constructed+1
+    local recipe=(found.type=='assembling-machine' or found.type=='furnace') and found.get_recipe()
+    local mismatch=(found.prototype.supports_direction and found.direction~=wanted.direction) or (wanted.recipe and (not recipe or recipe.name~=wanted.recipe)) or (wanted.type and found.type=='underground-belt' and found.belt_to_ground_type~=wanted.type)
+    if mismatch then report.faults_total=report.faults_total+1;issue(report.faults,{index=index,name=found.name,position=position,reason='Direction, recipe or underground type differs from the design',direction=found.direction,recipe=recipe and recipe.name}) end
+    if found.type=='assembling-machine' or found.type=='furnace' then
+     local state=status(found) or 'unknown'
+     report.machines_total=report.machines_total+1
+     report.machine_status_counts[state]=(report.machine_status_counts[state] or 0)+1
+     issue(report.machines,{index=index,name=found.name,position=position,status=state,recipe=recipe and recipe.name,crafting=found.is_crafting(),powered=found.is_connected_to_electric_network()})
+    elseif found.type=='transport-belt' and #found.belt_neighbours.outputs==0 then
+     report.terminal_belts_total=report.terminal_belts_total+1
+     issue(report.terminal_belts,{index=index,position=position,capacity_per_min=found.prototype.belt_speed*480*60,left_items=found.get_transport_line(1).get_item_count{name=request.item,quality='normal'},right_items=found.get_transport_line(2).get_item_count{name=request.item,quality='normal'}})
+    end
+   end
+  end
+  report.missing_total=report.requested-report.constructed
+  report.rows_limited_to=16
+  report.foundation_missing=0
+  for _,tile in ipairs(tiles) do if surface.get_tile{x=tile.position.x+request.position.x,y=tile.position.y+request.position.y}.name~=tile.name then report.foundation_missing=report.foundation_missing+1 end end
+  local outputs,seen={},{}
+  for _,at in ipairs(request.outputs) do
+   local found
+   for _,e in pairs(surface.find_entities_filtered{position=at,force=force}) do
+    if e.position.x==at.x and e.position.y==at.y and (e.type=='container' or e.type=='logistic-container' or e.type=='space-platform-hub') then
+     if found then error('Ambiguous output destination',0) end
+     found=e
+    end
+   end
+   if not found or not found.unit_number then error('Output destination must be an exact built chest or platform hub in this force',0) end
+   if seen[found.unit_number] then error('Duplicate output destination',0) end
+   seen[found.unit_number]=true
+   outputs[#outputs+1]={unit_number=found.unit_number,count=found.get_item_count{name=request.item,quality='normal'}}
+  end
+  if #outputs>0 then report.output_sample={tick=game.tick,item=request.item,outputs=outputs} end
+  report.note='Read-only construction and operating-state check. Belt contents are occupancy, not throughput; circuit settings and input sustainability are not verified. Sample retained destination inventories twice to measure delivery.'
+  return report
+ end
  if request.operation=='place' and (request.expectedDesign~=request.design or request.expectedTick>game.tick or game.tick-request.expectedTick>3600) then error('Placement inspection expired; inspect again',0) end
  for _,e in ipairs(entities) do
   if e.recipe then

@@ -1,10 +1,16 @@
+import { createHash } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { useDataWriter, useDelivery, usePersistentState, useTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { z } from 'zod';
 import { serverToolGroups } from '$lib/assistant-routing';
-import { blueprintArtifactSchema } from '$lib/blueprints';
+import {
+	type BuildOutputSample,
+	blueprintArtifactSchema,
+	buildOutputSampleSchema,
+	measureBuildOutput
+} from '$lib/blueprints';
 import type { FactoryImage } from '$lib/factory-images';
 import { useAssistantToolGroups } from './assistant-tool-groups';
 import { fetchPublicWeb, schoolBlueprint, searchBlueprints, webPageText } from './assistant-web';
@@ -55,6 +61,10 @@ export function serverAssistantTools(context: {
 	}>('factory-query-targets', { requestId: '', targets: {} });
 	const [lookupContracts, setLookupContracts] = usePersistentState<Record<string, string[]>>(
 		'factory-lookup-contracts',
+		{}
+	);
+	const [buildSamples, setBuildSamples] = usePersistentState<Record<string, BuildOutputSample>>(
+		'build-output-samples',
 		{}
 	);
 	// Coordinates are a read optimization, not authority. Native reads recheck the
@@ -287,9 +297,9 @@ export function serverAssistantTools(context: {
 		useTool({
 			name: 'blueprint_operation',
 			description:
-				'Design an importable native Factorio blueprint or place construction ghosts. operation=catalog inspects named live prototypes and supplies native blueprint_settings_example for collectors and combinators; create validates an explicit layout and exports a rich blueprint preview without changing the world. Its inserter_transfers report planned pickup/drop points, 1-based entity targets and local belt side/lane capacity; missing targets may need existing-world connections. These geometry facts do not verify curved-belt routing or production. Set display=false for intermediate drafts: export and validate without waiting for sprite rendering; display the final design only. inspect checks exact force/surface/position/layout and reports active robot coverage and exact normal-quality construction materials in provider/storage chests. ready means collision-free placement only; construction.single_network_ready checks whether one network covers and stocks the whole layout with available robots. Neither proves power, connected supplies, output routing or production. Before constructing a working module, verify those connections and report material shortages rather than placing an isolated module. After create returns designId, use that ID with force, surface and position for inspect/place instead of resending entities. To revise a draft, create with designId and entityChanges [{index, changes}], removedEntityIndices, or addedEntities / addedEntityRows. Patch/removal indices refer to the original draft; retained wires are remapped, and wires to removed entities are removed. New entities use final array indices. Omitted settings are preserved. Extend rows by reference instead of retransmitting the full layout. The full blueprint is streamed to the player separately from its compact model result. place requires expectedTick and expectedDesign from a successful fresh inspection AND an explicit user placement request. It rechecks collisions, explored terrain, unlocks and player permissions. It never supplies free materials, deconstructs obstacles or builds completed machines. Supports up to 200 item-placeable, blueprintable entities from the current game and mods, plus up to 1024 space-platform-foundation tiles. There is no entity-type whitelist; catalog checks native blueprintability. create may include locked machines or recipes and reports unlock warnings; inspect/place still require unlocks. For new platform area, inspect/place a tiles-only foundation layout first, wait for real foundation construction, then inspect/place its machines. Platforms construct from hub stock without robots. Entity settings support native filters, use_filters/filter_mode, override_stack_size, circuit control_behavior, circuit wires and custom inserter pickup_position/drop_position vectors relative to the inserter center. Collector static filters use chunk-filter; circuit filters use control_behavior.circuit_set_filters, not the runtime set_filter property. Constant combinators use control_behavior.sections.sections with section filters, not the obsolete control_behavior.filters. Read catalog examples before encoding circuit controls. Read inspect_transport before copying an existing inserter; preserve its filters and vectors. wires is a blueprint-level array of tuples using 1-based entity array indices and the catalog’s wire_connector_ids; entity-level wires are also accepted. Factorio validates and round-trips these settings; custom vectors must be supported by the current prototype. Modules and train schedules still need explicit support; do not silently discard them.',
+				'Design an importable native Factorio blueprint or place construction ghosts. operation=catalog inspects named live prototypes and supplies native blueprint_settings_example for collectors and combinators; create validates an explicit layout and exports a rich blueprint preview without changing the world. Its inserter_transfers report planned pickup/drop points, 1-based entity targets and local belt side/lane capacity; missing targets may need existing-world connections. These geometry facts do not verify curved-belt routing or production. Set display=false for intermediate drafts: export and validate without waiting for sprite rendering; display the final design only. inspect checks exact force/surface/position/layout and reports active robot coverage and exact normal-quality construction materials in provider/storage chests. ready means collision-free placement only; construction.single_network_ready checks whether one network covers and stocks the whole layout with available robots. Neither proves power, connected supplies, output routing or production. Before constructing a working module, verify those connections and report material shortages rather than placing an isolated module. After create returns designId, use that ID with force, surface and position for inspect/place instead of resending entities. To revise a draft, create with designId and entityChanges [{index, changes}], removedEntityIndices, or addedEntities / addedEntityRows. Patch/removal indices refer to the original draft; retained wires are remapped, and wires to removed entities are removed. New entities use final array indices. Omitted settings are preserved. Extend rows by reference instead of retransmitting the full layout. The full blueprint is streamed to the player separately from its compact model result. place requires expectedTick and expectedDesign from a successful fresh inspection AND an explicit user placement request. It rechecks collisions, explored terrain, unlocks and player permissions. It never supplies free materials, deconstructs obstacles or builds completed machines. Supports up to 200 item-placeable, blueprintable entities from the current game and mods, plus up to 1024 space-platform-foundation tiles. There is no entity-type whitelist; catalog checks native blueprintability. create may include locked machines or recipes and reports unlock warnings; inspect/place still require unlocks. For new platform area, inspect/place a tiles-only foundation layout first, wait for real foundation construction, then inspect/place its machines. Platforms construct from hub stock without robots. Entity settings support native filters, use_filters/filter_mode, override_stack_size, circuit control_behavior, circuit wires and custom inserter pickup_position/drop_position vectors relative to the inserter center. Collector static filters use chunk-filter; circuit filters use control_behavior.circuit_set_filters, not the runtime set_filter property. Constant combinators use control_behavior.sections.sections with section filters, not the obsolete control_behavior.filters. Read catalog examples before encoding circuit controls. Read inspect_transport before copying an existing inserter; preserve its filters and vectors. wires is a blueprint-level array of tuples using 1-based entity array indices and the catalog’s wire_connector_ids; entity-level wires are also accepted. Factorio validates and round-trips these settings; custom vectors must be supported by the current prototype. Modules and train schedules still need explicit support; do not silently discard them. operation=check is read-only: use designId, force, surface, position and item after placement to check actual construction, wrong recipes/directions, machine states and terminal-belt occupancy. Optional outputs=[{x,y},...] selects exact built destination chests or platform hubs; check twice at least 30 game seconds apart to obtain automatically calculated net inventory delivery. The baseline survives compaction. Output withdrawals or outside deposits invalidate attribution; do not treat force production or occupied lanes as delivery proof. Checks do not verify circuit settings.',
 			input: v.object({
-				operation: v.picklist(['catalog', 'create', 'inspect', 'place']),
+				operation: v.picklist(['catalog', 'create', 'inspect', 'place', 'check']),
 				args: v.record(v.string(), v.unknown()),
 				display: v.optional(v.boolean(), true)
 			}),
@@ -313,6 +323,42 @@ export function serverAssistantTools(context: {
 					{ ...data.args, operation: data.operation },
 					actor
 				);
+				if (data.operation === 'check') {
+					const checked = z
+						.object({ output_sample: buildOutputSampleSchema.optional() })
+						.passthrough()
+						.parse(native);
+					const sample = checked.output_sample;
+					const key = createHash('sha256')
+						.update(
+							JSON.stringify({
+								design: data.args.designId ?? data.args.entities,
+								force: data.args.force,
+								surface: data.args.surface,
+								position: data.args.position,
+								item: data.args.item,
+								outputs: data.args.outputs
+							})
+						)
+						.digest('hex');
+					const before = buildSamples[key];
+					const measurement =
+						before && sample
+							? measureBuildOutput(before, sample)
+							: {
+									measured: false,
+									reason: sample
+										? 'Baseline recorded; check again after at least 30 game seconds'
+										: 'No output inventories supplied; delivery is not measured'
+								};
+					if (sample && (!before || measurement.measured || !('elapsed_ticks' in measurement))) {
+						const recent = Object.entries(buildSamples)
+							.filter(([id]) => id !== key)
+							.slice(-7);
+						setBuildSamples({ ...Object.fromEntries(recent), [key]: sample });
+					}
+					return result('check_build', 'Build verification', { ...checked, measurement });
+				}
 				const artifact = blueprintArtifactSchema.safeParse(native);
 				let rendered: unknown = native;
 				if (artifact.success && data.display) {
@@ -602,7 +648,7 @@ For requested blueprints or construction:
 2. Call plan_production with the target rate and actual recipe/machine choices. For construction, prefer compatible machines already in construction stock. If inspection finds the chosen machine unavailable, recalculate and redesign using stocked alternatives before reporting a shortage. Declare existing supplies in external_inputs instead of recursively redesigning upstream production. Use blueprint_operation catalog for the real machine dimensions, fluid ports and inserter offsets. Do not substitute remembered recipes or hand-calculated machine counts.
 3. Follow requested logistics and layout constraints before placing any section: belts versus robots, readable lanes versus weaving, and configured inserter reach. Continue the requested work without asking the user to repeat authorization. Once recipe, capacity and connection facts are known, create a concrete blueprint draft with display=false; render only the final export. Stop broad surveys. Structured geometry is sufficient to start designing; a pending sprite preview must not block this step.
 4. For an explicit construction request, inspect the full target layout, robot coverage and material stock, then place with its fresh expectedTick and expectedDesign. A blueprint request alone does not authorize placement. Ghosts reserve no items; normal game construction consumes real stock later. Missing stock or robot coverage is not a reason to stop an explicitly requested ghost build. Finish the connected design and report what remains unbuilt. Preserve unrelated existing buildings and their settings. An explicitly requested connected build includes necessary edits at its supply and bus connection points; use freshly inspected native rotation or robot deconstruction/replacement there. Do not expand into unrelated demolition.
-5. Verify the whole requested scope with batches. Deliver the importable connected design or full authorized ghost layout; a proposal is not completion. For a throughput target, diagnose and fix bottlenecks until the sustained measured rate meets it. A fixable belt merge, incorrect direction or missing connection is work to finish, not a reason to end the response. Stop only for a concrete external blocker such as unavailable materials or locked technology. Necessary supply connections, output routing and power are part of that build request. Machine counts, burst rates and collision-free placement do not prove throughput. Measure delivered rate from destination inventory deltas: (afterCount - beforeCount) * 3600 / (afterTick - beforeTick). Force production is a separate rate. Report incomplete ghosts and missing materials; never require another “do it” for work already requested.
+5. Use blueprint_operation check with the saved designId after placement for construction, machine faults and terminal-belt lanes. Supply destination inventories in outputs and check again after at least 30 game seconds for automatic delivered-rate measurement. Do useful targeted inspection or repairs while construction/measurement progresses, rather than repeated broad surveys. When no isolated destination inventory exists, report throughput as unmeasured and use native transport inspection to diagnose routing. Verify other requested scope with batches. Deliver the importable connected design or full authorized ghost layout; a proposal is not completion. For a throughput target, diagnose and fix bottlenecks until the sustained measured rate meets it. A fixable belt merge, incorrect direction or missing connection is work to finish, not a reason to end the response. Stop only for a concrete external blocker such as unavailable materials or locked technology. Necessary supply connections, output routing and power are part of that build request. Machine counts, burst rates and collision-free placement do not prove throughput. Measure delivered rate from destination inventory deltas: (afterCount - beforeCount) * 3600 / (afterTick - beforeTick). Force production is a separate rate. Report incomplete ghosts and missing materials; never require another “do it” for work already requested.
 Use available_research for research that can start next and tech_status for prerequisites; current_research only describes an active task. Distinguish crafting triggers from lab research. Diagnose production bottlenecks from machine and supply evidence, not totals alone. Respect truncated scans, sample windows and available log history.
 Lead with the outcome. Routine diagnosis and build replies should take 2–4 sentences: the result, key rate or location, and any remaining blocker. Expand when the user asks for detail. Keep per-machine readings and lookup narration in Activity. Avoid reassurance, apologies and offers to perform work already requested. Use display=true only for an artifact that helps the answer. Only the latest displayed inspection appears inline. Distinguish existing-factory inspections from blueprint designs. factory_view is a static sprite layout, not a live game screenshot; it omits terrain, belt items and operating state. Continue with structured queries when its preview is pending instead of recapturing. Do not claim to have seen an unavailable image. Rich artifacts have copy/download controls: never repeat blueprint strings in prose. Persistent watches notify the app inbox.`;
 }

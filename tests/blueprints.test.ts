@@ -14,6 +14,7 @@ import {
 	blueprintRowsSchema,
 	blueprintTargetSchema,
 	expandBlueprintRows,
+	measureBuildOutput,
 	reviseBlueprintDesign
 } from '../src/lib/blueprints';
 import { blueprintCommand, blueprintToolJsonSchema } from '../src/lib/server/factory-blueprints';
@@ -53,6 +54,29 @@ test('provider blueprint contracts accept omitted defaults and preserve strict o
 	];
 	for (const args of drafts) assert.doesNotThrow(() => validate({ operation: 'create', args }));
 	assert.doesNotThrow(() => validate({ operation: 'inspect', args: target }));
+	assert.doesNotThrow(() =>
+		validate({
+			operation: 'check',
+			args: {
+				force: 'player',
+				designId: 'a'.repeat(64),
+				surface: 'nauvis',
+				position: { x: 0, y: 0 },
+				item: 'plastic-bar'
+			}
+		})
+	);
+	assert.throws(() =>
+		validate({
+			operation: 'check',
+			args: {
+				force: 'player',
+				designId: 'a'.repeat(64),
+				surface: 'nauvis',
+				position: { x: 0, y: 0 }
+			}
+		})
+	);
 	for (const args of [
 		{ ...design, arbitrary: true },
 		{ ...design, entities: [{ ...design.entities[0], direction: 2 }] },
@@ -538,4 +562,48 @@ test('saved blueprint references retain omitted entity settings and require exac
 		}
 	])
 		assert.equal(blueprintInputSchema.safeParse(invalid).success, false);
+});
+
+test('build delivery uses game ticks and rejects short, changed or drained samples', () => {
+	const before = {
+		tick: 100,
+		item: 'plastic-bar',
+		outputs: [
+			{ unit_number: 1, count: 20 },
+			{ unit_number: 2, count: 0 }
+		]
+	};
+	const after = {
+		...before,
+		tick: 3700,
+		outputs: [
+			{ unit_number: 1, count: 470 },
+			{ unit_number: 2, count: 450 }
+		]
+	};
+	const measured = measureBuildOutput(before, after);
+	assert.equal(measured.measured, true);
+	if (!measured.measured) throw new Error('Expected a delivery measurement');
+	assert.equal(measured.per_min, 900);
+	assert.equal(measured.delivered, 900);
+	for (const invalid of [
+		{ ...after, tick: 101 },
+		{ ...after, tick: 0 },
+		{ ...after, item: 'coal' },
+		{
+			...after,
+			outputs: [
+				{ unit_number: 3, count: 470 },
+				{ unit_number: 2, count: 450 }
+			]
+		},
+		{
+			...after,
+			outputs: [
+				{ unit_number: 1, count: 10 },
+				{ unit_number: 2, count: 910 }
+			]
+		}
+	])
+		assert.equal(measureBuildOutput(before, invalid).measured, false);
 });

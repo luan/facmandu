@@ -122,6 +122,65 @@ export const blueprintTargetSchema = blueprintDesignSchema.extend({
 			'Integer world offset added to every entity position; not the blueprint cursor center'
 		)
 });
+const outputTarget = z.strictObject({
+	x: z.number().min(-1000000).max(1000000),
+	y: z.number().min(-1000000).max(1000000)
+});
+const buildCheck = {
+	operation: z.literal('check'),
+	item: name,
+	outputs: z.array(outputTarget).max(16).default([])
+};
+export const buildOutputSampleSchema = z.strictObject({
+	tick: z.number().int().nonnegative(),
+	item: name,
+	outputs: z
+		.array(
+			z.strictObject({
+				unit_number: z.number().int().positive(),
+				count: z.number().int().nonnegative()
+			})
+		)
+		.min(1)
+		.max(16)
+});
+export type BuildOutputSample = z.infer<typeof buildOutputSampleSchema>;
+export function measureBuildOutput(before: BuildOutputSample, after: BuildOutputSample) {
+	const ticks = after.tick - before.tick;
+	if (
+		before.item !== after.item ||
+		before.outputs.length !== after.outputs.length ||
+		before.outputs.some((output, index) => output.unit_number !== after.outputs[index]?.unit_number)
+	)
+		return { measured: false as const, reason: 'Output destinations changed; take a new baseline' };
+	if (ticks <= 0)
+		return {
+			measured: false as const,
+			reason: 'Game clock did not advance; take a new baseline after a save reload'
+		};
+	const delivered =
+		after.outputs.reduce((total, output) => total + output.count, 0) -
+		before.outputs.reduce((total, output) => total + output.count, 0);
+	if (before.outputs.some((output, index) => (after.outputs[index]?.count ?? -1) < output.count))
+		return {
+			measured: false as const,
+			reason: 'An output inventory decreased; use destinations that retain the sampled items'
+		};
+	if (ticks < 1800)
+		return {
+			measured: false as const,
+			reason: 'Sample less than 30 game seconds; check again after 30 game seconds',
+			elapsed_ticks: ticks
+		};
+	return {
+		measured: true as const,
+		delivered,
+		elapsed_ticks: ticks,
+		per_min: (delivered * 3600) / ticks,
+		basis:
+			'Net accumulation in destination inventories; withdrawals can undercount delivery, outside deposits can overcount it'
+	};
+}
 export const blueprintRequestSchema = z
 	.discriminatedUnion('operation', [
 		z.strictObject({
@@ -131,6 +190,7 @@ export const blueprintRequestSchema = z
 		}),
 		blueprintDesignSchema.extend({ operation: z.literal('create') }),
 		blueprintTargetSchema.extend({ operation: z.literal('inspect') }),
+		blueprintTargetSchema.extend(buildCheck),
 		blueprintTargetSchema.extend({
 			operation: z.literal('place'),
 			expectedTick: z.number().int().nonnegative(),
@@ -149,6 +209,11 @@ const entityPatch = blueprintEntitySchema
 	.partial()
 	.extend({ direction: blueprintEntitySchema.shape.direction.removeDefault().optional() });
 export const blueprintReferenceSchema = z.discriminatedUnion('operation', [
+	designReference.extend({
+		...buildCheck,
+		surface: name,
+		position: blueprintTargetSchema.shape.position
+	}),
 	designReference.extend({
 		operation: z.literal('create'),
 		label: z.string().min(1).max(120).optional(),
@@ -175,7 +240,7 @@ export const blueprintReferenceSchema = z.discriminatedUnion('operation', [
 ]);
 export function reviseBlueprintDesign(
 	saved: z.infer<typeof blueprintDesignSchema>,
-	revision: z.infer<(typeof blueprintReferenceSchema.options)[0]>
+	revision: Extract<z.infer<typeof blueprintReferenceSchema>, { operation: 'create' }>
 ): BlueprintRequest {
 	if (saved.force !== revision.force) throw new Error('Blueprint draft belongs to another force');
 	const removed = new Set(revision.removedEntityIndices);

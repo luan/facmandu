@@ -23,7 +23,7 @@ import { rconScript } from './server-rcon';
 export const blueprintToolJsonSchema = {
 	type: 'object',
 	properties: {
-		operation: { type: 'string', enum: ['catalog', 'create', 'inspect', 'place'] },
+		operation: { type: 'string', enum: ['catalog', 'create', 'inspect', 'place', 'check'] },
 		display: { type: 'boolean' },
 		args: { type: 'object' }
 	},
