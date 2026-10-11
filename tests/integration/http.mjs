@@ -3043,6 +3043,7 @@ done
 		assert.equal(selectedState.current, newPanel.current);
 		assert.equal(selectedState.blueprint, panelDesign.blueprint);
 		assert.equal(selectedState.design, 'Glass');
+		assert.deepEqual(selectedState.materials, panelDesign.cost);
 		assert.equal(selectedState.running, false);
 		assert.deepEqual(
 			selectedState.messages.map((message) => message.role),

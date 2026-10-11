@@ -83,6 +83,10 @@ local function update(player_index,state)
  if type(state.chats)~='table' or #state.chats>8 then error('Expected up to eight chats',0) end
  if state.blueprint and (type(state.blueprint)~='string' or #state.blueprint>65536 or not state.blueprint:match('^0[%w+/=]+$')) then error('Invalid blueprint',0) end
  if state.design and (type(state.design)~='string' or #state.design>200) then error('Invalid design title',0) end
+ if state.materials and (type(state.materials)~='table' or #state.materials>32) then error('Invalid construction materials',0) end
+ for _,item in ipairs(state.materials or {}) do
+  if type(item.name)~='string' or #item.name>100 or type(item.count)~='number' or item.count<=0 or item.count>1000000 or item.count~=math.floor(item.count) then error('Invalid construction material',0) end
+ end
  for _,field in ipairs{'messages','activity'} do
   local rows=state[field] or {}
   if type(rows)~='table' or #rows>16 then error('Invalid '..field,0) end
@@ -137,6 +141,14 @@ local function update(player_index,state)
   local actions=refs.design.add{type='flow',direction='vertical'}
   actions.add{type='button',name=PREFIX..'inspect-blueprint',caption='Open blueprint',tooltip='Inspect the design in Factorio’s blueprint editor'}
   actions.add{type='button',name=PREFIX..'blueprint',caption='Place ghosts',style='confirm_button',tooltip='Put the design in your cursor. Construction uses your ordinary items.'}
+  if #(state.materials or {})>0 then
+   label(refs.design,'Construction materials',410,'heading_2_label')
+   local materials=refs.design.add{type='table',column_count=2}
+   for _,item in ipairs(state.materials) do
+    label(materials,prototypes.item[item.name] and '[item='..item.name..'] '..item.name or item.name,330)
+    label(materials,tostring(item.count),70)
+   end
+  end
  else label(refs.design,'No blueprint in this conversation yet.',410) end
 end
 local function open(player)

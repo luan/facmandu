@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { gameReply, gameText, parseGameChat } from '../src/lib/game-chat';
+import { gamePanelText, gameReply, gameText, parseGameChat } from '../src/lib/game-chat';
+
+test('native conversation text keeps paragraphs and real Factorio tags without web formatting', () => {
+	assert.equal(
+		gamePanelText(
+			'**Glass**\n\nUse [item=kr_glass].\n[link](https://example.com) [img=made-up-icon]',
+			500
+		),
+		'Glass\n\nUse [item=kr_glass].\nlink'
+	);
+});
 
 test('native panel strings keep Unicode intact within their byte budget', () => {
 	assert.equal(gameText('a🦊中z', 7), 'a🦊');

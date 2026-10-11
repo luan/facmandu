@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { and, desc, eq } from 'drizzle-orm';
 import { factoryResultSchema } from '$lib/assistant-results';
 import { blueprintArtifactSchema } from '$lib/blueprints';
-import { gameReply, gameText, parseGameChat, parseGameUi } from '$lib/game-chat';
+import { gamePanelText, gameReply, gameText, parseGameChat, parseGameUi } from '$lib/game-chat';
 import { routeAmbientChat } from './ambient-chat';
 import { db } from './db';
 import { genID } from './db/ids';
@@ -91,9 +91,9 @@ async function syncPanel(
 	const messages: { role: 'user' | 'assistant'; text: string }[] = [];
 	let available = 12000;
 	for (const entry of turns) {
-		const answer = gameText(entry.answer, Math.min(6000, available));
+		const answer = gamePanelText(entry.answer, Math.min(6000, available));
 		available -= Buffer.byteLength(answer);
-		const prompt = gameText(entry.prompt, Math.min(2000, available));
+		const prompt = gamePanelText(entry.prompt, Math.min(2000, available));
 		available -= Buffer.byteLength(prompt);
 		if (answer) messages.unshift({ role: 'assistant', text: answer });
 		if (prompt) messages.unshift({ role: 'user', text: prompt });
@@ -106,12 +106,13 @@ async function syncPanel(
 			(!sourceChat || sourceChat === current?.id
 				? progress && gameText(progress, 500)
 				: undefined) ?? (turn?.state === 'running' ? 'Working…' : 'Ready'),
-		answer: gameText(turn?.answer ?? '', 6000),
+		answer: gamePanelText(turn?.answer ?? '', 6000),
 		running: turn?.state === 'running',
 		messages,
 		activity: panelActivity(turn?.results ?? '[]'),
 		blueprint: design?.blueprint,
 		design: design && gameText(design.label, 200),
+		materials: design?.cost.slice(0, 32).map((item) => ({ ...item, count: Math.ceil(item.count) })),
 		chats: chats.map((chat) => ({ id: chat.id, title: gameText(chat.title, 200) }))
 	};
 	if (sessions.get(server.id) !== session) return;
@@ -121,7 +122,9 @@ async function syncPanel(
 		`/silent-command local p=game.get_player(${JSON.stringify(player)}); local i=remote.interfaces['facmandu-assistant']; if p and p.connected and i and i.update_player then remote.call('facmandu-assistant','update_player',p.index,helpers.json_to_table(${encoded})) end`
 	);
 }
-function panelDesign(results: string): { blueprint: string; label: string } | undefined {
+function panelDesign(
+	results: string
+): { blueprint: string; label: string; cost: { name: string; count: number }[] } | undefined {
 	try {
 		const data: unknown = JSON.parse(results);
 		if (!Array.isArray(data)) return;
@@ -130,7 +133,11 @@ function panelDesign(results: string): { blueprint: string; label: string } | un
 			if (!result.success || !result.data.display) continue;
 			const blueprint = blueprintArtifactSchema.safeParse(result.data.result);
 			if (blueprint.success && blueprint.data.blueprint.length <= 65536)
-				return { blueprint: blueprint.data.blueprint, label: blueprint.data.label };
+				return {
+					blueprint: blueprint.data.blueprint,
+					label: blueprint.data.label,
+					cost: blueprint.data.cost
+				};
 		}
 	} catch {
 		/* A damaged historic result must not prevent chat updates. */

@@ -25,7 +25,7 @@ export function parseGameChat(
 	return { player, prompt, ...(!mention ? { ambient: true as const } : {}) };
 }
 
-function plainReply(text: string): string {
+function plainReply(text: string, preserveLines = false): string {
 	const tags: string[] = [];
 	const plain = text
 		.replace(/\0/gu, '')
@@ -37,9 +37,9 @@ function plainReply(text: string): string {
 		})
 		.replace(/<[^>]*>/gu, '')
 		.replace(/https?:\/\/\S+/giu, '')
-		.replace(/(?:^|\n)\s{0,3}(?:#{1,6}\s+|[-*+]\s+|\d+\.\s+|>\s*)/gu, ' ')
+		.replace(/(^|\n)\s{0,3}(?:#{1,6}\s+|[-*+]\s+|\d+\.\s+|>\s*)/gu, preserveLines ? '$1' : ' ')
 		.replace(/[`*_~]/gu, '')
-		.replace(/\s+/gu, ' ')
+		.replace(preserveLines ? /[^\S\n]+/gu : /\s+/gu, ' ')
 		.trim();
 	return plain.replace(/\0(\d+)\0/gu, (_, index: string) => tags[Number(index)] ?? '');
 }
@@ -112,4 +112,8 @@ export function gameText(value: string, bytes: number): string {
 		result += char;
 	}
 	return result;
+}
+
+export function gamePanelText(value: string, bytes: number): string {
+	return gameText(plainReply(value, true), bytes);
 }
