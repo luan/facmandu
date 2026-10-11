@@ -4604,6 +4604,15 @@ done
 			return event;
 		}
 		assert.equal((await cloudOperation('backup')).state, 'done');
+		assert.deepEqual(
+			await readFile(join(cloudDirectory, 'cloud-recovery.zip')),
+			Buffer.from(cloudOriginal)
+		);
+		assert.ok(
+			!(await readdir(join(cloudDirectory, 'saves'))).some((name) =>
+				name.startsWith('cloud-recovery-')
+			)
+		);
 		const cloudList = await json(`${serverPath}/cloud`, { cookie: cookies.owner });
 		assert.equal(cloudList.saves.length, 1);
 		const cloudChoice = cloudList.saves[0];
@@ -4619,6 +4628,15 @@ done
 		assert.equal((await cloudOperation('backup')).state, 'error');
 		rejectCloudUpload = 'quota';
 		assert.match((await cloudOperation('backup')).message, /storage is full/);
+		assert.deepEqual(
+			await readFile(join(cloudDirectory, 'cloud-recovery.zip')),
+			Buffer.from(cloudOriginal),
+			'Failed uploads preserve the last verified local recovery'
+		);
+		assert.ok(
+			(await readdir(cloudDirectory)).some((name) => name.startsWith('cloud-pending-')),
+			'Failed snapshots are retained outside playable saves'
+		);
 		rejectCloudUpload = false;
 		assert.equal(dropboxFiles.size, 1);
 		const beforeBadRestore = await readFile(cloudConfigPath, 'utf8');
@@ -4688,6 +4706,15 @@ done
 		assert.equal(dropboxFiles.size, 1);
 		assert.equal(automaticState.saves.length, 4);
 		assert.deepEqual(dropboxFiles.get(cloudChoice.path_lower).bytes, Buffer.from(automaticWorld));
+		assert.deepEqual(
+			await readFile(join(cloudDirectory, 'cloud-recovery.zip')),
+			Buffer.from(automaticWorld)
+		);
+		assert.ok(
+			!(await readdir(join(cloudDirectory, 'saves'))).some((name) =>
+				name.startsWith('cloud-recovery-')
+			)
+		);
 		await action(`${serverPath}/cloud`, cookies.owner, {
 			operation: 'automatic',
 			enabled: 'false'

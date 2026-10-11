@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { link, open, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { link, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import { cloudSaveLimit, dropboxContentHash, validateCloudSave } from '../dropbox-saves';
@@ -118,8 +118,10 @@ async function currentSave(server: ManagedServer) {
 	if (!selected) throw new ServerError(409, 'No current world to back up');
 	return selected.name;
 }
-async function readStableSave(server: ManagedServer, name: string) {
-	const path = savePath(server, name);
+function readStableSave(server: ManagedServer, name: string) {
+	return readStableFile(savePath(server, name));
+}
+async function readStableFile(path: string) {
 	const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
 	try {
 		const before = await file.stat();
@@ -147,8 +149,10 @@ async function readStableSave(server: ManagedServer, name: string) {
 		await file.close();
 	}
 }
-async function publishSave(server: ManagedServer, name: string, bytes: Uint8Array) {
-	const target = savePath(server, name);
+function publishSave(server: ManagedServer, name: string, bytes: Uint8Array) {
+	return publishFile(savePath(server, name), bytes);
+}
+async function publishFile(target: string, bytes: Uint8Array) {
 	const temporary = `${target}.${randomUUID()}.tmp`;
 	try {
 		await writeFile(temporary, bytes, { flag: 'wx', mode: 0o600 });
@@ -229,14 +233,14 @@ export async function backupToDropbox(server: ManagedServer, userId: string, aut
 		await writeJson(statePath(server), { source, stamp, revision: current.rev, hash });
 		return { source, backup: name, unchanged: true };
 	}
-	// Keep one recovery copy per distinct save, including failed uploads. Existing backups stay intact.
-	const recovery = `cloud-recovery-${hash}.zip`;
+	// Failed snapshots remain private; successful history belongs to Dropbox revisions.
+	const recovery = join(server.directory, `cloud-pending-${hash}.zip`);
 	try {
-		await publishSave(server, recovery, bytes);
+		await publishFile(recovery, bytes);
 	} catch (cause) {
 		if (
 			(cause as NodeJS.ErrnoException).code !== 'EEXIST' ||
-			dropboxContentHash(await readStableSave(server, recovery)) !== hash
+			dropboxContentHash(await readStableFile(recovery)) !== hash
 		)
 			throw cause;
 	}
@@ -264,6 +268,14 @@ export async function backupToDropbox(server: ManagedServer, userId: string, aut
 			502,
 			'Dropbox backup integrity check failed. The local recovery copy was kept.'
 		);
+	// Replace the local latest recovery only after Dropbox verified the new revision.
+	await rename(recovery, join(server.directory, 'cloud-recovery.zip'));
+	const directory = await open(server.directory, 'r');
+	try {
+		await directory.sync();
+	} finally {
+		await directory.close();
+	}
 	await writeJson(statePath(server), { source, stamp, revision: uploaded.rev, hash });
 	return { source, backup: name, unchanged: false };
 }
