@@ -62,6 +62,7 @@ local function inspect(a)
  elseif e.type=='transport-belt' or e.type=='underground-belt' or e.type=='splitter' then
   row.total_items=e.get_item_count()
   row.belt_items_per_second=e.prototype.belt_speed*480
+  row.lane_items_per_second=row.belt_items_per_second/2
   row.transport_lines={}
   for index=1,e.get_max_transport_line_index() do
    local line=e.get_transport_line(index)
