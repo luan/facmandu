@@ -288,7 +288,7 @@ export function serverAssistantTools(context: {
 				const instance = await server();
 				let image: FactoryImage | { id: string; pending: true };
 				try {
-					image = await renderFactoryBlueprint(instance, data.blueprint);
+					image = await renderFactoryBlueprint(instance, data.blueprint, 2000);
 				} catch (cause) {
 					if (!(cause instanceof FactoryImagePending)) throw cause;
 					image = { id: cause.imageId, pending: true };
@@ -386,7 +386,7 @@ export function serverAssistantTools(context: {
 					try {
 						rendered = {
 							...artifact.data,
-							image: await renderFactoryBlueprint(instance, artifact.data.blueprint)
+							image: await renderFactoryBlueprint(instance, artifact.data.blueprint, 2000)
 						};
 					} catch (cause) {
 						if (!(cause instanceof ServerError)) throw cause;
