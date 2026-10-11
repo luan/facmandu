@@ -158,7 +158,6 @@ local function blueprint(request)
   end
   for _,wire in ipairs(e.wires or {}) do
    if not request.entities[wire[1]] or not request.entities[wire[3]] or (wire[1]~=i and wire[3]~=i) then error('Wire endpoints must refer to this blueprint entity and another existing entity',0) end
-   if wire[1]==wire[3] then error('A blueprint wire cannot connect an entity to itself',0) end
   end
   local w,h=dimensions(p,e.direction)
   if (e.position.x-w/2)%1~=0 or (e.position.y-h/2)%1~=0 then error('Entity is not aligned to the tile grid: '..e.name,0) end
