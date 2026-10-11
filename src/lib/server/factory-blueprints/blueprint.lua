@@ -76,7 +76,7 @@ local function construction_report(force,surface,entities,offset,cost)
  return {single_network_ready=ready,entities=#entities,networks=networks,total_networks=total,production_verified=false,note='Normal-quality stock is not reserved. Coverage and materials do not verify power, input/output connections or throughput.'}
 end
 local function control_example(kind)
- if kind=='asteroid-collector' then return {['chunk-filter']={{index=1,name='oxide-asteroid-chunk'}},control_behavior={circuit_set_filters=false,circuit_read_contents=true,include_hands=true,circuit_enabled=true,circuit_condition={first_signal={type='virtual',name='signal-A'},comparator='>',constant=0}}} end
+ if kind=='asteroid-collector' then return {['chunk-filter']={{index=1,name='oxide-asteroid-chunk'}},control_behavior={circuit_set_filters=false,circuit_read_contents=true,include_hands=true,circuit_enabled=true,circuit_condition={first_signal={type='item',name='oxide-asteroid-chunk'},comparator='<',constant=5}}} end
  if kind=='constant-combinator' then return {control_behavior={sections={sections={{index=1,filters={{index=1,type='item',name='oxide-asteroid-chunk',quality='normal',comparator='=',count=1}}}}}}} end
  if kind=='decider-combinator' then return {control_behavior={decider_conditions={conditions={{first_signal={type='item',name='oxide-asteroid-chunk'},comparator='<',constant=5}},outputs={{signal={type='virtual',name='signal-A'},copy_count_from_input=false,constant=1}},else_outputs={}}}} end
 end
@@ -195,6 +195,15 @@ local function blueprint(request)
   source.wires=source.wires or {}
   source.wires[#source.wires+1]=wire
   preview[wire[1]].wires=source.wires
+ end
+ local connected={}
+ for _,e in ipairs(entities) do
+  for _,wire in ipairs(e.wires or {}) do connected[wire[1]]=true;connected[wire[3]]=true end
+ end
+ for i,e in ipairs(entities) do
+  if e.control_behavior and e.control_behavior.circuit_enabled and not connected[i] then
+   warn('Entity '..i..' ('..e.name..') has a circuit condition but no wire connection. Its inventory cannot control that condition until wired; encode the complete control circuit.')
+  end
  end
  inventory=game.create_inventory(1)
  local stack=inventory[1]
