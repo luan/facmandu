@@ -12,6 +12,8 @@ export function assistantErrorMessage(cause: unknown): string {
 		)
 			return 'Your model provider suspended this account. Check billing or the monthly spending limit, then retry or choose another provider.';
 		if ('message' in error && typeof error.message === 'string') {
+			if (/socket connection was closed unexpectedly/iu.test(error.message))
+				return 'The model connection kept dropping. Your work is saved; retry to continue.';
 			if (/tpm_uncached_exceeded/iu.test(error.message))
 				return 'The provider rejected too much uncached conversation context. Your work is saved; start a new chat or choose another model to continue.';
 			if (/\b429\b|rate.limit/iu.test(error.message))

@@ -39,9 +39,18 @@ index 210bfa06fdd35f698d537e41f6d2adf9299529bd..bd794c099a9212527520ecbd6192523e
  			messages: this.agentLoop.state.messages.slice(),
  			tools: this.agentLoop.state.tools
 diff --git a/dist/dispatch-BlxCz6iq.mjs b/dist/dispatch-BlxCz6iq.mjs
-index 94d0dc4e069259c5f321b429e5a086ed724c5158..d0fb6849c71b93462395d78dc9411337af589c88 100644
+index 94d0dc4e069259c5f321b429e5a086ed724c5158..b9970bee8f81a1f62707a150ee899e50835e16d7 100644
 --- a/dist/dispatch-BlxCz6iq.mjs
 +++ b/dist/dispatch-BlxCz6iq.mjs
+@@ -2314,7 +2314,7 @@ function findTrailingPartialToolBatch(following) {
+ function isRetryableModelError(message) {
+ 	if (message.stopReason !== "error" || !message.errorMessage) return false;
+ 	if (message.errorMessage.includes("(retryable_interruption)")) return true;
+-	return /overloaded|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|network.?error|connection.?(?:reset|refused|lost|error)|socket hang up|fetch failed|timed? out|timeout|terminated|provider finish_reason:\s*error(?![-\w])/i.test(message.errorMessage);
++	return /overloaded|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|network.?error|connection.?(?:reset|refused|lost|error)|socket hang up|socket connection was closed unexpectedly|fetch failed|timed? out|timeout|terminated|provider finish_reason:\s*error(?![-\w])/i.test(message.errorMessage);
+ }
+ function isToolBatchAssistant(message) {
+ 	return message.stopReason === "toolUse" || (message.stopReason === "length" || message.stopReason === "stop") && message.content.some((block) => block.type === "toolCall");
 @@ -4244,3 +4244,5 @@ function validateDispatchRequest(request, agent) {
  }
  //#endregion

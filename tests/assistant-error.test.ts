@@ -36,3 +36,12 @@ test('provider token limits explain recovery without exposing its private respon
 	assert.doesNotMatch(message, /private-account|private-token/u);
 	assert.match(assistantErrorMessage(new Error('429 rate_limit_error')), /wait briefly/u);
 });
+
+test('exhausted socket recovery explains the saved work without exposing provider data', () => {
+	const message = assistantErrorMessage(
+		new Error('The socket connection was closed unexpectedly. private-token')
+	);
+	assert.match(message, /model connection kept dropping/u);
+	assert.match(message, /work is saved/u);
+	assert.doesNotMatch(message, /private-token/u);
+});

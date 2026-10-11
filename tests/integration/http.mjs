@@ -139,6 +139,7 @@ for (let index = 0; index < 25; index++)
 	metadata.set(`bulk-${index}`, catalog(`bulk-${index}`, '1.0.0'));
 let oauthSubject = 'fixture-openai-owner';
 const requestedModels = [];
+let socketRecoveryFailures = 0;
 const webSteeringStarted = Promise.withResolvers();
 const webSteeringRelease = Promise.withResolvers();
 const gameSteeringStarted = Promise.withResolvers();
@@ -413,6 +414,7 @@ const fixture = createServer(async (request, response) => {
 			const wantsServerModPlan = currentRequest.includes('fixture-server-mod-plan');
 			const wantsCombinedReview = currentRequest.includes('User request: fixture-combined-review');
 			const wantsDirectApply = currentRequest.includes('User request: fixture-direct-apply');
+			const wantsSocketRecovery = currentRequest.includes('fixture-socket-recovery');
 			const wantsPreviewRecommendations = currentRequest.includes(
 				'User request: fixture-preview-recommendations'
 			);
@@ -686,7 +688,8 @@ const fixture = createServer(async (request, response) => {
 																			]
 																		})
 																	}
-																: wantsDirectApply && directCallCount < 2
+																: wantsDirectApply &&
+																		directCallCount < (wantsSocketRecovery ? 1 : 2)
 																	? {
 																			type: 'function_call',
 																			id: `fc_direct_apply_${directCallCount}`,
@@ -822,6 +825,21 @@ const fixture = createServer(async (request, response) => {
 				)
 					? 'Recovered complete answer.'
 					: '';
+			if (wantsSocketRecovery && item.type === 'message') {
+				if (socketRecoveryFailures++ === 0) {
+					response.writeHead(200, { 'content-type': 'text/event-stream' });
+					response.end(
+						`data: ${JSON.stringify({ type: 'response.failed', response: { error: { message: 'The socket connection was closed unexpectedly.' } } })}\n\n`
+					);
+					return;
+				}
+				assert.equal(
+					directCallCount,
+					1,
+					'Recovery retains the completed change instead of calling it again'
+				);
+				item.content[0].text = 'Recovered socket response.';
+			}
 			const preamble =
 				wantsServerSaves && item.type === 'function_call'
 					? {
@@ -3787,6 +3805,26 @@ done
 	passed(
 		'combined mod review refreshes stale snapshots; explicit apply is atomic, deduplicated, scoped and idempotent'
 	);
+	await client.execute({
+		sql: 'INSERT INTO modlist (id,user_id,name,factorio_version) VALUES (?,?,?,?)',
+		args: ['socket-recovery-list', 'owner', 'Socket recovery', '2.1']
+	});
+	const socketPath = '/api/modlists/socket-recovery-list/assistant';
+	const socketReply = await request(socketPath, {
+		cookie: cookies.owner,
+		method: 'POST',
+		form: {
+			prompt: 'fixture-direct-apply fixture-socket-recovery: add direct-alpha and direct-beta',
+			model: 'gpt-6-sol'
+		}
+	});
+	assert.equal(socketReply.status, 200);
+	assert.match(await socketReply.text(), /Recovered socket response/u);
+	const socketHistory = await json(socketPath, { cookie: cookies.owner });
+	assert.equal(socketHistory.turns[0].state, 'done');
+	assert.equal(socketHistory.turns[0].plans.filter((plan) => plan.applied).length, 1);
+	assert.equal(socketRecoveryFailures, 2);
+	passed('model socket interruption resumes the same request with one completed change receipt');
 	metadata.set(
 		'legacy-alpha',
 		catalog('legacy-alpha', '1.0.0', ['base >= 2.1', 'legacy-helper >= 1.0.0'])
