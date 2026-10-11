@@ -16,7 +16,9 @@ const provider = createProvider({
 			provider: 'neuralwatt',
 			api: 'openai-completions',
 			baseUrl: 'https://api.neuralwatt.com/v1',
-			input: ['text', 'image'],
+			// Native factory-image QA on this route exhausted reasoning without an
+			// answer. Enable vision after that same image query returns usable output.
+			input: ['text'],
 			reasoning: true,
 			thinkingLevelMap: { low: 'low', high: 'high', xhigh: 'xhigh', max: 'max' },
 			contextWindow: 1048560,
