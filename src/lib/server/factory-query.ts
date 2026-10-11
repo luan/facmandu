@@ -17,9 +17,11 @@ function luaString(value: string) {
 }
 
 // Each command owns its modules and registry. Nothing is installed in the save,
-// and third-party remote interfaces cannot add callable tools.
+// and third-party remote interfaces cannot add callable tools. Documented planner
+// reads use an explicit adapter; the native remote object is never caller-controlled.
 // Sources use line comments only; multiline strings require Lua-aware compaction.
-const bundle = `local registry = {}
+const bundle = `local native_remote = remote
+local registry = {}
 local remote = { interfaces = {} }
 function remote.add_interface(name, functions) registry[name] = functions; remote.interfaces[name] = functions end
 function remote.call(name, method, ...) return registry[name][method](...) end
@@ -46,7 +48,7 @@ require = function(name)
   if not loaded[name] then loaded[name] = assert(modules[name], "Unknown query module")() end
   return loaded[name]
 end
-require("scripts.tools.engine").register()
+require("scripts.tools.engine").register(native_remote)
 local functions = registry["ai-agent-bridge-tools"]
 `;
 

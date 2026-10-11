@@ -572,6 +572,13 @@ export function serverAssistantTools(context: {
 			const player = context.gamePlayer
 				? (await requireGamePlayer(instance, context.userId, context.gamePlayer)).player
 				: null;
+			if (
+				player &&
+				data.queries.some(
+					(query) => query.tool === 'read_factory_plan' && query.args.player !== player.name
+				)
+			)
+				throw new ServerError(403, 'Read your own planner session');
 			const prepared = data.queries.map((query) =>
 				prepareFactoryLookup(query, manifest.tools, targets, player?.force)
 			);
@@ -617,6 +624,8 @@ export function serverAssistantTools(context: {
 			const player = context.gamePlayer
 				? (await requireGamePlayer(instance, context.userId, context.gamePlayer)).player
 				: null;
+			if (player && data.tool === 'read_factory_plan' && data.args.player !== player.name)
+				throw new ServerError(403, 'Read your own planner session');
 			const prepared = prepareFactoryLookup(data, manifest.tools, targets, player?.force);
 			if (!prepared.ok) throw new Error(prepared.error);
 			const args = prepared.args;
@@ -674,6 +683,7 @@ const lookupGroups: Record<string, string> = {
 	top_items: 'production',
 	production_since: 'production',
 	inspect_machine: 'production',
+	find_resource_patches: 'production',
 	inspect_transport: 'logistics',
 	inspect_power_network: 'power',
 	trains: 'logistics',
@@ -682,7 +692,8 @@ const lookupGroups: Record<string, string> = {
 	inspect_train_stop: 'logistics',
 	inspect_logistic_requests: 'logistics',
 	logistics_summary: 'logistics',
-	planning_recipes: 'planning'
+	planning_recipes: 'planning',
+	read_factory_plan: 'planning'
 };
 async function catalog(server: Awaited<ReturnType<typeof requireServer>>, groups: Set<string>) {
 	const manifest = manifestSchema.parse(await factoryQuery(server, { op: 'catalog' }));

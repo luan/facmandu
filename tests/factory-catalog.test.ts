@@ -206,3 +206,86 @@ test('local detailed searches expose finite supplies before scenery without requ
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 });
+
+test('resource discovery groups charted neutral deposits and rejects unbounded scans', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const root = resolve('src/lib/server/factory-query');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ package.path=${JSON.stringify(`${root}/?.lua;`)}..package.path
+ local surface={name='nauvis',valid=true}
+ local force={name='player',is_chunk_charted=function(_,chunk) return chunk.x<2 end}
+ game={forces={player=force},surfaces={nauvis=surface}}
+ prototypes={entity={stone={type='resource'},belt={type='transport-belt'}}}
+ surface.find_entities_filtered=function(filter)
+  assert(filter.force=='neutral' and filter.type=='resource' and filter.limit==8192)
+  return {
+   {position={x=10.5,y=10.5},amount=100},
+   {position={x=11.5,y=11.5},amount=200},
+   {position={x=40.5,y=0.5},amount=400},
+   {position={x=100.5,y=0.5},amount=900}
+  }
+ end
+ local find=require('scripts.tools.resources').functions.find_resource_patches
+ local args={force='player',surface='nauvis',name='stone',x=0,y=0,radius=256}
+ local found=find(args)
+ assert(found.charted_tiles==3 and found.total_patches==2 and not found.truncated)
+ assert(found.patches[1].tiles==2 and found.patches[1].amount==300)
+ assert(found.patches[1].position.x==10.5 and found.patches[1].bounds.right==12)
+ assert(found.patches[2].amount==400)
+ args.radius=513;assert(not pcall(find,args))
+ args.radius=0/0;assert(not pcall(find,args))
+ args.radius=256;args.name='belt';assert(not pcall(find,args))
+ args.name='stone';args.x=nil;assert(not pcall(find,args))
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
+
+test('planner adapters use only documented reads and keep private plans and other forces out', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const root = resolve('src/lib/server/factory-query');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ package.path=${JSON.stringify(`${root}/?.lua;`)}..package.path
+ local force={name='player'};local other={name='other'}
+ local players={alice={name='alice',index=1,force=force},bob={name='bob',index=2,force=force},eve={name='eve',index=3,force=other}}
+ game={forces={player=force,other=other},get_player=function(name) return players[name] end}
+ script={active_mods={factoryplanner='2.1.18',helmod='2.3.4',TaskList='0.6.0'}}
+ local native={interfaces={['fp-interface']={export_current_factory=true},helmod_interface={get_models=true}}}
+ native.call=function(interface,method,index)
+  if interface=='fp-interface' then
+   assert(method=='export_current_factory' and index==1)
+   return {name='glass',blueprint_strings={'huge omitted string'},top_floor={lines={{machine={amount=8}}}}}
+  end
+  assert(interface=='helmod_interface' and method=='get_models')
+  return {
+   own={owner='alice',time=60,products={glass={count=900}}},
+   private={owner='bob',share=0},shared={owner='bob',share=1},
+   enemy={owner='eve',share=1}
+  }
+ end
+ local tools=require('scripts.tools.mod_planners').provider(native).functions
+ local caps=tools.mod_integrations({force='player'})
+ assert(caps.mods.factoryplanner.read and not caps.mods.TaskList.read)
+ local args={force='player',player='alice',planner='factoryplanner'}
+ local plan=tools.read_factory_plan(args)
+ assert(plan.plan.top_floor.lines[1].machine.amount==8 and not plan.plan.blueprint_strings)
+ args.planner='helmod'
+ local list=tools.read_factory_plan(args)
+ assert(list.total==2 and #list.plans==2)
+ args.id='own';assert(tools.read_factory_plan(args).plan.products.glass.count==900)
+ args.id='private';assert(not pcall(tools.read_factory_plan,args))
+ args.id='enemy';assert(not pcall(tools.read_factory_plan,args))
+ args.player='eve';assert(not pcall(tools.read_factory_plan,args))
+ args.player='alice';args.planner='freeplay';assert(not pcall(tools.read_factory_plan,args))
+ local unavailable=require('scripts.tools.mod_planners').provider(nil).functions
+ args.planner='factoryplanner';assert(not pcall(unavailable.read_factory_plan,args))
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});

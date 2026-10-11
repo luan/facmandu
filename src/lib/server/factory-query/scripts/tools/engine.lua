@@ -25,6 +25,7 @@ local entity_count     = require("scripts.tools.entity_count")
 local environment      = require("scripts.tools.environment")
 local rockets          = require("scripts.tools.rockets")
 local game_time        = require("scripts.tools.game_time")
+local resources        = require("scripts.tools.resources")
 local locate           = require("scripts.tools.locate")
 local kills            = require("scripts.tools.kills")
 local built            = require("scripts.tools.built")
@@ -43,7 +44,7 @@ local MODULES = {
   research, tech_status, logistics, entity_count, environment, rockets, game_time,
   locate, kills, built, fluid_rate, trains,
   machine_diagnostics, transport_diagnostics, power_diagnostics, train_diagnostics, logistic_requests,
-  planning, sweep,
+  planning, resources, sweep,
 }
 
 local INTERFACE = "ai-agent-bridge-tools"
@@ -71,9 +72,16 @@ end
 
 FUNCTIONS.agent_tools_v1 = function() return { v = 1, tools = MANIFEST } end
 
+local planners = require("scripts.tools.mod_planners")
 local M = {}
 
-function M.register()
+function M.register(native_remote)
+  local provider = planners.provider(native_remote)
+  for name, entry in pairs(provider.manifest) do
+    entry.params.force = "string! exact asking force name"
+    MANIFEST[name] = entry
+    FUNCTIONS[name] = provider.functions[name]
+  end
   remote.add_interface(INTERFACE, FUNCTIONS)
 end
 
