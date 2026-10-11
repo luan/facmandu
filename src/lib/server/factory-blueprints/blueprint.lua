@@ -104,6 +104,15 @@ local function blueprint(request)
   end
   return {force=force.name,entities=entities}
  end
+ local defaults={use_filters=false,filter_mode='whitelist',override_stack_size=0,circuit_set_filters=false,circuit_read_hand_contents=false,circuit_set_stack_size=false,circuit_enabled=false,connect_to_logistic_network=false,comparator='=',quality='normal'}
+ local function contains(actual,wanted,key)
+  if actual==nil and defaults[key]~=nil then actual=defaults[key] end
+  if type(wanted)~='table' then return actual==wanted end
+  if type(actual)~='table' then return false end
+  for k,v in pairs(wanted) do if not contains(actual[k],v,k) then return false end end
+  return true
+ end
+ local settings={'filters','use_filters','filter_mode','pickup_position','drop_position','override_stack_size','control_behavior'}
  local entities,preview,boxes,warnings={},{},{},{}
  local warned={}
  local function warn(text) if not warned[text] then warnings[#warnings+1]=text;warned[text]=true end end
@@ -143,6 +152,14 @@ local function blueprint(request)
   local directional_type=p.type=='underground-belt' or p.type=='loader' or p.type=='loader-1x1'
   if e.type and not directional_type then error('Input/output type is only valid for underground belts and loaders',0) end
   if directional_type and not e.type then error('Specify input/output for underground belt or loader',0) end
+  if (e.pickup_position or e.drop_position or e.use_filters~=nil or e.filter_mode or e.override_stack_size) and p.type~='inserter' then error('Inserter settings require an inserter',0) end
+  for _,filter in ipairs(e.filters or {}) do
+   if not prototypes.item[filter.name] or (filter.quality and not prototypes.quality[filter.quality]) then error('Unknown filter item or quality',0) end
+  end
+  for _,wire in ipairs(e.wires or {}) do
+   if not request.entities[wire[1]] or not request.entities[wire[3]] or (wire[1]~=i and wire[3]~=i) then error('Wire endpoints must refer to this blueprint entity and another existing entity',0) end
+   if wire[1]==wire[3] then error('A blueprint wire cannot connect an entity to itself',0) end
+  end
   local w,h=dimensions(p,e.direction)
   if (e.position.x-w/2)%1~=0 or (e.position.y-h/2)%1~=0 then error('Entity is not aligned to the tile grid: '..e.name,0) end
   local box={x1=e.position.x-w/2,y1=e.position.y-h/2,x2=e.position.x+w/2,y2=e.position.y+h/2}
@@ -152,6 +169,8 @@ local function blueprint(request)
   boxes[#boxes+1]=box
   entities[i]={entity_number=i,name=e.name,position=e.position,direction=e.direction,recipe=e.recipe,type=e.type}
   preview[i]={name=e.name,position=e.position,direction=e.direction,recipe=e.recipe,type=e.type,width=w,height=h}
+  for _,key in ipairs(settings) do entities[i][key]=e[key];preview[i][key]=e[key] end
+  entities[i].wires=e.wires;preview[i].wires=e.wires
  end
  inventory=game.create_inventory(1)
  local stack=inventory[1]
@@ -167,7 +186,25 @@ local function blueprint(request)
  if not normalized or #normalized~=#entities then error('Factorio rejected blueprint entities',0) end
  for i,e in ipairs(normalized) do
   if e.name~=entities[i].name or e.position.x~=entities[i].position.x or e.position.y~=entities[i].position.y or (e.direction or 0)~=entities[i].direction or e.recipe~=entities[i].recipe or e.type~=entities[i].type then error('Factorio changed blueprint settings; adjust the design',0) end
+  for _,key in ipairs(settings) do
+   local wanted=entities[i][key]
+   local actual=e[key]
+   if actual and (key=='pickup_position' or key=='drop_position') then actual={x=actual.x or actual[1],y=actual.y or actual[2]} end
+   if wanted~=nil and not contains(actual,wanted,key) then error('Factorio changed or rejected '..key..' for '..e.name,0) end
+  end
  end
+ local function wire_set(list)
+  local result={}
+  for _,entity in ipairs(list) do
+   for _,w in ipairs(entity.wires or {}) do
+    local a,b=w[1]..':'..w[2],w[3]..':'..w[4]
+    result[a<b and a..'/'..b or b..'/'..a]=true
+   end
+  end
+  return result
+ end
+ local requested_wires,native_wires=wire_set(entities),wire_set(normalized)
+ if not contains(native_wires,requested_wires) or not contains(requested_wires,native_wires) then error('Factorio changed or rejected blueprint wires',0) end
  stack.label=request.label
  local cost={}
  for _,item in pairs(stack.cost_to_build) do cost[#cost+1]={name=item.name,count=item.count} end
@@ -227,6 +264,7 @@ local function blueprint(request)
  if request.operation=='inspect' then return {ready=#blocked==0,blocked=blocked,expectedTick=game.tick,expectedDesign=request.design,surface=surface.name,position=request.position,entities=#entities,tiles=#tiles,foundation_pending=#pending_tiles,cost=cost,construction=construction_report(force,surface,entities,request.position,cost)} end
  if #blocked>0 then error('Placement is blocked at '..blocked[1].name..'; inspect the site again',0) end
  -- Create ghosts at exact inspected coordinates; build_blueprint centers the layout around its cursor.
+ local ghosts={}
  local placed=0
  local placed_tiles=0
  local failure
@@ -250,7 +288,10 @@ local function blueprint(request)
    local b=boxes[i]
    if surface.count_entities_filtered{area={{b.x1+request.position.x,b.y1+request.position.y},{b.x2+request.position.x,b.y2+request.position.y}},type="entity-ghost"}>0 then error("Site changed during placement",0) end
    if not surface.can_place_entity{name=e.name,position=position,direction=e.direction,force=force,build_check_type=defines.build_check_type.manual} then error('Site changed during placement',0) end
-   local ghost=surface.create_entity{name='entity-ghost',inner_name=e.name,position=position,direction=e.direction,force=force,type=e.type,expires=false}
+   local creation={name='entity-ghost',inner_name=e.name,position=position,direction=e.direction,force=force,type=e.type,expires=false}
+   for _,key in ipairs(settings) do creation[key]=e[key] end
+   local ghost=surface.create_entity(creation)
+   ghosts[i]=ghost
    if not ghost then error('Factorio refused a construction ghost',0) end
    placed=placed+1
    if e.recipe then
@@ -267,6 +308,20 @@ local function blueprint(request)
    if not ghost.valid or ghost.type~='entity-ghost' or ghost.ghost_name~=e.name or ghost.position.x~=position.x or ghost.position.y~=position.y then error('A mod changed the placed ghost; inspect the result',0) end
   end)
   if not ok then failure=tostring(err):match('^[^\n]*');break end
+ end
+ if not failure then
+  for _,e in ipairs(entities) do
+   for _,wire in ipairs(e.wires or {}) do
+    local ok,err=pcall(function()
+     local a,b=ghosts[wire[1]],ghosts[wire[3]]
+     if not a or not b or not a.valid or not b.valid then error('Wire target changed during placement',0) end
+     local source,target=a.get_wire_connector(wire[2],true),b.get_wire_connector(wire[4],true)
+     if not source or not target or (not source.is_connected_to(target) and not source.connect_to(target,true)) then error('Factorio rejected a wire connector or wire reach',0) end
+    end)
+    if not ok then failure=tostring(err):match('^[^\n]*');break end
+   end
+   if failure then break end
+  end
  end
  return {operation='place_blueprint',surface=surface.name,position=request.position,requested=#entities,placed=placed,requested_tiles=#pending_tiles,placed_tiles=placed_tiles,complete=placed==#entities and placed_tiles==#pending_tiles and not failure,error=failure,cost=cost,note=surface.platform and 'Construction requests use real platform hub inventory. No structures were removed.' or 'Construction ghosts require real items and player or robot construction. No structures were removed.'}
 end

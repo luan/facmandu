@@ -4,7 +4,7 @@ local bounded = require('scripts.tools.bounded')
 local M = {}
 M.manifest = {
  inspect_transport = {
-  desc = 'Inspect one built belt, inserter, chest, pipe, tank or pump at exact coordinates: status, direction, item counts/contents, individual belt line counts, inserter pickup/drop targets and the first fluid storage’s connections. Optional item reports exact normal-quality counts. Belt counts are a snapshot, not measured throughput; sample delivered items over game ticks to verify a full belt. Fluid segment amounts are shared network stock, not independent stock at every pipe. Read-only; ghosts are not built entities.',
+  desc = 'Inspect one built belt, inserter, chest, pipe, tank or pump at exact coordinates: status, direction, item counts/contents, individual belt line counts, inserter pickup/drop targets, native blueprint_settings (relative pickup/drop vectors, filters and control behavior), wire connections and the first fluid storage’s connections. Optional item reports exact normal-quality counts. Belt counts are a snapshot, not measured throughput; sample delivered items over game ticks to verify a full belt. Fluid segment amounts are shared network stock, not independent stock at every pipe. Read-only; ghosts are not built entities.',
   params = {surface='string! surface name or index',x='number! map x',y='number! map y',name='string entity prototype name',unit_number='integer unit number to disambiguate',item='string exact item prototype name to count'}
  }
 }
@@ -27,6 +27,31 @@ local function inspect(a)
   table.sort(items,function(a,b) if a.count~=b.count then return a.count>b.count end return a.name<b.name end)
   row.contents={total_kinds=#items,items=bounded.cut(items,12),truncated=#items>12}
  elseif e.type=='inserter' then
+  local inventory=game.create_inventory(1)
+  local ok,settings=pcall(function()
+   local stack=inventory[1];stack.set_stack{name='blueprint'}
+   local mapping=stack.create_blueprint{surface=surface,force=force,area=e.bounding_box,include_entities=true}
+   local entities=stack.get_blueprint_entities() or {}
+   for index,entity in pairs(mapping) do
+    if entity==e then
+     local native=entities[index]
+     local result={}
+     for _,key in ipairs({'filters','use_filters','filter_mode','override_stack_size','control_behavior','pickup_position','drop_position'}) do result[key]=native[key] end
+     for _,key in ipairs({'pickup_position','drop_position'}) do local v=result[key];if v then result[key]={x=v.x or v[1],y=v.y or v[2]} end end
+     return result
+    end
+   end
+   error('Entity could not be captured as a blueprint',0)
+  end)
+  inventory.destroy()
+  if not ok then error(settings,0) end
+  row.blueprint_settings=settings
+  row.wire_connections={}
+  for id,connector in pairs(e.get_wire_connectors(false)) do
+   for _,connection in pairs(connector.connections) do
+    row.wire_connections[#row.wire_connections+1]={connector_id=id,target_connector_id=connection.target.wire_connector_id,target=reference(connection.target.owner)}
+   end
+  end
   row.pickup_position=e.pickup_position;row.drop_position=e.drop_position
   row.pickup_target=reference(e.pickup_target);row.drop_target=reference(e.drop_target)
   row.connected_to_power_source=e.is_connected_to_electric_network();row.energy_j=e.energy

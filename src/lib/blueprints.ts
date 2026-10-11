@@ -3,12 +3,47 @@ import { factoryImageSchema } from './factory-images';
 
 const name = z.string().min(1).max(200);
 const coordinate = z.number().min(-10000).max(10000).multipleOf(0.5);
+const vector = z.strictObject({ x: z.number().min(-64).max(64), y: z.number().min(-64).max(64) });
+const wire = z.tuple([
+	z.number().int().min(1).max(200),
+	z.number().int().min(1).max(65535),
+	z.number().int().min(1).max(200),
+	z.number().int().min(1).max(65535)
+]);
 export const blueprintEntitySchema = z.strictObject({
 	name,
 	position: z.strictObject({ x: coordinate, y: coordinate }),
 	direction: z.union([z.literal(0), z.literal(4), z.literal(8), z.literal(12)]).default(0),
 	recipe: name.optional(),
-	type: z.enum(['input', 'output']).optional()
+	type: z.enum(['input', 'output']).optional(),
+	filters: z
+		.array(
+			z.strictObject({
+				index: z.number().int().min(1).max(1000),
+				name,
+				quality: name.optional(),
+				comparator: z.enum(['=', '≠', '<', '>', '≤', '≥']).optional()
+			})
+		)
+		.max(100)
+		.optional(),
+	use_filters: z.boolean().optional(),
+	filter_mode: z.enum(['whitelist', 'blacklist']).optional(),
+	pickup_position: vector
+		.describe('Inserter pickup vector relative to its center, not world coordinates')
+		.optional(),
+	drop_position: vector
+		.describe('Inserter drop vector relative to its center, not world coordinates')
+		.optional(),
+	override_stack_size: z.number().int().min(0).max(255).optional(),
+	control_behavior: z.record(z.string().min(1).max(100), z.json()).optional(),
+	wires: z
+		.array(wire)
+		.max(100)
+		.describe(
+			'Native tuples [source entity index, source connector id, target entity index, target connector id]. Entity indices are 1-based positions in entities.'
+		)
+		.optional()
 });
 export const blueprintTileSchema = z.strictObject({
 	name,
@@ -17,7 +52,7 @@ export const blueprintTileSchema = z.strictObject({
 		y: z.number().int().min(-10000).max(10000)
 	})
 });
-// Modules, wires and trains need explicit settings and native validation before being added.
+// Modules and train schedules need explicit request/settings support before being added.
 export const blueprintDesignSchema = z.strictObject({
 	force: name,
 	label: z.string().min(1).max(120),

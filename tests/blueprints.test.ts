@@ -143,3 +143,49 @@ test('foundation layouts use integer tiles and remain bound to the inspected lay
 		true
 	);
 });
+
+test('configured inserters preserve settings and bind placement to inspected configuration', () => {
+	const configured = {
+		...target,
+		entities: [
+			{
+				name: 'inserter',
+				position: { x: 0.5, y: 0.5 },
+				direction: 0 as const,
+				filters: [{ index: 1, name: 'iron-plate' }],
+				use_filters: true,
+				pickup_position: { x: 0, y: -2 },
+				drop_position: { x: 0.25, y: 2.25 },
+				control_behavior: { circuit_read_hand_contents: true },
+				wires: [[1, 1, 2, 1]]
+			},
+			{ name: 'inserter', position: { x: 2.5, y: 0.5 }, direction: 0 as const }
+		]
+	};
+	const parsed = blueprintTargetSchema.parse(configured);
+	assert.deepEqual(parsed.entities[0], configured.entities[0]);
+	const expectedDesign = createHash('sha256').update(JSON.stringify(parsed)).digest('hex');
+	const request = blueprintRequestSchema.parse({
+		...configured,
+		operation: 'place',
+		expectedTick: 10,
+		expectedDesign
+	});
+	if (request.operation !== 'place') throw new Error('Expected placement');
+	assert.ok(blueprintCommand(request).startsWith('/silent-command'));
+	assert.throws(
+		() =>
+			blueprintCommand({
+				...request,
+				entities: parsed.entities.map((entity) => ({ ...entity, use_filters: false }))
+			}),
+		/Blueprint changed/
+	);
+	assert.equal(
+		blueprintTargetSchema.safeParse({
+			...configured,
+			entities: [{ ...configured.entities[0], pickup_position: { x: 10000, y: 0 } }]
+		}).success,
+		false
+	);
+});
