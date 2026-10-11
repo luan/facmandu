@@ -128,6 +128,7 @@ const outputTarget = z.strictObject({
 });
 const buildCheck = {
 	operation: z.literal('check'),
+	measure: z.boolean().default(false),
 	item: name,
 	outputs: z.array(outputTarget).max(16).default([])
 };

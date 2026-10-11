@@ -20,6 +20,20 @@ import { rconScript } from './server-rcon';
 
 // The operation belongs outside args. Reusing request schemas verbatim made the
 // model emit a second operation inside args and obscured which fields go together.
+const variants = [
+	...blueprintRequestSchema.options,
+	...blueprintReferenceSchema.options,
+	blueprintRowsSchema
+].map((variant) => {
+	const { operation, ...fields } = variant.shape;
+	return z.strictObject({
+		operation,
+		display: z.boolean().optional(),
+		args: z.strictObject(fields)
+	});
+});
+// Generate the union once so repeated entity/settings schemas share references.
+const contract = z.toJSONSchema(z.union(variants), { io: 'input', reused: 'ref' });
 export const blueprintToolJsonSchema = {
 	type: 'object',
 	properties: {
@@ -29,17 +43,8 @@ export const blueprintToolJsonSchema = {
 	},
 	required: ['operation', 'args'],
 	additionalProperties: false,
-	oneOf: [
-		...blueprintRequestSchema.options,
-		...blueprintReferenceSchema.options,
-		blueprintRowsSchema
-	].map((variant) => {
-		const { operation, ...fields } = variant.shape;
-		return z.toJSONSchema(
-			z.strictObject({ operation, display: z.boolean().optional(), args: z.strictObject(fields) }),
-			{ io: 'input' }
-		);
-	})
+	oneOf: contract.anyOf,
+	$defs: contract.$defs
 };
 export function blueprintDesignHash(input: unknown) {
 	return createHash('sha256')
