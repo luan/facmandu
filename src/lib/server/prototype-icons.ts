@@ -39,6 +39,8 @@ async function packageFiles(
 		.sort((left, right) => left.name.localeCompare(right.name));
 	const files: (string | number)[][] = [];
 	for (const entry of entries) {
+		// Factorio rewrites these on start/stop; their contents are hashed separately.
+		if (!prefix && (entry.name === 'mod-list.json' || entry.name === 'mod-settings.dat')) continue;
 		const path = join(directory, entry.name);
 		const relative = join(prefix, entry.name);
 		const info = await stat(path);
