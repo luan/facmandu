@@ -64,7 +64,7 @@ local M = {}
 
 M.manifest = {
   find_entities = {
-    desc = "Where one force's entities are on one surface: positions with a ready [gps=...] tag. Filter by entity name, type (assembling-machine, furnace, mining-drill, lab, roboport, rocket-silo), the recipe a crafting machine is set to, or the item or fluid its recipe makes (where are grenades made: product=grenade). A recipe or product search covers every crafting machine on the surface by itself; a type beside it is not needed. Ghosts match too, by what they will become, and rows say ghost=true; ghost=true or false narrows to ghosts or built. With x, y and radius, omit filters to inspect all infrastructure in that bounded area, including stored-supply endpoints. Otherwise give at least one filter. Product searches find crafting machines, not items in chests or fluids in tanks. truncated=true means the scan stopped before the end of the surface, so the rows are what it saw and nothing in the reply says a thing is absent. An unknown name comes back found=false with suggestions of close names. For a count, entity_count is cheaper: it asks the engine for a number instead of walking positions.",
+    desc = "Where one force's entities are on one surface: positions with a ready [gps=...] tag. Filter by entity name, type (assembling-machine, furnace, mining-drill, lab, roboport, rocket-silo), the recipe a crafting machine is set to, or the item or fluid its recipe makes (where are grenades made: product=grenade). A recipe or product search covers every crafting machine on the surface by itself; a type beside it is not needed. Ghosts match too, by what they will become, and rows say ghost=true; ghost=true or false narrows to ghosts or built. With x, y and radius, omit filters to inspect all infrastructure in that bounded area, including stored-supply endpoints. types counts every matched entity type, including omitted rows; use a type filter to inspect those entities. Otherwise give at least one filter. Product searches find crafting machines, not items in chests or fluids in tanks. truncated=true means the scan stopped before the end of the surface, so the rows are what it saw and nothing in the reply says a thing is absent. An unknown name comes back found=false with suggestions of close names. For a count, entity_count is cheaper: it asks the engine for a number instead of walking positions.",
     tier = "2",
     params = {
       surface = "string! surface name or index, e.g. nauvis",
@@ -264,6 +264,11 @@ local function find_entities(a)
     if keep then matches[#matches + 1] = entity end
   end
 
+  local types = {}
+  for _, entity in ipairs(matches) do
+    local kind = real_type(entity)
+    types[kind] = (types[kind] or 0) + 1
+  end
   local shown = bounded.cut(matches, bounded.limit(a.limit, DEFAULT_SHOWN, MAX_SHOWN))
   local rows = {}
   for i, entity in ipairs(shown) do
@@ -279,7 +284,7 @@ local function find_entities(a)
     name = name, type = etype, recipe = recipe, product = product, ghost = ghost,
     position = position, radius = a.radius,
     scanned = #scanned, truncated = #scanned >= SCAN_CAP,
-    total = #matches, shown = #rows, entities = rows,
+    total = #matches, shown = #rows, omitted = #matches - #rows, types = types, entities = rows,
   }
 end
 

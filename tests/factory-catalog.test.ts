@@ -41,6 +41,16 @@ test('native lookup contracts declare scope and preserve exact local targets', (
    assert(result.position.x == 0.5 and result.radius == 8)
    local area = functions.find_entities({force='player',surface='nauvis',x=0.5,y=-0.5,radius=8})
    assert(area.entities[1].unit_number == 7)
+   assert(area.types['transport-belt'] == 1 and area.omitted == 0)
+   game.surfaces.nauvis.find_entities_filtered=function(filter)
+    assert(filter.force=='player' and filter.radius==8)
+    return {
+     {name='transport-belt',type='transport-belt',position={x=0.5,y=-0.5}},
+     {name='storage-tank',type='storage-tank',position={x=3.5,y=3.5}}
+    }
+   end
+   local limited=functions.find_entities({force='player',surface='nauvis',x=0.5,y=-0.5,radius=8,limit=1})
+   assert(limited.shown==1 and limited.omitted==1 and limited.types['storage-tank']==1)
    assert(not pcall(functions.find_entities,{force='player',surface='nauvis'}))
    for _, args in ipairs({{x=0}, {x=0,y=0,radius=97}, {x=1000001,y=0,radius=8}}) do
     args.force='player';args.surface='nauvis';args.name='transport-belt'
