@@ -32,7 +32,7 @@
  <!-- biome-ignore lint/a11y/noNoninteractiveTabindex: allow keyboard scrolling of the zoomed image -->
  <section class="max-h-[65vh] min-h-64 overflow-auto p-4" aria-label={label} tabindex="0">
   {#if unavailable}<div class="p-4 text-sm text-muted-foreground"><p role="alert">Preview unavailable.</p>{#if onretry}<Button size="sm" class="mt-3" disabled={retrying} onclick={onretry}>{retrying?'Rendering…':'Retry preview'}</Button>{:else}<p>Capture another factory view.</p>{/if}</div>{:else if !ready}<p role="status" class="p-4 text-sm text-muted-foreground">Rendering factory view…</p>{:else}
-  <img loading="lazy" src={factoryImageUrl(serverId,image)} alt={label} width={'width' in image ? image.width : undefined} height={'height' in image ? image.height : undefined} style={`width:${zoom*100}%;max-width:none;height:auto;image-rendering:pixelated`} onerror={()=>unavailable=true} />
+  <img loading="lazy" src={factoryImageUrl(serverId,image)} alt={label} width={'width' in image ? image.width : undefined} height={'height' in image ? image.height : undefined} style={zoom===1 ? "width:auto;max-width:100%;max-height:55vh;height:auto;margin:0 auto;image-rendering:pixelated" : `width:${zoom*100}%;max-width:none;height:auto;image-rendering:pixelated`} onerror={()=>unavailable=true} />
   {/if}
  </section>
  <div class="border-t border-border px-3 py-2 text-xs text-muted-foreground"><a class="text-primary" href={factoryImageUrl(serverId,image)} target="_blank" rel="noopener noreferrer">Open full image</a></div>
