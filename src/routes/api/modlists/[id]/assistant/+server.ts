@@ -139,10 +139,6 @@ function recoverPendingTurns() {
 			const controller = new AbortController();
 			running.set(key, controller);
 			void (async () => {
-				const timeout = setTimeout(
-					() => controller.abort(),
-					Math.max(1, 180_000 - (Date.now() - turn.createdAt.getTime()))
-				);
 				try {
 					const { handle } = await agentHandle(
 						turn.userId,
@@ -213,7 +209,6 @@ function recoverPendingTurns() {
 						.set({ state: 'error', answer: 'Response interrupted. Send your message again.' })
 						.where(eq(assistantTurn.id, turn.id));
 				} finally {
-					clearTimeout(timeout);
 					running.delete(key);
 				}
 			})().catch(() => {});
@@ -564,7 +559,7 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 		throw cause;
 	}
 	const encoder = new TextEncoder();
-	let disconnect = () => controller.abort();
+	let disconnect = () => {};
 	const stream = new ReadableStream<Uint8Array>({
 		start(output) {
 			let closed = false;
@@ -573,10 +568,8 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 			};
 			disconnect = () => {
 				closed = true;
-				controller.abort();
 			};
 			request.signal.addEventListener('abort', disconnect, { once: true });
-			const timeout = setTimeout(() => controller.abort(), 180_000);
 			const id = genID('turn');
 			let cards: AssistantMod[] = [];
 			const results: FactoryResult[] = [];
@@ -747,7 +740,6 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 						.catch(() => {});
 					send({ error: message });
 				} finally {
-					clearTimeout(timeout);
 					running.delete(key);
 					await stopWatching();
 					request.signal.removeEventListener('abort', disconnect);

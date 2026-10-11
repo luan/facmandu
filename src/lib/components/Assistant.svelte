@@ -27,8 +27,10 @@
   if (loading) return;
   voice.stop();
   // Detach the view without cancelling the persisted run in the previous chat.
-  controller = undefined; busy = false; progress = '';
+  const running = runningViews.get(id);
+  controller = running?.controller; busy = !!running; steeringBusy = false; progress = running?.progress ?? '';
   chat = id; contextUsage = null; turns = []; plans = []; combineablePlanIds = []; selectedMods = []; selectedTurn = ''; prompt = ''; error = ''; refreshError = ''; text = ''; activePrompt = ''; activeMods = []; activeResults = []; loading = true;
+  if (running) { activePrompt = running.prompt; text = running.text; activeResults = running.results; activeMods = running.mods; contextUsage = running.contextUsage; }
   await refresh(true, true);
  }
  async function createChat() {
@@ -75,6 +77,7 @@
  let selectedMods = $state<string[]>([]);
  let selectedTurn = $state('');
  let controller = $state<AbortController>();
+ const runningViews = new Map<string, { controller: AbortController; prompt: string; text: string; progress: string; results: FactoryResult[]; mods: AssistantMod[]; contextUsage: AssistantContextUsage | null }>();
  let activePrompt = $state('');
  let activeMods = $state<AssistantMod[]>([]);
  let previewName = $state<string | null>(null);
@@ -176,15 +179,15 @@
  async function send() {
   if (loading || steeringBusy || !prompt.trim() || (inProgress && !serverId)) return;
   if (inProgress) {
-   const message = prompt; steeringBusy = true; error = '';
+   const message = prompt; const requestChat = chat; steeringBusy = true; error = '';
    try {
     const response = await fetch(endpoint, { method: 'POST', body: new URLSearchParams({ chat, operation: 'steer', prompt: message }) });
     if (!response.ok) { const data = await response.json(); throw new Error(data.message ?? 'Could not send steering'); }
-    if (prompt === message) prompt = '';
-    if (activePrompt) activePrompt += `\n\nFollow-up: ${message}`;
-    await refresh();
-   } catch (cause) { error = cause instanceof Error ? cause.message : 'Could not send steering'; }
-   finally { steeringBusy = false; }
+    const view = runningViews.get(requestChat);
+    if (view) view.prompt += `\n\nFollow-up: ${message}`;
+    if (chat === requestChat) { if (prompt === message) prompt = ''; if (activePrompt) activePrompt += `\n\nFollow-up: ${message}`; await refresh(); }
+   } catch (cause) { if (chat === requestChat) error = cause instanceof Error ? cause.message : 'Could not send steering'; }
+   finally { if (chat === requestChat) steeringBusy = false; }
    return;
   }
   const message = prompt; const requestChat = chat; prompt = '';
@@ -197,6 +200,8 @@
   activePrompt = message;
   const requestController = controller;
   const requestChat = chat;
+  const view = { controller: requestController, prompt: message, text: '', progress, results: activeResults, mods: activeMods, contextUsage };
+  runningViews.set(requestChat, view);
   const ownsView = () => chat === requestChat && controller === requestController;
   let answer = '';
   let responseError = '';
@@ -210,13 +215,13 @@
    const decoder = new TextDecoder(); let buffer = ''; let complete = false;
    for (;;) { const { done, value } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true });
     let newline = buffer.indexOf('\n');
-    while (newline >= 0) { const event = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1); if (event.delta) answer += event.delta; if (event.answer) answer = event.answer; if (event.error) responseError = event.error; if (ownsView()) { if (event.compacted) compacted = true; if (event.contextUsage) contextUsage = event.contextUsage; if (event.results) activeResults = event.results; if (event.mods) activeMods = event.mods; text = answer; if (event.progress) progress = event.progress; if (event.error) error = event.error; } if (event.done || event.error) complete = true; newline = buffer.indexOf('\n'); }
+    while (newline >= 0) { const event = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1); if (event.delta) answer += event.delta; if (event.answer) answer = event.answer; if (event.error) responseError = event.error; view.text = answer; if (event.results) view.results = event.results; if (event.mods) view.mods = event.mods; if (event.progress) view.progress = event.progress; if (event.contextUsage) view.contextUsage = event.contextUsage; if (ownsView()) { if (event.compacted) compacted = true; if (event.contextUsage) contextUsage = event.contextUsage; if (event.results) activeResults = event.results; if (event.mods) activeMods = event.mods; text = answer; if (event.progress) progress = event.progress; if (event.error) error = event.error; } if (event.done || event.error) complete = true; newline = buffer.indexOf('\n'); }
     if (complete) break;
    }
    if (responseError) throw new Error(responseError);
    return answer;
   } catch (cause) { const message = requestController.signal.aborted ? 'Stopped' : cause instanceof SyntaxError ? 'The response was interrupted. Retry.' : cause instanceof Error ? cause.message : 'Request failed'; if (ownsView()) error = message; throw new Error(message); }
-  finally { if (ownsView()) { busy = false; controller = undefined; progress = ''; if (!accepted) { text = ''; activePrompt = ''; activeMods = []; activeResults = []; } await refresh(); if (!serverId && plans[0]?.applied && plans[0].id !== previousPlanId) await invalidate('app:modlist'); } }
+  finally { runningViews.delete(requestChat); if (ownsView()) { busy = false; controller = undefined; progress = ''; if (!accepted) { text = ''; activePrompt = ''; activeMods = []; activeResults = []; } await refresh(); if (!serverId && plans[0]?.applied && plans[0].id !== previousPlanId) await invalidate('app:modlist'); } }
  }
  async function apply(id: string) {
   busy = true; error = ''; progress = 'Applying changes…';
@@ -270,7 +275,7 @@
  function toggleSelected(name: string, turnId: string) { selectedMods = selectedMods.includes(name) ? selectedMods.filter(item => item !== name) : [...selectedMods, name]; selectedTurn = turnId; }
  async function stop() { controller?.abort(); await fetch(endpoint, { method: 'POST', headers: { Accept: 'application/json' }, body: new URLSearchParams({ chat, operation: 'cancel' }) }); }
  onMount(() => { if (serverId) return; window.addEventListener('facmandu-explain', explain); return () => window.removeEventListener('facmandu-explain', explain); });
- onDestroy(() => { voice.stop(); controller?.abort(); clearTimeout(pollTimer); });
+ onDestroy(() => { voice.stop(); for (const view of runningViews.values()) view.controller.abort(); clearTimeout(pollTimer); });
 </script>
 {#snippet planRows(plan: ModlistPlan)}
       <div class="divide-y divide-border/60">

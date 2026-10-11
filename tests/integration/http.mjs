@@ -2530,15 +2530,20 @@ done
 		operation: 'steer',
 		prompt: 'fixture-web-steering-update: copper instead'
 	});
+	await steeringResponse.body.cancel();
 	webSteeringRelease.resolve();
-	assert.match(await steeringResponse.text(), /Steered to copper/);
+	await until(
+		`${serverAssistantPath}?chat=${steerChat}`,
+		cookies.owner,
+		(value) => value.turns[0]?.state === 'done'
+	);
 	const steeredHistory = await json(`${serverAssistantPath}?chat=${steerChat}`, {
 		cookie: cookies.owner
 	});
 	assert.equal(steeredHistory.turns.length, 1);
 	assert.match(steeredHistory.turns[0].prompt, /Follow-up: fixture-web-steering-update/);
 	assert.match(steeredHistory.turns[0].answer, /Steered to copper/);
-	passed('mid-run web steering joins the response, preserves follow-ups and rejects other users');
+	passed('mid-run web steering preserves follow-ups and finishes after the browser disconnects');
 	const gameSockets = new Set();
 	const gameReplies = [];
 	const gameWaiters = new Map();

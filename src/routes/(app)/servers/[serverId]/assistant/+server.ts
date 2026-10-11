@@ -212,8 +212,8 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 	const encoder = new TextEncoder();
 	let closed = false;
 	const disconnect = () => {
+		// Disconnecting the view is not an explicit Stop request.
 		closed = true;
-		controller.abort();
 	};
 	const stream = new ReadableStream<Uint8Array>({
 		start(output) {
