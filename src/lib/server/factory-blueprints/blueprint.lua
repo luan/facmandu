@@ -184,8 +184,11 @@ local function blueprint(request)
   local w,h=dimensions(p,e.direction)
   if (e.position.x-w/2)%1~=0 or (e.position.y-h/2)%1~=0 then error('Entity is not aligned to the tile grid: '..e.name,0) end
   local box={x1=e.position.x-w/2,y1=e.position.y-h/2,x2=e.position.x+w/2,y2=e.position.y+h/2}
-  for _,b in ipairs(boxes) do
-   if box.x1<b.x2 and box.x2>b.x1 and box.y1<b.y2 and box.y2>b.y1 then error('Blueprint entities overlap: '..e.name,0) end
+  for j,b in ipairs(boxes) do
+   if box.x1<b.x2 and box.x2>b.x1 and box.y1<b.y2 and box.y2>b.y1 then
+    local other=request.entities[j]
+    error('Blueprint entities overlap: index '..i..' '..e.name..' at ('..e.position.x..', '..e.position.y..') with index '..j..' '..other.name..' at ('..other.position.x..', '..other.position.y..'). Move or remove the conflicting entity.',0)
+   end
   end
   boxes[#boxes+1]=box
   entities[i]={entity_number=i,name=e.name,position=e.position,direction=e.direction,recipe=e.recipe,type=e.type}

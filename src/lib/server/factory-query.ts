@@ -67,7 +67,12 @@ if request.op == "batch" then
  local results={}
  for _,query in ipairs(request.queries) do
   local success,value=pcall(lookup,query)
-  results[#results+1]={tool=query.tool,ok=success,result=success and value or nil,error=not success and tostring(value):match("^[^\\n]*") or nil}
+  local row={tool=query.tool,ok=success}
+  if success then row.result=value else row.error=tostring(value):match("^[^\\n]*") end
+  if #helpers.table_to_json(row)>math.floor(60000/#request.queries) then
+   row={tool=query.tool,ok=false,error="Result too large for this batch; narrow this query or use factory_lookup for it alone"}
+  end
+  results[#results+1]=row
  end
  return {tick=game.tick,results=results}
 end
