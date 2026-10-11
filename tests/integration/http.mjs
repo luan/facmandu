@@ -139,6 +139,10 @@ for (let index = 0; index < 25; index++)
 	metadata.set(`bulk-${index}`, catalog(`bulk-${index}`, '1.0.0'));
 let oauthSubject = 'fixture-openai-owner';
 const requestedModels = [];
+const webSteeringStarted = Promise.withResolvers();
+const webSteeringRelease = Promise.withResolvers();
+const gameSteeringStarted = Promise.withResolvers();
+const gameSteeringRelease = Promise.withResolvers();
 const codexMenus = [];
 const routingQueries = [];
 const assistantToolOutputs = [];
@@ -367,6 +371,14 @@ const fixture = createServer(async (request, response) => {
 					!JSON.stringify(body.input).includes('fixture-plan'),
 					'New chat must not inherit another conversation'
 				);
+			if (currentRequest.includes('fixture-web-steering-start')) {
+				webSteeringStarted.resolve();
+				await webSteeringRelease.promise;
+			}
+			if (currentRequest.includes('fixture-game-steering-start')) {
+				gameSteeringStarted.resolve();
+				await gameSteeringRelease.promise;
+			}
 			const wantsCompaction = currentRequest.includes('fixture-long-context');
 			const wantsGame = currentRequest.includes('fixture-game-');
 			const wantsGameQuestionAction = currentRequest.includes('fixture-game-question-action');
@@ -773,8 +785,16 @@ const fixture = createServer(async (request, response) => {
 																														1400
 																													)
 																												: wantsGame
-																													? '**Iron nearby:** [item=iron-plate] [gps=12,34,nauvis].'
-																													: 'Fixture contextual explanation: this adds transport options alongside your enabled root-mod.',
+																													? currentRequest.includes(
+																															'fixture-game-steering-update'
+																														)
+																														? 'Steered to copper.'
+																														: '**Iron nearby:** [item=iron-plate] [gps=12,34,nauvis].'
+																													: currentRequest.includes(
+																																'fixture-web-steering-update'
+																															)
+																														? 'Steered to copper.'
+																														: 'Fixture contextual explanation: this adds transport options alongside your enabled root-mod.',
 																											annotations: []
 																										}
 																									]
@@ -2485,6 +2505,40 @@ done
 		'list assistant discovers its linked server, installs archives without changing the save and leaves it stopped'
 	);
 	passed('Decisions chat context and tool groups, dynamic expansion, and stopped server reads');
+	const steerChat = (
+		await (await action(serverAssistantPath, cookies.owner, { operation: 'new-chat' })).json()
+	).id;
+	const steeringResponse = await request(serverAssistantPath, {
+		cookie: cookies.owner,
+		method: 'POST',
+		form: {
+			chat: steerChat,
+			prompt: 'fixture-web-steering-start',
+			model: 'gpt-6-luna',
+			effort: 'medium'
+		}
+	});
+	await webSteeringStarted.promise;
+	await action(
+		serverAssistantPath,
+		cookies.stranger,
+		{ chat: steerChat, operation: 'steer', prompt: 'intrusion' },
+		403
+	);
+	await action(serverAssistantPath, cookies.owner, {
+		chat: steerChat,
+		operation: 'steer',
+		prompt: 'fixture-web-steering-update: copper instead'
+	});
+	webSteeringRelease.resolve();
+	assert.match(await steeringResponse.text(), /Steered to copper/);
+	const steeredHistory = await json(`${serverAssistantPath}?chat=${steerChat}`, {
+		cookie: cookies.owner
+	});
+	assert.equal(steeredHistory.turns.length, 1);
+	assert.match(steeredHistory.turns[0].prompt, /Follow-up: fixture-web-steering-update/);
+	assert.match(steeredHistory.turns[0].answer, /Steered to copper/);
+	passed('mid-run web steering joins the response, preserves follow-ups and rejects other users');
 	const gameSockets = new Set();
 	const gameReplies = [];
 	const gameWaiters = new Map();
@@ -2678,6 +2732,25 @@ done
 			4
 		);
 		assert.equal(gameReplies.length, 5);
+		await appendFile(gameLog, '106.000 [CHAT] Frank: @ fixture-game-steering-start\n');
+		await gameSteeringStarted.promise;
+		const steeringAck = nextGameReply('Frank');
+		await appendFile(
+			gameLog,
+			'106.001 [CHAT] Frank: @ fixture-game-steering-update: copper instead\n'
+		);
+		assert.match(await steeringAck, /Updated request/);
+		const steeredReply = nextGameReply('Frank');
+		gameSteeringRelease.resolve();
+		assert.match(await steeredReply, /Steered to copper/);
+		assert.equal(
+			gameReplies.length,
+			7,
+			'Steering sends one acknowledgement and one final force reply'
+		);
+		passed(
+			'in-game steering bypasses the idle cooldown and updates the active response without replay'
+		);
 		await action(`${serverPath}?/manage`, cookies.owner, { ...gameSettings, enabled: 'off' });
 		passed(
 			'in-game assistant starts at EOF, scopes player chats and tools, rejects web writes and unauthorized actions, bounds spam, supports new chat and does not replay after restart'

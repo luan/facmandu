@@ -1,4 +1,5 @@
-import { and, desc, eq } from 'drizzle-orm';
+import type { ConversationStreamChunk } from '@flue/runtime';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import {
 	assistantModsSchema,
 	type FactoryResult,
@@ -18,12 +19,54 @@ const state = globalThis as typeof globalThis & {
 };
 state.__facmanduServerAssistantRequests ??= new Map();
 export const serverAssistantRequests = state.__facmanduServerAssistantRequests;
+type Steering = {
+	ready: ReturnType<
+		typeof Promise.withResolvers<((prompt: string, key: string) => Promise<string>) | null>
+	>;
+	receipts: Map<string, Promise<string | null>>;
+	closed: boolean;
+	done: ReturnType<typeof Promise.withResolvers<void>>;
+};
+const steering = new WeakMap<AbortController, Steering>();
+export function serverAssistantController() {
+	const controller = new AbortController();
+	steering.set(controller, {
+		ready: Promise.withResolvers(),
+		receipts: new Map(),
+		closed: false,
+		done: Promise.withResolvers()
+	});
+	return controller;
+}
+export async function steerServerTurn(chatId: string, prompt: string, key: string) {
+	const controller = serverAssistantRequests.get(chatId);
+	const current = controller && steering.get(controller);
+	if (!current) return false;
+	if (current.closed) {
+		await current.done.promise;
+		return false;
+	}
+	let receipt = current.receipts.get(key);
+	// Bound joined context; longer discussions can continue in a new response.
+	if (!receipt && current.receipts.size >= 20)
+		throw new Error('This response already has 20 follow-ups; wait for it to finish');
+	if (!receipt) {
+		receipt = current.ready.promise.then((dispatch) => {
+			if (!dispatch) return null;
+			if (controller.signal.aborted) throw new Error('The response has stopped');
+			return dispatch(prompt, key);
+		});
+		current.receipts.set(key, receipt);
+	}
+	return (await receipt) !== null;
+}
 const keyOf = (userId: string, serverId: string) => `${userId}:${serverId}`;
 export async function finishServerTurn(
 	turn: typeof turnTable.$inferSelect,
 	controller: AbortController,
 	send: (event: object) => void
 ) {
+	const current = steering.get(controller);
 	let timeout: ReturnType<typeof setTimeout> | undefined;
 	const results: FactoryResult[] = [];
 	const toolNames = new Map<string, string>();
@@ -32,10 +75,10 @@ export async function finishServerTurn(
 		const chat = turn.chatId
 			? await db.select().from(assistantChat).where(eq(assistantChat.id, turn.chatId)).get()
 			: null;
-		// Visual design and construction need several tool rounds; game chat stays brief.
+		// Construction needs the same runtime budget in game and on the website.
 		timeout = setTimeout(
-			() => controller.abort(),
-			Math.max(1, (chat?.gamePlayer ? 180_000 : 900_000) - (Date.now() - turn.createdAt.getTime()))
+			() => controller.abort('timeout'),
+			Math.max(1, 900_000 - (Date.now() - turn.createdAt.getTime()))
 		);
 		const game = chat?.gamePlayer
 			? await requireGamePlayer(
@@ -118,67 +161,103 @@ export async function finishServerTurn(
 				abort();
 				throw new Error('Stopped');
 			}
-			const result = await handle.read(receipt, {
-				signal: controller.signal,
-				onEvent: submissionEvents(receipt, (chunk) => {
-					if (chunk.type === 'message-delta' && chunk.kind === 'text')
-						send({ delta: chunk.delta, progress: 'Responding…' });
-					if (chunk.type === 'tool-input') toolNames.set(chunk.toolCallId, chunk.toolName);
-					if (chunk.type === 'tool-output-error') {
-						const tool = toolNames.get(chunk.toolCallId) ?? 'Tool';
-						results.push({
-							kind: 'factory-result',
-							tool,
-							title: `${tool} failed`,
-							result: { error: chunk.errorText }
-						});
-						send({
-							results: results.filter((item) => item.tool !== 'mod_cards'),
-							progress: 'Recovering from tool error…'
-						});
-					}
-					if (chunk.type === 'tool-input')
-						send({
-							progress:
-								chunk.toolName === 'factory_action'
-									? 'Updating factory…'
-									: chunk.toolName === 'plan_production'
-										? 'Calculating production…'
-										: chunk.toolName === 'create_factory_watch'
-											? 'Creating watch…'
-											: chunk.toolName.startsWith('factory_')
-												? 'Reading factory…'
-												: 'Working…'
-						});
-					if (chunk.type === 'tool-output') {
-						send({ progress: 'Thinking…' });
-						const cards = assistantModsSchema.safeParse(chunk.output);
-						if (cards.success) {
-							const previous = results.find((item) => item.tool === 'mod_cards');
-							const before = assistantModsSchema.safeParse(previous?.result);
-							const mods = new Map(
-								(before.success ? before.data.mods : []).map((mod) => [mod.name, mod])
-							);
-							for (const mod of cards.data.mods) mods.set(mod.name, mod);
-							const value = { kind: 'mods', mods: [...mods.values()].slice(-6) };
-							if (previous) previous.result = value;
-							else
-								results.push({
-									kind: 'factory-result',
-									tool: 'mod_cards',
-									title: 'Mods',
-									result: value
-								});
-							send({ mods: value.mods });
-						}
-						const parsed = factoryResultSchema.safeParse(chunk.output);
-						if (parsed.success) {
-							results.push(parsed.data);
-							send({ results: results.filter((item) => item.tool !== 'mod_cards') });
-						}
-					}
-				})
+			current?.ready.resolve(async (prompt, key) => {
+				const latestGame = chat?.gamePlayer
+					? await requireGamePlayer(
+							await requireServer(turn.userId, turn.serverId),
+							turn.userId,
+							chat.gamePlayer
+						)
+					: null;
+				const joined = await handle.dispatch({
+					message: {
+						kind: 'signal',
+						type: 'facmandu-request',
+						body: `${latestGame ? `This message is from the connected in-game player: ${JSON.stringify(latestGame.player)}. Answer in at most three short chat messages.\n` : ''}The user is steering the current request: ${prompt}`,
+						attributes: { groups: '[]', requestId: turn.id }
+					},
+					initialData: context,
+					idempotencyKey: key
+				});
+				await db
+					.update(turnTable)
+					.set({ prompt: sql`${turnTable.prompt} || ${`\n\nFollow-up: ${prompt}`}` })
+					.where(eq(turnTable.id, turn.id));
+				return joined.submissionId;
 			});
+			const accept = (chunk: ConversationStreamChunk) => {
+				if (chunk.type === 'message-delta' && chunk.kind === 'text')
+					send({ delta: chunk.delta, progress: 'Responding…' });
+				if (chunk.type === 'tool-input') toolNames.set(chunk.toolCallId, chunk.toolName);
+				if (chunk.type === 'tool-output-error') {
+					const tool = toolNames.get(chunk.toolCallId) ?? 'Tool';
+					results.push({
+						kind: 'factory-result',
+						tool,
+						title: `${tool} failed`,
+						result: { error: chunk.errorText }
+					});
+					send({
+						results: results.filter((item) => item.tool !== 'mod_cards'),
+						progress: 'Recovering from tool error…'
+					});
+				}
+				if (chunk.type === 'tool-input')
+					send({
+						progress:
+							chunk.toolName === 'factory_action'
+								? 'Updating factory…'
+								: chunk.toolName === 'plan_production'
+									? 'Calculating production…'
+									: chunk.toolName === 'create_factory_watch'
+										? 'Creating watch…'
+										: chunk.toolName.startsWith('factory_')
+											? 'Reading factory…'
+											: 'Working…'
+					});
+				if (chunk.type === 'tool-output') {
+					send({ progress: 'Thinking…' });
+					const cards = assistantModsSchema.safeParse(chunk.output);
+					if (cards.success) {
+						const previous = results.find((item) => item.tool === 'mod_cards');
+						const before = assistantModsSchema.safeParse(previous?.result);
+						const mods = new Map(
+							(before.success ? before.data.mods : []).map((mod) => [mod.name, mod])
+						);
+						for (const mod of cards.data.mods) mods.set(mod.name, mod);
+						const value = { kind: 'mods', mods: [...mods.values()].slice(-6) };
+						if (previous) previous.result = value;
+						else
+							results.push({
+								kind: 'factory-result',
+								tool: 'mod_cards',
+								title: 'Mods',
+								result: value
+							});
+						send({ mods: value.mods });
+					}
+					const parsed = factoryResultSchema.safeParse(chunk.output);
+					if (parsed.success) {
+						results.push(parsed.data);
+						send({ results: results.filter((item) => item.tool !== 'mod_cards') });
+					}
+				}
+			};
+			let result = await handle.read(receipt, {
+				signal: controller.signal,
+				onEvent: submissionEvents(receipt, accept)
+			});
+			// Joined deliveries share the host response. If one arrived after it
+			// settled, read its own response too so a boundary race cannot lose it.
+			for (const joined of current?.receipts.values() ?? []) {
+				const id = await joined.catch(() => null);
+				if (id)
+					result = await handle.read(id, {
+						signal: controller.signal,
+						onEvent: submissionEvents(id, accept)
+					});
+			}
+			if (current) current.closed = true;
 			await db
 				.update(turnTable)
 				.set({ state: 'done', answer: result.text, results: JSON.stringify(results) })
@@ -192,7 +271,12 @@ export async function finishServerTurn(
 			'Server assistant failed:',
 			cause instanceof Error ? cause.message.split('\n')[0]?.slice(0, 200) : 'Unknown error'
 		);
-		const answer = controller.signal.aborted ? 'Response stopped.' : assistantErrorMessage(cause);
+		const answer =
+			controller.signal.reason === 'timeout'
+				? 'The assistant reached its 15-minute limit. Completed game changes remain; ask it to inspect the current state before continuing.'
+				: controller.signal.aborted
+					? 'Response stopped.'
+					: assistantErrorMessage(cause);
 		await db
 			.update(turnTable)
 			.set({ state: 'error', answer, results: JSON.stringify(results) })
@@ -200,8 +284,14 @@ export async function finishServerTurn(
 			.catch(() => {});
 		send({ error: answer });
 	} finally {
+		if (current) {
+			current.closed = true;
+			current.ready.resolve(null);
+			current.done.resolve();
+		}
 		stopWatching();
 		clearTimeout(timeout);
-		serverAssistantRequests.delete(turn.chatId ?? keyOf(turn.userId, turn.serverId));
+		const key = turn.chatId ?? keyOf(turn.userId, turn.serverId);
+		if (serverAssistantRequests.get(key) === controller) serverAssistantRequests.delete(key);
 	}
 }

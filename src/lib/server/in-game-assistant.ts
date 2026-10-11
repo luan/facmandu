@@ -7,7 +7,12 @@ import { db } from './db';
 import { genID } from './db/ids';
 import { assistantChat, type ManagedServer, managedServer, serverAssistantTurn } from './db/schema';
 import { requireGamePlayer } from './game-player';
-import { finishServerTurn, serverAssistantRequests } from './server-assistant';
+import {
+	finishServerTurn,
+	serverAssistantController,
+	serverAssistantRequests,
+	steerServerTurn
+} from './server-assistant';
 import { type GameAssistantConfig, serverConfig } from './server-files';
 import { type LogLine, subscribeLogs } from './server-logs';
 import { rconScript } from './server-rcon';
@@ -18,7 +23,7 @@ type Session = {
 	controllers: Set<AbortController>;
 	config: GameAssistantConfig;
 	fingerprint: string;
-	pending: Set<string>;
+	pending: Map<string, { chat: Promise<string | null>; done: Promise<void> }>;
 	recent: number[];
 	players: Map<string, number>;
 };
@@ -65,7 +70,8 @@ async function answer(
 	server: ManagedServer,
 	session: Session,
 	line: LogLine,
-	message: { player: string; prompt: string }
+	message: { player: string; prompt: string },
+	ready: (chat: string | null) => void
 ) {
 	const ownerId = session.config.ownerId;
 	await requireGamePlayer(server, ownerId, message.player);
@@ -82,9 +88,10 @@ async function answer(
 		return;
 	}
 	const id = `game-${createHash('sha256').update(`${server.id}:${line.id}:${line.text}`).digest('hex')}`;
-	const controller = new AbortController();
+	const controller = serverAssistantController();
 	session.controllers.add(controller);
 	serverAssistantRequests.set(chat.id, controller);
+	ready(chat.id);
 	try {
 		const inserted = await db
 			.insert(serverAssistantTurn)
@@ -116,7 +123,11 @@ async function answer(
 		}
 		await finishServerTurn(turn, controller, () => {});
 		// Changing settings or disconnecting never replays a response or pending game action.
-		if (controller.signal.aborted || sessions.get(server.id) !== session) return;
+		if (
+			(controller.signal.aborted && controller.signal.reason !== 'timeout') ||
+			sessions.get(server.id) !== session
+		)
+			return;
 		await requireGamePlayer(server, ownerId, message.player);
 		const completed = await db
 			.select()
@@ -136,10 +147,10 @@ function receive(server: ManagedServer, session: Session, line: LogLine) {
 	const now = Date.now();
 	session.recent = session.recent.filter((time) => now - time < 60_000);
 	if (
-		session.pending.has(message.player) ||
-		session.pending.size >= 4 ||
+		(!session.pending.has(message.player) && session.pending.size >= 4) ||
 		session.recent.length >= 10 ||
-		now - (session.players.get(message.player) ?? 0) < 15_000
+		(!session.pending.has(message.player) &&
+			now - (session.players.get(message.player) ?? 0) < 15_000)
 	)
 		return;
 	// Bound player cooldown state even on servers that accept many distinct names.
@@ -147,15 +158,63 @@ function receive(server: ManagedServer, session: Session, line: LogLine) {
 		if (now - time >= 60_000) session.players.delete(player);
 	session.players.set(message.player, now);
 	session.recent.push(now);
-	session.pending.add(message.player);
-	void answer(server, session, line, message)
+	deliver(server, session, line, message);
+}
+function deliver(
+	server: ManagedServer,
+	session: Session,
+	line: LogLine,
+	message: { player: string; prompt: string }
+) {
+	const pending = session.pending.get(message.player);
+	if (pending) {
+		void (async () => {
+			await requireGamePlayer(server, session.config.ownerId, message.player);
+			const chat = await pending.chat;
+			if (
+				chat &&
+				(await steerServerTurn(chat, message.prompt, `game-steer-${server.id}-${line.id}`))
+			) {
+				await reply(server, message.player, 'Updated request.');
+				return;
+			}
+			await pending.done;
+			if (sessions.get(server.id) === session) deliver(server, session, line, message);
+		})().catch(async (cause: unknown) => {
+			console.error(
+				'In-game steering failed:',
+				cause instanceof Error ? cause.message.split('\n')[0]?.slice(0, 200) : 'Unknown error'
+			);
+			await reply(server, message.player, 'Could not update the request. Try again.').catch(
+				() => {}
+			);
+		});
+		return;
+	}
+	launch(server, session, line, message);
+}
+function launch(
+	server: ManagedServer,
+	session: Session,
+	line: LogLine,
+	message: { player: string; prompt: string }
+) {
+	const ready = Promise.withResolvers<string | null>();
+	const done = Promise.withResolvers<void>();
+	const pending = { chat: ready.promise, done: done.promise };
+	session.pending.set(message.player, pending);
+	void answer(server, session, line, message, ready.resolve)
 		.catch((cause: unknown) => {
 			console.error(
 				'In-game assistant failed:',
 				cause instanceof Error ? cause.message.split('\n')[0]?.slice(0, 200) : 'Unknown error'
 			);
 		})
-		.finally(() => session.pending.delete(message.player));
+		.finally(() => {
+			ready.resolve(null);
+			if (session.pending.get(message.player) === pending) session.pending.delete(message.player);
+			done.resolve();
+		});
 }
 export async function refreshInGameAssistants() {
 	// A settings save must finish a scan of its own values, even during startup.
@@ -191,7 +250,7 @@ async function scanServers() {
 			config,
 			fingerprint,
 			controllers: new Set(),
-			pending: new Set(),
+			pending: new Map(),
 			recent: [],
 			players: new Map()
 		};

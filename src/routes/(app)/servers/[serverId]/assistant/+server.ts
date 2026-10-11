@@ -12,7 +12,12 @@ import { authenticationForm, requireSameOrigin } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { genID } from '$lib/server/db/ids';
 import { serverAssistantTurn as turnTable } from '$lib/server/db/schema';
-import { finishServerTurn, serverAssistantRequests } from '$lib/server/server-assistant';
+import {
+	finishServerTurn,
+	serverAssistantController,
+	serverAssistantRequests,
+	steerServerTurn
+} from '$lib/server/server-assistant';
 import { startModSync } from '$lib/server/server-mod-sync';
 import { requireServer } from '$lib/server/servers';
 import type { RequestHandler } from './$types';
@@ -52,7 +57,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
 		}
 		const key = turn.chatId ?? keyOf(turn.userId, turn.serverId);
 		if (!running.has(key)) {
-			const controller = new AbortController();
+			const controller = serverAssistantController();
 			running.set(key, controller);
 			void finishServerTurn(turn, controller, () => {}).catch(() => {});
 		}
@@ -118,6 +123,18 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 		running.get(key)?.abort();
 		return json({ cancelled: true });
 	}
+	if (operation === 'steer') {
+		const prompt = String(input.get('prompt') ?? '').trim();
+		if (!prompt || prompt.length > 6000) error(400, 'Enter a question of up to 6,000 characters');
+		let accepted: boolean;
+		try {
+			accepted = await steerServerTurn(chat.id, prompt, genID('steer'));
+		} catch {
+			error(409, 'Could not deliver this update. Wait for the response or try again.');
+		}
+		if (!accepted) error(409, 'The response has finished; send a new message');
+		return json({ steered: true });
+	}
 	if (operation === 'apply-modlist') {
 		if (running.has(key)) error(409, 'Finish the current response first');
 		const saved = await db
@@ -162,7 +179,7 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 		error(400, 'Choose an available model and effort');
 	if (running.has(key)) error(409, 'A response is already in progress');
 	if (running.size >= 8) error(429, 'The assistant is busy. Try again shortly.');
-	const controller = new AbortController();
+	const controller = serverAssistantController();
 	running.set(key, controller);
 	const id = genID('turn');
 	try {

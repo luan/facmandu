@@ -162,8 +162,21 @@
   open = true; prompt = `Why would ${event.detail} be useful in this list? Explain what it adds, overlaps with enabled mods, and compatibility or dependency concerns.`;
   await refresh(); void send();
  }
+ let steeringBusy = $state(false);
  async function send() {
-  if (inProgress || loading || !prompt.trim()) return;
+  if (loading || steeringBusy || !prompt.trim() || (inProgress && !serverId)) return;
+  if (inProgress) {
+   const message = prompt; steeringBusy = true; error = '';
+   try {
+    const response = await fetch(endpoint, { method: 'POST', body: new URLSearchParams({ chat, operation: 'steer', prompt: message }) });
+    if (!response.ok) { const data = await response.json(); throw new Error(data.message ?? 'Could not send steering'); }
+    if (prompt === message) prompt = '';
+    if (activePrompt) activePrompt += `\n\nFollow-up: ${message}`;
+    await refresh();
+   } catch (cause) { error = cause instanceof Error ? cause.message : 'Could not send steering'; }
+   finally { steeringBusy = false; }
+   return;
+  }
   const message = prompt; prompt = '';
   try { await ask(message); } catch { if (!prompt) prompt = message; }
  }
@@ -411,7 +424,7 @@
    {#if refreshError}<p role="status" class="text-sm text-muted-foreground">{refreshError} <button type="button" class="underline" onclick={() => void refresh()}>Retry</button></p>{/if}
    {#if gamePlayer}<div class="flex items-center justify-between gap-3 text-sm text-muted-foreground"><span>In-game conversation with {gamePlayer}</span><Button variant="outline" size="sm" disabled={inProgress || loading} onclick={createChat}>New web chat</Button></div>{:else}
    {#if modelError}<p role="status" class="text-sm text-muted-foreground">{modelError}</p>{/if}
-   <Prompt bind:value={prompt} label="Message" placeholder={serverId ? "Ask about this server…" : "Ask about this list…"} maxLength={6000} busy={inProgress} {send} disabledReason={loading ? 'Loading conversation' : ''} stop={busy && controller ? stop : undefined}>
+   <Prompt bind:value={prompt} label="Message" placeholder={serverId ? "Ask about this server…" : "Ask about this list…"} maxLength={6000} busy={inProgress} allowSteering={!!serverId} {send} disabledReason={loading ? 'Loading conversation' : steeringBusy ? 'Sending steering' : ''} stop={busy && controller ? stop : undefined}>
     {#snippet controls()}
      {#if voiceState.active || voiceState.connecting}
       <TooltipButton tooltip={voiceState.muted ? 'Unmute microphone' : 'Mute microphone'} variant="ghost" size="icon" disabled={voiceState.connecting} aria-pressed={voiceState.muted} onclick={() => voice.mute()}>{#if voiceState.muted}<MicOffIcon />{:else}<MicIcon />{/if}</TooltipButton>
