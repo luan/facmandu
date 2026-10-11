@@ -67,6 +67,7 @@ import {
 	serverSetupStatus
 } from './server-provision';
 import { listServers, requireServer } from './servers';
+import { decodeToolStream } from './tool-arguments';
 
 type Context = { userId: string; model: string; chatId?: string; gamePlayer?: string } & (
 	| { listId: string; serverId?: never }
@@ -135,15 +136,16 @@ async function registerAssistantProvider(
 	// New providers stream directly; only Codex needs the transport shaping below.
 	setProvider({
 		...loaded.provider,
-		streamSimple: (model, transcript, options) =>
-			loaded.provider.streamSimple(
-				{ ...selected, baseUrl: model.baseUrl },
-				transcriptWithImages(normalizeContext(transcript)),
-				{
+		streamSimple: (model, transcript, options) => {
+			const prepared = transcriptWithImages(normalizeContext(transcript));
+			return decodeToolStream(
+				loaded.provider.streamSimple({ ...selected, baseUrl: model.baseUrl }, prepared, {
 					...options,
 					reasoning: effort
-				}
-			),
+				}),
+				prepared
+			);
+		},
 		id: providerId,
 		getModels: () => [{ ...selected, id: 'assistant', provider: providerId }],
 		auth: {
