@@ -36,7 +36,8 @@ export const blueprintToolJsonSchema = {
 	].map((variant) => {
 		const { operation, ...fields } = variant.shape;
 		return z.toJSONSchema(
-			z.strictObject({ operation, display: z.boolean().optional(), args: z.strictObject(fields) })
+			z.strictObject({ operation, display: z.boolean().optional(), args: z.strictObject(fields) }),
+			{ io: 'input' }
 		);
 	})
 };

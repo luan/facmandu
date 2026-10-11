@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { type JsonObject, normalizeContext } from '@earendil-works/pi-ai';
+import { validateToolArguments } from '@earendil-works/pi-ai/utils/validation';
 import { lauxlib, lua, lualib, to_luastring } from 'fengari';
 import {
 	blueprintArtifactSchema,
@@ -14,7 +16,7 @@ import {
 	expandBlueprintRows,
 	reviseBlueprintDesign
 } from '../src/lib/blueprints';
-import { blueprintCommand } from '../src/lib/server/factory-blueprints';
+import { blueprintCommand, blueprintToolJsonSchema } from '../src/lib/server/factory-blueprints';
 
 const design = {
 	force: 'player',
@@ -22,6 +24,43 @@ const design = {
 	entities: [{ name: 'transport-belt', position: { x: 0.5, y: 0.5 }, direction: 4 as const }]
 };
 const target = { ...design, surface: 'nauvis', position: { x: 20, y: 20 } };
+test('provider blueprint contracts accept omitted defaults and preserve strict operation boundaries', () => {
+	const transcript = normalizeContext({
+		messages: [],
+		tools: [{ name: 'blueprint_operation', description: '', parameters: blueprintToolJsonSchema }]
+	});
+	const tool = transcript.messages.flatMap((message) =>
+		message.role === 'system' ? (message.toolsAdded ?? []) : []
+	)[0];
+	assert.ok(tool);
+	const validate = (arguments_: JsonObject) =>
+		validateToolArguments(tool, {
+			type: 'toolCall',
+			name: tool.name,
+			id: 'contract',
+			arguments: arguments_
+		});
+	const [entity] = design.entities;
+	if (!entity) throw new Error('Expected entity');
+	const drafts: JsonObject[] = [
+		design,
+		{
+			force: 'player',
+			label: 'Row',
+			entityRows: [{ entity, count: 2, step: { x: 1, y: 0 } }]
+		},
+		{ force: 'player', designId: 'a'.repeat(64), removedEntityIndices: [1] }
+	];
+	for (const args of drafts) assert.doesNotThrow(() => validate({ operation: 'create', args }));
+	assert.doesNotThrow(() => validate({ operation: 'inspect', args: target }));
+	for (const args of [
+		{ ...design, arbitrary: true },
+		{ ...design, entities: [{ ...design.entities[0], direction: 2 }] },
+		{ ...design, designId: 'a'.repeat(64) }
+	])
+		assert.throws(() => validate({ operation: 'create', args }));
+	assert.throws(() => validate({ operation: 'place', args: target }));
+});
 test('draft removal preserves settings and remaps retained wires while adding compact rows', () => {
 	const saved = blueprintDesignSchema.parse({
 		force: 'player',

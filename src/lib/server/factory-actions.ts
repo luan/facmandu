@@ -139,8 +139,10 @@ export const factoryActionSchema = z.discriminatedUnion('operation', [
 
 export type FactoryAction = z.infer<typeof factoryActionSchema>;
 export type FactoryActionInspect = z.infer<typeof factoryActionInspectSchema>;
-export const factoryActionJsonSchema = z.toJSONSchema(factoryActionSchema);
-export const factoryActionInspectJsonSchema = z.toJSONSchema(factoryActionInspectSchema);
+export const factoryActionJsonSchema = z.toJSONSchema(factoryActionSchema, { io: 'input' });
+export const factoryActionInspectJsonSchema = z.toJSONSchema(factoryActionInspectSchema, {
+	io: 'input'
+});
 
 export const factoryActionInspectManifest = {
 	entities_inspect:
