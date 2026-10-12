@@ -22,7 +22,7 @@ function M.provider(native_remote)
    factoryplanner={version=mods.factoryplanner,read=not not available('fp-interface','export_current_factory'),solve=not not available('facmandu-factory-planner','solve'),tool='read_factory_plan',solverTool='solve_factory_plan'},
    helmod={version=mods.helmod,read=not not available('helmod_interface','get_models'),calculate=not not available('helmod_interface','get_recipe'),tool='read_factory_plan',recipeTool='helmod_recipe'},
    ['blueprint-sandboxes']={version=mods['blueprint-sandboxes'],read=not not available('facmandu-blueprint-sandboxes','read'),export=not not available('facmandu-blueprint-sandboxes','export'),tool='read_sandbox',exportTool='sandbox_blueprint',note='Read and export existing owned designs; no sandbox creation or editor control.'},
-   TaskList={version=mods.TaskList,read=not not available('facmandu-task-list','read'),write=not not available('facmandu-task-list','update'),tool='task_list',note='Install the Toby Task List adapter to enable shared force task reads and edits.'},
+   TaskList={version=mods.TaskList,read=not not available('facmandu-task-list','read'),write=not not available('facmandu-task-list','update'),tool='task_list'},
    toby={version=mods['facmandu-assistant'],read=not not available('facmandu-toby-drone','read'),write=not not available('facmandu-toby-drone','command'),tool='toby_drone',note='Toby has its own automatic companion, separate from Entourage. No equipment or fuel is needed; construction consumes real materials.'}
   }}
  end
