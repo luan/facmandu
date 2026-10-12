@@ -38,7 +38,7 @@ async function prepareModelImage(server: ManagedServer, id: string) {
 	}
 	const temporary = `${destination}.${randomUUID()}.tmp`;
 	try {
-		// Pillow is installed with Beast's renderer. Preserve the full PNG for players;
+		// Pillow is available on Beast. Preserve the full PNG for players;
 		// bounded JPEG previews keep repeated vision requests below upstream body limits.
 		await run(
 			'python3',

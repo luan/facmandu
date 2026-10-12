@@ -26,7 +26,7 @@
  }
 </script>
 <section class="overflow-hidden border border-border bg-white/[0.025] text-sm" aria-label={blueprint.label}>
- <header class="flex flex-wrap items-center justify-between gap-3 border-b border-border p-3"><h3 class="font-semibold">Blueprint design · {blueprint.label}</h3><span class="text-xs text-muted-foreground">{blueprint.entities.length} entities{blueprint.tiles.length ? ` · ${blueprint.tiles.length} foundation tiles` : ''} · Native blueprint</span></header>
+ <header class="flex flex-wrap items-center justify-between gap-3 border-b border-border p-3"><h3 class="font-semibold">Blueprint design · {blueprint.label}</h3><span class="text-xs text-muted-foreground">{blueprint.entities.length} entities{blueprint.tiles.length ? ` · ${blueprint.tiles.length} construction tiles` : ''} · Native blueprint</span></header>
  {#if image && serverId}<FactoryImage {image} {serverId} label={`Sprite layout for ${blueprint.label}`} onretry={()=>void render()} retrying={rendering} />{:else}
  <svg class="h-80 w-full bg-black/20" viewBox={`${bounds.left} ${bounds.top} ${bounds.right-bounds.left} ${bounds.bottom-bounds.top}`} role="img" aria-label={`Layout for ${blueprint.label}`}>
   {#each blueprint.tiles as tile}<rect x={tile.position.x} y={tile.position.y} width="1" height="1" fill="#414141" stroke="#737373" stroke-width="0.04"><title>{tile.name}</title></rect>{/each}
@@ -41,8 +41,8 @@
  {#if serverId}<div class="p-3"><Button size="sm" disabled={rendering} onclick={()=>void render()}>{rendering?'Rendering sprites…':'Render sprite preview'}</Button></div>{/if}
  {/if}
  <div class="space-y-3 border-t border-border p-3">
-  <p class="text-xs text-muted-foreground">Import checked by Factorio. This design preview does not confirm construction, connections or throughput.</p>
-  {#each blueprint.warnings as warning}<p class="text-xs text-amber-200">{warning}</p>{/each}
+  <p class="text-xs text-muted-foreground">Native import validated · Design preview</p>
+  {#if blueprint.warnings.length}<details><summary class="cursor-pointer text-xs text-amber-200">{blueprint.warnings.length} design {blueprint.warnings.length === 1 ? 'check' : 'checks'}</summary><ul class="mt-2 space-y-1 text-xs text-amber-200">{#each blueprint.warnings as warning}<li>{warning}</li>{/each}</ul></details>{/if}
   <details><summary class="cursor-pointer text-xs">Construction materials</summary><ul class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">{#each blueprint.cost as item}<li>{item.count} × {item.name}</li>{/each}</ul></details>
   <div class="flex gap-2"><Button size="sm" onclick={() => void copy()}>{#if copied}<CheckIcon />{:else}<CopyIcon />{/if}Copy blueprint</Button><Button size="sm" variant="outline" onclick={download}><DownloadIcon />Download</Button></div>
   {#if error}<p role="alert" class="text-xs text-destructive">{error}</p>{/if}
