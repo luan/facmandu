@@ -195,7 +195,9 @@ local function power_report(force,surface,entities,offset,boxes)
   if not covered then uncovered_total=uncovered_total+1;if #uncovered<16 then uncovered[#uncovered+1]=index end
   elseif not connected then unconnected_total=unconnected_total+1;if #unconnected<16 then unconnected[#unconnected+1]=index end end
  end
- return {checked=not unknown,consumers=#consumers,existing_scan_radius=64,uncovered_total=uncovered_total,uncovered_entities=uncovered,unconnected_total=unconnected_total,unconnected_entities=unconnected,note='Bounded potential pole coverage and cable reach to an existing powered network or planned generator. Wiring, generator inputs, power headroom and production are not verified. Inspect and repair reported gaps before calling a production layout connected.'}
+ -- A known path for every consumer proves coverage even when unrelated poles
+ -- remain uncharted. Missing paths still retain that uncertainty.
+ return {checked=not unknown or (uncovered_total==0 and unconnected_total==0),consumers=#consumers,existing_scan_radius=64,uncovered_total=uncovered_total,uncovered_entities=uncovered,unconnected_total=unconnected_total,unconnected_entities=unconnected,note='Bounded potential pole coverage and cable reach to an existing powered network or planned generator. Wiring, generator inputs, power headroom and production are not verified. Inspect and repair reported gaps before calling a production layout connected.'}
 end
 local function control_example(kind)
  if kind=='asteroid-collector' then return {['chunk-filter']={{index=1,name='oxide-asteroid-chunk'}},control_behavior={circuit_set_filters=false,circuit_read_contents=true,include_hands=true,circuit_enabled=true,circuit_condition={first_signal={type='item',name='oxide-asteroid-chunk'},comparator='<',constant=5}}} end

@@ -676,6 +676,15 @@ test('native placement inspection identifies pole gaps and preserves uncertainty
  request.entities={{name='plant',position={x=2.5,y=0.5},direction=0}}
  local existing=blueprint(request)
  assert(existing.power.checked and existing.power.unconnected_total==0 and existing.power.uncovered_total==0,'Existing power must work without adding poles')
+ force.is_chunk_charted=function(_,chunk) return chunk.x>=0 end
+ local find=surface.find_entities_filtered
+ surface.find_entities_filtered=function(q)
+  local rows=find(q)
+  if q.type=='electric-pole' then rows[#rows+1]={type='electric-pole',name='pole',quality={name='normal'},position={x=-32.5,y=0.5}} end
+  return rows
+ end
+ assert(blueprint(request).power.checked,'A known powered path must not be invalidated by unrelated uncharted poles')
+ force.is_chunk_charted=function() return charted end
  charted=false;assert(not blueprint(request).power.checked,'Uncharted evidence cannot prove an absent power source')
  `)
 	);
