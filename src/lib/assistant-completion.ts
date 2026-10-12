@@ -12,6 +12,27 @@ const completionSchema = z.object({
 	})
 });
 
+export function missingFactoryCheck(
+	requests: readonly string[],
+	tools: readonly { tool: string; isError: boolean }[]
+): boolean {
+	// Cover direct live-state checks; open-ended advice stays model-led until
+	// routing provides reliable typed intent for every request.
+	const liveCheck =
+		/^\s*(?:does|do|is|are|why|where|check|inspect|can you (?:check|inspect|see))\b.*\b(?:factory|line|belt|bus|platform|machines?|collectors?|furnaces?|map|production)\b/i;
+	const reads = new Set([
+		'factory_lookup',
+		'factory_batch',
+		'factory_view',
+		'blueprint_operation',
+		'factory_action_inspect'
+	]);
+	return (
+		requests.some((request) => liveCheck.test(request)) &&
+		!tools.some(({ tool }) => reads.has(tool))
+	);
+}
+
 export function completionRequest(
 	requests: readonly string[],
 	answer: string,

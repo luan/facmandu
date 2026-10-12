@@ -18,6 +18,7 @@ import { sqlite, start } from '@flue/runtime/node';
 import { eq } from 'drizzle-orm';
 import * as v from 'valibot';
 import { env } from '$env/dynamic/private';
+import { missingFactoryCheck } from '$lib/assistant-completion';
 import {
 	type AssistantContextUsage,
 	assistantContextLimit,
@@ -256,6 +257,15 @@ function ModlistAssistant() {
 		const last = runtimeState.lastTurn?.get(chatId);
 		if (!last) return;
 		if (last.text && last.finishReason !== 'length') {
+			if (context.serverId && missingFactoryCheck(request.messages, response.toolCalls)) {
+				append({
+					kind: 'signal',
+					type: 'factory-check-required',
+					attributes: { requestId: requestId ?? '' },
+					body: 'No factory inspection was attempted in this request. Server status only checks the process; earlier turns can be stale. Inspect the requested factory target now before answering its current state. For a saved build connection, call blueprint_operation check with its designId, world position and exact product, then trace the product_outputs drop targets. Ingredient feeds are not product outputs; a belt ending at an inserter can be a valid machine feed. If the server is unavailable or inspection fails, report that fresh failure without inventing the factory state. This reminder authorizes no writes.'
+				});
+				return;
+			}
 			if (!request.reviewed && response.toolCalls.length) {
 				setRequest({ ...request, reviewed: true });
 				append({

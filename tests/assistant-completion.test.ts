@@ -1,6 +1,37 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { completionRequest, needsContinuation } from '../src/lib/assistant-completion';
+import {
+	completionRequest,
+	missingFactoryCheck,
+	needsContinuation
+} from '../src/lib/assistant-completion';
+
+test('current factory checks require fresh inspection while advice and verified read failures can finish', () => {
+	const status = [{ tool: 'server_status', isError: false }];
+	for (const request of [
+		'Does the new glass line connect to the bus?',
+		'Are our machines working?',
+		'Check the factory.'
+	]) {
+		assert.equal(missingFactoryCheck([request], status), true);
+		assert.equal(
+			missingFactoryCheck([request], [...status, { tool: 'factory_batch', isError: false }]),
+			false
+		);
+		assert.equal(
+			missingFactoryCheck([request], [...status, { tool: 'factory_lookup', isError: true }]),
+			false
+		);
+	}
+	for (const request of [
+		'How do I connect belts?',
+		'Can you design a blueprint?',
+		'Is the server running?',
+		'Thanks.'
+	]) {
+		assert.equal(missingFactoryCheck([request], status), false);
+	}
+});
 
 test('only a consistent confident unfinished result continues the response', () => {
 	const result = (choice: string, confidence: number, unfinished: number, finished: number) => ({
