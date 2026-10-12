@@ -13,6 +13,7 @@ import {
 	blueprintRequestSchema,
 	blueprintRowsSchema,
 	blueprintTargetSchema,
+	combineBlueprintDesigns,
 	expandBlueprintRows,
 	measureBuildOutput,
 	reviseBlueprintDesign
@@ -84,6 +85,52 @@ test('provider blueprint contracts accept omitted defaults and preserve strict o
 	])
 		assert.throws(() => validate({ operation: 'create', args }));
 	assert.throws(() => validate({ operation: 'place', args: target }));
+});
+test('saved sections combine into one layout while preserving settings, tile offsets and wire endpoints', () => {
+	const base = blueprintDesignSchema.parse(design);
+	const section = blueprintDesignSchema.parse({
+		force: 'player',
+		label: 'Configured section',
+		entities: [
+			{
+				name: 'fast-inserter',
+				position: { x: 0.5, y: 0.5 },
+				pickup_position: { x: 3, y: 0 },
+				drop_position: { x: -2, y: 0 },
+				use_filters: true,
+				filters: [{ index: 1, name: 'iron-plate' }],
+				wires: [[1, 1, 2, 1]]
+			},
+			{ name: 'medium-electric-pole', position: { x: 2.5, y: 0.5 } }
+		],
+		wires: [[1, 2, 2, 2]],
+		tiles: [{ name: 'stone-path', position: { x: 0, y: 0 } }]
+	});
+	const before = JSON.stringify({ base, section });
+	const combined = combineBlueprintDesigns(base, [{ design: section, offset: { x: -70, y: 32 } }]);
+	assert.equal(combined.entities.length, 3);
+	assert.deepEqual(combined.entities[1], {
+		...section.entities[0],
+		position: { x: -69.5, y: 32.5 },
+		wires: [[2, 1, 3, 1]]
+	});
+	assert.deepEqual(combined.wires, [[2, 2, 3, 2]]);
+	assert.deepEqual(combined.tiles, [{ name: 'stone-path', position: { x: -70, y: 32 } }]);
+	assert.equal(JSON.stringify({ base, section }), before);
+	assert.throws(
+		() =>
+			combineBlueprintDesigns(base, [
+				{ design: { ...section, force: 'enemy' }, offset: { x: 0, y: 0 } }
+			]),
+		/another force/
+	);
+	assert.throws(
+		() =>
+			combineBlueprintDesigns(base, [
+				{ design: { ...section, wires: [[1, 1, 3, 1]] }, offset: { x: 0, y: 0 } }
+			]),
+		/outside its section/
+	);
 });
 test('draft removal preserves settings and remaps retained wires while adding compact rows', () => {
 	const saved = blueprintDesignSchema.parse({

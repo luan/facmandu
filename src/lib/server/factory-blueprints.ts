@@ -9,6 +9,7 @@ import {
 	blueprintRequestSchema,
 	blueprintRowsSchema,
 	blueprintTargetSchema,
+	combineBlueprintDesigns,
 	expandBlueprintRows,
 	reviseBlueprintDesign
 } from '$lib/blueprints';
@@ -102,6 +103,19 @@ const replySchema = z.discriminatedUnion('ok', [
 	z.object({ ok: z.literal(true), result: z.json() }),
 	z.object({ ok: z.literal(false), error: z.string() })
 ]);
+async function readBlueprintDraft(directory: string, id: string, force: string) {
+	let saved: z.infer<typeof blueprintDesignSchema>;
+	try {
+		saved = blueprintDesignSchema.parse(
+			JSON.parse(await readFile(join(directory, 'blueprint-drafts', `${id}.json`), 'utf8'))
+		);
+	} catch {
+		throw new ServerError(404, 'Blueprint draft not found on this server; create it again');
+	}
+	if (blueprintDesignHash(saved) !== id || saved.force !== force)
+		throw new ServerError(409, 'Blueprint draft does not match this force or its recorded design');
+	return saved;
+}
 export async function factoryBlueprint(
 	server: ManagedServer,
 	input: unknown,
@@ -127,27 +141,16 @@ export async function factoryBlueprint(
 	let resolved: BlueprintRequest;
 	if ('designId' in parsed.data) {
 		const reference = parsed.data;
-		let saved: z.infer<typeof blueprintDesignSchema>;
-		try {
-			saved = blueprintDesignSchema.parse(
-				JSON.parse(
-					await readFile(
-						join(server.directory, 'blueprint-drafts', `${reference.designId}.json`),
-						'utf8'
-					)
-				)
-			);
-		} catch {
-			throw new ServerError(404, 'Blueprint draft not found on this server; create it again');
-		}
-		if (blueprintDesignHash(saved) !== reference.designId || saved.force !== reference.force)
-			throw new ServerError(
-				409,
-				'Blueprint draft does not match this force or its recorded design'
-			);
+		const saved = await readBlueprintDraft(server.directory, reference.designId, reference.force);
 		if (reference.operation === 'create') {
+			const parts = await Promise.all(
+				reference.parts.map(async (part) => ({
+					design: await readBlueprintDraft(server.directory, part.designId, reference.force),
+					offset: part.offset
+				}))
+			);
 			try {
-				resolved = reviseBlueprintDesign(saved, reference);
+				resolved = reviseBlueprintDesign(combineBlueprintDesigns(saved, parts), reference);
 			} catch (cause) {
 				throw new ServerError(400, cause instanceof Error ? cause.message : 'Invalid revision');
 			}

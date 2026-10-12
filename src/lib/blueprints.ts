@@ -222,6 +222,18 @@ export const blueprintReferenceSchema = z.discriminatedUnion('operation', [
 	designReference.extend({
 		operation: z.literal('create'),
 		label: z.string().min(1).max(120).optional(),
+		parts: z
+			.array(
+				z.strictObject({
+					designId: designReference.shape.designId,
+					offset: blueprintTargetSchema.shape.position
+				})
+			)
+			.max(16)
+			.describe(
+				'Append saved sections without retransmitting their geometry. Offset is section world position minus this draft world position. Wires and settings are preserved.'
+			)
+			.default([]),
 		entityChanges: z
 			.array(
 				z.strictObject({
@@ -251,6 +263,41 @@ export const blueprintReferenceSchema = z.discriminatedUnion('operation', [
 		expectedDesign: z.string().regex(/^[a-f0-9]{64}$/)
 	})
 ]);
+export function combineBlueprintDesigns(
+	base: z.infer<typeof blueprintDesignSchema>,
+	parts: ReadonlyArray<{
+		design: z.infer<typeof blueprintDesignSchema>;
+		offset: z.infer<typeof blueprintTargetSchema.shape.position>;
+	}>
+) {
+	const entities = [...base.entities];
+	const wires = [...base.wires];
+	const tiles = [...base.tiles];
+	for (const { design, offset } of parts) {
+		if (design.force !== base.force) throw new Error('Blueprint section belongs to another force');
+		const count = entities.length;
+		const shiftWire = (connection: z.infer<typeof wire>): z.infer<typeof wire> => {
+			if (connection[0] > design.entities.length || connection[2] > design.entities.length)
+				throw new Error('Blueprint section wire refers outside its section');
+			return [connection[0] + count, connection[1], connection[2] + count, connection[3]];
+		};
+		entities.push(
+			...design.entities.map((entity) => ({
+				...entity,
+				position: { x: entity.position.x + offset.x, y: entity.position.y + offset.y },
+				wires: entity.wires?.map(shiftWire)
+			}))
+		);
+		wires.push(...design.wires.map(shiftWire));
+		tiles.push(
+			...design.tiles.map((tile) => ({
+				...tile,
+				position: { x: tile.position.x + offset.x, y: tile.position.y + offset.y }
+			}))
+		);
+	}
+	return blueprintDesignSchema.parse({ ...base, entities, wires, tiles });
+}
 export function reviseBlueprintDesign(
 	saved: z.infer<typeof blueprintDesignSchema>,
 	revision: Extract<z.infer<typeof blueprintReferenceSchema>, { operation: 'create' }>
