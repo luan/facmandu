@@ -148,7 +148,7 @@ local function blueprint(request)
     end
     local custom_vectors;if p.type=='inserter' then custom_vectors=p.allow_custom_vectors end
     local wire_distance,supply_distance;if p.type=='electric-pole' then wire_distance=p.get_max_wire_distance('normal');supply_distance=p.get_supply_area_distance('normal') end
-    entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,supports_direction=p.supports_direction,collision_box=p.collision_box,crafting_categories=p.crafting_categories,recipe_settable=p.type=='assembling-machine',max_wire_distance=wire_distance,supply_area_distance=supply_distance,belt_items_per_second=p.belt_speed and p.belt_speed*480,mining_radius=p.mining_drill_radius,mining_speed=p.mining_speed,resource_categories=p.resource_categories,output_offset=p.vector_to_place_result,max_underground_distance=p.max_underground_distance,fluid_connections=connections,inserter_connections=inserter_connections(p),allow_custom_vectors=custom_vectors,custom_vector_max_distance=custom_inserter_range(force,p),unlocked=unlocked(available,p),blueprint_settings_example=control_example(p.type)}
+    entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,center_offset={x=(p.tile_width/2)%1,y=(p.tile_height/2)%1},supports_direction=p.supports_direction,collision_box=p.collision_box,crafting_categories=p.crafting_categories,recipe_settable=p.type=='assembling-machine',max_wire_distance=wire_distance,supply_area_distance=supply_distance,belt_items_per_second=p.belt_speed and p.belt_speed*480,mining_radius=p.mining_drill_radius,mining_speed=p.mining_speed,resource_categories=p.resource_categories,output_offset=p.vector_to_place_result,max_underground_distance=p.max_underground_distance,fluid_connections=connections,inserter_connections=inserter_connections(p),allow_custom_vectors=custom_vectors,custom_vector_max_distance=custom_inserter_range(force,p),unlocked=unlocked(available,p),blueprint_settings_example=control_example(p.type)}
    elseif prototypes.tile[name] and prototypes.tile[name].can_be_part_of_blueprint and #(prototypes.tile[name].items_to_place_this or {})>0 then
     entities[#entities+1]={name=name,type='tile',width=1,height=1,unlocked=unlocked(available,prototypes.tile[name])}
    else
@@ -173,7 +173,7 @@ local function blueprint(request)
  end
  local function contains(actual,wanted) return difference(actual,wanted,'','')==nil end
  local settings={'filters','use_filters','filter_mode','pickup_position','drop_position','override_stack_size','control_behavior','chunk-filter'}
- local entities,preview,boxes,warnings={},{},{},{}
+ local entities,preview,boxes,warnings,collisions={},{},{},{},{}
  local warned={}
  local function warn(text) if not warned[text] then warnings[#warnings+1]=text;warned[text]=true end end
  local tiles=request.tiles or {}
@@ -197,7 +197,7 @@ local function blueprint(request)
    warn('Construction item is not unlocked: '..e.name)
   end
   if e.recipe then
-   if p.type~='assembling-machine' then error('Only assembling machines accept explicit recipes; furnaces select recipes from their inputs',0) end
+   if p.type~='assembling-machine' then error('Entity '..i..' '..e.name..' has native type '..p.type..' and cannot accept an explicit recipe. Remove recipe from this entity; inspect recipe_settable in catalog for other machines.',0) end
    local recipe=force.recipes[e.recipe]
    local compatible=false
    if recipe and p.crafting_categories then
@@ -235,12 +235,13 @@ local function blueprint(request)
   -- Factorio omits rotation for nondirectional prototypes, including ordinary pipes and chests.
   local direction=p.supports_direction==false and 0 or e.direction
   local w,h=dimensions(p,direction)
-  if (e.position.x-w/2)%1~=0 or (e.position.y-h/2)%1~=0 then error('Entity is not aligned to the tile grid: '..e.name,0) end
+  if (e.position.x-w/2)%1~=0 or (e.position.y-h/2)%1~=0 then error('Entity '..i..' '..e.name..' is not aligned to the tile grid: x must be integer + '..((w/2)%1)..', y must be integer + '..((h/2)%1)..' for this direction. Patch this entity position by index.',0) end
   local box={x1=e.position.x-w/2,y1=e.position.y-h/2,x2=e.position.x+w/2,y2=e.position.y+h/2}
   for j,b in ipairs(boxes) do
    if box.x1<b.x2 and box.x2>b.x1 and box.y1<b.y2 and box.y2>b.y1 then
     local other=request.entities[j]
-    error('Blueprint entities overlap: index '..i..' '..e.name..' at ('..e.position.x..', '..e.position.y..') with index '..j..' '..other.name..' at ('..other.position.x..', '..other.position.y..'). Entity '..i..' footprint ['..box.x1..', '..box.y1..'] to ['..box.x2..', '..box.y2..']; entity '..j..' footprint ['..b.x1..', '..b.y1..'] to ['..b.x2..', '..b.y2..']. Remove an unnecessary conflicting entity by index or move it completely outside the other footprint.',0)
+    -- Bound diagnostics so one revision can fix several conflicts without flooding context.
+    if #collisions<8 then collisions[#collisions+1]='Blueprint entities overlap: index '..i..' '..e.name..' at ('..e.position.x..', '..e.position.y..') with index '..j..' '..other.name..' at ('..other.position.x..', '..other.position.y..'). Entity '..i..' footprint ['..box.x1..', '..box.y1..'] to ['..box.x2..', '..box.y2..']; entity '..j..' footprint ['..b.x1..', '..b.y1..'] to ['..b.x2..', '..b.y2..']' end
    end
   end
   boxes[#boxes+1]=box
@@ -251,6 +252,7 @@ local function blueprint(request)
   for _,wire in ipairs(e.wires or {}) do wires[#wires+1]=wire end
   entities[i].wires=#wires>0 and wires or nil;preview[i].wires=entities[i].wires
  end
+ if #collisions>0 then error(table.concat(collisions,'; ')..'. Remove unnecessary conflicting entities by index or move them completely outside the other footprints.',0) end
  for _,wire in ipairs(request.wires or {}) do
   local source,target=entities[wire[1]],entities[wire[3]]
   if not source or not target then error('Wire endpoints must refer to existing blueprint entity indices',0) end
@@ -319,6 +321,11 @@ local function blueprint(request)
  table.sort(cost,function(a,b)return a.name<b.name end)
  if request.operation=='create' then
   local transfers,rows={},{}
+  for i,e in ipairs(entities) do
+   if prototypes.entity[e.name].type=='assembling-machine' and not e.recipe then
+    warn('Entity '..i..' '..e.name..' has no recipe. Set its recipe before treating this design as a working production module, or verify that an existing machine supplies the configuration for an overlay.')
+   end
+  end
   local undergrounds,partners={},{}
   local headings={[0]={0,-1},[4]={1,0},[8]={0,1},[12]={-1,0}}
   for i,e in ipairs(entities) do if prototypes.entity[e.name].type=='underground-belt' then undergrounds[#undergrounds+1]=i end end

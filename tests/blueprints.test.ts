@@ -230,6 +230,22 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
  local catalog=blueprint{operation='catalog',force='player',names={'plant','furnace','pole'}}
  assert(catalog.entities[1].recipe_settable and not catalog.entities[2].recipe_settable)
  assert(catalog.entities[3].max_wire_distance==17 and catalog.entities[3].supply_area_distance==4)
+ assert(catalog.entities[2].center_offset.x==0.5 and catalog.entities[2].center_offset.y==0.5)
+ local aligned,alignment_error=pcall(blueprint,{operation='create',force='player',label='Misaligned furnace',entities={
+  {name='furnace',position={x=2,y=2},direction=0}
+ }})
+ assert(not aligned and alignment_error:match('Entity 1 furnace') and alignment_error:match('integer %+ 0.5'))
+ local configured,recipe_error=pcall(blueprint,{operation='create',force='player',label='Furnace recipe',entities={
+  {name='furnace',position={x=2.5,y=2.5},direction=0,recipe='iron-plate'}
+ }})
+ assert(not configured and recipe_error:match('Entity 1 furnace') and recipe_error:match('Remove recipe'))
+ local clear,collision_error=pcall(blueprint,{operation='create',force='player',label='Two conflicts',entities={
+  {name='belt',position={x=0.5,y=0.5},direction=0},
+  {name='pole',position={x=0.5,y=0.5},direction=0},
+  {name='belt',position={x=2.5,y=0.5},direction=0},
+  {name='pole',position={x=2.5,y=0.5},direction=0}
+ }})
+ assert(not clear and collision_error:match('index 2 pole') and collision_error:match('index 4 pole'))
  local fixed=blueprint{operation='create',force='player',label='Nondirectional',entities={
   {name='box',position={x=1.5,y=0.5},direction=4}
  }}
@@ -252,7 +268,7 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
   assert(a.pickup_entity==1 and a.drop_entity==3 and a.drop_belt_side=='right')
   assert(b.pickup_entity==5 and b.drop_entity==3 and b.drop_belt_side=='left')
   assert(a.belt_lane_items_per_second==7.5 and b.belt_lane_items_per_second==7.5)
-  assert(not result.warnings)
+  assert(#result.warnings==2 and result.warnings[1]:match('Entity 1 plant has no recipe') and result.warnings[2]:match('Entity 5 plant has no recipe'))
   local result=blueprint{operation='create',force='player',label='Custom',entities={
    entity('plant',2.5,0.5,0),entity('inserter',2.5,2.5,0,0.8),entity('belt',2.5,3.5,4)
   }}
