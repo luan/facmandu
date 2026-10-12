@@ -28,6 +28,23 @@ test('unknown failures never expose raw exception messages', () => {
 		assert.equal(assistantErrorMessage(cause), 'Could not finish this response. Try again.');
 });
 
+test('wrapped provider overload explains recovery without exposing provider data', () => {
+	const message = assistantErrorMessage(
+		new AgentRunError({
+			outcome: 'failed',
+			submissionId: 'test',
+			cause: {
+				name: 'FlueError',
+				message: 'Codex error: Our servers are currently overloaded. private-account private-token'
+			}
+		})
+	);
+	assert.match(message, /temporarily overloaded/u);
+	assert.match(message, /work is saved/u);
+	assert.match(message, /choose another model/u);
+	assert.doesNotMatch(message, /private-account|private-token/u);
+});
+
 test('provider token limits explain recovery without exposing its private response', () => {
 	const error = new Error('429 tpm_uncached_exceeded private-account private-token');
 	const message = assistantErrorMessage(error);
