@@ -33,6 +33,22 @@ export function missingFactoryCheck(
 	);
 }
 
+export function unfinishedFactoryConnections(requests: readonly string[], answer: string): boolean {
+	const expansion = requests.some((request) =>
+		/^\s*(?:i|we)\s+(?:need|want)\s+(?:more\s+)?\S+/i.test(request)
+	);
+	if (
+		!expansion ||
+		requests.some((request) => /\b(?:blueprint|design|plan|advice)\b/i.test(request))
+	)
+		return false;
+	// Missing construction stock is allowed; admitted gaps in the designed
+	// supply, output or power connections still need investigation and repair.
+	return /\b(?:could not|cannot|can't|haven't|did not) verify\b[^.!?]{0,120}\b(?:power|supply|feed|connection)\b|\b(?:power|supply|feed|connection)\b[^.!?]{0,60}\b(?:unverified|unconfirmed|not verified)\b/i.test(
+		answer
+	);
+}
+
 export function completionRequest(
 	requests: readonly string[],
 	answer: string,

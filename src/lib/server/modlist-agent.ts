@@ -18,7 +18,7 @@ import { sqlite, start } from '@flue/runtime/node';
 import { eq } from 'drizzle-orm';
 import * as v from 'valibot';
 import { env } from '$env/dynamic/private';
-import { missingFactoryCheck } from '$lib/assistant-completion';
+import { missingFactoryCheck, unfinishedFactoryConnections } from '$lib/assistant-completion';
 import {
 	type AssistantContextUsage,
 	assistantContextLimit,
@@ -277,6 +277,7 @@ function ModlistAssistant() {
 				return;
 			}
 			if (
+				!(context.serverId && unfinishedFactoryConnections(request.messages, last.text)) &&
 				!(await unfinishedAssistantResponse(
 					context.userId,
 					request.messages,

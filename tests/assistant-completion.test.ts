@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import {
 	completionRequest,
 	missingFactoryCheck,
-	needsContinuation
+	needsContinuation,
+	unfinishedFactoryConnections
 } from '../src/lib/assistant-completion';
 
 test('current factory checks require fresh inspection while advice and verified read failures can finish', () => {
@@ -31,6 +32,28 @@ test('current factory checks require fresh inspection while advice and verified 
 	]) {
 		assert.equal(missingFactoryCheck([request], status), false);
 	}
+});
+
+test('an expansion with admitted connection gaps continues, while stock shortages and design requests do not', () => {
+	const answer = 'Ghosts placed. The inspection could not verify power or a sand-feed connection.';
+	assert.equal(unfinishedFactoryConnections(['I need more glass.'], answer), true);
+	assert.equal(
+		unfinishedFactoryConnections(['I need glass.'], 'The supply connection remains unverified.'),
+		true
+	);
+	assert.equal(
+		unfinishedFactoryConnections(
+			['I need more glass.'],
+			'The connected ghost layout is complete; six belts await stock.'
+		),
+		false
+	);
+	assert.equal(
+		unfinishedFactoryConnections(['I need more glass.'], 'Delivery remains unverified.'),
+		false
+	);
+	assert.equal(unfinishedFactoryConnections(['I need a blueprint only.'], answer), false);
+	assert.equal(unfinishedFactoryConnections(['How could I make more glass?'], answer), false);
 });
 
 test('only a consistent confident unfinished result continues the response', () => {
