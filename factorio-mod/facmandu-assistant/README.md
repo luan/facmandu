@@ -1,6 +1,6 @@
-# Toby
+# [WIP] Toby
 
-Private development build, version **0.0.1**. This package has not been published to the Mod Portal.
+Work in progress, version **0.0.1**. Requires Factorio **2.1** and a Facmandu-managed server for AI chat. Installing the mod alone does not connect an AI model.
 
 Click **Toby** above the game view, or press **Ctrl+Shift+T**, to open the side panel. **Chat** shows recent messages, **Activity** shows the selected run's tool activity, and **Design** holds its latest blueprint. Switch conversations while a run continues, or use **Steer** to add instructions. Press **Enter** to send or steer. Closing the panel keeps your typed draft. Shortcuts are configurable in Factorio’s Controls settings.
 
