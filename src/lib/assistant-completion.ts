@@ -44,7 +44,7 @@ export function unfinishedFactoryConnections(requests: readonly string[], answer
 		return false;
 	// Missing construction stock is allowed; admitted gaps in the designed
 	// supply, output or power connections still need investigation and repair.
-	return /\b(?:could not|cannot|can't|haven't|did not) verify\b[^.!?]{0,120}\b(?:power|supply|feed|connection)\b|\b(?:power|supply|feed|connection)\b[^.!?]{0,60}\b(?:unverified|unconfirmed|not verified)\b/i.test(
+	return /\b(?:not placed|nothing (?:was )?placed|haven't placed|only (?:designed|drafted))\b|\b(?:could not|cannot|can't|haven't|did not) verify\b[^.!?]{0,120}\b(?:power|supply|feed|connection)\b|\b(?:power|supply|feed|connection)\b[^.!?]{0,60}\b(?:unverified|unconfirmed|not verified)\b/i.test(
 		answer
 	);
 }

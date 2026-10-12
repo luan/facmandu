@@ -38,6 +38,13 @@ test('an expansion with admitted connection gaps continues, while stock shortage
 	const answer = 'Ghosts placed. The inspection could not verify power or a sand-feed connection.';
 	assert.equal(unfinishedFactoryConnections(['I need more glass.'], answer), true);
 	assert.equal(
+		unfinishedFactoryConnections(
+			['I need more glass.'],
+			'The design is not placed because belts are missing from stock.'
+		),
+		true
+	);
+	assert.equal(
 		unfinishedFactoryConnections(['I need glass.'], 'The supply connection remains unverified.'),
 		true
 	);
