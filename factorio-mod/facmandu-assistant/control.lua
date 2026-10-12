@@ -1,4 +1,10 @@
 local PREFIX='facmandu-toby-'
+local drone=require('drone')
+local function drone_status(player,refs)
+ local state=drone.read(player.force.name,player.name)
+ refs.drone_status.caption=state.available and ('Toby · '..state.mode..' · '..state.surface..' · '..state.robots..' robots') or 'Craft and place a Toby drone to assign it to you.'
+ refs.drone_follow.enabled=state.available;refs.drone_stay.enabled=state.available;refs.drone_inventory.enabled=state.available
+end
 local function bounded_text(value,limit)
  if #value<=limit then return value end
  while limit>0 and value:byte(limit+1)>=128 and value:byte(limit+1)<=191 do limit=limit-1 end
@@ -55,7 +61,19 @@ local function panel(player)
   refs[entry[1]]=rows
   if entry[1]=='conversation' then refs.history=content end
  end
+ local drone_tab=tabs.add{type='tab',caption='Drone'}
+ local drone_content=tabs.add{type='flow',direction='vertical'}
+ drone_content.style.width=432;drone_content.style.height=height-240
+ refs.drone_status=label(drone_content,'',410,'heading_2_label')
+ label(drone_content,'Equip Toby with a personal roboport, power and batteries. Load construction robots and materials into its inventory. Native robots build your nearby ghosts.',410)
+ refs.drone_inventory=drone_content.add{type='button',name=PREFIX..'drone-inventory',caption='Equipment and inventory'}
+ local drone_actions=drone_content.add{type='flow',direction='horizontal'}
+ refs.drone_follow=drone_actions.add{type='button',name=PREFIX..'drone-follow',caption='Follow me'}
+ refs.drone_stay=drone_actions.add{type='button',name=PREFIX..'drone-stay',caption='Stay here'}
+ label(drone_content,'To assign an unowned drone, point at it in the game view and press Ctrl+Shift+Y.',410)
+ tabs.add_tab(drone_tab,drone_content)
  tabs.selected_tab_index=storage.tabs[player.index] or 1
+ drone_status(player,refs)
  local composer=frame.add{type='textfield',name=PREFIX..'message',text=storage.drafts[player.index] or '',tooltip='Enter: send or steer · Ctrl+Shift+Enter: open blueprint'}
  composer.style.width=456;composer.style.height=36
  local actions=frame.add{type='flow',direction='horizontal'}
@@ -160,9 +178,11 @@ local function open(player)
 end
 script.on_init(function()
  storage.players={};storage.drafts={};storage.tabs={};storage.gui={};storage.sequence=0
+ drone.init()
  for _,player in pairs(game.players) do button(player) end
 end)
 script.on_configuration_changed(function()
+ drone.init()
  storage.players=storage.players or {};storage.drafts=storage.drafts or {};storage.tabs=storage.tabs or {};storage.gui=storage.gui or {}
  for _,player in pairs(game.players) do
   button(player)
@@ -180,6 +200,16 @@ script.on_event('facmandu-toby-toggle',function(event)
  local player=game.get_player(event.player_index)
  local frame=player.gui.screen[PREFIX..'panel']
  if frame then frame.destroy() else open(player) end
+end)
+script.on_event('facmandu-toby-claim-drone',function(event)
+ local player=game.get_player(event.player_index)
+ local ok,message=pcall(drone.bind,player,player.selected)
+ if not ok then player.print(message);return end
+ open(player);storage.gui[player.index].tabs.selected_tab_index=4;storage.tabs[player.index]=4
+end)
+script.on_event('facmandu-toby-open-drone',function(event)
+ local player=game.get_player(event.player_index)
+ open(player);storage.gui[player.index].tabs.selected_tab_index=4;storage.tabs[player.index]=4
 end)
 local function take_blueprint(player,inspect)
  local state=storage.players[player.index]
@@ -216,8 +246,23 @@ script.on_event(defines.events.on_gui_click,function(event)
   send(player)
  elseif name==PREFIX..'new' then emit(player,'new')
  elseif name==PREFIX..'stop' then emit(player,'stop',nil,selected(player))
+ elseif name==PREFIX..'drone-follow' or name==PREFIX..'drone-stay' then
+  local state=drone.read(player.force.name,player.name)
+  local ok,message=pcall(drone.command,player.force.name,player.name,name==PREFIX..'drone-follow' and 'follow' or 'stay',state)
+  if not ok then player.print(message) end
+  drone_status(player,refs)
+ elseif name==PREFIX..'drone-inventory' then
+  local state=storage.drones[player.index]
+  if state and state.entity.valid then refs.frame.destroy();player.opened=state.entity end
  elseif name==PREFIX..'blueprint' or name==PREFIX..'inspect-blueprint' then
   take_blueprint(player,name==PREFIX..'inspect-blueprint')
+ end
+end)
+script.on_event(defines.events.on_built_entity,drone.built)
+script.on_nth_tick(60,function()
+ drone.tick()
+ for index,refs in pairs(storage.gui or {}) do
+  if refs.frame.valid then local player=game.get_player(index);if player then drone_status(player,refs) end end
  end
 end)
 script.on_event(defines.events.on_gui_text_changed,function(event)

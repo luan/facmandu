@@ -205,6 +205,7 @@ export function serverAssistantTools(context: {
 				'Perform explicitly requested native entity edits, research, train or logistic request changes. entities_edit supports rotating factory entities, marking them for robot deconstruction, cancelling deconstruction, and cancelling construction ghosts. First inspect its exact target and expected state. Use the declared operation schema in args. A stale snapshot is rejected; inspect again before retrying. Questions about capabilities or advice do not authorize changes; "can you rotate/change X?" requests the stated action.',
 			input: v.object({
 				operation: v.picklist([
+					'drone_command',
 					'task_add',
 					'task_update',
 					'entity_rotate',
@@ -706,7 +707,8 @@ const lookupGroups: Record<string, string> = {
 	logistics_summary: 'logistics',
 	planning_recipes: 'planning',
 	read_factory_plan: 'planning',
-	task_list: 'planning'
+	task_list: 'planning',
+	toby_drone: 'logistics'
 };
 async function catalog(server: Awaited<ReturnType<typeof requireServer>>, groups: Set<string>) {
 	const manifest = manifestSchema.parse(await factoryQuery(server, { op: 'catalog' }));

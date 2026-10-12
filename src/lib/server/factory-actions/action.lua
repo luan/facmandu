@@ -381,6 +381,12 @@ end
 
 local function action(request)
   local operation = request.operation
+  if operation=='drone_command' then
+    if request.player and request.player.name~=request.owner then fail('You can command only your own Toby drone') end
+    local interface=remote.interfaces['facmandu-toby-drone']
+    if not interface or not interface.command then fail('Install the Toby development mod on server and clients') end
+    return {operation=operation,drone=remote.call('facmandu-toby-drone','command',request.force,request.owner,request.command,request.expected,request.position)}
+  end
   if operation=='task_add' or operation=='task_update' then
     local interface=remote.interfaces['facmandu-task-list']
     if not interface or not interface.read or not interface.add or not interface.update then fail('Install the Toby Task List adapter in server settings') end

@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { zipSync } from 'fflate';
 import control from '../../../factorio-mod/facmandu-assistant/control.lua?raw';
 import data from '../../../factorio-mod/facmandu-assistant/data.lua?raw';
+import drone from '../../../factorio-mod/facmandu-assistant/drone.lua?raw';
+import dronePrototypes from '../../../factorio-mod/facmandu-assistant/drone-prototypes.lua?raw';
 import info from '../../../factorio-mod/facmandu-assistant/info.json';
 import locale from '../../../factorio-mod/facmandu-assistant/locale/en/toby.cfg?raw';
 import readme from '../../../factorio-mod/facmandu-assistant/README.md?raw';
@@ -20,6 +22,8 @@ export function tobyModArchive() {
 				'info.json': JSON.stringify(info),
 				'control.lua': control,
 				'data.lua': data,
+				'drone.lua': drone,
+				'drone-prototypes.lua': dronePrototypes,
 				'locale/en/toby.cfg': locale,
 				'README.md': readme
 			}).map(([name, source]) => [`${info.name}_${info.version}/${name}`, encode.encode(source)])

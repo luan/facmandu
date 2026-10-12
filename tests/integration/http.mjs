@@ -2665,6 +2665,12 @@ done
 			.includes('FACMANDU_UI')
 	);
 	assert.equal((await request('/api/toby-mod')).status, 401);
+	for (const file of ['drone.lua', 'drone-prototypes.lua']) {
+		assert.equal(
+			Buffer.from(tobyFiles[`facmandu-assistant_0.0.1/${file}`]).toString(),
+			await readFile(join(root, 'factorio-mod/facmandu-assistant', file), 'utf8')
+		);
+	}
 	passed('Toby mod download packages the exact native UI contract and requires authentication');
 	await action(`${secondPath}?/manage`, cookies.stranger, { operation: 'installToby' }, 403);
 	await writeFile(

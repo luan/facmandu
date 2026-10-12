@@ -61,6 +61,41 @@ test('inspection cannot accept write operations', () => {
 	);
 });
 
+test('Toby drone commands require ownership and a fresh movement revision', () => {
+	const command = {
+		operation: 'drone_command',
+		force: 'player',
+		owner: 'alice',
+		command: 'follow',
+		expected: { unitNumber: 12, revision: 2, surface: 'nauvis' }
+	};
+	assert.equal(factoryActionSchema.safeParse(command).success, true);
+	for (const changed of [
+		{ ...command, expected: undefined },
+		{ ...command, owner: undefined },
+		{ ...command, command: 'spawn' },
+		{ ...command, expected: { ...command.expected, revision: -1 } }
+	])
+		assert.equal(factoryActionSchema.safeParse(changed).success, false);
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const source = readFileSync('src/lib/server/factory-actions/action.lua', 'utf8');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`${source}
+ local called=false
+ remote={interfaces={['facmandu-toby-drone']={command=true}},call=function(interface,method,force,owner,mode,expected,position)
+  assert(interface=='facmandu-toby-drone' and method=='command' and force=='player' and owner=='alice' and mode=='follow' and expected.revision==2)
+  called=true;return {mode=mode}
+ end}
+ local request={operation='drone_command',force='player',owner='alice',command='follow',expected={unitNumber=12,revision=2,surface='nauvis'},player={name='bob'}}
+ assert(not pcall(action,request) and not called)
+ request.player.name='alice';assert(action(request).drone.mode=='follow' and called)
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
+
 test('train and requester changes require snapshot fields from inspection', () => {
 	const train = {
 		operation: 'train_add_stop',

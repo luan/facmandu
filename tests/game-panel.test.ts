@@ -9,8 +9,9 @@ test('Toby panel sends native player requests and preserves typed drafts across 
 	const source = readFileSync('factorio-mod/facmandu-assistant/control.lua', 'utf8');
 	const script = `
  local handlers={};local interface;local last
- storage={};defines={events={on_player_created=1,on_player_joined_game=2,on_gui_click=3,on_gui_selection_state_changed=4,on_gui_closed=5,on_gui_text_changed=6,on_gui_selected_tab_changed=7,on_gui_confirmed=8}}
- script={on_init=function(fn) handlers.init=fn end,on_configuration_changed=function(fn) handlers.migrate=fn end,on_event=function(event,fn) handlers[event]=fn end}
+ package.preload.drone=function() return {init=function() end,built=function() end,tick=function() end,read=function() return {available=false} end} end
+ storage={};defines={events={on_player_created=1,on_player_joined_game=2,on_gui_click=3,on_gui_selection_state_changed=4,on_gui_closed=5,on_gui_text_changed=6,on_gui_selected_tab_changed=7,on_gui_confirmed=8,on_built_entity=9}}
+ script={on_init=function(fn) handlers.init=fn end,on_configuration_changed=function(fn) handlers.migrate=fn end,on_event=function(event,fn) handlers[event]=fn end,on_nth_tick=function() end}
  remote={add_interface=function(name,api) assert(name=='facmandu-assistant');interface=api end}
  helpers={table_to_json=function(data) last=data;return '{}' end};log=function() end
  local function gui(parent,name)
@@ -28,7 +29,7 @@ test('Toby panel sends native player requests and preserves typed drafts across 
   return element
  end
  local cleared=false;local imported;local full=true
- local player={name='Alice',index=1,display_resolution={height=1080},display_scale=1,surface={name='nauvis'},gui={top=gui(),screen=gui()},print=function() end,clear_cursor=function() cleared=true;return not full end,cursor_stack={import_stack=function(value) imported=value;return 0 end}}
+ local player={name='Alice',index=1,force={name='player'},display_resolution={height=1080},display_scale=1,surface={name='nauvis'},gui={top=gui(),screen=gui()},print=function() end,clear_cursor=function() cleared=true;return not full end,cursor_stack={import_stack=function(value) imported=value;return 0 end}}
  game={players={player},get_player=function(index) if index==1 then return player end end}
  ${source}
  handlers.init();assert(player.gui.top['facmandu-toby-open'])
@@ -72,6 +73,10 @@ test('Toby panel sends native player requests and preserves typed drafts across 
  assert(player.opened==player.cursor_stack and not frame.valid)
  interface.open_player(1);frame=player.gui.screen['facmandu-toby-panel']
  handlers[5]({element=frame});assert(not frame.valid)
+ handlers['facmandu-toby-open-drone']({player_index=1})
+ assert(storage.gui[1].tabs.selected_tab_index==4)
+ handlers['facmandu-toby-toggle']({player_index=1});handlers['facmandu-toby-toggle']({player_index=1})
+ assert(storage.gui[1].tabs.selected_tab_index==4)
  `;
 	const status = lauxlib.luaL_dostring(state, to_luastring(script));
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));

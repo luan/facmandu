@@ -104,6 +104,18 @@ export const factoryActionInspectSchema = z.discriminatedUnion('operation', [
 ]);
 
 export const factoryActionSchema = z.discriminatedUnion('operation', [
+	z.object({
+		operation: z.literal('drone_command'),
+		force: label,
+		owner: label,
+		command: z.enum(['follow', 'stay', 'move']),
+		expected: z.object({
+			unitNumber: entity.shape.unitNumber,
+			revision: z.number().int().nonnegative(),
+			surface: label
+		}),
+		position: entity.shape.position.optional()
+	}),
 	taskFields.omit({ completed: true }).extend({ operation: z.literal('task_add'), force: label }),
 	taskFields.extend({
 		operation: z.literal('task_update'),
@@ -177,6 +189,8 @@ export const factoryActionInspectManifest = {
 } satisfies Record<FactoryActionInspect['operation'], string>;
 
 export const factoryActionManifest = {
+	drone_command:
+		'Control the owning player’s Toby drone, separate from Entourage. Supply force, owner, command (follow, stay, move), and expected unitNumber/revision/surface from a fresh toby_drone lookup; move also needs position within 256 explored tiles. Native autopilot and ordinary construction robots consume the drone’s loaded equipment, power and items. No items, equipment, research or drones are granted. In-game callers can command only their own drone.',
 	task_add:
 		'Add a shared force task to Task List using title, description and status (not_started, in_progress, paused, blocked). Identical active tasks are reused. Changes use the native mod and refresh its normal GUI; no world construction is implied.',
 	task_update:
@@ -312,6 +326,39 @@ async function execute(
 	const reply = replySchema.safeParse(decoded);
 	if (!reply.success) throw new ServerError(502, 'The server did not return a valid action result');
 	if (!reply.data.ok) throw new ServerError(409, reply.data.error);
+	if (input.operation === 'drone_command') {
+		const result = z
+			.object({
+				operation: z.literal('drone_command'),
+				drone: z.object({
+					available: z.literal(true),
+					player: label,
+					force: label,
+					unitNumber: entity.shape.unitNumber,
+					surface: label,
+					position: entity.shape.position,
+					mode: z.enum(['follow', 'stay', 'move']),
+					revision: z.number().int().nonnegative(),
+					energy: z.number().finite().nonnegative(),
+					robots: z.number().int().nonnegative(),
+					cargo: z
+						.union([
+							z
+								.array(
+									z.object({ name: label, quality: label, count: z.number().int().positive() })
+								)
+								.max(20),
+							z.object({}).strict()
+						])
+						.transform((items) => (Array.isArray(items) ? items : [])),
+					destination: entity.shape.position.optional()
+				})
+			})
+			.safeParse(reply.data.result);
+		if (!result.success)
+			throw new ServerError(502, 'The server returned an invalid Toby drone result');
+		return result.data;
+	}
 	if (input.operation.startsWith('task_')) {
 		const result = z
 			.object({
