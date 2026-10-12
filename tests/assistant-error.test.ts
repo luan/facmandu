@@ -45,3 +45,19 @@ test('exhausted socket recovery explains the saved work without exposing provide
 	assert.match(message, /work is saved/u);
 	assert.doesNotMatch(message, /private-token/u);
 });
+
+test('upstream request buffer rejection preserves completed actions without leaking provider data', () => {
+	const message = assistantErrorMessage(
+		new AgentRunError({
+			outcome: 'failed',
+			submissionId: 'test',
+			cause: {
+				name: 'FlueError',
+				message: 'exceeded request buffer limit while retrying upstream private-token'
+			}
+		})
+	);
+	assert.match(message, /Completed actions and designs are saved/u);
+	assert.match(message, /continue from them/u);
+	assert.doesNotMatch(message, /private-token/u);
+});

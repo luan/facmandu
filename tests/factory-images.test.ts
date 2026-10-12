@@ -255,3 +255,28 @@ test('compact blueprint tool outputs retain model vision without repeating the l
 	assert.equal(result.content[1]?.type, 'image');
 	assert.equal(context.messages[0]?.content.length, 1);
 });
+
+test('bounded model previews preserve harness references and exclude oversized legacy PNGs', () => {
+	const context = normalizeContext({ messages: [message()] });
+	const jpeg = Buffer.from([0xff, 0xd8, 0x00, 0x00, 0xff, 0xd9]);
+	const preview = addFactoryImages(context, () => ({ data: jpeg, mimeType: 'image/jpeg' }));
+	const result = preview.messages[0];
+	if (result?.role !== 'toolResult') throw new Error('Expected tool result');
+	assert.deepEqual(result.content[1], {
+		type: 'image',
+		data: jpeg.toString('base64'),
+		mimeType: 'image/jpeg'
+	});
+	assert.equal(context.messages[0]?.role === 'toolResult' && context.messages[0].content.length, 1);
+	for (const bytes of [Buffer.alloc(512 * 1024 + 1), Buffer.from('invalid jpeg')]) {
+		const updated = addFactoryImages(context, () => ({ data: bytes, mimeType: 'image/jpeg' }));
+		const tool = updated.messages[0];
+		if (tool?.role !== 'toolResult') throw new Error('Expected tool result');
+		assert.equal(tool.content.filter((part) => part.type === 'image').length, 0);
+	}
+	const oversized = addFactoryImages(context, () => Buffer.alloc(512 * 1024 + 1));
+	const tool = oversized.messages[0];
+	if (tool?.role !== 'toolResult') throw new Error('Expected tool result');
+	assert.match(JSON.stringify(tool.content), /exceeds the model request budget/u);
+	assert.doesNotMatch(JSON.stringify(tool.content), /capture another/u);
+});

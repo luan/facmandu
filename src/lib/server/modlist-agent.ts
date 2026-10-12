@@ -54,7 +54,7 @@ import type { TranscriptContext } from '@earendil-works/pi-ai';
 import { factoryActionInspectJsonSchema, factoryActionJsonSchema } from './factory-actions';
 import { blueprintToolJsonSchema } from './factory-blueprints';
 import { addFactoryImages } from './factory-image-context';
-import { factoryImagePath } from './factory-images';
+import { factoryImagePath, factoryModelImagePath } from './factory-images';
 import { listRankedRecommendations } from './modlist-recommendations';
 import { startModlistRepair } from './modlist-repair';
 import { saveRecommendationFeedback } from './recommendation-feedback';
@@ -120,7 +120,17 @@ async function registerAssistantProvider(
 		return instance
 			? addFactoryImages(
 					typed,
-					(id) => readFileSync(factoryImagePath(instance, id)),
+					(id) => {
+						try {
+							return {
+								data: readFileSync(factoryModelImagePath(instance, id)),
+								mimeType: 'image/jpeg' as const
+							};
+						} catch (cause) {
+							if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause;
+							return readFileSync(factoryImagePath(instance, id));
+						}
+					},
 					loaded.model.input.includes('image')
 				)
 			: typed;
