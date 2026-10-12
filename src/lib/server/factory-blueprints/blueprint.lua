@@ -529,7 +529,7 @@ local function blueprint(request)
  if surface.platform and surface.platform.force~=force then error('This platform belongs to another force',0) end
  if request.operation=='check' then
   if not prototypes.item[request.item] then error('Output measurement requires a real item prototype',0) end
-  local report={operation='check_build',tick=game.tick,surface=surface.name,force=force.name,constructed=0,requested=#entities,ghosts=0,missing={},faults={},faults_total=0,machines={},machines_total=0,machine_status_counts={},terminal_belts={},terminal_belts_total=0,settings_verified=false}
+  local report={operation='check_build',tick=game.tick,surface=surface.name,force=force.name,constructed=0,requested=#entities,ghosts=0,missing={},faults={},faults_total=0,machines={},machines_total=0,machine_status_counts={},product_outputs={},product_outputs_total=0,terminal_belts={},terminal_belts_total=0,settings_verified=false}
   local function issue(list,row) if #list<16 then list[#list+1]=row end end
   local function status(e) for name,id in pairs(defines.entity_status) do if id==e.status then return name end end end
   for index,wanted in ipairs(entities) do
@@ -555,6 +555,20 @@ local function blueprint(request)
      report.machines_total=report.machines_total+1
      report.machine_status_counts[state]=(report.machine_status_counts[state] or 0)+1
      issue(report.machines,{index=index,name=found.name,position=position,status=state,recipe=recipe and recipe.name,crafting=found.is_crafting(),powered=found.is_connected_to_electric_network()})
+    elseif found.type=='inserter' then
+     local producer=found.pickup_target
+     if producer and producer.valid and producer.force==force and (producer.type=='assembling-machine' or producer.type=='furnace') then
+      local recipe=producer.get_recipe()
+      for _,product in pairs(recipe and recipe.products or {}) do
+       if product.type=='item' and product.name==request.item then
+        local drop=found.drop_target
+        local target=drop and drop.valid and drop.force==force and {name=drop.name,unit_number=drop.unit_number,position=drop.position} or nil
+        report.product_outputs_total=report.product_outputs_total+1
+        issue(report.product_outputs,{index=index,inserter=found.unit_number,producer={name=producer.name,unit_number=producer.unit_number,position=producer.position},recipe=recipe.name,item=request.item,drop_position=found.drop_position,drop_target=target})
+        break
+       end
+      end
+     end
     elseif found.type=='transport-belt' and #found.belt_neighbours.outputs==0 then
      report.terminal_belts_total=report.terminal_belts_total+1
      issue(report.terminal_belts,{index=index,position=position,capacity_per_min=found.prototype.belt_speed*480*60,left_items=found.get_transport_line(1).get_item_count{name=request.item,quality='normal'},right_items=found.get_transport_line(2).get_item_count{name=request.item,quality='normal'}})

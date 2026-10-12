@@ -26,6 +26,43 @@ const design = {
 	entities: [{ name: 'transport-belt', position: { x: 0.5, y: 0.5 }, direction: 4 as const }]
 };
 const target = { ...design, surface: 'nauvis', position: { x: 20, y: 20 } };
+test('build checks identify actual product output belts rather than ingredient feeds', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ local force={name='player',recipes={{enabled=true,products={{type='item',name='inserter'}}}}}
+ local prototype={type='inserter',tile_width=1,tile_height=1,supports_direction=true,items_to_place_this={{name='inserter'}},has_flag=function() return false end}
+ prototypes={entity={inserter=prototype},item={glass={}}}
+ local belt={valid=true,name='belt',type='transport-belt',force=force,position={x=2.5,y=0.5},unit_number=20}
+ local producer={valid=true,name='furnace',type='furnace',force=force,position={x=-1.5,y=0.5},unit_number=10,get_recipe=function() return {name='glass',products={{type='item',name='glass'}}} end}
+ local output={name='inserter',type='inserter',force=force,position={x=0.5,y=0.5},unit_number=1,direction=0,prototype=prototype,pickup_target=producer,drop_target=belt,drop_position={x=2.7,y=0.5}}
+ local input={name='inserter',type='inserter',force=force,position={x=4.5,y=0.5},unit_number=2,direction=0,prototype=prototype,pickup_target=belt,drop_target=producer}
+ local surface={name='nauvis',find_entities_filtered=function(args) return {args.position.x==0.5 and output or input} end}
+ game={tick=120,forces={player=force},surfaces={nauvis=surface},create_inventory=function()
+  local saved
+  return {{set_stack=function() end,set_blueprint_entities=function(e) saved=e end,get_blueprint_entities=function() return saved end,get_blueprint_tiles=function() return {} end,cost_to_build={}}}
+ end}
+ defines={entity_status={}}
+ ${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
+ local request={operation='check',force='player',surface='nauvis',position={x=0,y=0},item='glass',outputs={},entities={
+  {name='inserter',position={x=0.5,y=0.5},direction=0},{name='inserter',position={x=4.5,y=0.5},direction=0}
+ }}
+ local check=blueprint(request)
+ assert(check.product_outputs_total==1 and #check.product_outputs==1)
+ local connection=check.product_outputs[1]
+ assert(connection.index==1 and connection.recipe=='glass' and connection.item=='glass')
+ assert(connection.producer.unit_number==10 and connection.drop_target.unit_number==20 and connection.drop_position.x==2.7)
+ producer.force={name='enemy'};assert(blueprint(request).product_outputs_total==0)
+ producer.force=force;producer.get_recipe=function() return {name='sand',products={{type='item',name='sand'}}} end
+ assert(blueprint(request).product_outputs_total==0)
+ producer.get_recipe=function() return nil end;assert(blueprint(request).product_outputs_total==0)
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
+
 test('provider blueprint contracts accept omitted defaults and preserve strict operation boundaries', () => {
 	const transcript = normalizeContext({
 		messages: [],
