@@ -4,6 +4,6 @@
 	"title": "Toby · Development",
 	"author": "Luan",
 	"factorio_version": "2.1",
-	"description": "In-game chat, blueprints and Toby's own craftable construction drone. Uses your server's assistant permissions. No free items or research.",
+	"description": "In-game chat, blueprints and Toby's own automatic construction companion. Uses your server's assistant permissions. No free items or research.",
 	"dependencies": ["base >= 2.1.0"]
 }

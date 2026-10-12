@@ -2,7 +2,7 @@ local PREFIX='facmandu-toby-'
 local drone=require('drone')
 local function drone_status(player,refs)
  local state=drone.read(player.force.name,player.name)
- refs.drone_status.caption=state.available and ('Toby · '..state.mode..' · '..state.surface..' · '..state.robots..' robots') or 'Craft and place a Toby drone to assign it to you.'
+ refs.drone_status.caption=state.available and ('Toby · '..state.mode..' · '..state.surface..' · '..(state.built or 0)..' built') or 'Toby appears when you join with a character.'
  refs.drone_follow.enabled=state.available;refs.drone_stay.enabled=state.available;refs.drone_inventory.enabled=state.available
 end
 local function bounded_text(value,limit)
@@ -65,12 +65,12 @@ local function panel(player)
  local drone_content=tabs.add{type='flow',direction='vertical'}
  drone_content.style.width=432;drone_content.style.height=height-240
  refs.drone_status=label(drone_content,'',410,'heading_2_label')
- label(drone_content,'Equip Toby with a personal roboport, power and batteries. Load construction robots and materials into its inventory. Native robots build your nearby ghosts.',410)
- refs.drone_inventory=drone_content.add{type='button',name=PREFIX..'drone-inventory',caption='Equipment and inventory'}
+ label(drone_content,'Toby follows you and builds nearby ghosts using your items or nearby provider/storage chests. No equipment, robots or fuel needed.',410)
+ refs.drone_inventory=drone_content.add{type='button',name=PREFIX..'drone-inventory',caption='Inventory'}
  local drone_actions=drone_content.add{type='flow',direction='horizontal'}
  refs.drone_follow=drone_actions.add{type='button',name=PREFIX..'drone-follow',caption='Follow me'}
  refs.drone_stay=drone_actions.add{type='button',name=PREFIX..'drone-stay',caption='Stay here'}
- label(drone_content,'To assign an unowned drone, point at it in the game view and press Ctrl+Shift+Y.',410)
+
  tabs.add_tab(drone_tab,drone_content)
  tabs.selected_tab_index=storage.tabs[player.index] or 1
  drone_status(player,refs)
@@ -259,8 +259,9 @@ script.on_event(defines.events.on_gui_click,function(event)
  end
 end)
 script.on_event(defines.events.on_built_entity,drone.built)
-script.on_nth_tick(60,function()
+script.on_nth_tick(10,function(event)
  drone.tick()
+ if event.tick%60~=0 then return end
  for index,refs in pairs(storage.gui or {}) do
   if refs.frame.valid then local player=game.get_player(index);if player then drone_status(player,refs) end end
  end

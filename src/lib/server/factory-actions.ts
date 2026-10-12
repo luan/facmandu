@@ -339,8 +339,8 @@ async function execute(
 					position: entity.shape.position,
 					mode: z.enum(['follow', 'stay', 'move']),
 					revision: z.number().int().nonnegative(),
-					energy: z.number().finite().nonnegative(),
-					robots: z.number().int().nonnegative(),
+					built: z.number().int().nonnegative(),
+					working: label.optional(),
 					cargo: z
 						.union([
 							z
