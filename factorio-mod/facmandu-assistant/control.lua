@@ -16,7 +16,7 @@ local function emit(player,operation,prompt,chat)
 end
 local function button(player)
  if not player.gui.top[PREFIX..'open'] then
-  player.gui.top.add{type='button',name=PREFIX..'open',caption='Toby',tooltip='Open Toby · Ctrl+Shift+T · Development build'}
+  player.gui.top.add{type='button',name=PREFIX..'open',caption='Toby',tooltip='Open Toby · Ctrl+Shift+T'}
  end
 end
 local function label(parent,caption,width,style)
@@ -188,8 +188,6 @@ script.on_configuration_changed(function()
   button(player)
   local old=player.gui.screen[PREFIX..'panel']
   if old then
-   local refs=storage.gui[player.index]
-   storage.drafts[player.index]=refs and refs.message.text or old[PREFIX..'message'].text
    old.destroy();open(player)
   end
  end
