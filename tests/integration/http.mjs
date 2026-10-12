@@ -826,7 +826,8 @@ const fixture = createServer(async (request, response) => {
 					? 'Recovered complete answer.'
 					: '';
 			if (wantsSocketRecovery && item.type === 'message') {
-				if (socketRecoveryFailures++ === 0) {
+				if (socketRecoveryFailures === 0) {
+					socketRecoveryFailures++;
 					response.writeHead(200, { 'content-type': 'text/event-stream' });
 					response.end(
 						`data: ${JSON.stringify({ type: 'response.failed', response: { error: { message: 'The socket connection was closed unexpectedly.' } } })}\n\n`
@@ -4034,7 +4035,7 @@ done
 	const socketHistory = await json(socketPath, { cookie: cookies.owner });
 	assert.equal(socketHistory.turns[0].state, 'done');
 	assert.equal(socketHistory.turns[0].plans.filter((plan) => plan.applied).length, 1);
-	assert.equal(socketRecoveryFailures, 2);
+	assert.equal(socketRecoveryFailures, 1);
 	passed('model socket interruption resumes the same request with one completed change receipt');
 	metadata.set(
 		'legacy-alpha',

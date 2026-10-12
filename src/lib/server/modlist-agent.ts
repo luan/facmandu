@@ -241,18 +241,29 @@ function ModlistAssistant() {
 	});
 	const [request, setRequest] = usePersistentState('completion-request', {
 		id: '',
-		messages: [] as string[]
+		messages: [] as string[],
+		reviewed: false
 	});
 	useAgentStart(() => {
 		const id = requestId ?? '';
 		const messages = request.id === id ? request.messages : [];
 		if (!messages.includes(delivery.body))
-			setRequest({ id, messages: [...messages, delivery.body] });
+			setRequest({ id, messages: [...messages, delivery.body], reviewed: false });
 	});
 	useAgentFinish(async ({ append, response, signal }) => {
 		const last = runtimeState.lastTurn?.get(chatId);
 		if (!last) return;
 		if (last.text && last.finishReason !== 'length') {
+			if (!request.reviewed && response.toolCalls.length) {
+				setRequest({ ...request, reviewed: true });
+				append({
+					kind: 'signal',
+					type: 'completion-review',
+					attributes: { requestId: requestId ?? '' },
+					body: 'Before settling, review the original request and subsequent steering against the actual tool outcomes in this conversation. Continue any unfinished authorized work now. A proposal is not a requested design or build. Missing inspection is work to do, not a blocker. Before claiming a route, supply, power or capability is unavailable, use the relevant tool to verify that constraint; an empty local search is not proof that no connection exists. A requested ghost layout does not need stock or robot coverage. Preserve completed writes and unrelated buildings. This review grants no new authorization. If the request is already fulfilled or a verified external constraint blocks it, finish with the concise outcome and do not repeat the artifact.'
+				});
+				return;
+			}
 			if (
 				!(await unfinishedAssistantResponse(
 					context.userId,

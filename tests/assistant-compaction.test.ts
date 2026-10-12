@@ -8,8 +8,57 @@ import {
 	fauxProvider,
 	fauxToolCall
 } from '@earendil-works/pi-ai/providers/faux';
-import { init, observe, useModel, usePersistentState, useTool } from '@flue/runtime';
+import {
+	init,
+	observe,
+	useAgentFinish,
+	useModel,
+	usePersistentState,
+	useTool
+} from '@flue/runtime';
 import { sqlite, start } from '@flue/runtime/node';
+import { assistantText, submissionEvents } from '../src/lib/server/assistant-events';
+
+test('finish continuations see committed hook state without another tool call', async () => {
+	const directory = await mkdtemp(join(tmpdir(), 'facmandu-completion-'));
+	const provider = fauxProvider({ provider: 'completion-test', models: [{ id: 'probe' }] });
+	provider.setResponses([
+		fauxAssistantMessage('Reviewing the answer.'),
+		fauxAssistantMessage('Verified answer.')
+	]);
+	let reviews = 0;
+	function CompletionProbe() {
+		useModel('completion-test/probe');
+		const [reviewed, setReviewed] = usePersistentState('reviewed', false);
+		useAgentFinish(({ append }) => {
+			if (reviewed) return;
+			reviews++;
+			setReviewed(true);
+			append({ kind: 'signal', type: 'review', body: 'Review the answer before finishing.' });
+		});
+		return 'Answer the question.';
+	}
+	const runtime = await start({
+		agents: [CompletionProbe],
+		providers: [provider.provider],
+		db: sqlite(join(directory, 'conversations.db'))
+	});
+	try {
+		const handle = init(CompletionProbe, { id: 'completion-probe' });
+		const receipt = await handle.dispatch('Answer and verify.');
+		let answer: string | undefined;
+		await handle.read(receipt, {
+			onEvent: submissionEvents(receipt.submissionId, (chunk) => {
+				answer = assistantText(answer, chunk);
+			})
+		});
+		assert.equal(answer, 'Verified answer.');
+		assert.equal(reviews, 1);
+	} finally {
+		await runtime.stop();
+		await rm(directory, { recursive: true, force: true });
+	}
+});
 
 test('long tool runs compact before the next model call and keep completed writes durable', async () => {
 	const directory = await mkdtemp(join(tmpdir(), 'facmandu-compaction-'));
