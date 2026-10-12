@@ -68,6 +68,21 @@ test('plans an exact module recipe and machine from supplied inputs without upst
 	});
 	assert.equal(plan.status, 'complete');
 	assert.equal(plan.steps[0]?.machines, 1);
+	assert.equal(plan.steps[0]?.build_count, 1);
+	const expansion = await planFactory(server, {
+		force: 'player',
+		surface: 'nauvis',
+		product: 'plastic-bar',
+		per_min: 120.001,
+		recipes: { 'plastic-bar': 'plastic-bar' },
+		machines: { 'plastic-bar': 'chemical-plant' },
+		external_inputs: [
+			{ name: 'coal', type: 'item' },
+			{ name: 'petroleum-gas', type: 'fluid' }
+		]
+	});
+	assert.equal(expansion.steps[0]?.machines, 1);
+	assert.equal(expansion.steps[0]?.build_count, 2);
 	assert.equal(plan.steps[0]?.construction_stock, 3);
 	assert.deepEqual(plan.inputs, [
 		{ name: 'coal', type: 'item', per_min: 60 },

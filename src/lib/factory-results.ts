@@ -346,11 +346,19 @@ function planView(view: ResultView, data: Data) {
 	if (steps.length)
 		view.tables.push({
 			title: 'Build steps',
-			columns: ['Recipe', 'Crafts / min', 'Machine equivalents'],
+			columns: ['Recipe', 'Crafts / min', 'Machines'],
 			rows: steps.map((step) => [
 				humanName(step.recipe),
 				rate(step.crafts_per_min),
-				[display(step.machines), humanName(step.machine)].filter(Boolean).join(' × ') || '—'
+				[
+					display(
+						step.build_count ??
+							(typeof step.machines === 'number' ? Math.ceil(step.machines) : undefined)
+					),
+					humanName(step.machine)
+				]
+					.filter(Boolean)
+					.join(' × ') || '—'
 			]),
 			prototypes: steps.map((step) => [
 				prototype('recipe', step.recipe),

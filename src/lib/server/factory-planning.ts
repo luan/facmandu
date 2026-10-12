@@ -109,6 +109,7 @@ export type FactoryPlan = {
 		crafts_per_min: number;
 		machine?: string;
 		machines?: number;
+		build_count?: number;
 		construction_stock?: number;
 		ingredients: Rate[];
 		products: Rate[];
@@ -292,12 +293,14 @@ export async function planFactory(
 				`Recipe ${chosen.name} has fluid temperature or item quality constraints that this plan does not model`
 			);
 		}
+		const machines = (crafts * chosen.energy) / (60 * machineChoice.speed);
 		const step: FactoryPlan['steps'][number] = {
 			recipe: chosen.name,
 			product: product.name,
 			crafts_per_min: rounded(crafts),
 			machine: machineChoice.name,
-			machines: rounded((crafts * chosen.energy) / (60 * machineChoice.speed)),
+			machines: rounded(machines),
+			build_count: Math.ceil(machines),
 			construction_stock: machineChoice.construction_stock,
 			ingredients: chosen.ingredients.map((part) => ({
 				name: part.name,

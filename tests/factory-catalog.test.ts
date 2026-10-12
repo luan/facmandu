@@ -41,6 +41,16 @@ test('belt tracing follows native underground pairs and branches without crossin
  assert(#trace.nodes[3].outputs==2 and trace.nodes[3].filter=='coal')
  assert(trace.nodes[4].outputs[1]==1 and trace.nodes[4].boundary)
  assert(trace.nodes[5].boundary and #trace.nodes[5].outputs==0)
+ exit.underground_belt_neighbour=start;start.belt_neighbours.inputs={left,foreign,hidden}
+ left.belt_neighbours.inputs={right};right.belt_neighbours.inputs={start}
+ surface.find_entities_filtered=function() return {exit} end;args.x=4.5;args.trace_direction='upstream'
+ trace=inspect(args).belt_trace
+ assert(trace.direction=='upstream' and #trace.nodes==4 and not trace.truncated)
+ assert(trace.nodes[1].inputs[1]==2 and trace.nodes[2].inputs[1]==3 and trace.nodes[2].boundary)
+ assert(trace.nodes[4].inputs[1]==2 and trace.nodes[1].outputs==nil)
+ args.trace_limit=2;trace=inspect(args).belt_trace;assert(trace.truncated and #trace.nodes==2)
+ for _,direction in ipairs({'sideways',false,4}) do args.trace_direction=direction;assert(not pcall(inspect,args)) end
+ surface.find_entities_filtered=function() return {start} end;args.x=0.5;args.trace_direction=nil
  args.trace_limit=2;trace=inspect(args).belt_trace
  assert(#trace.nodes==2 and trace.truncated and trace.nodes[2].truncated)
  start.underground_belt_neighbour=nil;args.trace_limit=16;trace=inspect(args).belt_trace

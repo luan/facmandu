@@ -179,7 +179,7 @@ test('production plans show build rates, inputs and unresolved choices', () => {
 				recipe: 'electronic-circuit',
 				crafts_per_min: 120,
 				machine: 'assembling-machine-2',
-				machines: 4
+				machines: 1.067
 			}
 		],
 		inputs: [{ name: 'iron-plate', type: 'item', per_min: 120 }],
@@ -190,11 +190,11 @@ test('production plans show build rates, inputs and unresolved choices', () => {
 	});
 	assert.equal(plan.cards[0]?.badge, 'Choose recipes');
 	assert.equal(plan.cards[0]?.subtitle, undefined);
-	assert.deepEqual(plan.tables[0]?.columns, ['Recipe', 'Crafts / min', 'Machine equivalents']);
+	assert.deepEqual(plan.tables[0]?.columns, ['Recipe', 'Crafts / min', 'Machines']);
 	assert.deepEqual(plan.tables[0]?.rows[0], [
 		'Electronic circuit',
 		'120/min',
-		'4 × Assembling machine 2'
+		'2 × Assembling machine 2'
 	]);
 	assert.deepEqual(plan.tables[1]?.rows[0], ['Iron plate', '120/min']);
 	assert.deepEqual(plan.cards[1]?.details, [
