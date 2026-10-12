@@ -50,24 +50,15 @@ local function custom_inserter_range(force,p)
 end
 local function can_request_ghost(force,surface,entity,position,box,offset)
  if surface.can_place_entity{name=entity.name,position=position,direction=entity.direction,force=force,build_check_type=defines.build_check_type.manual} then return true end
- if not surface.platform or surface.platform.force~=force then return false end
+ if surface.platform and surface.platform.force~=force then return false end
  local area={{box.x1+offset.x,box.y1+offset.y},{box.x2+offset.x,box.y2+offset.y}}
- local foundations={}
- for _,ghost in ipairs(surface.find_entities_filtered{area=area,type='tile-ghost',force=force}) do
-  if ghost.ghost_name=='space-platform-foundation' then foundations[math.floor(ghost.position.x)..':'..math.floor(ghost.position.y)]=true end
- end
  local pending=false
- for x=math.floor(area[1][1]),math.floor(area[2][1]-0.001) do
-  for y=math.floor(area[1][2]),math.floor(area[2][2]-0.001) do
-   local tile=surface.get_tile{x=x,y=y}
-   if tile.name~='space-platform-foundation' then
-    if tile.name~='empty-space' or not foundations[x..':'..y] then return false end
-    pending=true
-   end
-  end
+ for _,ghost in ipairs(surface.find_entities_filtered{area=area,type='tile-ghost'}) do
+  if ghost.force~=force then return false end
+  pending=true
  end
- -- Normal blueprint ghosts can wait above owned foundation ghosts. Script-ghost
- -- checks also permit unsupported empty space and must never be used here.
+ -- Native blueprint checks require suitable tiles or tile ghosts across the
+ -- footprint. Script-ghost checks also permit unsupported terrain; never use them.
  return pending and surface.can_place_entity{name=entity.name,position=position,direction=entity.direction,force=force,build_check_type=defines.build_check_type.blueprint_ghost,forced=false}
 end
 local function inserter_connections(p)
@@ -158,7 +149,7 @@ local function blueprint(request)
     local custom_vectors;if p.type=='inserter' then custom_vectors=p.allow_custom_vectors end
     local wire_distance,supply_distance;if p.type=='electric-pole' then wire_distance=p.get_max_wire_distance('normal');supply_distance=p.get_supply_area_distance('normal') end
     entities[#entities+1]={name=name,type=p.type,width=p.tile_width,height=p.tile_height,supports_direction=p.supports_direction,collision_box=p.collision_box,crafting_categories=p.crafting_categories,recipe_settable=p.type=='assembling-machine',max_wire_distance=wire_distance,supply_area_distance=supply_distance,belt_items_per_second=p.belt_speed and p.belt_speed*480,mining_radius=p.mining_drill_radius,mining_speed=p.mining_speed,resource_categories=p.resource_categories,output_offset=p.vector_to_place_result,max_underground_distance=p.max_underground_distance,fluid_connections=connections,inserter_connections=inserter_connections(p),allow_custom_vectors=custom_vectors,custom_vector_max_distance=custom_inserter_range(force,p),unlocked=unlocked(available,p),blueprint_settings_example=control_example(p.type)}
-   elseif name=='space-platform-foundation' and prototypes.tile[name] then
+   elseif prototypes.tile[name] and prototypes.tile[name].can_be_part_of_blueprint and #(prototypes.tile[name].items_to_place_this or {})>0 then
     entities[#entities+1]={name=name,type='tile',width=1,height=1,unlocked=unlocked(available,prototypes.tile[name])}
    else
     entities[#entities+1]={name=name,error='Unknown or non-blueprintable entity'}
@@ -189,10 +180,10 @@ local function blueprint(request)
  local tile_positions={}
  for _,tile in ipairs(tiles) do
   local p=prototypes.tile[tile.name]
-  if tile.name~='space-platform-foundation' or not p or not p.can_be_part_of_blueprint then error('Only space-platform-foundation tiles are supported',0) end
+  if not p or not p.can_be_part_of_blueprint or #(p.items_to_place_this or {})==0 then error('Unknown or non-blueprintable construction tile: '..tile.name,0) end
   local key=tile.position.x..':'..tile.position.y
   if tile_positions[key] then error('Duplicate blueprint tile',0) end
-  tile_positions[key]=true
+  tile_positions[key]=tile.name
   if not unlocked(available,p) then
    if request.operation~='create' then error('Construction item is not unlocked: '..tile.name,0) end
    warn('Construction item is not unlocked: '..tile.name)
@@ -284,7 +275,7 @@ local function blueprint(request)
  local normalized_tiles=stack.get_blueprint_tiles() or {}
  if #normalized_tiles~=#tiles then error('Factorio rejected blueprint tiles',0) end
  for _,tile in ipairs(normalized_tiles) do
-  if tile.name~='space-platform-foundation' or not tile_positions[tile.position.x..':'..tile.position.y] then error('Factorio changed blueprint tile positions',0) end
+  if tile_positions[tile.position.x..':'..tile.position.y]~=tile.name then error('Factorio changed blueprint tile positions',0) end
  end
  local normalized=stack.get_blueprint_entities() or {}
  if not normalized or #normalized~=#entities then error('Factorio rejected blueprint entities',0) end
@@ -382,7 +373,6 @@ local function blueprint(request)
  local surface=game.surfaces[request.surface]
  if not surface then error('Unknown surface',0) end
  if surface.platform and surface.platform.force~=force then error('This platform belongs to another force',0) end
- if #tiles>0 and (not surface.platform or surface.platform.force~=force) then error('Foundation requires a space platform belonging to this force',0) end
  if request.operation=='check' then
   if not prototypes.item[request.item] then error('Output measurement requires a real item prototype',0) end
   local report={operation='check_build',tick=game.tick,surface=surface.name,force=force.name,constructed=0,requested=#entities,ghosts=0,missing={},faults={},faults_total=0,machines={},machines_total=0,machine_status_counts={},terminal_belts={},terminal_belts_total=0,settings_verified=false}
@@ -419,8 +409,8 @@ local function blueprint(request)
   end
   report.missing_total=report.requested-report.constructed
   report.rows_limited_to=16
-  report.foundation_missing=0
-  for _,tile in ipairs(tiles) do if surface.get_tile{x=tile.position.x+request.position.x,y=tile.position.y+request.position.y}.name~=tile.name then report.foundation_missing=report.foundation_missing+1 end end
+  report.tiles_missing=0
+  for _,tile in ipairs(tiles) do if surface.get_tile{x=tile.position.x+request.position.x,y=tile.position.y+request.position.y}.name~=tile.name then report.tiles_missing=report.tiles_missing+1 end end
   local outputs,seen={},{}
   for _,at in ipairs(request.outputs) do
    local found
@@ -450,21 +440,24 @@ local function blueprint(request)
  end
  local blocked={}
  local pending_tiles={}
- local existing_foundations=0
+ local completed_tile_items={}
  for _,tile in ipairs(tiles) do
   local position={x=tile.position.x+request.position.x,y=tile.position.y+request.position.y}
   local existing=surface.get_tile(position)
-  if existing.name==tile.name then existing_foundations=existing_foundations+1 else
+  if existing.name==tile.name then
+   local item=prototypes.tile[tile.name].items_to_place_this[1]
+   completed_tile_items[item.name]=(completed_tile_items[item.name] or 0)+item.count
+  else
    if not surface.is_chunk_generated{x=math.floor(position.x/32),y=math.floor(position.y/32)} or not force.is_chunk_charted(surface,{x=math.floor(position.x/32),y=math.floor(position.y/32)}) then
     blocked[#blocked+1]={name=tile.name,position=position,reason='Outside explored, generated terrain'}
-   elseif existing.name~='empty-space' or existing.has_tile_ghost() then
-    blocked[#blocked+1]={name=tile.name,position=position,reason='Tile is occupied or already has a construction ghost'}
+   elseif existing.has_tile_ghost() or not surface.can_place_entity{name='tile-ghost',inner_name=tile.name,position=position,force=force,build_check_type=defines.build_check_type.manual,forced=false} then
+    blocked[#blocked+1]={name=tile.name,position=position,reason='Tile cannot be placed here or already has a construction ghost'}
    else pending_tiles[#pending_tiles+1]={name=tile.name,position=position} end
   end
  end
  for i=#cost,1,-1 do
-  if cost[i].name=='space-platform-foundation' then
-   cost[i].count=cost[i].count-existing_foundations
+  if completed_tile_items[cost[i].name] then
+   cost[i].count=cost[i].count-completed_tile_items[cost[i].name]
    if cost[i].count==0 then table.remove(cost,i) end
   end
  end
@@ -502,23 +495,23 @@ local function blueprint(request)
   local existing=surface.find_entities_filtered{area={{b.x1+request.position.x,b.y1+request.position.y},{b.x2+request.position.x,b.y2+request.position.y}},type='entity-ghost'}
   if #existing>0 then blocked[#blocked+1]={name=e.name,position=position,reason='An existing construction ghost occupies this position'} end
  end
- if request.operation=='inspect' then return {ready=#blocked==0,blocked=blocked,expectedTick=game.tick,expectedDesign=request.design,surface=surface.name,position=request.position,entities=#entities,tiles=#tiles,foundation_pending=#pending_tiles,cost=cost,construction=construction_report(force,surface,entities,request.position,cost)} end
+ if request.operation=='inspect' then return {ready=#blocked==0,blocked=blocked,expectedTick=game.tick,expectedDesign=request.design,surface=surface.name,position=request.position,entities=#entities,tiles=#tiles,tiles_pending=#pending_tiles,cost=cost,construction=construction_report(force,surface,entities,request.position,cost)} end
  if #blocked>0 then error('Placement is blocked at '..blocked[1].name..'; inspect the site again',0) end
  -- Create ghosts at exact inspected coordinates; build_blueprint centers the layout around its cursor.
  local ghosts={}
  local placed=0
  local placed_tiles=0
  local failure
- -- Only request foundations; the platform builds them using real hub inventory.
+ -- Request tile ghosts only; ordinary robots or the platform supply the materials.
  for _,tile in ipairs(pending_tiles) do
   local ok,err=pcall(function()
-   if surface.get_tile(tile.position).name~='empty-space' or surface.get_tile(tile.position).has_tile_ghost() then error('Foundation site changed; inspect again',0) end
+   if surface.get_tile(tile.position).has_tile_ghost() or not surface.can_place_entity{name='tile-ghost',inner_name=tile.name,position=tile.position,force=force,build_check_type=defines.build_check_type.manual,forced=false} then error('Tile site changed; inspect again',0) end
    local ghost=surface.create_entity{name='tile-ghost',inner_name=tile.name,position=tile.position,force=force,expires=false}
-   if not ghost then error('Factorio refused a foundation ghost',0) end
+   if not ghost then error('Factorio refused a tile ghost',0) end
    placed_tiles=placed_tiles+1
    if actor then ghost.last_user=actor end
    script.raise_script_built{entity=ghost}
-   if not ghost.valid and surface.get_tile(tile.position).name~=tile.name then error('A mod changed the foundation ghost',0) end
+   if not ghost.valid and surface.get_tile(tile.position).name~=tile.name then error('A mod changed the tile ghost',0) end
   end)
   if not ok then failure=tostring(err):match('^[^\n]*');break end
  end

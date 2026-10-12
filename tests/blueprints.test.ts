@@ -261,7 +261,7 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
   return {name=at.x>0.5 and 'water' or 'grass-1'}
  end
  surface.find_entities_filtered=function(filter)
-  if filter.type=='entity-ghost' then return {} end
+  if filter.type=='entity-ghost' or filter.type=='tile-ghost' then return {} end
   assert(charted and filter.area and filter.limit==16)
   return {
    {name='belt',type='transport-belt',position={x=0.5,y=0.5},force=force,unit_number=7},
@@ -286,8 +286,8 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
  surface.get_tile=function() return {name=tile} end
  surface.find_entities_filtered=function(filter)
   if filter.type=='tile-ghost' then
-   assert(filter.force==force)
-   return own_foundation and {{ghost_name='space-platform-foundation',position={x=0.5,y=0.5}}} or {}
+   assert(filter.force==nil)
+   return own_foundation and tile=='empty-space' and {{ghost_name='space-platform-foundation',force=force,position={x=0.5,y=0.5}}} or {}
   end
   return {}
  end
@@ -301,6 +301,19 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
  own_foundation=false;local before_checks=ghost_checks
  assert(not blueprint(inspection).ready and ghost_checks==before_checks)
  own_foundation=true;native_allowed=false;assert(not blueprint(inspection).ready)
+ surface.platform=nil;tile='water'
+ surface.find_entities_filtered=function(filter)
+  return filter.type=='tile-ghost' and {{ghost_name='landfill',force=force,position={x=0.5,y=0.5}}} or {}
+ end
+ native_allowed=true;assert(blueprint(inspection).ready)
+ surface.find_entities_filtered=function(filter)
+  return filter.type=='tile-ghost' and {{ghost_name='landfill',force={name='other'},position={x=0.5,y=0.5}}} or {}
+ end
+ assert(not blueprint(inspection).ready)
+ surface.platform={force=force,hub={get_inventory=function() return nil end}}
+ surface.find_entities_filtered=function(filter)
+  return filter.type=='tile-ghost' and own_foundation and tile=='empty-space' and {{ghost_name='space-platform-foundation',force=force,position={x=0.5,y=0.5}}} or {}
+ end
  native_allowed=true;tile='space-platform-foundation';before_checks=ghost_checks
  assert(not blueprint(inspection).ready and ghost_checks==before_checks)
  tile='empty-space'
@@ -452,6 +465,53 @@ test('rich blueprint artifacts need an importable string and validated layout', 
 		false
 	);
 	assert.equal(blueprintArtifactSchema.safeParse({ ...artifact, entities: [] }).success, false);
+});
+
+test('ordinary construction tiles round-trip and obey native placement and site changes', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ local force={name='player',recipes={{enabled=true,products={{type='item',name='landfill'}}}},logistic_networks={}}
+ local charted=true;local allowed=true;local occupied=false;local built=false;local renamed=false;local created=0
+ force.is_chunk_charted=function() return charted end
+ local surface={name='nauvis',is_chunk_generated=function() return true end}
+ surface.get_tile=function() return {name=built and 'landfill' or 'water',has_tile_ghost=function() return occupied end} end
+ surface.can_place_entity=function(check)
+  assert(check.name=='tile-ghost' and check.inner_name=='landfill' and check.force==force and check.forced==false)
+  return allowed
+ end
+ surface.create_entity=function(check)
+  assert(check.name=='tile-ghost' and check.inner_name=='landfill')
+  created=created+1;occupied=true;return {valid=true}
+ end
+ defines={build_check_type={manual=1}};script={raise_script_built=function() end}
+ prototypes={entity={},tile={landfill={can_be_part_of_blueprint=true,items_to_place_this={{name='landfill',count=1}}},water={can_be_part_of_blueprint=true}}}
+ game={tick=100,forces={player=force},surfaces={nauvis=surface},create_inventory=function()
+  local saved
+  return {{set_stack=function() end,set_blueprint_entities=function() end,get_blueprint_entities=function() return {} end,
+   set_blueprint_tiles=function(tiles) saved=tiles end,get_blueprint_tiles=function()
+    if renamed then return {{name='water',position=saved[1].position}} end;return saved
+   end,export_stack=function() return '0native' end,cost_to_build={{name='landfill',count=1}}}}
+ end}
+ ${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
+ local request={operation='create',force='player',label='Landfill',entities={},tiles={{name='landfill',position={x=0,y=0}}}}
+ assert(blueprint(request).kind=='blueprint')
+ renamed=true;assert(not pcall(blueprint,request));renamed=false
+ request.tiles[1].name='water';assert(not pcall(blueprint,request));request.tiles[1].name='landfill'
+ request.operation='inspect';request.surface='nauvis';request.position={x=0,y=0};request.design='site'
+ assert(blueprint(request).ready)
+ allowed=false;assert(not blueprint(request).ready);allowed=true
+ charted=false;assert(not blueprint(request).ready);charted=true
+ occupied=true;assert(not blueprint(request).ready);occupied=false
+ built=true;assert(#blueprint(request).cost==0);built=false
+ request.operation='place';request.expectedTick=100;request.expectedDesign='site'
+ allowed=false;assert(not pcall(blueprint,request) and created==0);allowed=true
+ assert(blueprint(request).placed_tiles==1 and created==1)
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 });
 
 test('foundation layouts use integer tiles and remain bound to the inspected layout', () => {
