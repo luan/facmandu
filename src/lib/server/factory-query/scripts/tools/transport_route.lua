@@ -150,10 +150,12 @@ local function route(a)
  end
  enqueue(a.x,a.y,start_entity and start_entity.direction or nil,false,0)
  local visited=0
+ local closest
  while #heap>0 and visited<5000 do
   local node=pop(heap)
   if node.g==best[node.id] then
    visited=visited+1
+   if not node.tunnel and node.h<span and (not closest or node.h<closest.h or (node.h==closest.h and node.g<closest.g)) then closest=node end
    if node.x==a.target_x and node.y==a.target_y then
     local path={};local current=node
     while current do table.insert(path,1,current);current=parents[current.id].id and nodes[parents[current.id].id] or nil end
@@ -199,7 +201,7 @@ local function route(a)
    end
   end
  end
- return {force=force.name,surface=surface.name,tick=game.tick,found=false,visited=visited,note=visited>=5000 and 'Search budget reached; use a closer charted waypoint or a narrower detour area.' or 'No charted collision-free route within this area. Inspect the obstruction; this tool does not demolish buildings or place landfill.'}
+ return {force=force.name,surface=surface.name,tick=game.tick,found=false,visited=visited,closestApproach=closest and {x=closest.x,y=closest.y,remaining=closest.h} or nil,note=visited>=5000 and 'Search budget reached; try a section ending at closestApproach before continuing, or narrow the detour area. No route has been exported.' or 'No charted collision-free route within this area. closestApproach is a reachable surface-belt frontier, not a completed connection. Inspect beyond it or choose a wider detour; routing does not demolish buildings or place landfill.'}
 end
 M.functions={route_belt=route}
 return M

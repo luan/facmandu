@@ -75,7 +75,10 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
  args.x=0.25;assert(not pcall(route,args));args.x=0.5
  args.target_x=600.5;assert(not pcall(route,args));args.target_x=64.5
  chart[key(1,0)]=true;chart[key(1,-1)]=true
- assert(route(args).found==false and reads>0)
+ local frontier=route(args)
+ assert(not frontier.found and reads>0 and frontier.closestApproach)
+ assert(frontier.closestApproach.x<32 and known(frontier.closestApproach.x,frontier.closestApproach.y))
+ assert(frontier.closestApproach.remaining>0 and frontier.closestApproach.remaining<64)
  chart[key(2,0)]=true;assert(not pcall(route,args))
  world={};blocked={};chart={}
  local open=route{force='player',surface='nauvis',belt='belt',x=0.5,y=0.5,target_x=20.5,target_y=10.5,margin=1}

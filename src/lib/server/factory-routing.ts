@@ -52,7 +52,8 @@ const routeReply = z.discriminatedUnion('found', [
 		surface: z.string(),
 		reason: z.string().optional(),
 		note: z.string().optional(),
-		visited: z.number().optional()
+		visited: z.number().optional(),
+		closestApproach: position.extend({ remaining: z.number().positive() }).optional()
 	}),
 	z.object({
 		found: z.literal(true),
