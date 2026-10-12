@@ -14,6 +14,7 @@ test('only a consistent confident unfinished result continues the response', () 
 		}
 	});
 	assert.equal(needsContinuation(result('continue', 0.95, 0.95, 0.05)), true);
+	assert.equal(needsContinuation(result('continue', 0.75, 0.75, 0.25)), true);
 	assert.equal(needsContinuation(result('finish', 0.95, 0.05, 0.95)), false);
 	assert.equal(needsContinuation(result('continue', 0.6, 0.6, 0.4)), false);
 	assert.equal(needsContinuation(result('continue', 0.95, 0.1, 0.9)), false);
