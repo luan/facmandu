@@ -27,7 +27,7 @@ function M.provider(native_remote)
  end
  local function solve_factory_plan(a)
   local force=force_lookup.require_force(a.force)
-  if not available('facmandu-factory-planner','solve') then error('Connect Factory Planner in server settings to install its Toby adapter',0) end
+  if not available('facmandu-factory-planner','solve') then error('Factory Planner calculation API is unavailable; use plan_production or read the selected native plan',0) end
   return native_remote.call('facmandu-factory-planner','solve',force.name,a.player,a.surface,a.products,a.recipes)
  end
  local function helmod_recipe(a)
@@ -107,7 +107,7 @@ function M.provider(native_remote)
  end
  local function task_list(a)
   local force=force_lookup.require_force(a.force)
-  if not available('facmandu-task-list','read') then error('Install the Toby Task List adapter in server settings',0) end
+  if not available('facmandu-task-list','read') then error('Task List does not expose shared-task APIs on this server',0) end
   return native_remote.call('facmandu-task-list','read',force.name,bounded.limit(a.limit,20,50),a.completed==true)
  end
  local function toby_drone(a)
