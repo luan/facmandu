@@ -1,0 +1,9 @@
+{
+	"name": "k2so-vulcanus-start-compat",
+	"version": "0.0.1",
+	"title": "[WIP] K2SO Vulcanus Start Compatibility",
+	"author": "Luan",
+	"factorio_version": "2.1",
+	"description": "Fixes the electronics research cycle when starting on Vulcanus with Any Planet Start and Krastorio 2 Spaced Out. No items or research are granted.",
+	"dependencies": ["base >= 2.1.20", "any-planet-start >= 1.2.5", "Krastorio2-spaced-out >= 2.0.17"]
+}
