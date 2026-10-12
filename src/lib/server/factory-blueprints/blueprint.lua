@@ -115,6 +115,88 @@ local function construction_report(force,surface,entities,offset,cost)
  -- A positive result requires one network to cover and stock the whole layout; split-network builds need allocation checks.
  return {single_network_ready=ready,entities=#entities,networks=networks,total_networks=total,production_verified=false,note='Normal-quality stock is not reserved. Coverage and materials do not verify power, input/output connections or throughput.'}
 end
+local function power_report(force,surface,entities,offset,boxes)
+ if surface.platform then return nil end -- Platforms share power without ordinary pole coverage.
+ local nodes,positions,consumers,sources={},{},{},{}
+ local function position(e) return {x=e.position.x+offset.x,y=e.position.y+offset.y} end
+ local function add(name,at,index,native)
+  local p=prototypes.entity[name]
+  local quality=native and native.quality.name or 'normal'
+  local key=name..':'..at.x..':'..at.y
+  local node=positions[key]
+  if not node then
+   node={position=at,wire=p.get_max_wire_distance(quality),supply=p.get_supply_area_distance(quality),index=index}
+   positions[key]=node;nodes[#nodes+1]=node
+  end
+  if native and native.type~='entity-ghost' then
+   local network=native.electric_network
+   local flow=network and network.parent_network.flow_last_tick
+   node.anchor=node.anchor or (flow and (flow.maximum_production>0 or flow.accumulator_energy>0)) or false
+  end
+  return node
+ end
+ for i,e in ipairs(entities) do
+  local p=prototypes.entity[e.name]
+  if p.type=='electric-pole' then
+   local node=add(e.name,position(e),i)
+   -- Bound native searches and graph size; increase only after a larger native fixture meets the tick budget.
+   if node.wire>128 or #nodes>128 then return {checked=false,note='Power geometry exceeds this inspection budget; inspect the connections in sections.'} end
+  elseif p.electric_energy_source_prototype then
+   if p.type=='solar-panel' or p.type=='generator' then sources[#sources+1]=i else consumers[#consumers+1]=i end
+  end
+ end
+ if #consumers==0 then return nil end
+ local unknown=false
+ local planned=#nodes
+ local sites,chunks={},{}
+ for i=1,planned do
+  sites[#sites+1]={position=nodes[i].position,radius=nodes[i].wire}
+ end
+ for _,index in ipairs(consumers) do
+  local at=position(entities[index]);local key=math.floor(at.x/32)..':'..math.floor(at.y/32)
+  if not chunks[key] then chunks[key]=true;sites[#sites+1]={position=at,radius=64} end
+ end
+ for _,site in ipairs(sites) do
+  for _,filter in ipairs{{type='electric-pole'},{ghost_type='electric-pole'}} do
+   filter.position,filter.radius,filter.force,filter.limit=site.position,site.radius,force,128
+   local found=surface.find_entities_filtered(filter)
+   if #found==128 then unknown=true end
+   for _,e in ipairs(found) do
+    if force.is_chunk_charted(surface,{x=math.floor(e.position.x/32),y=math.floor(e.position.y/32)}) then
+     local name=e.type=='entity-ghost' and e.ghost_name or e.name
+     if #nodes>=512 and not positions[name..':'..e.position.x..':'..e.position.y] then unknown=true
+     else add(name,e.position,nil,e) end
+    else unknown=true end
+   end
+  end
+ end
+ local function covers(node,index)
+  local b=boxes[index];local at=node.position;local r=node.supply
+  return b.x1+offset.x<at.x+r and b.x2+offset.x>at.x-r and b.y1+offset.y<at.y+r and b.y2+offset.y>at.y-r
+ end
+ local reached,queue={},{}
+ for i,node in ipairs(nodes) do
+  for _,source in ipairs(sources) do if covers(node,source) then node.anchor=true end end
+  if node.anchor then reached[i]=true;queue[#queue+1]=i end
+ end
+ local cursor=1
+ while queue[cursor] do
+  local a=nodes[queue[cursor]];cursor=cursor+1
+  for i,b in ipairs(nodes) do
+   local dx,dy=a.position.x-b.position.x,a.position.y-b.position.y
+   if not reached[i] and dx*dx+dy*dy<=math.min(a.wire,b.wire)^2 then reached[i]=true;queue[#queue+1]=i end
+  end
+ end
+ local uncovered,unconnected={},{}
+ local uncovered_total,unconnected_total=0,0
+ for _,index in ipairs(consumers) do
+  local covered,connected=false,false
+  for i,node in ipairs(nodes) do if covers(node,index) then covered=true;connected=connected or reached[i] end end
+  if not covered then uncovered_total=uncovered_total+1;if #uncovered<16 then uncovered[#uncovered+1]=index end
+  elseif not connected then unconnected_total=unconnected_total+1;if #unconnected<16 then unconnected[#unconnected+1]=index end end
+ end
+ return {checked=not unknown,consumers=#consumers,existing_scan_radius=64,uncovered_total=uncovered_total,uncovered_entities=uncovered,unconnected_total=unconnected_total,unconnected_entities=unconnected,note='Bounded potential pole coverage and cable reach to an existing powered network or planned generator. Wiring, generator inputs, power headroom and production are not verified. Inspect and repair reported gaps before calling a production layout connected.'}
+end
 local function control_example(kind)
  if kind=='asteroid-collector' then return {['chunk-filter']={{index=1,name='oxide-asteroid-chunk'}},control_behavior={circuit_set_filters=false,circuit_read_contents=true,include_hands=true,circuit_enabled=true,circuit_condition={first_signal={type='item',name='oxide-asteroid-chunk'},comparator='<',constant=5}}} end
  if kind=='constant-combinator' then return {control_behavior={sections={sections={{index=1,filters={{index=1,type='item',name='oxide-asteroid-chunk',quality='normal',comparator='=',count=1}}}}}}} end
@@ -524,7 +606,7 @@ local function blueprint(request)
   local existing=surface.find_entities_filtered{area={{b.x1+request.position.x,b.y1+request.position.y},{b.x2+request.position.x,b.y2+request.position.y}},type='entity-ghost'}
   if #existing>0 then blocked[#blocked+1]={name=e.name,position=position,reason='An existing construction ghost occupies this position'} end
  end
- if request.operation=='inspect' then return {ready=#blocked==0,blocked=blocked,expectedTick=game.tick,expectedDesign=request.design,surface=surface.name,position=request.position,entities=#entities,tiles=#tiles,tiles_pending=#pending_tiles,cost=cost,construction=construction_report(force,surface,entities,request.position,cost)} end
+ if request.operation=='inspect' then return {ready=#blocked==0,blocked=blocked,expectedTick=game.tick,expectedDesign=request.design,surface=surface.name,position=request.position,entities=#entities,tiles=#tiles,tiles_pending=#pending_tiles,cost=cost,construction=construction_report(force,surface,entities,request.position,cost),power=power_report(force,surface,entities,request.position,boxes)} end
  if #blocked>0 then error('Placement is blocked at '..blocked[1].name..'; inspect the site again',0) end
  -- Create ghosts at exact inspected coordinates; build_blueprint centers the layout around its cursor.
  local ghosts={}

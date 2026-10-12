@@ -987,7 +987,7 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 								? 'Ghosts placed'
 								: 'Incomplete'
 							: data.ready
-								? 'Ready to place'
+								? 'Placement clear'
 								: 'Blocked',
 					tone: data.complete || data.ready ? 'good' : 'warning',
 					metrics:
@@ -1000,6 +1000,20 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 					notes: [string(data.note), string(data.error)].filter(Boolean)
 				}
 			];
+			const power = record(data.power);
+			if (Object.keys(power).length) {
+				const gaps = Number(power.uncovered_total ?? 0) + Number(power.unconnected_total ?? 0);
+				view.cards.push({
+					title: 'Planned power connections',
+					badge: power.checked !== true ? 'Partial scan' : gaps ? 'Gaps found' : 'Reach checked',
+					tone: power.checked !== true || gaps ? 'warning' : 'muted',
+					metrics: [
+						...numeric('Without pole coverage', power.uncovered_total),
+						...numeric('Without source connection', power.unconnected_total)
+					],
+					notes: ['Potential cable reach only; actual wiring and power capacity need checking.']
+				});
+			}
 			const blocked = rows(data.blocked);
 			if (blocked.length)
 				view.tables = [

@@ -577,6 +577,54 @@ test('ordinary construction tiles round-trip and obey native placement and site 
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 });
 
+test('native placement inspection identifies pole gaps and preserves uncertainty outside charted evidence', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ local charted=true
+ local force={name='player',logistic_networks={},recipes={{enabled=true,products={{type='item',name='building'}}}},is_chunk_charted=function() return charted end}
+ local function proto(kind,width)
+  return {type=kind,tile_width=width,tile_height=width,items_to_place_this={{name='building',count=1}},has_flag=function() return false end}
+ end
+ local plant=proto('assembling-machine',3);plant.electric_energy_source_prototype={}
+ local pole=proto('electric-pole',1)
+ pole.get_max_wire_distance=function() return 9 end;pole.get_supply_area_distance=function() return 4 end
+ prototypes={entity={plant=plant,pole=pole}}
+ local source={type='electric-pole',name='pole',quality={name='normal'},position={x=0.5,y=0.5},electric_network={parent_network={flow_last_tick={maximum_production=1,accumulator_energy=0}}}}
+ local surface={name='nauvis',can_place_entity=function() return true end,is_chunk_generated=function() return true end}
+ surface.find_entities_filtered=function(q)
+  if q.type~='electric-pole' then return {} end
+  local dx,dy=source.position.x-q.position.x,source.position.y-q.position.y
+  return dx*dx+dy*dy<=q.radius*q.radius and {source} or {}
+ end
+ game={tick=100,forces={player=force},surfaces={nauvis=surface},create_inventory=function()
+  local saved
+  return {{set_stack=function() end,set_blueprint_entities=function(e) saved=e end,get_blueprint_entities=function() return saved end,get_blueprint_tiles=function() return {} end,export_stack=function() return '0native' end,cost_to_build={{name='building',count=2}}}}
+ end}
+ defines={build_check_type={manual=1}}
+ ${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
+ local request={operation='inspect',force='player',surface='nauvis',position={x=0,y=0},label='Powered module',design='inspection',entities={
+  {name='plant',position={x=20.5,y=0.5},direction=0},
+  {name='pole',position={x=20.5,y=4.5},direction=0}
+ }}
+ local gap=blueprint(request)
+ assert(gap.ready and gap.power.checked and gap.power.uncovered_total==0 and gap.power.unconnected_total==1)
+ assert(gap.power.unconnected_entities[1]==1)
+ request.entities[3]={name='pole',position={x=8.5,y=0.5},direction=0}
+ request.entities[4]={name='pole',position={x=16.5,y=0.5},direction=0}
+ local connected=blueprint(request)
+ assert(connected.power.checked and connected.power.uncovered_total==0 and connected.power.unconnected_total==0)
+ request.entities={{name='plant',position={x=2.5,y=0.5},direction=0}}
+ local existing=blueprint(request)
+ assert(existing.power.checked and existing.power.unconnected_total==0 and existing.power.uncovered_total==0,'Existing power must work without adding poles')
+ charted=false;assert(not blueprint(request).power.checked,'Uncharted evidence cannot prove an absent power source')
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
+
 test('native export warns about missing, distant and competing underground partners', () => {
 	const state = lauxlib.luaL_newstate();
 	lualib.luaL_openlibs(state);

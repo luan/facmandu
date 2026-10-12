@@ -530,6 +530,29 @@ test('blueprint placement reports incomplete work and actionable blocked coordin
 	assert.deepEqual(blocked.tables[0]?.rows, [['Transport belt', '50.5', '50.5', 'Occupied']]);
 });
 
+test('placement clearance keeps power gaps and partial evidence visible', () => {
+	const inspection = (checked: boolean, gaps: number) =>
+		view('blueprint_operation', {
+			ready: true,
+			surface: 'nauvis',
+			entities: 30,
+			power: { checked, uncovered_total: 0, unconnected_total: gaps }
+		});
+	const disconnected = inspection(true, 29);
+	assert.equal(disconnected.cards[0]?.badge, 'Placement clear');
+	assert.equal(disconnected.cards[1]?.badge, 'Gaps found');
+	assert.deepEqual(disconnected.cards[1]?.metrics, [
+		{ label: 'Without pole coverage', value: '0' },
+		{ label: 'Without source connection', value: '29' }
+	]);
+	assert.equal(inspection(false, 0).cards[1]?.badge, 'Partial scan');
+	assert.equal(inspection(true, 0).cards[1]?.badge, 'Reach checked');
+	assert.match(
+		inspection(true, 0).cards[1]?.notes[0] ?? '',
+		/actual wiring and power capacity need checking/u
+	);
+});
+
 test('only the latest displayed factory inspection is inline and all captures remain available', () => {
 	const capture = (tick: number, display = true) => ({
 		kind: 'factory-result' as const,
