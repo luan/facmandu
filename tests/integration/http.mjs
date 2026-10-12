@@ -4924,10 +4924,21 @@ done
 			'Dropbox OAuth uses PKCE, browser-bound single-use state, refresh tokens and original-session ownership without exposing credentials'
 		);
 
-		await action(`${serverPath}/cloud`, cookies.owner, {
-			operation: 'automatic',
-			enabled: 'false'
-		});
+		// OAuth enables automatic backup. Let an in-flight sample release its lock
+		// before isolating the manual backup fixture from that initial revision.
+		const pauseDeadline = Date.now() + 10_000;
+		while (true) {
+			const pause = await request(`${serverPath}/cloud`, {
+				cookie: cookies.owner,
+				method: 'POST',
+				form: { operation: 'automatic', enabled: 'false' }
+			});
+			if (pause.status === 200) break;
+			assert.equal(pause.status, 409);
+			assert.match(await pause.text(), /Backing up completed save to Dropbox/);
+			assert.ok(Date.now() < pauseDeadline, 'Initial automatic backup did not release its lock');
+		}
+		dropboxFiles.clear();
 		const cloudDirectory = machineDirs[0];
 		const cloudConfigPath = join(cloudDirectory, 'facmandu.json');
 		const cloudOriginal = zipSync({ 'world/level.dat': strToU8('original world') });
