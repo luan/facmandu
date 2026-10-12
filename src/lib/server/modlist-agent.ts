@@ -7,6 +7,7 @@ import {
 	setProvider,
 	useAgentFinish,
 	useAgentStart,
+	useDataWriter,
 	useDelivery,
 	useInitialData,
 	useModel,
@@ -234,6 +235,7 @@ function ModlistAssistant() {
 		}
 	});
 	const delivery = useDelivery();
+	const writeAnswer = useDataWriter('assistant-answer', { schema: v.string() });
 	const requestId = delivery.kind === 'signal' ? delivery.attributes?.requestId : undefined;
 	const [recovery, setRecovery] = usePersistentState('answer-recovery', {
 		requestId: '',
@@ -272,8 +274,10 @@ function ModlistAssistant() {
 					response.toolCalls,
 					signal
 				))
-			)
+			) {
+				writeAnswer(last.text);
 				return;
+			}
 			append({
 				kind: 'signal',
 				type: 'completion-recovery',

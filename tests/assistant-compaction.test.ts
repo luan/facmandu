@@ -12,12 +12,17 @@ import {
 	init,
 	observe,
 	useAgentFinish,
+	useDataWriter,
 	useModel,
 	usePersistentState,
 	useTool
 } from '@flue/runtime';
 import { sqlite, start } from '@flue/runtime/node';
-import { assistantText, submissionEvents } from '../src/lib/server/assistant-events';
+import {
+	assistantFinalText,
+	assistantText,
+	submissionEvents
+} from '../src/lib/server/assistant-events';
 
 test('finish continuations see committed hook state without another tool call', async () => {
 	const directory = await mkdtemp(join(tmpdir(), 'facmandu-completion-'));
@@ -29,9 +34,13 @@ test('finish continuations see committed hook state without another tool call', 
 	let reviews = 0;
 	function CompletionProbe() {
 		useModel('completion-test/probe');
+		const writeAnswer = useDataWriter('assistant-answer');
 		const [reviewed, setReviewed] = usePersistentState('reviewed', false);
 		useAgentFinish(({ append }) => {
-			if (reviewed) return;
+			if (reviewed) {
+				writeAnswer('Verified answer.');
+				return;
+			}
 			reviews++;
 			setReviewed(true);
 			append({ kind: 'signal', type: 'review', body: 'Review the answer before finishing.' });
@@ -47,13 +56,18 @@ test('finish continuations see committed hook state without another tool call', 
 		const handle = init(CompletionProbe, { id: 'completion-probe' });
 		const receipt = await handle.dispatch('Answer and verify.');
 		let answer: string | undefined;
-		await handle.read(receipt, {
+		const reply = await handle.read(receipt, {
 			onEvent: submissionEvents(receipt.submissionId, (chunk) => {
 				answer = assistantText(answer, chunk);
 			})
 		});
 		assert.equal(answer, 'Verified answer.');
 		assert.equal(reviews, 1);
+		assert.equal(
+			assistantFinalText(reply, 'Preliminary answer.Verified answer.'),
+			'Verified answer.'
+		);
+		assert.equal(assistantFinalText(await handle.read(receipt.submissionId)), 'Verified answer.');
 	} finally {
 		await runtime.stop();
 		await rm(directory, { recursive: true, force: true });

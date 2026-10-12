@@ -8,7 +8,7 @@ import {
 } from '$lib/assistant-results';
 import { chatHistory, newChat, resolveChat, touchChat } from '$lib/server/assistant-chats';
 import { assistantErrorMessage } from '$lib/server/assistant-error';
-import { submissionEvents } from '$lib/server/assistant-events';
+import { assistantFinalText, submissionEvents } from '$lib/server/assistant-events';
 import { assistantModelCatalog } from '$lib/server/assistant-models';
 import { authenticationForm, requireSameOrigin } from '$lib/server/auth';
 import { db, userHasModlistAccess } from '$lib/server/db';
@@ -195,7 +195,7 @@ function recoverPendingTurns() {
 							.update(assistantTurn)
 							.set({
 								state: 'done',
-								answer: reply.text,
+								answer: assistantFinalText(reply),
 								mods: JSON.stringify(cards),
 								results: JSON.stringify(results)
 							})
@@ -707,7 +707,7 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 								})
 							});
 							await resultWrites;
-							answer = result.text;
+							answer = assistantFinalText(result);
 						} finally {
 							controller.signal.removeEventListener('abort', abort);
 						}

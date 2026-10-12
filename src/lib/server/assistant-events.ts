@@ -20,3 +20,13 @@ export function assistantText(previous: string | undefined, chunk: ConversationS
 		return (previous ?? '') + chunk.delta;
 	return previous;
 }
+
+// Recovery and completion review can emit several drafts in one coalesced reply.
+export function assistantFinalText(
+	reply: { text: string; data: Record<string, unknown> },
+	streamed?: string
+) {
+	const answers = reply.data['assistant-answer'];
+	const accepted = Array.isArray(answers) ? answers.at(-1) : undefined;
+	return typeof accepted === 'string' ? accepted : (streamed ?? reply.text);
+}

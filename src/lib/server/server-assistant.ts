@@ -6,7 +6,7 @@ import {
 	factoryResultSchema
 } from '$lib/assistant-results';
 import { assistantErrorMessage } from './assistant-error';
-import { assistantText, submissionEvents } from './assistant-events';
+import { assistantFinalText, assistantText, submissionEvents } from './assistant-events';
 import { db } from './db';
 import { assistantChat, serverAssistantTurn as turnTable } from './db/schema';
 import { requireGamePlayer } from './game-player';
@@ -288,6 +288,7 @@ export async function finishServerTurn(
 					});
 			}
 			if (current) current.closed = true;
+			answer = assistantFinalText(result, answer);
 			await db
 				.update(turnTable)
 				.set({ state: 'done', answer: answer ?? result.text, results: JSON.stringify(results) })
