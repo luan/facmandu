@@ -65,6 +65,10 @@ export function serverAssistantTools(context: {
 		'factory-lookup-contracts',
 		{}
 	);
+	const lookupNames = Object.keys(lookupContracts);
+	const lookupName = lookupNames.length
+		? v.picklist(lookupNames)
+		: v.pipe(v.string(), v.maxLength(80));
 	const [buildSamples, setBuildSamples] = usePersistentState<Record<string, BuildOutputSample>>(
 		'build-output-samples',
 		{}
@@ -658,7 +662,7 @@ export function serverAssistantTools(context: {
 			queries: v.pipe(
 				v.array(
 					v.object({
-						tool: v.pipe(v.string(), v.maxLength(80)),
+						tool: lookupName,
 						args: v.record(v.string(), v.union([v.string(), v.number(), v.boolean()]))
 					})
 				),
@@ -714,7 +718,7 @@ export function serverAssistantTools(context: {
 		description:
 			'Run one documented read-only factory lookup. Pass a force name when required. Read the catalog first. For entity inspections, previously discovered unit_number can replace x/y; native inspection rechecks that exact ID, force, surface and observed position. Moved or missing targets require a new search. Set display=true only for evidence that helps the answer; routine evidence stays in Activity. Results are bounded; a truncated scan cannot prove absence.',
 		input: v.object({
-			tool: v.pipe(v.string(), v.maxLength(80)),
+			tool: lookupName,
 			display: v.optional(v.boolean(), false),
 			args: v.record(v.string(), v.union([v.string(), v.number(), v.boolean()]))
 		}),
