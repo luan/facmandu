@@ -143,7 +143,9 @@ local function route(a)
   local id=key(x,y,d,tunnel)
   if best[id] and best[id]<=g then return end
   local h=math.abs(x-a.target_x)+math.abs(y-a.target_y)
-  local node={x=x,y=y,d=d,tunnel=tunnel,g=g,h=h,f=g+h,id=id}
+  -- Favor progress over exhaustive shortest-path search within the tick budget.
+  -- A route may use more undergrounds; native safety checks still apply to every edge.
+  local node={x=x,y=y,d=d,tunnel=tunnel,g=g,h=h,f=g+h*1.2,id=id}
   best[id]=g;nodes[id]=node;parents[id]={id=parent,jump=jump};push(heap,node)
  end
  enqueue(a.x,a.y,start_entity and start_entity.direction or nil,false,0)
