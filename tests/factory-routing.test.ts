@@ -74,6 +74,12 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
  chart[key(1,0)]=true;chart[key(1,-1)]=true
  assert(route(args).found==false and reads>0)
  chart[key(2,0)]=true;assert(not pcall(route,args))
+ world={};blocked={};chart={}
+ local open=route{force='player',surface='nauvis',belt='belt',x=0.5,y=0.5,target_x=20.5,target_y=10.5,margin=1}
+ assert(open.found and #open.entities==31)
+ local turns=0
+ for i=2,#open.entities do if open.entities[i].direction~=open.entities[i-1].direction then turns=turns+1 end end
+ assert(turns==1,'An open connection needs one corner, not a zigzag')
  `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));

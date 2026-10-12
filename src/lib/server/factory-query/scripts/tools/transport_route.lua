@@ -141,7 +141,9 @@ local function route(a)
      local source_ok=(node.x==a.x and node.y==a.y and start_entity) or fits(node.tunnel and a.underground or a.belt,node.x,node.y,step.d)
      local at_end=x==a.target_x and y==a.target_y
      local target_ok=(at_end and end_entity and known(x,y) and (step.d+8)%16~=end_entity.direction) or fits(a.belt,x,y,step.d)
-     if source_ok and target_ok then enqueue(x,y,step.d,false,node.g+1,node.id) end
+     -- Prefer readable straight runs over equally short zigzags.
+     local turn=node.d~=nil and node.d~=step.d and 0.25 or 0
+     if source_ok and target_ok then enqueue(x,y,step.d,false,node.g+1+turn,node.id) end
      if underground and not node.tunnel and node.d==step.d and not (node.x==a.x and node.y==a.y and start_entity) and fits(a.underground,node.x,node.y,step.d) then
       local length=math.min(underground.max_underground_distance,32)
       for n=2,length do

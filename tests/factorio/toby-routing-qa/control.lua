@@ -17,7 +17,7 @@ script.on_nth_tick(30,function()
    for x=-16,112 do for y=-16,24 do tiles[#tiles+1]={name='grass-1',position={x=x,y=y}} end end
    surface.set_tiles(tiles)
    p.force.chart(surface,{{-16,-16},{112,24}});p.teleport({-10,-10})
-   for _,e in ipairs(surface.find_entities_filtered{area={{-1,-4},{12,15}},type={'tree','simple-entity'}}) do e.destroy() end
+   for _,e in ipairs(surface.find_entities_filtered{area={{-16,-16},{112,24}},type={'tree','simple-entity'}}) do e.destroy() end
    local source=assert(surface.create_entity{name='transport-belt',position={0.5,0.5},direction=4,force=p.force})
    local destination=assert(surface.create_entity{name='transport-belt',position={8.5,0.5},direction=4,force=p.force})
    for y=-3,3 do assert(surface.create_entity{name='stone-wall',position={4.5,y+0.5},force=p.force}) end
@@ -42,12 +42,17 @@ script.on_nth_tick(30,function()
    end
    assert(entrance and exit,'The wall crossing needs an underground pair')
    assert(entrance.underground_belt_neighbour==exit,'The native underground pair did not connect')
+   local open=route{force=p.force.name,surface=p.surface.name,belt='transport-belt',x=20.5,y=8.5,target_x=80.5,target_y=20.5,margin=1}
+   assert(open.found and #open.entities==73)
+   local turns=0
+   for i=2,#open.entities do if open.entities[i].direction~=open.entities[i-1].direction then turns=turns+1 end end
+   assert(turns==1,'The empty route should have one corner')
    assert(p.insert{name='iron-plate',count=2}==2)
    assert(p.remove_item{name='iron-plate',count=2}==2)
    assert(source.get_transport_line(1).insert_at_back{name='iron-plate',count=1})
    assert(source.get_transport_line(2).insert_at_back{name='iron-plate',count=1})
    storage.source=source;storage.destination=destination;storage.started=game.tick
-   storage.result={found=true,entities=#result.entities,visited=result.visited,undergroundPaired=true,sourcePreserved=true,destinationPreserved=true}
+   storage.result={found=true,entities=#result.entities,visited=result.visited,freeRouteEntities=#open.entities,freeRouteTurns=turns,undergroundPaired=true,sourcePreserved=true,destinationPreserved=true}
    storage.stage='flow'
   elseif storage.stage=='flow' and game.tick-storage.started>=480 then
    local e=storage.destination
