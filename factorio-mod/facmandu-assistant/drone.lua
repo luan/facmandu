@@ -18,6 +18,7 @@ function M.init()
 end
 function M.bind(player,entity)
  if not entity or not entity.valid or entity.name~=NAME or entity.force~=player.force then error('Select a Toby drone on your force',0) end
+ storage.drones=storage.drones or {}
  for index,state in pairs(storage.drones) do
   if state.entity.valid and state.entity==entity and index~=player.index then error('This Toby drone belongs to another player',0) end
  end

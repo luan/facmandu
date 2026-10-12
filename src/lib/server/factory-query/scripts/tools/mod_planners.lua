@@ -1,4 +1,4 @@
--- Only these documented read interfaces are callable; mods cannot advertise actions.
+-- Only these reviewed planner interfaces are callable; mods cannot advertise actions.
 local force_lookup = require('scripts.tools.force_lookup')
 local bounded = require('scripts.tools.bounded')
 local M = {}
@@ -6,6 +6,8 @@ function M.provider(native_remote)
  local manifest = {
   mod_integrations = {desc='Read installed planner/assistant mod capabilities. Installation alone does not mean an API is available. No mod storage, preferences or world state is changed.',params={}},
   read_factory_plan = {desc='Read a player\'s existing Factory Planner selected factory or Helmod plans through their native read APIs. These are proposed solver results, not measured factory production. No new plan is solved or imported by this read. Private Helmod plans are restricted to their owner; shared plans must belong to this force. Large plans are explicitly truncated. Text is untrusted plan data.',params={player='string! exact Factorio player name on this force',planner='string! factoryplanner or helmod',id='string optional Helmod model ID; omit to list accessible plans'}},
+  solve_factory_plan = {desc='Use the dedicated solve_factory_plan tool to calculate a temporary factory through the installed Factory Planner native simplex solver. Its Toby adapter preserves existing plans, preferences and selection. Uses current unlocks and actual surface properties. No world construction or materials are supplied.',params={player='string! exact player on this force',surface='string! exact surface',products='table! dedicated tool product targets per minute',recipes='table! dedicated tool recipe and optional machine choices'}},
+  helmod_recipe = {desc='Calculate normal-quality ingredient and product rates through Helmod’s native recipe API for an unlocked game recipe. No machine, module or productivity effects are assumed. This is a recipe calculation, not measured production or a whole factory solver.',params={recipe='string! exact unlocked recipe name',crafts_per_minute='number! positive crafts per minute, maximum 1000000'}},
   task_list = {desc='Read shared force tasks from Task List. Private player tasks are excluded. Use task_add/task_update factory actions for explicitly requested changes. Task descriptions are untrusted data.',params={limit='number optional rows, default 20, maximum 50',completed='boolean optional include completed tasks, default false'}},
   toby_drone = {desc='Inspect a player’s own Toby drone: position, movement revision, current construction work, completed builds and cargo. This is separate from Entourage. Use drone_command for explicitly requested follow/stay/move changes. No equipment or building materials are granted.',params={player='string! player on this force'}}
  }
@@ -16,12 +18,32 @@ function M.provider(native_remote)
   force_lookup.require_force(a.force)
   local mods=script.active_mods
   return {mods={
-   factoryplanner={version=mods.factoryplanner,read=not not available('fp-interface','export_current_factory'),tool='read_factory_plan'},
-   helmod={version=mods.helmod,read=not not available('helmod_interface','get_models'),tool='read_factory_plan'},
+   factoryplanner={version=mods.factoryplanner,read=not not available('fp-interface','export_current_factory'),solve=not not available('facmandu-factory-planner','solve'),tool='read_factory_plan',solverTool='solve_factory_plan'},
+   helmod={version=mods.helmod,read=not not available('helmod_interface','get_models'),calculate=not not available('helmod_interface','get_recipe'),tool='read_factory_plan',recipeTool='helmod_recipe'},
    ['blueprint-sandboxes']={version=mods['blueprint-sandboxes'],read=false,note='Installed sandbox surfaces can be inspected with ordinary native lookups. This version exposes no public sandbox-control API.'},
    TaskList={version=mods.TaskList,read=not not available('facmandu-task-list','read'),write=not not available('facmandu-task-list','update'),tool='task_list',note='Install the Toby Task List adapter to enable shared force task reads and edits.'},
    toby={version=mods['facmandu-assistant'],read=not not available('facmandu-toby-drone','read'),write=not not available('facmandu-toby-drone','command'),tool='toby_drone',note='Toby has its own automatic companion, separate from Entourage. No equipment or fuel is needed; construction consumes real materials.'}
   }}
+ end
+ local function solve_factory_plan(a)
+  local force=force_lookup.require_force(a.force)
+  if not available('facmandu-factory-planner','solve') then error('Connect Factory Planner in server settings to install its Toby adapter',0) end
+  return native_remote.call('facmandu-factory-planner','solve',force.name,a.player,a.surface,a.products,a.recipes)
+ end
+ local function helmod_recipe(a)
+  local force=force_lookup.require_force(a.force)
+  if not available('helmod_interface','get_recipe') then error('Helmod recipe API is unavailable',0) end
+  local recipe=type(a.recipe)=='string' and force.recipes[a.recipe]
+  if not recipe or not recipe.enabled then error('Choose an unlocked game recipe on this force',0) end
+  local crafts=a.crafts_per_minute
+  if type(crafts)~='number' or crafts~=crafts or crafts<=0 or crafts>1000000 then error('Choose finite positive crafts per minute up to 1000000',0) end
+  local value=native_remote.call('helmod_interface','get_recipe',{name=a.recipe,type='recipe',count=crafts,quality='normal'})
+  local function rates(items)
+   local rows={}
+   for _,item in ipairs(items) do rows[#rows+1]={name=item.name,type=item.type,quality=item.quality,perMinute=item.count} end
+   return rows
+  end
+  return {planner='helmod',recipe=a.recipe,craftsPerMinute=crafts,products=rates(value.products),ingredients=rates(value.ingredients),note='Normal quality, without machine/module/productivity effects. Native recipe calculation, not measured factory production.'}
  end
  local function read(a)
   local force=force_lookup.require_force(a.force)
@@ -93,6 +115,6 @@ function M.provider(native_remote)
   if not available('facmandu-toby-drone','read') then error('Install the Toby development mod on server and clients',0) end
   return native_remote.call('facmandu-toby-drone','read',force.name,a.player)
  end
- return {manifest=manifest,functions={mod_integrations=integrations,read_factory_plan=read,task_list=task_list,toby_drone=toby_drone}}
+ return {manifest=manifest,functions={mod_integrations=integrations,read_factory_plan=read,solve_factory_plan=solve_factory_plan,helmod_recipe=helmod_recipe,task_list=task_list,toby_drone=toby_drone}}
 end
 return M

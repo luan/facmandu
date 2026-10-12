@@ -107,11 +107,11 @@ export const actions: Actions = {
 				return fail(409, { message: 'Wait for this server’s mod update to finish' });
 			switch (operation) {
 				case 'installTobyIntegration': {
-					if (name !== 'TaskList') return fail(400, { message: 'Unknown Toby integration' });
+					if (name !== 'TaskList' && name !== 'factoryplanner')
+						return fail(400, { message: 'Unknown Toby integration' });
 					await installTobyIntegration(server, name);
 					return {
-						message:
-							'Task List connected to Toby. Install the matching client package before joining.'
+						message: `${name === 'TaskList' ? 'Task List' : 'Factory Planner'} connected to Toby. Install the matching client package before joining.`
 					};
 				}
 				case 'installToby': {

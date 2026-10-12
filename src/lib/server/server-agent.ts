@@ -457,6 +457,58 @@ export function serverAssistantTools(context: {
 				);
 			}
 		});
+	if (groups.has('planning'))
+		useTool({
+			name: 'solve_factory_plan',
+			description:
+				'Calculate a temporary production chain using the installed Factory Planner native simplex solver and its Toby adapter. Check mod_integrations.solve first; plan_production remains available without this adapter. Supply exact unlocked recipe choices, optional compatible machines and desired product rates per minute. Uses player defaults, unlocks and actual surface properties. Returns solver predictions, external inputs, machine counts and any solver error; does not build or measure the factory, import a plan, or change the player’s existing plans, preferences or selection. In-game calculations use the asking player’s own force and preferences.',
+			input: v.object({
+				force: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+				player: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+				surface: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+				products: v.pipe(
+					v.array(
+						v.object({
+							name: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+							type: v.picklist(['item', 'fluid']),
+							perMinute: v.pipe(
+								v.number(),
+								v.finite(),
+								v.minValue(Number.MIN_VALUE),
+								v.maxValue(1000000)
+							)
+						})
+					),
+					v.minLength(1),
+					v.maxLength(8)
+				),
+				recipes: v.pipe(
+					v.array(
+						v.object({
+							name: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+							machine: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(200)))
+						})
+					),
+					v.minLength(1),
+					v.maxLength(24)
+				)
+			}),
+			async run({ data }) {
+				const instance = await server();
+				const player = context.gamePlayer
+					? (await requireGamePlayer(instance, context.userId, context.gamePlayer)).player
+					: null;
+				return result(
+					'planner_calculation',
+					'Factory Planner calculation',
+					await factoryQuery(instance, {
+						op: 'call',
+						tool: 'solve_factory_plan',
+						args: { ...data, ...(player ? { force: player.force, player: player.name } : {}) }
+					})
+				);
+			}
+		});
 	if (!context.gamePlayer && groups.has('watches')) {
 		useTool({
 			name: 'list_factory_watches',
@@ -707,6 +759,8 @@ const lookupGroups: Record<string, string> = {
 	logistics_summary: 'logistics',
 	planning_recipes: 'planning',
 	read_factory_plan: 'planning',
+	solve_factory_plan: 'planning',
+	helmod_recipe: 'planning',
 	task_list: 'planning',
 	toby_drone: 'logistics'
 };

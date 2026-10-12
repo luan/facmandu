@@ -274,7 +274,7 @@ test('resource discovery groups charted neutral deposits and rejects unbounded s
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 });
 
-test('planner adapters use only documented reads and keep private plans and other forces out', () => {
+test('planner adapters keep private plans and other forces out', () => {
 	const state = lauxlib.luaL_newstate();
 	lualib.luaL_openlibs(state);
 	const root = resolve('src/lib/server/factory-query');
@@ -316,6 +316,35 @@ test('planner adapters use only documented reads and keep private plans and othe
  args.player='alice';args.planner='freeplay';assert(not pcall(tools.read_factory_plan,args))
  local unavailable=require('scripts.tools.mod_planners').provider(nil).functions
  args.planner='factoryplanner';assert(not pcall(unavailable.read_factory_plan,args))
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
+
+test('Helmod calculations use its native rates and reject unavailable recipes and invalid rates before calling it', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const root = resolve('src/lib/server/factory-query');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ package.path=${JSON.stringify(`${root}/?.lua;`)}..package.path
+ game={forces={player={name='player',recipes={glass={enabled=true},locked={enabled=false}}}}}
+ script={active_mods={helmod='2.3.4'}}
+ local calls=0
+ local native={interfaces={helmod_interface={get_recipe=true}},call=function(interface,method,input)
+  assert(interface=='helmod_interface' and method=='get_recipe' and input.name=='glass' and input.type=='recipe' and input.quality=='normal')
+  calls=calls+1
+  return {products={{name='glass',type='item',quality='normal',count=input.count*8}},ingredients={{name='sand',type='item',quality='normal',count=input.count*16}}}
+ end}
+ local tools=require('scripts.tools.mod_planners').provider(native).functions
+ assert(tools.mod_integrations{force='player'}.mods.helmod.calculate)
+ local result=tools.helmod_recipe{force='player',recipe='glass',crafts_per_minute=15}
+ assert(result.products[1].perMinute==120 and result.ingredients[1].perMinute==240 and calls==1)
+ for _,rate in ipairs({0,-1,1000001,math.huge,0/0}) do assert(not pcall(tools.helmod_recipe,{force='player',recipe='glass',crafts_per_minute=rate})) end
+ for _,recipe in ipairs({'locked','missing'}) do assert(not pcall(tools.helmod_recipe,{force='player',recipe=recipe,crafts_per_minute=15})) end
+ assert(calls==1)
+ assert(not pcall(tools.solve_factory_plan,{force='player'}))
  `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));

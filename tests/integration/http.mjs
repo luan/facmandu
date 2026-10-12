@@ -2777,6 +2777,69 @@ done
 	passed(
 		'Task List adapter retains upstream source and license, preserves the original package and save, and provides matching private client downloads'
 	);
+	const plannerOriginal = zipSync({
+		'factoryplanner_2.1.18/info.json': strToU8(
+			JSON.stringify({
+				name: 'factoryplanner',
+				version: '2.1.18',
+				factorio_version: '2.1',
+				dependencies: ['base >= 2.1.20']
+			})
+		),
+		'factoryplanner_2.1.18/control.lua': strToU8('-- Native Factory Planner control\n'),
+		'factoryplanner_2.1.18/LICENSE': strToU8('MIT planner fixture license retained')
+	});
+	await writeFile(join(machineDirs[1], 'mods/factoryplanner_2.1.18.zip'), plannerOriginal);
+	for (let attempt = 0; attempt < 2; attempt++) {
+		await action(`${secondPath}?/manage`, cookies.owner, {
+			operation: 'installTobyIntegration',
+			name: 'factoryplanner'
+		});
+	}
+	const plannerPatched = unzipSync(
+		await readFile(join(machineDirs[1], 'mods/factoryplanner_2.1.18.zip'))
+	);
+	assert.equal(
+		JSON.parse(Buffer.from(plannerPatched['factoryplanner_2.1.18/info.json']).toString()).version,
+		'2.1.18'
+	);
+	assert.equal(
+		Buffer.from(plannerPatched['factoryplanner_2.1.18/control.lua']).toString(),
+		"-- Native Factory Planner control\n\nrequire('facmandu-toby')\n"
+	);
+	assert.match(
+		Buffer.from(plannerPatched['factoryplanner_2.1.18/facmandu-toby.lua']).toString(),
+		/facmandu-factory-planner/
+	);
+	assert.equal(
+		Buffer.from(plannerPatched['factoryplanner_2.1.18/LICENSE']).toString(),
+		'MIT planner fixture license retained'
+	);
+	assert.deepEqual(
+		await readFile(join(machineDirs[1], 'downloads/integrations/factoryplanner_2.1.18.zip')),
+		Buffer.from(plannerOriginal)
+	);
+	const plannerDownload = await request(`${secondPath}/toby-integrations/factoryplanner`, {
+		cookie: cookies.owner
+	});
+	assert.equal(plannerDownload.status, 200);
+	assert.deepEqual(unzipSync(new Uint8Array(await plannerDownload.arrayBuffer())), plannerPatched);
+	assert.equal(
+		(await request(`${secondPath}/toby-integrations/factoryplanner`, { cookie: cookies.stranger }))
+			.status,
+		403
+	);
+	assert.equal(
+		(await request(`${secondPath}/toby-integrations/unknown`, { cookie: cookies.owner })).status,
+		404
+	);
+	assert.deepEqual(
+		await readFile(join(machineDirs[1], 'saves/context-world.zip')),
+		Buffer.from(preservedSave)
+	);
+	passed(
+		'Factory Planner private adapter retains the upstream version, source and license, installs idempotently and serves matching authorized client downloads without changing saves'
+	);
 	const gameSockets = new Set();
 	const gameReplies = [];
 	const panelUpdates = [];

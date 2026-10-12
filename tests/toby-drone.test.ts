@@ -88,7 +88,7 @@ test('automatic Toby constructs without equipment and conserves real materials o
  local player={name='alice',index=1,force=force,connected=true,character={},physical_surface=surface,physical_position={x=0,y=0},get_main_inventory=function() return stock end}
  game={tick=0,players={player},forces={force},get_player=function() return player end,create_inventory=function() return inventory(0) end}
  remote={add_interface=function(_,value) api=value end}
- local module=(function() ${source} end)();module.init();module.tick()
+ local module=(function() ${source} end)();module.tick()
  assert(spawned==1 and api.read('player','alice').mode=='follow' and not entity.grid)
  module.tick();assert(ghost.valid and built==0 and spawned==1)
  stock[1].count=2;ghost.quality.name='uncommon';module.tick();assert(stock[1].count==2 and ghost.valid)
