@@ -33,6 +33,8 @@ script.on_nth_tick(30,function()
    args.underground='underground-belt'
    local result=route(args)
    assert(result.found and result.start.unit_number==source.unit_number and result.destination.unit_number==destination.unit_number)
+   local waypoint=route{force=p.force.name,surface=p.surface.name,belt='transport-belt',underground='underground-belt',x=0.5,y=0.5,target_x=7.5,target_y=0.5,margin=1}
+   assert(waypoint.found and waypoint.entities[#waypoint.entities].name=='transport-belt','A route section must end after its underground exit')
    log('TOBY_ROUTING_PATH '..helpers.table_to_json(result.entities))
    local entrance,exit
    for _,spec in ipairs(result.entities) do
@@ -69,7 +71,7 @@ script.on_nth_tick(30,function()
    assert(source.get_transport_line(1).insert_at_back{name='iron-plate',count=1})
    assert(source.get_transport_line(2).insert_at_back{name='iron-plate',count=1})
    storage.source=source;storage.destination=destination;storage.started=game.tick
-   storage.result={found=true,entities=#result.entities,visited=result.visited,freeRouteEntities=#open.entities,freeRouteTurns=turns,plannedObstaclesAvoided=true,plannedEndpointsPreserved=true,undergroundPaired=true,sourcePreserved=true,destinationPreserved=true}
+   storage.result={found=true,entities=#result.entities,visited=result.visited,freeRouteEntities=#open.entities,freeRouteTurns=turns,surfaceSectionJoin=true,plannedObstaclesAvoided=true,plannedEndpointsPreserved=true,undergroundPaired=true,sourcePreserved=true,destinationPreserved=true}
    storage.stage='flow'
   elseif storage.stage=='flow' and game.tick-storage.started>=480 then
    local e=storage.destination
@@ -77,6 +79,25 @@ script.on_nth_tick(30,function()
    local right=e.get_transport_line(2).get_item_count('iron-plate')
    assert(left==1 and right==1,'Both routed lanes must deliver their test plate')
    storage.result.leftDelivered=left;storage.result.rightDelivered=right;storage.result.passed=true
+   if remote.interfaces['facmandu-assistant'] then
+    local inventory=game.create_inventory(1)
+    local stack=inventory[1];stack.set_stack{name='blueprint'}
+    stack.set_blueprint_entities{
+     {entity_number=1,name='transport-belt',position={1.5,0.5},direction=4},
+     {entity_number=2,name='underground-belt',position={2.5,0.5},direction=4,type='input'},
+     {entity_number=3,name='underground-belt',position={7.5,0.5},direction=4,type='output'}
+    }
+    stack.label='Native routing fixture'
+    local encoded=stack.export_stack();inventory.destroy()
+    remote.call('facmandu-assistant','open_player',p.index)
+    remote.call('facmandu-assistant','update_player',p.index,{
+     status='Isolated routing test passed',answer='',current='routing-qa',running=false,
+     chats={{id='routing-qa',title='Native routing test'}},
+     messages={{role='user',text='Check the underground crossing.'},{role='assistant',text='Both belt lanes delivered their test plate through the crossing. The source and destination belts were preserved.'}},
+     activity={{text='3 connection entities · Underground pair connected'},{text='Left lane: 1 delivered · Right lane: 1 delivered'},{text='Planned machines avoided · Route joins use surface belts'}},
+     blueprint=encoded,design='Native routing fixture',materials={{name='transport-belt',count=1},{name='underground-belt',count=2}}
+    })
+   end
    record(storage.result);storage.stage='done'
   end
  end)

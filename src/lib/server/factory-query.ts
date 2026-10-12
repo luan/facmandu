@@ -54,9 +54,11 @@ local functions = registry["ai-agent-bridge-tools"]
 
 export function factoryCommand(request: Record<string, unknown>) {
 	const encoded = JSON.stringify(request);
-	if (Buffer.byteLength(encoded) > 8192) throw new ServerError(400, 'Query is too large');
+	const routing = request.op === 'call' && request.tool === 'route_belt';
+	if (Buffer.byteLength(encoded) > (routing ? 128000 : 8192))
+		throw new ServerError(400, 'Query is too large');
 	// Route geometry goes directly into a saved draft, rather than model context.
-	const replyLimit = request.op === 'call' && request.tool === 'route_belt' ? 131072 : 65536;
+	const replyLimit = routing ? 131072 : 65536;
 	return `/silent-command local ok, result = pcall(function()
 ${bundle}
 local request = helpers.json_to_table(${luaString(encoded)})

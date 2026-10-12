@@ -187,8 +187,10 @@ local function route(a)
       local length=math.min(underground.max_underground_distance,32)
       for n=2,length do
        local tx,ty=node.x+step.dx*n,node.y+step.dy*n
-       local retained_end=end_entity and tx==a.target_x and ty==a.target_y
-       if not retained_end and fits(a.underground,tx,ty,step.d) and tunnel_clear(node.x,node.y,n,step) then enqueue(tx,ty,step.d,true,node.g+n+2,node.id,{d=step.d}) end
+       -- Keep section joins on surface belts. A following section must not
+       -- replace an underground exit when the shared endpoint is combined.
+       local at_destination=tx==a.target_x and ty==a.target_y
+       if not at_destination and fits(a.underground,tx,ty,step.d) and tunnel_clear(node.x,node.y,n,step) then enqueue(tx,ty,step.d,true,node.g+n+2,node.id,{d=step.d}) end
       end
      end
     end

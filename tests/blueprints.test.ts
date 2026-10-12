@@ -561,6 +561,38 @@ test('ordinary construction tiles round-trip and obey native placement and site 
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 });
 
+test('native export warns about missing, distant and competing underground partners', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ local force={name='player',recipes={{enabled=true,products={{type='item',name='underground-belt'}}}}}
+ local prototype={type='underground-belt',tile_width=1,tile_height=1,supports_direction=true,max_underground_distance=5,items_to_place_this={{name='underground-belt'}},has_flag=function() return false end}
+ prototypes={entity={['underground-belt']=prototype}}
+ game={forces={player=force},create_inventory=function()
+  local saved
+  return {{set_stack=function() end,set_blueprint_entities=function(entities) saved=entities end,
+   get_blueprint_entities=function() return saved end,get_blueprint_tiles=function() return {} end,
+   export_stack=function() return '0native' end,cost_to_build={}}}
+ end}
+ ${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
+ local function belt(x,kind) return {name='underground-belt',position={x=x,y=0.5},direction=4,type=kind} end
+ local request={operation='create',force='player',label='Connection',entities={belt(0.5,'input'),belt(5.5,'output')}}
+ assert(not blueprint(request).warnings)
+ request.entities={belt(0.5,'input')}
+ local missing=blueprint(request).warnings
+ assert(#missing==1 and missing[1]:find('entity 1') and missing[1]:find('paired output'))
+ request.entities={belt(0.5,'input'),belt(6.5,'output')}
+ assert(#blueprint(request).warnings==2)
+ request.entities={belt(0.5,'input'),belt(2.5,'input'),belt(5.5,'output')}
+ local competing=blueprint(request).warnings
+ assert(#competing==1 and competing[1]:find('entity 1'))
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
+
 test('foundation layouts use integer tiles and remain bound to the inspected layout', () => {
 	const foundation = {
 		force: 'player',

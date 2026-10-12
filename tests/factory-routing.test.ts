@@ -68,6 +68,8 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
  end
  assert(entrance and exit and entrance.direction==4 and exit.direction==4)
  assert(exit.position.x-entrance.position.x<=underground.max_underground_distance)
+ local waypoint=route{force='player',surface='nauvis',belt='belt',underground='underground',x=0.5,y=0.5,target_x=7.5,target_y=0.5,margin=1}
+ assert(waypoint.found and waypoint.entities[#waypoint.entities].name=='belt','A section join must retain its underground exit')
  assert(world[key(start.position.x,start.position.y)]==start and world[key(target.position.x,target.position.y)]==target)
  args.underground='fast';assert(not pcall(route,args));args.underground='underground'
  args.x=0.25;assert(not pcall(route,args));args.x=0.5

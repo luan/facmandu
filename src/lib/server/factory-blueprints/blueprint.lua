@@ -319,6 +319,28 @@ local function blueprint(request)
  table.sort(cost,function(a,b)return a.name<b.name end)
  if request.operation=='create' then
   local transfers,rows={},{}
+  local undergrounds,partners={},{}
+  local headings={[0]={0,-1},[4]={1,0},[8]={0,1},[12]={-1,0}}
+  for i,e in ipairs(entities) do if prototypes.entity[e.name].type=='underground-belt' then undergrounds[#undergrounds+1]=i end end
+  for _,i in ipairs(undergrounds) do
+   local e=entities[i]
+   local heading=headings[e.direction]
+   local sign=e.type=='input' and 1 or -1
+   local closest=math.huge
+   for _,j in ipairs(undergrounds) do
+    local other=entities[j]
+    if other.name==e.name and other.direction==e.direction and other.type~=e.type then
+     local dx,dy=other.position.x-e.position.x,other.position.y-e.position.y
+     local distance=(heading[1]*dx+heading[2]*dy)*sign
+     if heading[1]*dy-heading[2]*dx==0 and distance>0 and distance<=prototypes.entity[e.name].max_underground_distance and distance<closest then partners[i]=j;closest=distance end
+    end
+   end
+  end
+  for _,i in ipairs(undergrounds) do
+   if not partners[i] or partners[partners[i]]~=i then
+    warn('Underground belt entity '..i..' at ('..entities[i].position.x..', '..entities[i].position.y..') has no paired '..(entities[i].type=='input' and 'output' or 'input')..' in this design. Add its partner or verify the matching existing-world endpoint before placement.')
+   end
+  end
   local function target_at(position)
    for i,b in ipairs(boxes) do
     if position.x>=b.x1 and position.x<b.x2 and position.y>=b.y1 and position.y<b.y2 then return i end
