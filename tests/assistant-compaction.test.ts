@@ -29,6 +29,14 @@ test('long tool runs compact before the next model call and keep completed write
 			const tools = context.messages.some(
 				(message) => message.role === 'system' && message.toolsAdded?.length
 			);
+			assert.equal(
+				context.messages.some(
+					(message) =>
+						message.role === 'system' && message.toolsAdded?.some((tool) => tool.name === 'task')
+				),
+				false,
+				'A model with no declared delegates must not see an unusable task tool'
+			);
 			if (!tools) {
 				summaries++;
 				return fauxAssistantMessage(

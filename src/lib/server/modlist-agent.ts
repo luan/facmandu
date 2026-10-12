@@ -6,6 +6,7 @@ import {
 	observe,
 	setProvider,
 	useAgentFinish,
+	useAgentStart,
 	useDelivery,
 	useInitialData,
 	useModel,
@@ -33,6 +34,7 @@ import {
 } from '$lib/assistant-routing';
 import { recommendationPageSize } from '$lib/recommendations';
 import { listOwnerKey } from './accounts';
+import { unfinishedAssistantResponse } from './assistant-completion';
 import { type LoadedAssistantModel, loadAssistantModel } from './assistant-models';
 import { useAssistantToolGroups } from './assistant-tool-groups';
 import { type CodexModel, codexProvider } from './codex';
@@ -237,9 +239,38 @@ function ModlistAssistant() {
 		requestId: '',
 		attempts: 0
 	});
-	useAgentFinish(({ append }) => {
+	const [request, setRequest] = usePersistentState('completion-request', {
+		id: '',
+		messages: [] as string[]
+	});
+	useAgentStart(() => {
+		const id = requestId ?? '';
+		const messages = request.id === id ? request.messages : [];
+		if (!messages.includes(delivery.body))
+			setRequest({ id, messages: [...messages, delivery.body] });
+	});
+	useAgentFinish(async ({ append, response, signal }) => {
 		const last = runtimeState.lastTurn?.get(chatId);
-		if (!last || (last.text && last.finishReason !== 'length')) return;
+		if (!last) return;
+		if (last.text && last.finishReason !== 'length') {
+			if (
+				!(await unfinishedAssistantResponse(
+					context.userId,
+					request.messages,
+					last.text,
+					response.toolCalls,
+					signal
+				))
+			)
+				return;
+			append({
+				kind: 'signal',
+				type: 'completion-recovery',
+				attributes: { requestId: requestId ?? '' },
+				body: 'Your last answer reports unfinished work already requested by the user. This run is still active; continue that work now using the recorded results, without repeating completed writes or requesting the same authorization again. This reminder grants no new permission. Finish the connected design or authorized ghost layout and fix recoverable tool errors. If an actual external blocker prevents progress, state that concrete blocker. Do not promise background work after ending your response.'
+			});
+			return;
+		}
 		const attempts = recovery.requestId === (requestId ?? '') ? recovery.attempts : 0;
 		if (attempts >= 2) throw new Error('Model returned no complete answer after recovery');
 		setRecovery({ requestId: requestId ?? '', attempts: attempts + 1 });
@@ -519,7 +550,7 @@ type RuntimeState = {
 	progress?: Map<string, (event: object) => void>;
 	contextUsage?: Map<string, AssistantContextUsage>;
 	contextWrites?: Map<string, Promise<unknown>>;
-	lastTurn?: Map<string, { text: boolean; finishReason?: string }>;
+	lastTurn?: Map<string, { text: string; finishReason?: string }>;
 };
 // Vite SSR reloads do not preserve import.meta.hot.data. Flue owns one runtime per process.
 const processState = globalThis as typeof globalThis & { __facmanduAgent?: RuntimeState };
@@ -554,9 +585,10 @@ runtimeState.observeStop = observe((event, context) => {
 	if (event.type === 'turn' && event.purpose === 'agent' && !event.isError)
 		runtimeState.lastTurn?.set(context.id, {
 			text:
-				event.response.output?.content.some(
-					(part) => part.type === 'text' && Boolean(part.text.trim())
-				) ?? false,
+				event.response.output?.content
+					.flatMap((part) => (part.type === 'text' ? [part.text] : []))
+					.join('\n')
+					.trim() ?? '',
 			finishReason: event.response.finishReason
 		});
 	if (
