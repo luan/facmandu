@@ -20,6 +20,9 @@ script.on_init(function()
   if cb and ca.is_connected_to(cb) then ca.disconnect_from(cb) end
   local function endpoint(e) return {unitNumber=e.unit_number,name=e.type=='entity-ghost' and e.ghost_name or e.name,position=e.position,connectorId=id} end
   local request={operation='wire_inspect',force=force.name,surface=surface.name,source=endpoint(a),target=endpoint(b)}
+  local batch=action{operation='wire_inspect_batch',force=force.name,surface=surface.name,connections={{source=endpoint(a),target=endpoint(b)},{source=endpoint(a),target=endpoint(far)}}}
+  assert(#batch.connections==2 and batch.connections[1].ok and batch.connections[2].ok)
+  assert(batch.connections[1].result.tick==batch.tick and batch.connections[2].result.tick==batch.tick and not batch.connections[1].result.connected)
   local before=action(request)
   assert(not before.connected and not before.sourceGhost and before.targetGhost)
   request.operation='wire_connect';request.expectedTick=before.tick;request.expectedConnected=before.connected;request.expectedSourceGhost=before.sourceGhost;request.expectedTargetGhost=before.targetGhost
@@ -31,7 +34,7 @@ script.on_init(function()
   assert(not pcall(action,request),'Native reach must reject the distant connection')
   request.target=endpoint(b);request.force='enemy'
   assert(not pcall(action,request),'Other forces cannot use these endpoints')
-  return {passed=true,native=script.active_mods.base,connected_ghost=true,existing_wire_preserved=true,stale_connection_rejected=true,reach_enforced=true,force_enforced=true}
+  return {passed=true,batch_read_same_tick=true,native=script.active_mods.base,connected_ghost=true,existing_wire_preserved=true,stale_connection_rejected=true,reach_enforced=true,force_enforced=true}
  end)
  local result=ok and message or {passed=false,error=tostring(message)}
  log('TOBY_WIRE_QA '..helpers.table_to_json(result))

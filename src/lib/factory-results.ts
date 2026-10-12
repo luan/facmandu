@@ -1146,6 +1146,38 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 		].includes(tool)
 	) {
 		serverOperationView(view, tool, data);
+	} else if (
+		data.operation === 'wire_inspect_batch' ||
+		data.operation === 'wire_inspect' ||
+		data.operation === 'wire_connect'
+	) {
+		view.title = data.operation === 'wire_connect' ? 'Wire connection' : 'Wire inspection';
+		const connections =
+			data.operation === 'wire_inspect_batch'
+				? rows(data.connections)
+				: [{ index: 1, ok: true, result: data }];
+		const endpoint = (value: unknown) => {
+			const node = record(value),
+				at = record(node.position);
+			return `${humanName(node.name)} (${display(at.x)}, ${display(at.y)})`;
+		};
+		view.tables = [
+			{
+				title: 'Connections',
+				columns: ['Pair', 'From', 'To', 'Connected', 'Reach', 'Issue'],
+				rows: connections.map((row) => {
+					const value = record(row.result);
+					return [
+						display(row.index),
+						row.ok ? endpoint(value.source) : '—',
+						row.ok ? endpoint(value.target) : '—',
+						row.ok ? (value.connected ? 'Yes' : 'No') : 'Not checked',
+						typeof value.canReach === 'boolean' ? (value.canReach ? 'Yes' : 'No') : 'Not checked',
+						string(row.error)
+					];
+				})
+			}
+		];
 	} else if (data.operation === 'entities_edit' || data.operation === 'entities_inspect') {
 		view.title = data.operation === 'entities_edit' ? 'Construction edits' : 'Entity inspection';
 		view.tables = [

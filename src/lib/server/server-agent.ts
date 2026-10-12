@@ -179,10 +179,11 @@ export function serverAssistantTools(context: {
 		useTool({
 			name: 'factory_action_inspect',
 			description:
-				'Read current factory entity, construction ghost, wire connection, research, train or requester state and exact action preconditions. wire_inspect takes source/target unitNumber, name, position and connectorId with force/surface, and returns connection state, ghost state and tick. Connector IDs come from blueprint catalog or inspect_transport. Use the operation and request fields declared in args. Never invent expected state.',
+				'Read current factory entity, construction ghost, wire connection, research, train or requester state and exact action preconditions. wire_inspect takes source/target unitNumber, name, position and connectorId with force/surface, and returns connection state, ghost state and tick. For independent reads use wire_inspect_batch with force, surface and up to 16 connections=[{source,target}]; it returns indexed snapshots from one game tick, with per-pair errors. Connector IDs come from blueprint catalog or inspect_transport. Use the operation and request fields declared in args. Never invent expected state.',
 			input: v.object({
 				operation: v.picklist([
 					'wire_inspect',
+					'wire_inspect_batch',
 					'entity_inspect',
 					'entities_inspect',
 					'ghost_inspect',

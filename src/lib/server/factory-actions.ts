@@ -85,6 +85,15 @@ const edits = z
 export const factoryActionInspectSchema = z.discriminatedUnion('operation', [
 	wire.extend({ operation: z.literal('wire_inspect') }),
 	z.object({
+		operation: z.literal('wire_inspect_batch'),
+		force: label,
+		surface: label,
+		connections: z
+			.array(wire.pick({ source: true, target: true }).strict())
+			.min(1)
+			.max(16)
+	}),
+	z.object({
 		operation: z.literal('entities_inspect'),
 		force: label,
 		surface: label,
@@ -188,6 +197,8 @@ export const factoryActionInspectJsonSchema = z.toJSONSchema(factoryActionInspec
 });
 
 export const factoryActionInspectManifest = {
+	wire_inspect_batch:
+		'Inspect up to 16 independent source/target connector pairs on one force and surface in a single game tick. Returns indexed connection snapshots and per-pair errors; never creates connectors or changes wiring.',
 	wire_inspect:
 		'Inspect an exact pair of same-force stationary entities or ghosts and native wire connector IDs. Returns connection state, ghost identities and tick for wire_connect. Does not create connectors or change wiring.',
 	entities_inspect:
@@ -325,7 +336,7 @@ const ghostResultSchema = z.discriminatedUnion('operation', [
 		after: z.object({ cancelled: z.literal(true) })
 	})
 ]);
-const wireResultSchema = z.object({
+const wireResultSchema = wire.extend({
 	operation: z.enum(['wire_inspect', 'wire_connect']),
 	tick: z.number().int().nonnegative(),
 	sourceGhost: z.boolean(),
@@ -351,6 +362,34 @@ async function execute(
 	const reply = replySchema.safeParse(decoded);
 	if (!reply.success) throw new ServerError(502, 'The server did not return a valid action result');
 	if (!reply.data.ok) throw new ServerError(409, reply.data.error);
+	if (input.operation === 'wire_inspect_batch') {
+		const parsed = z
+			.object({
+				operation: z.literal('wire_inspect_batch'),
+				tick: z.number().int().nonnegative(),
+				connections: z
+					.array(
+						z.discriminatedUnion('ok', [
+							z.object({
+								index: index,
+								ok: z.literal(true),
+								result: wireResultSchema.extend({ operation: z.literal('wire_inspect') })
+							}),
+							z.object({ index: index, ok: z.literal(false), error: z.string().max(2000) })
+						])
+					)
+					.length(input.connections.length)
+			})
+			.safeParse(reply.data.result);
+		if (
+			!parsed.success ||
+			parsed.data.connections.some(
+				(row, i) => row.index !== i + 1 || (row.ok && row.result.tick !== parsed.data.tick)
+			)
+		)
+			throw new ServerError(502, 'The server returned an invalid wire batch');
+		return parsed.data;
+	}
 	if (input.operation.startsWith('wire_')) {
 		const result = wireResultSchema.safeParse(reply.data.result);
 		if (!result.success) throw new ServerError(502, 'The server returned an invalid wire result');

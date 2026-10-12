@@ -505,6 +505,28 @@ test('routine reads stay in activity while requested displays and pending review
 	});
 });
 
+test('wire observations identify their endpoints and keep failed reads distinct from disconnections', () => {
+	const connection = {
+		operation: 'wire_inspect',
+		source: { name: 'medium-electric-pole', position: { x: 0.5, y: 0.5 } },
+		target: { name: 'medium-electric-pole', position: { x: 7.5, y: 0.5 } },
+		connected: false,
+		canReach: true
+	};
+	const wires = view('factory_action_inspect', {
+		operation: 'wire_inspect_batch',
+		connections: [
+			{ index: 1, ok: true, result: connection },
+			{ index: 2, ok: false, error: 'Entity changed; inspect it again' }
+		]
+	});
+	assert.deepEqual(wires.tables[0]?.rows, [
+		['1', 'Medium electric pole (0.5, 0.5)', 'Medium electric pole (7.5, 0.5)', 'No', 'Yes', ''],
+		['2', '—', '—', 'Not checked', 'Not checked', 'Entity changed; inspect it again']
+	]);
+	assert.equal(view('factory_action_inspect', connection).tables[0]?.rows[0]?.[3], 'No');
+});
+
 test('blueprint placement reports incomplete work and actionable blocked coordinates', () => {
 	const placed = view('blueprint_operation', {
 		operation: 'place_blueprint',

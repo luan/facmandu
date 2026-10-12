@@ -365,7 +365,7 @@ local function wire_action(request)
  end
  local can_reach
  if source and target then can_reach=source.can_wire_reach(target) end
- return {operation=request.operation,tick=game.tick,sourceGhost=source_ghost,targetGhost=target_ghost,connected=connected,canReach=can_reach}
+ return {operation=request.operation,force=request.force,surface=request.surface,source=request.source,target=request.target,tick=game.tick,sourceGhost=source_ghost,targetGhost=target_ghost,connected=connected,canReach=can_reach}
 end
 local function entity_edits(request)
  local entities={}
@@ -410,6 +410,14 @@ end
 
 local function action(request)
   local operation = request.operation
+  if operation=='wire_inspect_batch' then
+    local rows={}
+    for i,pair in ipairs(request.connections) do
+      local ok,value=pcall(wire_action,{operation='wire_inspect',force=request.force,surface=request.surface,source=pair.source,target=pair.target})
+      rows[#rows+1]={index=i,ok=ok,result=ok and value or nil,error=not ok and tostring(value):match('^[^\n]*') or nil}
+    end
+    return {operation=operation,tick=game.tick,connections=rows}
+  end
   if operation=='wire_inspect' or operation=='wire_connect' then return wire_action(request) end
   if operation=='drone_command' then
     if request.player and request.player.name~=request.owner then fail('You can command only your own Toby drone') end

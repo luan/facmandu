@@ -61,6 +61,39 @@ test('inspection cannot accept write operations', () => {
 	);
 });
 
+test('wire batches accept only bounded read pairs and cannot request mutations', () => {
+	const endpoint = {
+		unitNumber: 1,
+		name: 'medium-electric-pole',
+		position: { x: 0.5, y: 0.5 },
+		connectorId: 5
+	};
+	const pair = {
+		source: endpoint,
+		target: { ...endpoint, unitNumber: 2, position: { x: 7.5, y: 0.5 } }
+	};
+	const batch = {
+		operation: 'wire_inspect_batch',
+		force: 'player',
+		surface: 'nauvis',
+		connections: [pair]
+	};
+	assert.equal(factoryActionInspectSchema.safeParse(batch).success, true);
+	assert.equal(factoryActionSchema.safeParse(batch).success, false);
+	assert.equal(factoryActionInspectSchema.safeParse({ ...batch, connections: [] }).success, false);
+	assert.equal(
+		factoryActionInspectSchema.safeParse({ ...batch, connections: Array(17).fill(pair) }).success,
+		false
+	);
+	assert.equal(
+		factoryActionInspectSchema.safeParse({
+			...batch,
+			connections: [{ ...pair, operation: 'wire_connect' }]
+		}).success,
+		false
+	);
+});
+
 test('wire connections require exact endpoints and fresh observed connection state', () => {
 	const endpoint = {
 		unitNumber: 12,
@@ -134,6 +167,10 @@ test('native wiring preserves other connections and rejects stale, foreign or un
   if q.position.x==a.position.x then return {a} else return {b} end
  end}}}
  local request={operation='wire_inspect',force='player',surface='nauvis',source={unitNumber=1,name='pole',position=a.position,connectorId=5},target={unitNumber=2,name='pole',position=b.position,connectorId=5}}
+ local invalid={unitNumber=99,name='pole',position=b.position,connectorId=5}
+ local batch=action({operation='wire_inspect_batch',force='player',surface='nauvis',connections={{source=request.source,target=request.target},{source=request.source,target=invalid}}})
+ assert(batch.tick==100 and #batch.connections==2 and batch.connections[1].ok and not batch.connections[2].ok)
+ assert(batch.connections[1].result.tick==batch.tick and not batch.connections[1].result.connected and made==0 and writes==0)
  local snapshot=action(request)
  assert(not snapshot.connected and not snapshot.sourceGhost and snapshot.targetGhost and made==0 and writes==0)
  request.operation='wire_connect';request.expectedTick=snapshot.tick;request.expectedConnected=snapshot.connected;request.expectedSourceGhost=snapshot.sourceGhost;request.expectedTargetGhost=snapshot.targetGhost
