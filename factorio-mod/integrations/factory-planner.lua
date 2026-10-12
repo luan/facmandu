@@ -28,6 +28,13 @@ local function rates(items)
  end
  return rows
 end
+local function unlocked_machine(force,line,machine,items)
+ if not machine or not line:is_machine_compatible(machine) or not lib.availability.is_machine_available(force,machine) then return false end
+ local prototype=prototypes.entity[machine.name]
+ if not prototype then return false end
+ for _,item in pairs(prototype.items_to_place_this or {}) do if items[item.name] then return true end end
+ return false
+end
 local function solve(force_name,player_name,surface_name,products,recipes)
  local player=game.get_player(label(player_name))
  if not player or player.force.name~=force_name then error('Choose a player on the asking force',0) end
@@ -61,6 +68,12 @@ local function solve(force_name,player_name,surface_name,products,recipes)
   if row.machine then label(row.machine) end
  end
  local first_id=storage.next_object_ID
+ -- Match native ghost placement: a machine must have an item produced by an
+ -- enabled recipe. Planner visibility alone includes future machines.
+ local items={}
+ for _,recipe in pairs(player.force.recipes) do
+  if recipe.enabled then for _,product in pairs(recipe.products) do if product.type=='item' then items[product.name]=true end end end
+ end
  local selected=state.context.object_id
  local factory
  local ok,result=pcall(function()
@@ -78,9 +91,20 @@ local function solve(force_name,player_name,surface_name,products,recipes)
    local line=Line.init(recipe_protos[i]);factory.top_floor:insert(line)
    if row.machine then
     local machine=prototyper.util.find('machines',row.machine,line.recipe.proto.combined_category)
-    if not machine or not line:is_machine_compatible(machine) or not lib.availability.is_machine_available(player.force,machine) then error('Choose an unlocked compatible machine for '..row.name,0) end
+    if not unlocked_machine(player.force,line,machine,items) then error('Choose an unlocked compatible machine for '..row.name,0) end
     line:change_machine_to_proto(player,machine)
-   elseif not line:change_machine_to_default(player) then error('No unlocked compatible machine for '..row.name,0) end
+   else
+    local found=line:change_machine_to_default(player)
+    if not found or not unlocked_machine(player.force,line,line.machine.proto,items) then
+     local available
+     for _,machine in ipairs(prototyper.util.find('machines',nil,line.recipe.proto.combined_category).members) do
+      if unlocked_machine(player.force,line,machine,items) then available=machine end
+     end
+     if not available then error('No unlocked compatible machine for '..row.name,0) end
+     line:change_machine_to_proto(player,available)
+    end
+   end
+   if not player.force.is_quality_unlocked(line.machine.quality_proto.name) then line.machine.quality_proto=defaults.get_fallback('qualities').proto end
    line:refresh_line(player)
   end
   -- Selecting only the temporary floor keeps solver cache changes out of the
