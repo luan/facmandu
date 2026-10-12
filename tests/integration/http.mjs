@@ -2658,7 +2658,7 @@ done
 	const tobyFiles = unzipSync(new Uint8Array(await tobyZip.arrayBuffer()));
 	assert.equal(
 		JSON.parse(Buffer.from(tobyFiles['facmandu-assistant_0.0.1/info.json']).toString()).title,
-		'Toby · Development'
+		'[WIP] Toby'
 	);
 	assert.ok(
 		Buffer.from(tobyFiles['facmandu-assistant_0.0.1/control.lua'])
