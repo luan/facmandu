@@ -5,17 +5,58 @@ local M = {}
 M.manifest = {
  inspect_transport = {
   desc = 'Inspect one built belt, inserter, collector, combinator, chest, pipe, tank or pump at exact coordinates: status, direction, item counts/contents, individual belt line counts, inserter pickup/drop targets, collector/combinator/inserter native blueprint_settings (relative pickup/drop vectors, filters and control behavior), wire connections and the first fluid storage’s connections. Optional item accepts an item or fluid name; item counts use normal quality and fluid counts use native stored amounts. Belt counts are a snapshot, not measured throughput; sample delivered items over game ticks to verify a full belt. Fluid segment amounts are shared network stock, not independent stock at every pipe. Read-only; ghosts are not built entities.',
-  params = {surface='string! surface name or index',x='number! map x',y='number! map y',name='string entity prototype name',unit_number='integer unit number to disambiguate',item='string exact item or fluid prototype name to count'}
+  params = {surface='string! surface name or index',x='number! map x',y='number! map y',name='string entity prototype name',unit_number='integer unit number to disambiguate',item='string exact item or fluid prototype name to count',trace_limit='integer 1..256: trace downstream built belts, underground pairs and splitter branches at one tick; stops at force/chart boundaries. Topology is not throughput or lane/filter reachability'}
  }
 }
 local supported={['asteroid-collector']=true,['constant-combinator']=true,['decider-combinator']=true,['transport-belt']=true,['underground-belt']=true,splitter=true,inserter=true,container=true,['logistic-container']=true,pipe=true,['pipe-to-ground']=true,['storage-tank']=true,pump=true}
 local function reference(e)
  if e and e.valid then return {name=e.name,unit_number=e.unit_number,position=e.position} end
 end
+local function is_belt(e)
+ return e.type=='transport-belt' or e.type=='underground-belt' or e.type=='splitter'
+end
+local function trace_belts(start,surface,force,limit)
+ local entities,nodes,indices={start},{},{[start.unit_number]=1}
+ local truncated=false
+ local cursor=1
+ while cursor<=#entities do
+  local e=entities[cursor]
+  local row=reference(e);row.direction=e.direction;row.outputs={}
+  if e.type=='splitter' then row.filter=e.splitter_filter;row.input_priority=e.splitter_input_priority;row.output_priority=e.splitter_output_priority end
+  local outputs={}
+  for _,next in pairs(e.belt_neighbours.outputs) do outputs[#outputs+1]=next end
+  if e.type=='underground-belt' and e.belt_to_ground_type=='input' then
+   local next=e.underground_belt_neighbour
+   if next then outputs[#outputs+1]=next else row.unpaired=true end
+  end
+  table.sort(outputs,function(a,b) return a.unit_number<b.unit_number end)
+  local linked={}
+  for _,next in ipairs(outputs) do
+   if next.valid and is_belt(next) then
+    if next.force~=force or not force.is_chunk_charted(surface,{x=math.floor(next.position.x/32),y=math.floor(next.position.y/32)}) then
+     row.boundary=true
+    else
+     local index=indices[next.unit_number]
+     if not index then
+      if #entities<limit then
+       entities[#entities+1]=next;index=#entities;indices[next.unit_number]=index
+      else row.truncated=true;truncated=true end
+     end
+     if index and not linked[index] then row.outputs[#row.outputs+1]=index;linked[index]=true end
+    end
+   end
+  end
+  nodes[cursor]=row;cursor=cursor+1
+ end
+ return {tick=game.tick,nodes=nodes,truncated=truncated,note='Built belt topology only. Splitter filters, lane choices, inserter transfers and measured delivery need separate inspection.'}
+end
 local function inspect(a)
+ if a.trace_limit~=nil and (type(a.trace_limit)~='number' or a.trace_limit~=math.floor(a.trace_limit) or a.trace_limit<1 or a.trace_limit>256) then error('trace_limit must be an integer from 1 to 256',0) end
  local e,miss,surface,force=target.find(a)
  if not e then return miss end
  if not supported[e.type] then return {found=false,reason='Not a supported transport entity; use inspect_machine for crafting machines'} end
+ if a.trace_limit and not is_belt(e) then error('trace_limit requires a built belt or splitter',0) end
+ if a.trace_limit and not force.is_chunk_charted(surface,{x=math.floor(e.position.x/32),y=math.floor(e.position.y/32)}) then error('Belt trace starts outside charted force territory',0) end
  if a.item~=nil and (type(a.item)~='string' or not (prototypes.item[a.item] or prototypes.fluid[a.item])) then error('Unknown item or fluid prototype',0) end
  local status
  for name,id in pairs(defines.entity_status) do if id==e.status then status=name;break end end
@@ -95,6 +136,7 @@ local function inspect(a)
    row.inputs[#row.inputs+1]=input
   end
   for _,entity in pairs(neighbours.outputs) do row.outputs[#row.outputs+1]=reference(entity) end
+  if a.trace_limit then row.belt_trace=trace_belts(e,surface,force,a.trace_limit) end
  else
   row.stored_fluids=e.get_fluid_contents()
   -- 2.1 exposes native entity fluid connections; 2.0 retains stored-fluid evidence only.

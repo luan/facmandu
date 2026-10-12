@@ -3,6 +3,55 @@ import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { lauxlib, lua, lualib, to_luastring } from 'fengari';
 
+test('belt tracing follows native underground pairs and branches without crossing scope or exceeding its bound', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const root = resolve('src/lib/server/factory-query');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ package.path=${JSON.stringify(`${root}/?.lua;`)}..package.path
+ defines={entity_status={working=1}}
+ local force={name='player',is_chunk_charted=function(_,chunk) return chunk.x<2 end}
+ local line={get_item_count=function() return 0 end,get_contents=function() return {} end}
+ local function belt(id,x,kind)
+  return {valid=true,name='belt',type=kind or 'transport-belt',force=force,unit_number=id,
+   direction=4,status=1,position={x=x,y=0.5},prototype={belt_speed=0.03125},
+   belt_neighbours={inputs={},outputs={}},get_item_count=function() return 0 end,
+   get_max_transport_line_index=function() return 2 end,get_transport_line=function() return line end}
+ end
+ local start= belt(1,0.5,'underground-belt');start.belt_to_ground_type='input'
+ local exit=belt(2,4.5,'underground-belt');exit.belt_to_ground_type='output'
+ local split=belt(3,5.5,'splitter');split.splitter_filter='coal';split.splitter_output_priority='left'
+ local left,right=belt(4,6.5),belt(5,7.5)
+ local foreign,hidden=belt(6,8.5),belt(7,64.5);foreign.force={name='enemy'}
+ start.underground_belt_neighbour=exit;exit.belt_neighbours.outputs={split}
+ split.belt_neighbours.outputs={left,right};left.belt_neighbours.outputs={start,foreign}
+ right.belt_neighbours.outputs={hidden}
+ prototypes={entity={belt={}},item={},fluid={}}
+ local surface={name='nauvis',valid=true,find_entities_filtered=function() return {start} end}
+ game={tick=120,forces={player=force},surfaces={nauvis=surface}}
+ local inspect=require('scripts.tools.transport_diagnostics').functions.inspect_transport
+ local args={force='player',surface='nauvis',x=0.5,y=0.5,name='belt'}
+ assert(not inspect(args).belt_trace)
+ args.trace_limit=16
+ local trace=inspect(args).belt_trace
+ assert(trace.tick==120 and #trace.nodes==5 and not trace.truncated)
+ assert(trace.nodes[1].outputs[1]==2 and trace.nodes[2].outputs[1]==3)
+ assert(#trace.nodes[3].outputs==2 and trace.nodes[3].filter=='coal')
+ assert(trace.nodes[4].outputs[1]==1 and trace.nodes[4].boundary)
+ assert(trace.nodes[5].boundary and #trace.nodes[5].outputs==0)
+ args.trace_limit=2;trace=inspect(args).belt_trace
+ assert(#trace.nodes==2 and trace.truncated and trace.nodes[2].truncated)
+ start.underground_belt_neighbour=nil;args.trace_limit=16;trace=inspect(args).belt_trace
+ assert(#trace.nodes==1 and trace.nodes[1].unpaired)
+ for _,limit in ipairs({0,257,1.5,0/0,math.huge,'2'}) do args.trace_limit=limit;assert(not pcall(inspect,args)) end
+ args.trace_limit=16;start.position.x=64.5;args.x=64.5;assert(not pcall(inspect,args))
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
+
 test('native belt inspection distinguishes a two-lane turn from one-lane side-loading', () => {
 	const state = lauxlib.luaL_newstate();
 	lualib.luaL_openlibs(state);
