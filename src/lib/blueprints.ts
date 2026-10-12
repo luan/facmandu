@@ -383,7 +383,9 @@ export const blueprintArtifactSchema = z
 			)
 			.max(MAX_BLUEPRINT_ENTITIES)
 			.default([]),
-		cost: z.array(z.object({ name: z.string(), count: z.number().positive() }))
+		cost: z.array(
+			z.object({ name: z.string(), count: z.number().positive(), quality: z.string().optional() })
+		)
 	})
 	.refine(
 		(input) => input.entities.length + input.tiles.length > 0,

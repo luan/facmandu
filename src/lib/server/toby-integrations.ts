@@ -2,6 +2,7 @@ import { constants } from 'node:fs';
 import { copyFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { unzipSync, zipSync } from 'fflate';
+import blueprintSandboxes from '../../../factorio-mod/integrations/blueprint-sandboxes.lua?raw';
 import factoryPlanner from '../../../factorio-mod/integrations/factory-planner.lua?raw';
 import taskList from '../../../factorio-mod/integrations/task-list.lua?raw';
 import type { ManagedServer } from './db/schema';
@@ -10,6 +11,12 @@ import { installMod, serverModInventory, toggleMod } from './server-mods';
 import { requireStopped } from './server-process';
 
 export const tobyIntegrations = {
+	'blueprint-sandboxes': {
+		from: '3.3.0',
+		version: '3.3.0',
+		source: blueprintSandboxes,
+		note: 'Read and export existing owned sandbox designs without entering, equipping or creating labs'
+	},
 	TaskList: { from: '0.6.0', version: '0.6.1', source: taskList, note: 'Shared force task APIs' },
 	factoryplanner: {
 		from: '2.1.18',

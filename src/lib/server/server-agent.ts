@@ -321,6 +321,58 @@ export function serverAssistantTools(context: {
 			}
 		});
 		useTool({
+			name: 'sandbox_blueprint',
+			description:
+				'Export a bounded existing player or force lab from Blueprint Sandboxes through its Toby adapter. Read read_sandbox first. Preserves the native import string, including filters, wires, modules and item quality. Displays a copyable sprite design preview without entering or creating a sandbox or changing player state. Sandbox conditions do not validate real-world construction, inputs, power or throughput. In-game requests can read only the asking player’s labs.',
+			input: v.object({
+				force: v.pipe(v.string(), v.minLength(1), v.maxLength(100)),
+				player: v.pipe(v.string(), v.minLength(1), v.maxLength(100)),
+				kind: v.picklist(['player', 'force']),
+				x: v.pipe(v.number(), v.minValue(-1000000), v.maxValue(1000000)),
+				y: v.pipe(v.number(), v.minValue(-1000000), v.maxValue(1000000)),
+				radius: v.pipe(v.number(), v.minValue(1), v.maxValue(32))
+			}),
+			async run({ data }) {
+				const instance = await server();
+				if (context.gamePlayer) {
+					const { player } = await requireGamePlayer(instance, context.userId, context.gamePlayer);
+					if (data.player !== player.name || data.force !== player.force)
+						throw new ServerError(403, 'Read your own sandbox session');
+				}
+				const artifact = blueprintArtifactSchema.parse(
+					await factoryQuery(instance, { op: 'call', tool: 'export_sandbox', args: data })
+				);
+				let rendered = artifact;
+				try {
+					rendered = {
+						...artifact,
+						image: await renderFactoryBlueprint(instance, artifact.blueprint, 2000)
+					};
+				} catch (cause) {
+					if (!(cause instanceof ServerError)) throw cause;
+					rendered =
+						cause instanceof FactoryImagePending
+							? { ...artifact, image: { id: cause.imageId, pending: true } }
+							: { ...artifact, renderError: cause.message };
+				}
+				writeArtifact({
+					...result('blueprint_operation', 'Sandbox blueprint', rendered).output,
+					display: true
+				});
+				return {
+					output: {
+						label: artifact.label,
+						entities: artifact.entities.length,
+						tiles: artifact.tiles.length,
+						cost: artifact.cost,
+						warnings: artifact.warnings,
+						placed: false,
+						image: rendered.image
+					}
+				};
+			}
+		});
+		useTool({
 			name: 'blueprint_operation',
 			description:
 				'Design an importable native Factorio blueprint or place construction ghosts. operation=catalog inspects named live prototypes and supplies native blueprint_settings_example for collectors and combinators; create validates an explicit layout and exports a rich blueprint preview without changing the world. Its inserter_transfers report planned pickup/drop points, 1-based entity targets and local belt side/lane capacity; missing targets may need existing-world connections. These geometry facts do not verify curved-belt routing or production. Fix unpaired underground warnings, or verify the actual matching external endpoint before placement. Set display=false for intermediate drafts: export and validate without waiting for sprite rendering. For a design or build request, display the final connected blueprint once by its saved designId before answering; include its required construction tiles. inspect checks exact force/surface/position/layout and reports active robot coverage and exact normal-quality construction materials in provider/storage chests. ready means collision-free placement only; construction.single_network_ready checks whether one network covers and stocks the whole layout with available robots. power reports uncovered and unconnected consumer indices using bounded native pole coverage and cable reach to an existing powered network or planned generator. Repair reported gaps before placement; checked=false means incomplete evidence. It does not verify actual wires, generator inputs, headroom or production. Before constructing a working module, verify those connections and report material shortages rather than placing an isolated module. If native validation fails, its error supplies the saved unvalidated designId and offending entity indices; patch or remove those exact indices by reference. A failed draft is not an exported blueprint. After create returns designId, use that ID with force, surface and position for inspect/place instead of resending entities. To revise a draft, create with designId and entityChanges [{index, changes}], removedEntityIndices, or addedEntities / addedEntityRows. Patch/removal indices refer to the original draft; retained wires are remapped, and wires to removed entities are removed. New entities use final array indices. Omitted settings are preserved. Extend rows by reference instead of retransmitting the full layout. The full blueprint is streamed to the player separately from its compact model result. place requires expectedTick and expectedDesign from a successful fresh inspection AND an explicit user placement request. It rechecks collisions, explored terrain, unlocks and player permissions. It never supplies free materials, deconstructs obstacles or builds completed machines. Supports up to 1000 item-placeable, blueprintable entities from the current game and mods, plus up to 1024 item-placeable, blueprintable tiles, including landfill, concrete and space-platform foundations. Native tile placement rules still apply. There is no entity-type whitelist; catalog checks native blueprintability. create may include locked machines or recipes and reports unlock warnings; inspect/place still require unlocks. For new platform area, inspect/place foundation ghosts first, then inspect/place the machines above those owned foundation ghosts. The whole footprint must have built foundations or owned foundation ghosts; ordinary native blueprint collision checks still apply. Missing hub stock delays construction, not these ghost requests. Platforms construct from hub stock without robots. Entity settings support native filters, use_filters/filter_mode, override_stack_size, circuit control_behavior, circuit wires and custom inserter pickup_position/drop_position vectors relative to the inserter center. Collector static filters use chunk-filter; circuit filters use control_behavior.circuit_set_filters, not the runtime set_filter property. Constant combinators use control_behavior.sections.sections with section filters, not the obsolete control_behavior.filters. Read catalog examples before encoding circuit controls. Read inspect_transport before copying an existing inserter; preserve its filters and vectors. wires is a blueprint-level array of tuples using 1-based entity array indices and the catalog’s wire_connector_ids; entity-level wires are also accepted. Factorio validates and round-trips these settings; custom vectors must be supported by the current prototype and obey the catalog’s custom_vector_max_distance when reported. Do not stretch inserters to replace a belt route. Modules and train schedules still need explicit support; do not silently discard them. operation=check is read-only: use designId, force, surface, position and item after placement to check actual construction, wrong recipes/directions, machine states and terminal-belt occupancy. Optional outputs=[{x,y},...] selects exact built destination chests or platform hubs; set measure=true to sample delivery automatically over 30 seconds in one call, or check twice at least 30 game seconds apart. Rates use actual game ticks; paused or slow games may need another sample. The baseline survives compaction. Output withdrawals or outside deposits invalidate attribution; do not treat force production or occupied lanes as delivery proof. Checks do not verify circuit settings.',
@@ -686,10 +738,12 @@ export function serverAssistantTools(context: {
 			if (
 				player &&
 				data.queries.some(
-					(query) => query.tool === 'read_factory_plan' && query.args.player !== player.name
+					(query) =>
+						['read_factory_plan', 'read_sandbox', 'export_sandbox'].includes(query.tool) &&
+						query.args.player !== player.name
 				)
 			)
-				throw new ServerError(403, 'Read your own planner session');
+				throw new ServerError(403, 'Read your own planner or sandbox session');
 			const prepared = data.queries.map((query) =>
 				prepareFactoryLookup(query, manifest.tools, targets, player?.force)
 			);
@@ -735,8 +789,12 @@ export function serverAssistantTools(context: {
 			const player = context.gamePlayer
 				? (await requireGamePlayer(instance, context.userId, context.gamePlayer)).player
 				: null;
-			if (player && data.tool === 'read_factory_plan' && data.args.player !== player.name)
-				throw new ServerError(403, 'Read your own planner session');
+			if (
+				player &&
+				['read_factory_plan', 'read_sandbox', 'export_sandbox'].includes(data.tool) &&
+				data.args.player !== player.name
+			)
+				throw new ServerError(403, 'Read your own planner or sandbox session');
 			const prepared = prepareFactoryLookup(data, manifest.tools, targets, player?.force);
 			if (!prepared.ok) throw new Error(prepared.error);
 			const args = prepared.args;
@@ -807,6 +865,8 @@ const lookupGroups: Record<string, string> = {
 	route_belt: 'logistics',
 	find_buses: 'logistics',
 	read_factory_plan: 'planning',
+	read_sandbox: 'planning',
+	export_sandbox: 'planning',
 	solve_factory_plan: 'planning',
 	helmod_recipe: 'planning',
 	task_list: 'planning',

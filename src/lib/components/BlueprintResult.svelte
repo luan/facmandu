@@ -43,7 +43,7 @@
  <div class="space-y-3 border-t border-border p-3">
   <p class="text-xs text-muted-foreground">Native import validated · Design preview</p>
   {#if blueprint.warnings.length}<details><summary class="cursor-pointer text-xs text-amber-200">{blueprint.warnings.length} design {blueprint.warnings.length === 1 ? 'check' : 'checks'}</summary><ul class="mt-2 space-y-1 text-xs text-amber-200">{#each blueprint.warnings as warning}<li>{warning}</li>{/each}</ul></details>{/if}
-  <details><summary class="cursor-pointer text-xs">Construction materials</summary><ul class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">{#each blueprint.cost as item}<li>{item.count} × {item.name}</li>{/each}</ul></details>
+  <details><summary class="cursor-pointer text-xs">Construction materials</summary><ul class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">{#each blueprint.cost as item}<li>{item.count} × {item.name}{item.quality && item.quality !== 'normal' ? ` (${item.quality})` : ''}</li>{/each}</ul></details>
   <div class="flex gap-2"><Button size="sm" onclick={() => void copy()}>{#if copied}<CheckIcon />{:else}<CopyIcon />{/if}Copy blueprint</Button><Button size="sm" variant="outline" onclick={download}><DownloadIcon />Download</Button></div>
   {#if error}<p role="alert" class="text-xs text-destructive">{error}</p>{/if}
  </div>
