@@ -6,7 +6,7 @@
  import * as Card from '$lib/components/ui/card';
  import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
  import type { ServerView } from '$lib/server/server-view';
- let { config, models, toby, running, mods, serverId, action, submit, busyReason }: { config: NonNullable<ServerView['gameAssistant']>; models: ServerView['gameModels']; toby: ServerView['toby']; running: boolean; mods: ServerView['mods']; serverId: string; action: string; submit: SubmitFunction; busyReason: string } = $props();
+ let { config, models, action, submit, busyReason }: { config: NonNullable<ServerView['gameAssistant']>; models: ServerView['gameModels']; action: string; submit: SubmitFunction; busyReason: string } = $props();
  let enabled = $state(untrack(() => config.enabled));
  let model = $state(untrack(() => config.model || models.find((item) => item.id.includes('luna'))?.id || models[0]?.id || ''));
  let effort = $state(untrack(() => config.effort || models.find((item) => item.id === model)?.defaultEffort || ''));
@@ -15,10 +15,6 @@
  let players = $state(untrack(() => config.players.join('\n')));
  const selected = $derived(models.find((item) => item.id === model));
  const input = 'min-w-0 w-full border border-input bg-background px-3 py-2 text-sm';
- const integrations = [
-  { name: 'TaskList', label: 'Task List', version: '0.6.1', note: 'Shared force tasks. Uses the reviewed Task List 0.6.0 source.' },
-  { name: 'factoryplanner', label: 'Factory Planner', version: '2.1.18', note: 'Native solver calculations. Existing plans, preferences and selection are preserved.' }
- ];
  function chooseModel(event: Event & { currentTarget: HTMLSelectElement }) { effort = models.find((item) => item.id === event.currentTarget.value)?.defaultEffort ?? ''; }
 </script>
 <Card.Root>
@@ -39,30 +35,5 @@
    {#if !models.length}<p class="text-sm text-muted-foreground">Connect a model provider in <a href="/settings" class="underline">Account settings</a> to enable in-game replies.</p>{/if}
    <TooltipButton type="submit" tooltip={busyReason || (enabled && !models.length ? 'Connect a model provider first' : 'Save in-game assistant settings')} disabled={!!busyReason || (enabled && !models.length)}><SaveIcon class="size-4" />Save</TooltipButton>
   </form>
-  <div class="mt-5 border-t pt-4 space-y-3">
-   <p class="text-sm">In-game panel: {toby.installed && toby.enabled ? `installed · ${toby.version ?? toby.currentVersion}` : 'not enabled on this server'}</p>
-   <div class="flex flex-wrap items-center gap-3">
-    <form method="POST" {action} use:enhance={submit}>
-     <input type="hidden" name="operation" value="installToby" />
-     <TooltipButton type="submit" tooltip={busyReason || (running ? 'Stop the server before installing a mod' : `Install Toby ${toby.currentVersion}`)} disabled={!!busyReason || running}>{toby.installed && toby.enabled ? 'Update Toby' : 'Install Toby on server'}</TooltipButton>
-    </form>
-    <a href="/api/toby-mod" class="text-sm underline">Download for game clients</a>
-   </div>
-   <p class="text-xs text-muted-foreground">Every client needs the same mod. Install while stopped; your save is unchanged.</p>
-   {#each integrations.filter((integration) => mods.some((mod) => mod.name === integration.name && mod.enabled)) as integration (integration.name)}
-    <div class="space-y-2 border-t pt-3">
-     <p class="text-sm">{integration.label}</p>
-     <div class="flex flex-wrap items-center gap-3">
-      <form method="POST" {action} use:enhance={submit}>
-       <input type="hidden" name="operation" value="installTobyIntegration" />
-       <input type="hidden" name="name" value={integration.name} />
-       <TooltipButton type="submit" tooltip={busyReason || (running ? 'Stop the server before changing a mod' : `Install ${integration.label} ${integration.version} with Toby APIs`)} disabled={!!busyReason || running}>Connect {integration.label}</TooltipButton>
-      </form>
-      <a href={`/servers/${serverId}/toby-integrations/${integration.name}`} class="text-sm underline">Download matching client mod</a>
-     </div>
-     <p class="text-xs text-muted-foreground">{integration.note} The original archive is retained. This private adapter must also be installed on clients.</p>
-    </div>
-   {/each}
-  </div>
  </Card.Content>
 </Card.Root>
