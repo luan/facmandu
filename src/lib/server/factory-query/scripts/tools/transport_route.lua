@@ -46,6 +46,37 @@ local function route(a)
  if type(margin)~='number' or margin~=margin or margin%1~=0 or margin<1 or margin>64 then error('Choose a detour margin from 1 to 64 tiles',0) end
  local left,right=math.min(a.x,a.target_x)-margin,math.max(a.x,a.target_x)+margin
  local top,bottom=math.min(a.y,a.target_y)-margin,math.max(a.y,a.target_y)+margin
+ local planned,occupied_plan,planned_tunnels,planned_entities={},{},{},{}
+ local plan_tiles=0
+ if a.obstacles and (type(a.obstacles)~='table' or #a.obstacles>1000) then error('Route around at most 1000 planned entities',0) end
+ for _,e in ipairs(a.obstacles or {}) do
+  local p=type(e.name)=='string' and prototypes.entity[e.name]
+  if not p or type(e.position)~='table' then error('Invalid planned obstacle',0) end
+  for _,axis in ipairs{'x','y'} do
+   local value=e.position[axis]
+   if type(value)~='number' or value~=value or math.abs(value)>1000000 then error('Invalid planned obstacle position',0) end
+  end
+  local d=e.direction or 0
+  if type(d)~='number' or d%1~=0 or d<0 or d>15 then error('Invalid planned obstacle direction',0) end
+  local w,h=p.tile_width,p.tile_height
+  -- Conservative footprints match blueprint overlap validation. Diagonal
+  -- layouts use the enclosing square until diagonal routing is supported.
+  if d%4~=0 then w,h=math.max(w,h),math.max(w,h) elseif d%8==4 then w,h=h,w end
+  local x,y=e.position.x,e.position.y
+  local x1,x2=math.max(math.floor(x-w/2),math.floor(left)),math.min(math.ceil(x+w/2)-1,math.floor(right))
+  local y1,y2=math.max(math.floor(y-h/2),math.floor(top)),math.min(math.ceil(y+h/2)-1,math.floor(bottom))
+  plan_tiles=plan_tiles+math.max(0,x2-x1+1)*math.max(0,y2-y1+1)
+  -- Keep footprint indexing bounded independently of mod machine dimensions.
+  if plan_tiles>32768 then error('Planned footprints are too large for one route; choose nearby sections',0) end
+  for tx=x1,x2 do
+   for ty=y1,y2 do occupied_plan[tx..':'..ty]=true end
+  end
+  if e.name==a.underground then planned_tunnels[#planned_tunnels+1]=e end
+  if p.type=='transport-belt' and w==1 and h==1 then
+   local candidate={name=e.name,type=p.type,prototype=p,position=e.position,direction=d,force=force}
+   planned[x..':'..y]=candidate;planned_entities[candidate]=true
+  end
+ end
  local charted,placements={},{}
  local function known(x,y)
   local cx,cy=math.floor(x/32),math.floor(y/32)
@@ -62,6 +93,8 @@ local function route(a)
    local native=other.type=='entity-ghost' and other.ghost_prototype or other.prototype
    if native.type=='transport-belt' and other.position.x==x and other.position.y==y then return other end
   end
+  local draft=planned[x..':'..y]
+  if draft and surface.can_place_entity{name=draft.name,position=draft.position,direction=draft.direction,force=force,build_check_type=defines.build_check_type.manual,forced=false} then return draft end
  end
  local start_entity,end_entity=endpoint(a.x,a.y),endpoint(a.target_x,a.target_y)
  local function fits(name,x,y,d)
@@ -70,7 +103,7 @@ local function route(a)
   if placements[key]==nil then
    -- Manual checks permit fast replacement of belts. Routing must retain them.
    local occupied=surface.find_entities_filtered{position={x=x,y=y},type={'transport-belt','underground-belt','splitter','loader','loader-1x1','entity-ghost'},limit=1}
-   placements[key]=#occupied==0 and surface.can_place_entity{name=name,position={x=x,y=y},direction=d,force=force,build_check_type=defines.build_check_type.manual,forced=false}
+   placements[key]=not occupied_plan[math.floor(x)..':'..math.floor(y)] and #occupied==0 and surface.can_place_entity{name=name,position={x=x,y=y},direction=d,force=force,build_check_type=defines.build_check_type.manual,forced=false}
   end
   return placements[key]
  end
@@ -88,6 +121,11 @@ local function route(a)
   if #ghosts==64 then return false end
   for _,e in ipairs(ghosts) do
    if e.ghost_name==a.underground and e.direction==step.d and ((step.dx~=0 and e.position.y==y) or (step.dy~=0 and e.position.x==x)) then return false end
+  end
+  for _,e in ipairs(planned_tunnels) do
+   if (e.direction or 0)==step.d and ((step.dx~=0 and e.position.y==y) or (step.dy~=0 and e.position.x==x)) then
+    if e.position.x>=area[1][1] and e.position.x<=area[2][1] and e.position.y>=area[1][2] and e.position.y<=area[2][2] then return false end
+   end
   end
   for i=1,n-1 do if not known(x+step.dx*i,y+step.dy*i) then return false end end
   return true
@@ -131,8 +169,9 @@ local function route(a)
      end
     end
     if #entities>800 then error('Route has too many entities; choose a closer waypoint',0) end
-    local function existing(e) return e and {name=e.type=='entity-ghost' and e.ghost_name or e.name,ghost=e.type=='entity-ghost',unit_number=e.unit_number,position=e.position,direction=e.direction} or nil end
-    return {found=true,force=force.name,surface=surface.name,tick=game.tick,visited=visited,entities=entities,start=existing(start_entity),destination=existing(end_entity),note='Native collision and chart checks passed at this tick. Existing endpoints are retained. Inspect the saved blueprint again before ghost placement; transport flow and power still need verification.'}
+    local function existing(e) return e and not planned_entities[e] and {name=e.type=='entity-ghost' and e.ghost_name or e.name,ghost=e.type=='entity-ghost',unit_number=e.unit_number,position=e.position,direction=e.direction} or nil end
+    local function planned_endpoint(e) return e and planned_entities[e] and {name=e.name,position=e.position,direction=e.direction} or nil end
+    return {found=true,force=force.name,surface=surface.name,tick=game.tick,visited=visited,entities=entities,start=existing(start_entity),destination=existing(end_entity),plannedStart=planned_endpoint(start_entity),plannedDestination=planned_endpoint(end_entity),note='Native collision and chart checks passed at this tick. Existing and planned endpoints are retained; saved draft footprints were avoided. Inspect the combined blueprint again before ghost placement; transport flow and power still need verification.'}
    end
    for _,step in ipairs(directions) do
     local may_turn=not node.tunnel and not (node.x==a.x and node.y==a.y and start_entity)

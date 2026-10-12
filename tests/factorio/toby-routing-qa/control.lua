@@ -47,12 +47,29 @@ script.on_nth_tick(30,function()
    local turns=0
    for i=2,#open.entities do if open.entities[i].direction~=open.entities[i-1].direction then turns=turns+1 end end
    assert(turns==1,'The empty route should have one corner')
+   local planned_source={name='transport-belt',position={20.5,0.5},direction=4}
+   local planned_destination={name='transport-belt',position={36.5,0.5},direction=4}
+   local planned_plant={name='assembling-machine-1',position={28.5,0.5}}
+   local around=route{force=p.force.name,surface=p.surface.name,belt='transport-belt',x=20.5,y=0.5,target_x=36.5,target_y=0.5,margin=3,obstacles={
+    {name=planned_source.name,position={x=20.5,y=0.5},direction=4},
+    {name=planned_destination.name,position={x=36.5,y=0.5},direction=4},
+    {name=planned_plant.name,position={x=28.5,y=0.5}}
+   }}
+   assert(around.found and around.plannedStart and around.plannedDestination)
+   assert(not around.start and not around.destination,'Planned endpoints must remain distinct from live endpoints')
+   planned_source.force=p.force;planned_destination.force=p.force;planned_plant.force=p.force
+   assert(p.surface.create_entity(planned_source));assert(p.surface.create_entity(planned_destination));assert(p.surface.create_entity(planned_plant))
+   for _,spec in ipairs(around.entities) do
+    spec.force=p.force
+    assert(p.surface.can_place_entity{name=spec.name,position=spec.position,direction=spec.direction,force=p.force,build_check_type=defines.build_check_type.manual},'Route collided with a planned entity')
+    assert(p.surface.create_entity(spec))
+   end
    assert(p.insert{name='iron-plate',count=2}==2)
    assert(p.remove_item{name='iron-plate',count=2}==2)
    assert(source.get_transport_line(1).insert_at_back{name='iron-plate',count=1})
    assert(source.get_transport_line(2).insert_at_back{name='iron-plate',count=1})
    storage.source=source;storage.destination=destination;storage.started=game.tick
-   storage.result={found=true,entities=#result.entities,visited=result.visited,freeRouteEntities=#open.entities,freeRouteTurns=turns,undergroundPaired=true,sourcePreserved=true,destinationPreserved=true}
+   storage.result={found=true,entities=#result.entities,visited=result.visited,freeRouteEntities=#open.entities,freeRouteTurns=turns,plannedObstaclesAvoided=true,plannedEndpointsPreserved=true,undergroundPaired=true,sourcePreserved=true,destinationPreserved=true}
    storage.stage='flow'
   elseif storage.stage=='flow' and game.tick-storage.started>=480 then
    local e=storage.destination

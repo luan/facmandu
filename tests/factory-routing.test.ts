@@ -47,6 +47,7 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
  game={tick=1,forces={player=force},surfaces={nauvis=surface}}
  local function existing(x,y,ghost)
   local e={name=ghost and 'entity-ghost' or 'belt',ghost_name=ghost and 'belt' or nil,type=ghost and 'entity-ghost' or 'transport-belt',prototype=belt,ghost_prototype=ghost and belt or nil,position={x=x,y=y},direction=4,force=force,unit_number=x+1}
+  setmetatable(e,{__index=function(_,field) error('Unknown native entity field: '..field) end})
   world[key(x,y)]=e;return e
  end
  local start=existing(0.5,0.5);local target=existing(8.5,0.5,true)
@@ -80,6 +81,22 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
  local turns=0
  for i=2,#open.entities do if open.entities[i].direction~=open.entities[i-1].direction then turns=turns+1 end end
  assert(turns==1,'An open connection needs one corner, not a zigzag')
+ prototypes.entity.plant={type='assembling-machine',tile_width=3,tile_height=3}
+ local planned_args={force='player',surface='nauvis',belt='belt',x=0.5,y=0.5,target_x=10.5,target_y=0.5,margin=3,obstacles={
+  {name='belt',position={x=0.5,y=0.5},direction=4},
+  {name='plant',position={x=5.5,y=0.5}},
+  {name='belt',position={x=10.5,y=0.5},direction=4}
+ }}
+ local around=route(planned_args)
+ assert(around.found and around.plannedStart and around.plannedDestination)
+ assert(not around.start and not around.destination,'Planned endpoints are not live entities')
+ for _,e in ipairs(around.entities) do
+  assert(e.position.x~=0.5 or e.position.y~=0.5)
+  assert(e.position.x~=10.5 or e.position.y~=0.5)
+  assert(e.position.x<4 or e.position.x>=7 or e.position.y< -1 or e.position.y>=2,'Route intersects the unplaced machine')
+ end
+ planned_args.obstacles[2].position.x=0/0
+ assert(not pcall(route,planned_args))
  `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));

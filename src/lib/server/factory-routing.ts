@@ -6,8 +6,9 @@ import {
 	MAX_BLUEPRINT_ENTITIES
 } from '$lib/blueprints';
 import type { ManagedServer } from './db/schema';
-import { factoryBlueprint } from './factory-blueprints';
+import { factoryBlueprint, readBlueprintDraft } from './factory-blueprints';
 import { factoryQuery } from './factory-query';
+import { ServerError } from './server-files';
 
 const name = v.pipe(v.string(), v.minLength(1), v.maxLength(200));
 const coordinate = v.pipe(v.number(), v.finite(), v.minValue(-1000000), v.maxValue(1000000));
@@ -21,7 +22,21 @@ export const beltRouteInput = v.object({
 	target_x: coordinate,
 	target_y: coordinate,
 	margin: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(64))),
-	label: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(90)))
+	label: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(90))),
+	avoid: v.optional(
+		v.pipe(
+			v.array(
+				v.object({
+					designId: v.pipe(v.string(), v.regex(/^[a-f0-9]{64}$/u)),
+					position: v.object({
+						x: v.pipe(coordinate, v.integer()),
+						y: v.pipe(coordinate, v.integer())
+					})
+				})
+			),
+			v.maxLength(8)
+		)
+	)
 });
 const position = z.object({ x: z.number().finite(), y: z.number().finite() });
 const endpoint = z.object({
@@ -53,6 +68,8 @@ const routeReply = z.discriminatedUnion('found', [
 			.transform((value) => (Array.isArray(value) ? value : [])),
 		start: endpoint.optional(),
 		destination: endpoint.optional(),
+		plannedStart: endpoint.omit({ unit_number: true, ghost: true }).optional(),
+		plannedDestination: endpoint.omit({ unit_number: true, ghost: true }).optional(),
 		note: z.string()
 	})
 ]);
@@ -61,8 +78,27 @@ export async function designBeltRoute(
 	server: ManagedServer,
 	input: v.InferOutput<typeof beltRouteInput>
 ) {
+	const { avoid, ...request } = input;
+	const sections = await Promise.all(
+		(avoid ?? []).map(async (part) => ({
+			position: part.position,
+			design: await readBlueprintDraft(server.directory, part.designId, input.force)
+		}))
+	);
+	const obstacles = sections.flatMap(({ design, position }) =>
+		design.entities.map((entity) => ({
+			name: entity.name,
+			direction: entity.direction,
+			position: { x: entity.position.x + position.x, y: entity.position.y + position.y }
+		}))
+	);
+	if (obstacles.length > MAX_BLUEPRINT_ENTITIES)
+		throw new ServerError(
+			400,
+			'Route around at most 1000 planned entities; choose nearby sections'
+		);
 	const reply = routeReply.parse(
-		await factoryQuery(server, { op: 'call', tool: 'route_belt', args: input })
+		await factoryQuery(server, { op: 'call', tool: 'route_belt', args: { ...request, obstacles } })
 	);
 	if (!reply.found) return { ...reply, placed: false as const };
 	const origin = { x: Math.floor(input.x), y: Math.floor(input.y) };

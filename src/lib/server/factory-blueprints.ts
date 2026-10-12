@@ -103,7 +103,7 @@ const replySchema = z.discriminatedUnion('ok', [
 	z.object({ ok: z.literal(true), result: z.json() }),
 	z.object({ ok: z.literal(false), error: z.string() })
 ]);
-async function readBlueprintDraft(directory: string, id: string, force: string) {
+export async function readBlueprintDraft(directory: string, id: string, force: string) {
 	let saved: z.infer<typeof blueprintDesignSchema>;
 	try {
 		saved = blueprintDesignSchema.parse(
