@@ -3,6 +3,7 @@
  import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
  import Prompt from '$lib/components/Prompt.svelte';
  import { AssistantVoice, idleVoice } from '$lib/assistant-voice';
+ import { factoryViewSchema, factoryPreviewPendingSchema } from '$lib/factory-images';
  import { blueprintArtifactSchema } from '$lib/blueprints';
  import { assistantResultGroups } from '$lib/factory-results';
  import FactoryResultView from '$lib/components/FactoryResult.svelte';
@@ -64,12 +65,14 @@
  let open = $state(false); let sidebar = $state<'history' | 'activity' | null>(null); let prompt = $state(''); let busy = $state(false); let progress = $state(''); let text = $state(''); let error = $state(''); let refreshError = $state('');
  let turns = $state<{ id: string; prompt: string; answer: string; state: string; mods: AssistantMod[]; results?: FactoryResult[]; plans?: ModlistPlan[] }[]>([]);
   const inProgress = $derived(busy || turns.some(turn => turn.state === 'running'));
- function blueprintLabel(item: FactoryResult) {
-  if (!item.display || item.tool !== 'blueprint_operation') return null;
-  const parsed = blueprintArtifactSchema.safeParse(item.result);
-  return parsed.success ? parsed.data.label : null;
+ function layoutLabel(item: FactoryResult) {
+  if (!item.display) return null;
+  const design = blueprintArtifactSchema.safeParse(item.result);
+  if (design.success) return design.data.label;
+  const snapshot = factoryViewSchema.or(factoryPreviewPendingSchema).safeParse(item.result);
+  return snapshot.success ? `Existing factory · ${snapshot.data.surface}` : null;
  }
- const latestBlueprintTurn = $derived(activeResults.some(item => blueprintLabel(item)) ? 'active' : turns.findLast(turn => turn.results?.some(item => blueprintLabel(item)))?.id);
+ const latestLayoutTurn = $derived(activeResults.some(item => layoutLabel(item)) ? 'active' : turns.findLast(turn => turn.results?.some(item => layoutLabel(item)))?.id);
  type ModlistPlan = {
   id: string;
   applied: boolean;
@@ -392,10 +395,10 @@
       {/if}
       {#each resultGroups.primary as item}
        {@const failedSetup = setupId(item, 'failed')}
-       {@const earlierBlueprint = blueprintLabel(item)}
+       {@const earlierLayout = layoutLabel(item)}
        <div class="space-y-2">
-        {#if earlierBlueprint && turn.id !== latestBlueprintTurn}
-         <details class="border border-border bg-white/[0.025] text-sm"><summary class="cursor-pointer px-3 py-2 font-medium">Earlier blueprint · {earlierBlueprint}</summary><FactoryResultView {item} {serverId} /></details>
+        {#if earlierLayout && turn.id !== latestLayoutTurn}
+         <details class="border border-border bg-white/[0.025] text-sm"><summary class="cursor-pointer px-3 py-2 font-medium">Earlier layout · {earlierLayout}</summary><FactoryResultView {item} {serverId} /></details>
         {:else}<FactoryResultView {item} {serverId} />{/if}
         {#if failedSetup && !serverId}<div class="flex justify-end"><TooltipButton tooltip={inProgress ? 'Response in progress' : 'Retry setup on the same server'} disabled={inProgress} size="sm" onclick={() => retrySetup(failedSetup)}><RefreshCwIcon />Retry setup</TooltipButton></div>{/if}
         {#if item.tool === 'prepare_server_mod_list' && serverId}

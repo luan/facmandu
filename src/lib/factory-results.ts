@@ -1359,23 +1359,17 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 export function assistantResultGroups(results: readonly FactoryResult[]) {
 	const installation = results.findLastIndex((item) => item.tool === 'apply_server_mod_list');
 	const review = results.findLastIndex((item) => item.tool === 'prepare_server_mod_list');
-	const inspection = results.findLastIndex(
-		(item) => item.tool === 'factory_view' && item.display === true
-	);
 	const plan = results.findLastIndex(
 		(item) => item.tool === 'production_plan' && item.display === true
 	);
-	const design = results.findLastIndex(
-		(item) =>
-			(item.tool === 'blueprint_operation' || item.tool === 'render_blueprint') &&
-			item.display === true
+	const layoutTools = ['factory_view', 'blueprint_operation', 'render_blueprint'];
+	const layout = results.findLastIndex(
+		(item) => layoutTools.includes(item.tool ?? '') && item.display === true
 	);
 	const visible = (item: FactoryResult, index: number) =>
 		(item.display === true &&
-			(item.tool !== 'factory_view' || index === inspection) &&
 			(item.tool !== 'production_plan' || index === plan) &&
-			((item.tool !== 'blueprint_operation' && item.tool !== 'render_blueprint') ||
-				index === design)) ||
+			(!layoutTools.includes(item.tool ?? '') || index === layout)) ||
 		(index === review && review > installation) ||
 		item.tool === 'create_server_from_list' ||
 		item.tool === 'retry_server_setup';

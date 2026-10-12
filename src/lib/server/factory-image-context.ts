@@ -22,7 +22,9 @@ export function addFactoryImages(
 		if (
 			message.role !== 'toolResult' ||
 			message.isError ||
-			!['factory_view', 'blueprint_operation', 'render_blueprint'].includes(message.toolName)
+			!['factory_view', 'blueprint_operation', 'render_blueprint', 'sandbox_blueprint'].includes(
+				message.toolName
+			)
 		)
 			continue;
 		for (const part of message.content) {

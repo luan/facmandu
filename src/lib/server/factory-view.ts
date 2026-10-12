@@ -50,11 +50,12 @@ export async function captureFactoryView(server: ManagedServer, input: unknown, 
 	if (!reply.data.ok) throw new ServerError(409, reply.data.error);
 	const { blueprint, ...snapshot } = reply.data.result;
 	try {
-		return { ...snapshot, image: await renderFactoryBlueprint(server, blueprint, 2000) };
+		return { ...snapshot, blueprint, image: await renderFactoryBlueprint(server, blueprint, 2000) };
 	} catch (cause) {
 		if (!(cause instanceof FactoryImagePending)) throw cause;
 		return {
 			...snapshot,
+			blueprint,
 			kind: 'factory-preview-pending' as const,
 			image: { id: cause.imageId },
 			note: 'Preview is rendering. It will appear automatically when ready; continue with structured lookups instead of recapturing.'

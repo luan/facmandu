@@ -15,7 +15,7 @@ if surface.count_entities_filtered{area=area,force=force,limit=1001}>1000 then e
 inventory=game.create_inventory(1)
 local stack=inventory[1]
 stack.set_stack{name='blueprint'}
-local mapping=stack.create_blueprint{surface=surface,force=force,area=area,include_entities=true,include_modules=true,include_station_names=true,include_trains=true,always_include_tiles=false}
+local mapping=stack.create_blueprint{surface=surface,force=force,area=area,include_entities=true,include_modules=true,include_station_names=true,include_trains=true,always_include_tiles=true}
 local entities=stack.get_blueprint_entities()
 if not entities or #entities==0 then error('No blueprintable entities in this area',0) end
 if #entities>1000 then error('Too many entities; select a smaller factory area',0) end
@@ -28,4 +28,4 @@ for _,entity in pairs(entities) do
  end
 end
 if not origin then error('Could not locate captured entities',0) end
-return {kind='factory-view',force=force.name,surface=surface.name,tick=game.tick,area=area,origin=origin,count=#entities,blueprint=stack.export_stack()}
+return {kind='factory-view',force=force.name,surface=surface.name,tick=game.tick,area=area,origin=origin,count=#entities,blueprint=stack.export_stack(),cost=stack.cost_to_build}

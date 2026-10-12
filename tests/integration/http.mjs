@@ -3125,6 +3125,40 @@ done
 			selectedState.activity.map((entry) => entry.text),
 			['Blueprint', 'Intermediate draft']
 		);
+		const snapshotDesign = {
+			kind: 'factory-view',
+			force: 'player',
+			surface: 'nauvis',
+			tick: 42,
+			area: { left_top: { x: -16, y: -16 }, right_bottom: { x: 16, y: 16 } },
+			origin: { x: 0, y: 0 },
+			count: 1,
+			image: { id: 'a'.repeat(64), width: 128, height: 96 },
+			blueprint: '0current',
+			cost: panelDesign.cost
+		};
+		await client.execute({
+			sql: 'UPDATE server_assistant_turn SET results = ? WHERE chat_id = ?',
+			args: [
+				JSON.stringify([
+					{ kind: 'factory-result', title: 'Blueprint', display: true, result: panelDesign },
+					{
+						kind: 'factory-result',
+						title: 'Existing factory',
+						display: true,
+						result: snapshotDesign
+					}
+				]),
+				newPanel.current
+			]
+		});
+		const snapshotPanel = nextPanelUpdate('PanelUser');
+		await appendFile(gameLog, uiLine('PanelUser', 'refresh', 40));
+		const snapshotState = await snapshotPanel;
+		assert.equal(snapshotState.blueprint, snapshotDesign.blueprint);
+		assert.equal(snapshotState.design, 'Existing factory · nauvis');
+		assert.deepEqual(snapshotState.materials, snapshotDesign.cost);
+
 		assert.ok(
 			panelUpdates.every(
 				(update) =>

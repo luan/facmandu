@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { and, desc, eq } from 'drizzle-orm';
 import { factoryResultSchema } from '$lib/assistant-results';
 import { blueprintArtifactSchema } from '$lib/blueprints';
+import { factoryPreviewPendingSchema, factoryViewSchema } from '$lib/factory-images';
 import { gamePanelText, gameReply, gameText, parseGameChat, parseGameUi } from '$lib/game-chat';
 import { routeAmbientChat } from './ambient-chat';
 import { db } from './db';
@@ -137,6 +138,15 @@ function panelDesign(
 					blueprint: blueprint.data.blueprint,
 					label: blueprint.data.label,
 					cost: blueprint.data.cost
+				};
+			const snapshot = factoryViewSchema
+				.or(factoryPreviewPendingSchema)
+				.safeParse(result.data.result);
+			if (snapshot.success && snapshot.data.blueprint && snapshot.data.blueprint.length <= 65536)
+				return {
+					blueprint: snapshot.data.blueprint,
+					label: `Existing factory · ${snapshot.data.surface}`,
+					cost: snapshot.data.cost ?? []
 				};
 		}
 	} catch {

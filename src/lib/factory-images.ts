@@ -33,7 +33,13 @@ export const factoryViewSchema = z.object({
 	}),
 	origin: z.object({ x: z.number(), y: z.number() }),
 	count: z.number().int().positive().max(1000),
-	image: factoryImageSchema
+	image: factoryImageSchema,
+	blueprint: z.string().min(2).max(256000).optional(),
+	cost: z
+		.array(
+			z.object({ name: z.string(), count: z.number().positive(), quality: z.string().optional() })
+		)
+		.optional()
 });
 export const factoryPreviewPendingSchema = factoryViewSchema.omit({ image: true }).extend({
 	kind: z.literal('factory-preview-pending'),

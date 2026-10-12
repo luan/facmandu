@@ -591,8 +591,8 @@ test('only the latest displayed factory inspection is inline and all captures re
 	const revisedPlan = { ...second, tool: 'production_plan' };
 	const results = [first, plan, design, second, revisedPlan, scouting];
 	assert.deepEqual(assistantResultGroups(results), {
-		primary: [design, second, revisedPlan],
-		details: [first, plan, scouting]
+		primary: [second, revisedPlan],
+		details: [first, plan, design, scouting]
 	});
 	assert.deepEqual(
 		results.map((item) => item.result.tick),

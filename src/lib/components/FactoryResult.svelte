@@ -2,12 +2,13 @@
  import type { FactoryResult } from '$lib/assistant-results';
  import { presentFactoryResult } from '$lib/factory-results';
  import { consoleLevel, highlightCommand, isLuaLine, tokenClass } from '$lib/console';
- import { FlaskConicalIcon, UsersIcon, ChartNoAxesCombinedIcon, MapPinIcon, ServerIcon, CopyIcon, CheckIcon, ArrowUpRightIcon } from '@lucide/svelte';
+ import { FlaskConicalIcon, UsersIcon, ChartNoAxesCombinedIcon, MapPinIcon, ServerIcon, CopyIcon, DownloadIcon, CheckIcon, ArrowUpRightIcon } from '@lucide/svelte';
  import { blueprintArtifactSchema } from '$lib/blueprints';
  import BlueprintResult from './BlueprintResult.svelte';
  import FactoryImage from './FactoryImage.svelte';
  import { factoryViewSchema, factoryPreviewPendingSchema, factoryImageArtifactSchema } from '$lib/factory-images';
  import PrototypeIcon from './PrototypeIcon.svelte';
+ import Button from './ui/button/button.svelte';
  import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
  let { item, serverId }: { item: FactoryResult; serverId?: string } = $props();
  const renderedImage = $derived(factoryImageArtifactSchema.safeParse(item.result));
@@ -18,6 +19,8 @@
  let expanded = $state(false);
  let copied = $state('');
  let copyError = $state('');
+ async function copyLayout() { if (!snapshot.success || !snapshot.data.blueprint) return; try { await navigator.clipboard.writeText(snapshot.data.blueprint); copied = snapshot.data.blueprint; copyError = ''; } catch { copyError = 'Could not copy layout. Download it instead.'; } }
+ function downloadLayout() { if (!snapshot.success || !snapshot.data.blueprint) return; const url = URL.createObjectURL(new Blob([snapshot.data.blueprint], {type: 'text/plain'})); const link = document.createElement('a'); link.href = url; link.download = 'factory-layout.txt'; link.click(); URL.revokeObjectURL(url); }
  async function copyGPS(gps: string) { try { await navigator.clipboard.writeText(gps); copied = gps; copyError = ''; } catch { copyError = 'Could not copy location.'; } }
 </script>
 {#if blueprint.success}
@@ -25,7 +28,7 @@
 {:else if renderedImage.success && serverId}
 <section class="overflow-hidden border border-border bg-white/[0.025] text-sm" aria-label={renderedImage.data.label}><header class="p-3"><h3 class="font-semibold">Blueprint preview · {renderedImage.data.label}</h3></header><FactoryImage image={renderedImage.data.image} {serverId} label={renderedImage.data.label} /><p class="p-3 text-xs text-muted-foreground">Preview only; placement and throughput are not verified.</p></section>
 {:else if snapshot.success && serverId}
-<section class="overflow-hidden border border-border bg-white/[0.025] text-sm" aria-label="Factory view"><header class="flex flex-wrap items-center justify-between gap-2 p-3"><h3 class="font-semibold">Existing factory · {snapshot.data.surface}</h3><span class="text-xs text-muted-foreground">{snapshot.data.count} entities · Tick {snapshot.data.tick}</span></header><FactoryImage image={snapshot.data.image} {serverId} label={`Factory on ${snapshot.data.surface} at tick ${snapshot.data.tick}`} /><p class="p-3 text-xs text-muted-foreground">World area ({snapshot.data.area.left_top.x}, {snapshot.data.area.left_top.y}) to ({snapshot.data.area.right_bottom.x}, {snapshot.data.area.right_bottom.y}). {#if snapshot.data.origin.x !== 0 || snapshot.data.origin.y !== 0}Add ({snapshot.data.origin.x}, {snapshot.data.origin.y}) to grid coordinates for world positions. {/if}Existing entities only; terrain, belt items and machine status are not shown.</p></section>
+<section class="overflow-hidden border border-border bg-white/[0.025] text-sm" aria-label="Factory view"><header class="flex flex-wrap items-center justify-between gap-2 p-3"><h3 class="font-semibold">Existing factory · {snapshot.data.surface}</h3><span class="text-xs text-muted-foreground">{snapshot.data.count} entities · Tick {snapshot.data.tick}</span></header><FactoryImage image={snapshot.data.image} {serverId} label={`Factory on ${snapshot.data.surface} at tick ${snapshot.data.tick}`} /><p class="p-3 text-xs text-muted-foreground">World area ({snapshot.data.area.left_top.x}, {snapshot.data.area.left_top.y}) to ({snapshot.data.area.right_bottom.x}, {snapshot.data.area.right_bottom.y}). {#if snapshot.data.origin.x !== 0 || snapshot.data.origin.y !== 0}Add ({snapshot.data.origin.x}, {snapshot.data.origin.y}) to grid coordinates for world positions. {/if}Existing layout; belt items and machine status are not shown.</p>{#if snapshot.data.blueprint}<div class="flex gap-2 px-3 pb-3"><Button size="sm" onclick={() => void copyLayout()}>{#if copied === snapshot.data.blueprint}<CheckIcon />{:else}<CopyIcon />{/if}Copy current layout</Button><Button size="sm" variant="outline" onclick={downloadLayout}><DownloadIcon />Download layout</Button></div>{/if}{#if copyError}<p role="alert" class="px-3 pb-3 text-xs text-destructive">{copyError}</p>{/if}</section>
 {:else}
 <section class="overflow-hidden border border-border bg-white/[0.025] text-sm" aria-label={view.title}>
  <header class="flex items-center gap-2 border-b border-border px-3 py-2.5"><Icon class="size-4 shrink-0 text-primary" /><h3 class="font-semibold">{view.title}</h3>{#if view.context}<span class="ml-auto text-right text-xs text-muted-foreground">{view.context}</span>{/if}</header>

@@ -9,7 +9,9 @@ import {
 import {
 	factoryImageArtifactSchema,
 	factoryImageSchema,
-	factoryViewRequestSchema
+	factoryPreviewPendingSchema,
+	factoryViewRequestSchema,
+	factoryViewSchema
 } from '../src/lib/factory-images';
 import { addFactoryImages } from '../src/lib/server/factory-image-context';
 import { blueprintImageData, pngDimensions } from '../src/lib/server/factory-image-data';
@@ -279,4 +281,53 @@ test('bounded model previews preserve harness references and exclude oversized l
 	if (tool?.role !== 'toolResult') throw new Error('Expected tool result');
 	assert.match(JSON.stringify(tool.content), /exceeds the model request budget/u);
 	assert.doesNotMatch(JSON.stringify(tool.content), /capture another/u);
+});
+
+test('native factory snapshots preserve the exact copyable blueprint before and after rendering', () => {
+	const blueprint = encode({
+		...layout,
+		wires: [[1, 1, 2, 1]],
+		tiles: [{ name: 'space-platform-foundation', position: { x: 0, y: 0 } }]
+	});
+	const snapshot = {
+		kind: 'factory-view',
+		force: 'player',
+		surface: 'platform-1',
+		tick: 10,
+		area: { left_top: { x: -16, y: -16 }, right_bottom: { x: 16, y: 16 } },
+		origin: { x: 0, y: 0 },
+		count: 1,
+		image: { id, width: 128, height: 96 },
+		blueprint
+	};
+	assert.equal(factoryViewSchema.parse(snapshot).blueprint, blueprint);
+	assert.equal(
+		factoryPreviewPendingSchema.parse({
+			...snapshot,
+			kind: 'factory-preview-pending',
+			image: { id }
+		}).blueprint,
+		blueprint
+	);
+	assert.equal(factoryViewSchema.parse({ ...snapshot, blueprint: undefined }).blueprint, undefined);
+});
+test('sandbox exports and compact factory results attach the image without repeating blueprint payloads', () => {
+	for (const toolName of ['sandbox_blueprint', 'factory_view']) {
+		const result = message(id, toolName);
+		result.content = [
+			{
+				type: 'text',
+				text: JSON.stringify({
+					kind: 'factory-view',
+					image: { id, width: 128, height: 96 },
+					blueprintAvailable: true
+				})
+			}
+		];
+		const context = addFactoryImages(normalizeContext({ messages: [result] }), () => png);
+		const output = context.messages.find((message) => message.role === 'toolResult');
+		assert.ok(output);
+		assert.equal(output.content.filter((part) => part.type === 'image').length, 1);
+		assert.deepEqual(output.content[0], result.content[0]);
+	}
 });
