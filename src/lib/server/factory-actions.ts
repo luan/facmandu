@@ -190,7 +190,7 @@ export const factoryActionInspectManifest = {
 
 export const factoryActionManifest = {
 	drone_command:
-		'Control the owning player’s Toby drone, separate from Entourage. Supply force, owner, command (follow, stay, move), and expected unitNumber/revision/surface from a fresh toby_drone lookup; move also needs position within 256 explored tiles. Native autopilot and ordinary construction robots consume the drone’s loaded equipment, power and items. No items, equipment, research or drones are granted. In-game callers can command only their own drone.',
+		'Control the owning player’s automatic Toby companion. Supply force, owner, command (follow, stay, move), and expected unitNumber/revision/surface from a fresh toby_drone lookup; move also needs position within 256 explored tiles. Toby follows and constructs nearby ghosts using actual materials from its cargo, the player or nearby same-force provider/storage chests. No crafting, equipment, robots or fuel is needed. Missing materials leave ghosts untouched; no building items or research are granted. In-game callers can command only their own drone.',
 	task_add:
 		'Add a shared force task to Task List using title, description and status (not_started, in_progress, paused, blocked). Identical active tasks are reused. Changes use the native mod and refresh its normal GUI; no world construction is implied.',
 	task_update:

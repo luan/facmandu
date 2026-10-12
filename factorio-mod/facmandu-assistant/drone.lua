@@ -22,7 +22,7 @@ function M.bind(player,entity)
   if state.entity.valid and state.entity==entity and index~=player.index then error('This Toby drone belongs to another player',0) end
  end
  local current=owned(player)
- if current and current.entity~=entity then error('Mine your current Toby drone before assigning another',0) end
+ if current and current.entity~=entity then error('A Toby drone is already assigned to you',0) end
  if not current then
   entity.follow_target=nil;entity.autopilot_destination=nil
   entity.enable_logistics_while_moving=true
