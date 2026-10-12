@@ -170,13 +170,19 @@ export function serverAssistantTools(context: {
 			);
 		}
 	});
-	if (groups.has('research') || groups.has('logistics') || groups.has('planning')) {
+	if (
+		groups.has('research') ||
+		groups.has('logistics') ||
+		groups.has('planning') ||
+		groups.has('power')
+	) {
 		useTool({
 			name: 'factory_action_inspect',
 			description:
-				'Read current factory entity, construction ghost, research, train or requester state and exact action preconditions. Use the operation and request fields declared in args. Never invent expected state.',
+				'Read current factory entity, construction ghost, wire connection, research, train or requester state and exact action preconditions. wire_inspect takes source/target unitNumber, name, position and connectorId with force/surface, and returns connection state, ghost state and tick. Connector IDs come from blueprint catalog or inspect_transport. Use the operation and request fields declared in args. Never invent expected state.',
 			input: v.object({
 				operation: v.picklist([
+					'wire_inspect',
 					'entity_inspect',
 					'entities_inspect',
 					'ghost_inspect',
@@ -207,9 +213,10 @@ export function serverAssistantTools(context: {
 		useTool({
 			name: 'factory_action',
 			description:
-				'Perform explicitly requested native entity edits, research, train or logistic request changes. entities_edit supports rotating factory entities, marking them for robot deconstruction, cancelling deconstruction, and cancelling construction ghosts. First inspect its exact target and expected state. Use the declared operation schema in args. A stale snapshot is rejected; inspect again before retrying. Questions about capabilities or advice do not authorize changes; "can you rotate/change X?" requests the stated action.',
+				'Perform explicitly requested native entity edits, wiring, research, train or logistic request changes. wire_connect joins copper or circuit connectors on existing same-force entities or ghosts with native reach checks, preserving other wires; copy expectedTick, expectedConnected, expectedSourceGhost and expectedTargetGhost from wire_inspect. entities_edit supports rotating factory entities, marking them for robot deconstruction, cancelling deconstruction, and cancelling construction ghosts. First inspect its exact target and expected state. Use the declared operation schema in args. A stale snapshot is rejected; inspect again before retrying. Questions about capabilities or advice do not authorize changes; "can you rotate/change X?" requests the stated action.',
 			input: v.object({
 				operation: v.picklist([
+					'wire_connect',
 					'drone_command',
 					'task_add',
 					'task_update',

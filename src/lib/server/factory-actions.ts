@@ -41,6 +41,11 @@ const logistic = z.object({
 	expectedRequest: request.nullable()
 });
 const entity = logistic.pick({ unitNumber: true, force: true, surface: true, position: true });
+const wireEndpoint = entity.pick({ unitNumber: true, position: true }).extend({
+	name,
+	connectorId: index
+});
+const wire = z.object({ force: label, surface: label, source: wireEndpoint, target: wireEndpoint });
 const direction = z.union([z.literal(0), z.literal(4), z.literal(8), z.literal(12)]);
 const taskFields = z.object({
 	title: z.string().min(1).max(200),
@@ -78,6 +83,7 @@ const edits = z
 		'An entity may appear only once'
 	);
 export const factoryActionInspectSchema = z.discriminatedUnion('operation', [
+	wire.extend({ operation: z.literal('wire_inspect') }),
 	z.object({
 		operation: z.literal('entities_inspect'),
 		force: label,
@@ -104,6 +110,13 @@ export const factoryActionInspectSchema = z.discriminatedUnion('operation', [
 ]);
 
 export const factoryActionSchema = z.discriminatedUnion('operation', [
+	wire.extend({
+		operation: z.literal('wire_connect'),
+		expectedTick: z.number().int().nonnegative(),
+		expectedConnected: z.boolean(),
+		expectedSourceGhost: z.boolean(),
+		expectedTargetGhost: z.boolean()
+	}),
 	z.object({
 		operation: z.literal('drone_command'),
 		force: label,
@@ -175,6 +188,8 @@ export const factoryActionInspectJsonSchema = z.toJSONSchema(factoryActionInspec
 });
 
 export const factoryActionInspectManifest = {
+	wire_inspect:
+		'Inspect an exact pair of same-force stationary entities or ghosts and native wire connector IDs. Returns connection state, ghost identities and tick for wire_connect. Does not create connectors or change wiring.',
 	entities_inspect:
 		'Inspect up to 16 exact built entities or construction ghosts by unitNumber, prototype name and position. Returns tick and snapshots for entities_edit.',
 	entity_inspect:
@@ -189,6 +204,8 @@ export const factoryActionInspectManifest = {
 } satisfies Record<FactoryActionInspect['operation'], string>;
 
 export const factoryActionManifest = {
+	wire_connect:
+		'Connect an inspected native copper or circuit wire between two same-force stationary entities or construction ghosts, including existing-world endpoints omitted from a blueprint. Supply source/target identities and connectorId, force/surface, and expectedTick/Connected/SourceGhost/TargetGhost from wire_inspect. Native reach and wire compatibility are enforced. Never disconnects other wires, replaces entities, supplies items or changes research.',
 	drone_command:
 		'Control the owning player’s automatic Toby companion. Supply force, owner, command (follow, stay, move), and expected unitNumber/revision/surface from a fresh toby_drone lookup; move also needs position within 256 explored tiles. Toby follows and constructs nearby ghosts using actual materials from its cargo, the player or nearby same-force provider/storage chests. No crafting, equipment, robots or fuel is needed. Missing materials leave ghosts untouched; no building items or research are granted. In-game callers can command only their own drone.',
 	task_add:
@@ -308,6 +325,14 @@ const ghostResultSchema = z.discriminatedUnion('operation', [
 		after: z.object({ cancelled: z.literal(true) })
 	})
 ]);
+const wireResultSchema = z.object({
+	operation: z.enum(['wire_inspect', 'wire_connect']),
+	tick: z.number().int().nonnegative(),
+	sourceGhost: z.boolean(),
+	targetGhost: z.boolean(),
+	connected: z.boolean(),
+	canReach: z.boolean().optional()
+});
 
 async function execute(
 	server: ManagedServer,
@@ -326,6 +351,11 @@ async function execute(
 	const reply = replySchema.safeParse(decoded);
 	if (!reply.success) throw new ServerError(502, 'The server did not return a valid action result');
 	if (!reply.data.ok) throw new ServerError(409, reply.data.error);
+	if (input.operation.startsWith('wire_')) {
+		const result = wireResultSchema.safeParse(reply.data.result);
+		if (!result.success) throw new ServerError(502, 'The server returned an invalid wire result');
+		return result.data;
+	}
 	if (input.operation === 'drone_command') {
 		const result = z
 			.object({

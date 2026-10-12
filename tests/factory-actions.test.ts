@@ -61,6 +61,100 @@ test('inspection cannot accept write operations', () => {
 	);
 });
 
+test('wire connections require exact endpoints and fresh observed connection state', () => {
+	const endpoint = {
+		unitNumber: 12,
+		name: 'medium-electric-pole',
+		position: { x: 0.5, y: 0.5 },
+		connectorId: 5
+	};
+	const inspected = {
+		operation: 'wire_inspect',
+		force: 'player',
+		surface: 'nauvis',
+		source: endpoint,
+		target: { ...endpoint, unitNumber: 13 }
+	};
+	const change = {
+		...inspected,
+		operation: 'wire_connect',
+		expectedTick: 100,
+		expectedConnected: false,
+		expectedSourceGhost: false,
+		expectedTargetGhost: true
+	};
+	assert.equal(factoryActionInspectSchema.safeParse(inspected).success, true);
+	assert.equal(factoryActionSchema.safeParse(change).success, true);
+	assert.equal(factoryActionInspectSchema.safeParse(change).success, false);
+	for (const missing of [
+		'expectedTick',
+		'expectedConnected',
+		'expectedSourceGhost',
+		'expectedTargetGhost'
+	])
+		assert.equal(factoryActionSchema.safeParse({ ...change, [missing]: undefined }).success, false);
+	assert.equal(
+		factoryActionSchema.safeParse({ ...change, source: { ...endpoint, connectorId: 0 } }).success,
+		false
+	);
+});
+
+test('native wiring preserves other connections and rejects stale, foreign or unreachable endpoints', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ ${readFileSync('src/lib/server/factory-actions/action.lua', 'utf8')}
+ local force={name='player'}
+ local p={type='electric-pole',items_to_place_this={{name='medium-electric-pole'}}}
+ prototypes={entity={pole=p}}
+ local a={type='electric-pole',name='pole',unit_number=1,force=force,position={x=0.5,y=0.5}}
+ local b={type='entity-ghost',ghost_name='pole',ghost_prototype=p,unit_number=2,force=force,position={x=7.5,y=0.5}}
+ local made,writes=0,0
+ local connected,reachable=false,true
+ local ca,cb={},{}
+ local function connector(e,c)
+  e.get_wire_connector=function(id,create)
+   assert(id==5)
+   if not e.created and create then e.created=true;made=made+1 end
+   return e.created and c or nil
+  end
+ end
+ connector(a,ca);connector(b,cb)
+ ca.is_connected_to=function(target) assert(target==cb);return connected end
+ ca.can_wire_reach=function(target) assert(target==cb);return reachable end
+ ca.connect_to=function(target,check,origin)
+  assert(target==cb and check==true and origin==defines.wire_origin.player)
+  writes=writes+1;connected=true;return true
+ end
+ ca.disconnect_all=function() error('Unrelated wires must be preserved') end
+ defines={wire_origin={player=1}}
+ game={tick=100,surfaces={nauvis={find_entities_filtered=function(q)
+  if q.position.x==a.position.x then return {a} else return {b} end
+ end}}}
+ local request={operation='wire_inspect',force='player',surface='nauvis',source={unitNumber=1,name='pole',position=a.position,connectorId=5},target={unitNumber=2,name='pole',position=b.position,connectorId=5}}
+ local snapshot=action(request)
+ assert(not snapshot.connected and not snapshot.sourceGhost and snapshot.targetGhost and made==0 and writes==0)
+ request.operation='wire_connect';request.expectedTick=snapshot.tick;request.expectedConnected=snapshot.connected;request.expectedSourceGhost=snapshot.sourceGhost;request.expectedTargetGhost=snapshot.targetGhost
+ assert(action(request).connected and writes==1 and made==2)
+ assert(not pcall(action,request) and writes==1,'Concurrent connections need fresh inspection')
+ connected=false;reachable=false
+ assert(not pcall(action,request) and writes==1,'Native wire reach must be enforced')
+ request.operation='wire_inspect';assert(action(request).canReach==false)
+ request.operation='wire_connect';reachable=true;game.tick=4001
+ assert(not pcall(action,request) and writes==1)
+ game.tick=100;b.force={name='other'}
+ assert(not pcall(action,request) and writes==1)
+ b.force=force;b.unit_number=3
+ assert(not pcall(action,request) and writes==1)
+ b.unit_number=2;b.type='electric-pole';b.name='pole'
+ assert(not pcall(action,request) and writes==1,'Ghost revival changes the inspected target')
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
+
 test('Toby drone commands require ownership and a fresh movement revision', () => {
 	const command = {
 		operation: 'drone_command',

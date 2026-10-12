@@ -275,8 +275,9 @@ local function logistic_inspect(request)
 end
 
 local function stationary_factory_entity(e)
- local p=prototypes.entity[e.name]
- return p and p.items_to_place_this and #p.items_to_place_this>0 and e.type~='character' and e.type~='car' and e.type~='spider-vehicle' and e.type~='locomotive' and e.type~='cargo-wagon' and e.type~='fluid-wagon' and e.type~='artillery-wagon'
+ local p=e.type=='entity-ghost' and e.ghost_prototype or prototypes.entity[e.name]
+ local kind=e.type=='entity-ghost' and p and p.type or e.type
+ return p and p.items_to_place_this and #p.items_to_place_this>0 and kind~='character' and kind~='car' and kind~='spider-vehicle' and kind~='locomotive' and kind~='cargo-wagon' and kind~='fluid-wagon' and kind~='artillery-wagon'
 end
 local function inspected_entity(request, ghost)
   local surface = game.surfaces[request.surface]
@@ -327,7 +328,7 @@ local function edit_entity(request, target)
  if not surface then fail('Surface no longer exists') end
  for _,e in ipairs(surface.find_entities_filtered{position=target.position,radius=0.1,force=request.force,limit=16}) do
   local name=e.type=='entity-ghost' and e.ghost_name or e.name
-  if e.unit_number==target.unitNumber and name==target.name and e.position.x==target.position.x and e.position.y==target.position.y then return e end
+  if e.force.name==request.force and e.unit_number==target.unitNumber and name==target.name and e.position.x==target.position.x and e.position.y==target.position.y then return e end
  end
  fail('Entity changed; inspect it again')
 end
@@ -337,6 +338,34 @@ local function edit_snapshot(e)
  if e.type=='assembling-machine' or e.type=='furnace' or e.type=='rocket-silo' then local r=e.get_recipe();recipe=r and r.name or '' end
  if ghost and (e.ghost_type=='assembling-machine' or e.ghost_type=='furnace' or e.ghost_type=='rocket-silo') then local r=e.get_recipe();recipe=r and r.name or '' end
  return {unitNumber=e.unit_number,name=ghost and e.ghost_name or e.name,position=e.position,direction=e.direction,ghost=ghost,recipe=recipe,deconstructing=e.to_be_deconstructed()}
+end
+
+local function wire_action(request)
+ local source_entity=edit_entity(request,request.source)
+ local target_entity=edit_entity(request,request.target)
+ if source_entity==target_entity then fail('Choose two distinct wire endpoints') end
+ local function ghost(e) return e.type=='entity-ghost' end
+ for _,e in ipairs{source_entity,target_entity} do
+  if not stationary_factory_entity(e) then fail('Choose stationary player-built wire endpoints') end
+ end
+ local source=source_entity.get_wire_connector(request.source.connectorId,false)
+ local target=target_entity.get_wire_connector(request.target.connectorId,false)
+ local connected=source and target and source.is_connected_to(target) or false
+ local source_ghost,target_ghost=ghost(source_entity),ghost(target_entity)
+ if request.operation=='wire_connect' then
+  if request.expectedTick>game.tick or game.tick-request.expectedTick>3600 or connected~=request.expectedConnected
+   or source_ghost~=request.expectedSourceGhost or target_ghost~=request.expectedTargetGhost then fail('Wire inspection changed or expired; inspect again') end
+  if not connected then
+   source=source or source_entity.get_wire_connector(request.source.connectorId,true)
+   target=target or target_entity.get_wire_connector(request.target.connectorId,true)
+   if not source or not target or not source.can_wire_reach(target) or not source.connect_to(target,true,defines.wire_origin.player) then fail('Factorio rejected wire compatibility or reach') end
+   connected=source.is_connected_to(target)
+   if not connected then fail('Wire connection did not persist; inspect again') end
+  end
+ end
+ local can_reach
+ if source and target then can_reach=source.can_wire_reach(target) end
+ return {operation=request.operation,tick=game.tick,sourceGhost=source_ghost,targetGhost=target_ghost,connected=connected,canReach=can_reach}
 end
 local function entity_edits(request)
  local entities={}
@@ -381,6 +410,7 @@ end
 
 local function action(request)
   local operation = request.operation
+  if operation=='wire_inspect' or operation=='wire_connect' then return wire_action(request) end
   if operation=='drone_command' then
     if request.player and request.player.name~=request.owner then fail('You can command only your own Toby drone') end
     local interface=remote.interfaces['facmandu-toby-drone']
