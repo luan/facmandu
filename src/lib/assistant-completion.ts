@@ -33,15 +33,35 @@ export function missingFactoryCheck(
 	);
 }
 
-export function unfinishedFactoryConnections(requests: readonly string[], answer: string): boolean {
+function requestedExpansion(requests: readonly string[]): boolean {
 	const expansion = requests.some((request) =>
 		/^\s*(?:i|we)\s+(?:need|want)\s+(?:more\s+)?\S+/i.test(request)
 	);
-	if (
-		!expansion ||
-		requests.some((request) => /\b(?:blueprint|design|plan|advice)\b/i.test(request))
-	)
-		return false;
+	return (
+		expansion &&
+		!requests.some((request) =>
+			/\b(?:blueprint|design|plan|advice|cancel|stop)\b|\b(?:don't|do not|never)\s+(?:build|place|construct|change|modify)\b|\b(?:only|just)\s+(?:inspect|explain|tell|show)\b/i.test(
+				request
+			)
+		)
+	);
+}
+
+export function missingFactoryDesignAttempt(
+	requests: readonly string[],
+	tools: readonly { tool: string; isError: boolean }[]
+): boolean {
+	// A successful production plan resolves the product. Until typed intent is
+	// available, only enforce this for the direct expansion phrases above.
+	return (
+		requestedExpansion(requests) &&
+		tools.some(({ tool, isError }) => tool === 'plan_production' && !isError) &&
+		!tools.some(({ tool }) => tool === 'blueprint_operation' || tool === 'factory_action')
+	);
+}
+
+export function unfinishedFactoryConnections(requests: readonly string[], answer: string): boolean {
+	if (!requestedExpansion(requests)) return false;
 	// Missing construction stock is allowed; admitted gaps in the designed
 	// supply, output or power connections still need investigation and repair.
 	return /\b(?:not placed|nothing (?:was )?placed|haven't placed|only (?:designed|drafted))\b|\b(?:could not|cannot|can't|haven't|did not) verify\b[^.!?]{0,120}\b(?:power|supply|feed|connection)\b|\b(?:power|supply|feed|connection)\b[^.!?]{0,60}\b(?:unverified|unconfirmed|not verified)\b/i.test(

@@ -3,9 +3,37 @@ import { test } from 'node:test';
 import {
 	completionRequest,
 	missingFactoryCheck,
+	missingFactoryDesignAttempt,
 	needsContinuation,
 	unfinishedFactoryConnections
 } from '../src/lib/assistant-completion';
+
+test('a resolved expansion must attempt a layout or factory action before declining it', () => {
+	const planned = [{ tool: 'plan_production', isError: false }];
+	assert.equal(missingFactoryDesignAttempt(['I need more glass.'], planned), true);
+	for (const tool of ['blueprint_operation', 'factory_action']) {
+		assert.equal(
+			missingFactoryDesignAttempt(['I need more glass.'], [...planned, { tool, isError: true }]),
+			false
+		);
+	}
+	assert.equal(
+		missingFactoryDesignAttempt(
+			['I need more glass.'],
+			[{ tool: 'plan_production', isError: true }]
+		),
+		false
+	);
+	assert.equal(missingFactoryDesignAttempt(['I need a blueprint only.'], planned), false);
+	assert.equal(missingFactoryDesignAttempt(['How could I make more glass?'], planned), false);
+	for (const steering of ['Do not place anything.', 'Stop.', 'Just inspect the factory.']) {
+		assert.equal(missingFactoryDesignAttempt(['I need more glass.', steering], planned), false);
+		assert.equal(
+			unfinishedFactoryConnections(['I need more glass.', steering], 'Nothing placed.'),
+			false
+		);
+	}
+});
 
 test('current factory checks require fresh inspection while advice and verified read failures can finish', () => {
 	const status = [{ tool: 'server_status', isError: false }];

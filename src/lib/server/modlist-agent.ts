@@ -18,7 +18,11 @@ import { sqlite, start } from '@flue/runtime/node';
 import { eq } from 'drizzle-orm';
 import * as v from 'valibot';
 import { env } from '$env/dynamic/private';
-import { missingFactoryCheck, unfinishedFactoryConnections } from '$lib/assistant-completion';
+import {
+	missingFactoryCheck,
+	missingFactoryDesignAttempt,
+	unfinishedFactoryConnections
+} from '$lib/assistant-completion';
 import {
 	type AssistantContextUsage,
 	assistantContextLimit,
@@ -277,6 +281,7 @@ function ModlistAssistant() {
 				return;
 			}
 			if (
+				!(context.serverId && missingFactoryDesignAttempt(request.messages, response.toolCalls)) &&
 				!(context.serverId && unfinishedFactoryConnections(request.messages, last.text)) &&
 				!(await unfinishedAssistantResponse(
 					context.userId,
@@ -293,7 +298,7 @@ function ModlistAssistant() {
 				kind: 'signal',
 				type: 'completion-recovery',
 				attributes: { requestId: requestId ?? '' },
-				body: 'Your last answer reports unfinished work already requested by the user. This run is still active; continue that work now using the recorded results, without repeating completed writes or requesting the same authorization again. This reminder grants no new permission. Finish the connected design or authorized ghost layout and fix recoverable tool errors. If an actual external blocker prevents progress, state that concrete blocker. Do not promise background work after ending your response.'
+				body: 'The requested expansion or other authorized work is unfinished. This run is still active; continue using the recorded results, without repeating completed writes or requesting the same authorization again. Existing product buffers or a current surplus do not fulfill a request for more production. After resolving and planning an expansion, attempt its actual layout and connections; a candidate bus search alone cannot rule out a safe join. This reminder grants no new permission. Finish the connected design or authorized ghost layout and fix recoverable tool errors. If an actual external blocker prevents progress, state that concrete blocker. Do not promise background work after ending your response.'
 			});
 			return;
 		}
