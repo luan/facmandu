@@ -472,6 +472,49 @@ local function blueprint(request)
     end
    end
   end
+  -- Trace proposed geometry only. External endpoints still need native world checks.
+  local belts={}
+  for i,e in ipairs(entities) do
+   local kind=prototypes.entity[e.name].type
+   if kind=='transport-belt' or kind=='underground-belt' then belts[e.position.x..':'..e.position.y]=i end
+  end
+  local function planned_path(start)
+   local seen,index,length={},start,0
+   while true do
+    local e=entities[index];local p=prototypes.entity[e.name];local heading=headings[e.direction]
+    local ending={terminal_entity=index,length=length+1,position=e.position}
+    if seen[index] then ending.status='loop';ending.length=length;return ending end
+    seen[index]=true;length=length+1
+    if not heading or p.tile_width~=1 or p.tile_height~=1 then ending.status='unsupported';return ending end
+    local next_index
+    if p.type=='underground-belt' and e.type=='input' then
+     next_index=partners[index]
+     if not next_index or partners[next_index]~=index then ending.status='unpaired';return ending end
+    else
+     ending.next_position={x=e.position.x+heading[1],y=e.position.y+heading[2]}
+     next_index=belts[ending.next_position.x..':'..ending.next_position.y]
+     if not next_index then ending.status='external';return ending end
+     local other=entities[next_index]
+     if other.direction==(e.direction+8)%16 then ending.status='opposed';ending.next_entity=next_index;return ending end
+     if prototypes.entity[other.name].type=='underground-belt' then
+      if other.type=='output' then
+       ending.status=other.direction==e.direction and 'underground_exit' or 'unsupported';ending.next_entity=next_index;return ending
+      elseif other.direction~=e.direction then ending.status='unsupported';ending.next_entity=next_index;return ending end
+     end
+    end
+    index=next_index
+   end
+  end
+  for _,transfer in ipairs(transfers) do
+   local target=transfer.drop_entity and entities[transfer.drop_entity]
+   if target and belts[target.position.x..':'..target.position.y]==transfer.drop_entity then
+    transfer.planned_belt_path=planned_path(transfer.drop_entity)
+    local path=transfer.planned_belt_path
+    if path.status=='opposed' or path.status=='underground_exit' then
+     warn('Inserter '..transfer.inserter..' planned belt path cannot feed entity '..path.next_entity..' from entity '..path.terminal_entity..' ('..path.status..'). Correct this join before placement.')
+    end
+   end
+  end
   for last,row in pairs(rows) do
    if row.center==0 and row.left+row.right>=2 and (row.left==0 or row.right==0) then
     local side=row.left>0 and 'left' or 'right'

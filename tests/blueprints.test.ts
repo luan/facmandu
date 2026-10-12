@@ -204,12 +204,13 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
  inserter.inserter_pickup_position={x=0,y=-1}
  inserter.inserter_drop_position={x=0,y=1.2}
  local belt=prototype('transport-belt',1);belt.belt_speed=0.03125
+ local underground=prototype('underground-belt',1);underground.max_underground_distance=5
  local furnace=prototype('furnace',3)
  local pole=prototype('electric-pole',1)
  pole.get_max_wire_distance=function(quality) assert(quality=='normal');return 17 end
  pole.get_supply_area_distance=function(quality) assert(quality=='normal');return 4 end
  local box=prototype('container',3);box.tile_height=1;box.supports_direction=false
- prototypes={entity={plant=plant,inserter=inserter,belt=belt,box=box,furnace=furnace,pole=pole}}
+ prototypes={entity={plant=plant,inserter=inserter,belt=belt,ug=underground,other_ug=underground,box=box,furnace=furnace,pole=pole}}
  local omit_vectors=false
  game={forces={player={recipes={{enabled=true,products={{type='item',name='building'}}}}}},create_inventory=function()
   local saved
@@ -278,6 +279,25 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
    entity('inserter',4.5,2.5,0),entity('belt',4.5,3.5,4)
   }}
   assert(#single_lane.warnings==1 and single_lane.warnings[1]:match('7.5 items/s'))
+  local function path_design(label,tail)
+   local list={entity('plant',2.5,0.5,0),entity('inserter',2.5,2.5,0),entity('belt',2.5,3.5,4)}
+   for _,e in ipairs(tail) do list[#list+1]=e end
+   return blueprint{operation='create',force='player',label=label,entities=list}.inserter_transfers[1].planned_belt_path
+  end
+  local entrance=entity('ug',4.5,4.5,4);entrance.type='input'
+  local exit=entity('ug',8.5,4.5,4);exit.type='output'
+  local path=path_design('Turn and tunnel',{entity('belt',3.5,3.5,8),entity('belt',3.5,4.5,4),entrance,exit,entity('belt',9.5,4.5,0)})
+  assert(path.status=='external' and path.length==6 and path.terminal_entity==8)
+  local next_point=point(9.5,3.5);assert(path.next_position.x==next_point.x and path.next_position.y==next_point.y)
+  local loop=path_design('Loop',{entity('belt',3.5,3.5,8),entity('belt',3.5,4.5,12),entity('belt',2.5,4.5,0)})
+  assert(loop.status=='loop' and loop.length==4)
+  local opposed=path_design('Opposed',{entity('belt',3.5,3.5,12)})
+  assert(opposed.status=='opposed' and opposed.terminal_entity==3 and opposed.next_entity==4)
+  entrance=entity('ug',3.5,3.5,4);entrance.type='input'
+  exit=entity('other_ug',7.5,3.5,4);exit.type='output'
+  assert(path_design('Mixed tunnel',{entrance,exit}).status=='unpaired')
+  exit=entity('ug',3.5,3.5,4);exit.type='output'
+  assert(path_design('Into exit',{exit}).status=='underground_exit')
   local isolated=blueprint{operation='create',force='player',label='External',entities={entity('inserter',2.5,2.5,0)}}
   assert(not isolated.inserter_transfers[1].pickup_entity and not isolated.inserter_transfers[1].drop_entity)
  end

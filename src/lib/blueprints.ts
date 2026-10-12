@@ -378,7 +378,24 @@ export const blueprintArtifactSchema = z
 					pickup_entity: z.number().int().min(1).max(MAX_BLUEPRINT_ENTITIES).optional(),
 					drop_entity: z.number().int().min(1).max(MAX_BLUEPRINT_ENTITIES).optional(),
 					drop_belt_side: z.enum(['left', 'right', 'center']).optional(),
-					belt_lane_items_per_second: z.number().positive().optional()
+					belt_lane_items_per_second: z.number().positive().optional(),
+					planned_belt_path: z
+						.object({
+							status: z.enum([
+								'external',
+								'loop',
+								'unpaired',
+								'opposed',
+								'underground_exit',
+								'unsupported'
+							]),
+							length: z.number().int().min(1).max(MAX_BLUEPRINT_ENTITIES),
+							terminal_entity: z.number().int().min(1).max(MAX_BLUEPRINT_ENTITIES),
+							position: z.object({ x: z.number(), y: z.number() }),
+							next_position: z.object({ x: z.number(), y: z.number() }).optional(),
+							next_entity: z.number().int().min(1).max(MAX_BLUEPRINT_ENTITIES).optional()
+						})
+						.optional()
 				})
 			)
 			.max(MAX_BLUEPRINT_ENTITIES)
