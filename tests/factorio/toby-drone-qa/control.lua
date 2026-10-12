@@ -16,6 +16,7 @@ script.on_event(defines.events.on_player_created,function(event)
  p.teleport({0,0})
  p.get_main_inventory().clear()
  assert(p.insert{name='transport-belt',count=4}==4)
+ assert(p.insert{name='stone-brick',count=2}==2)
 end)
 script.on_nth_tick(30,function()
  local p=storage.player and game.get_player(storage.player)
@@ -50,17 +51,19 @@ script.on_nth_tick(30,function()
    assert(#ghosts==1);storage.inserter_position=ghosts[1].position;inventory.destroy()
    assert(p.surface.create_entity{name='stone-furnace',position={34,7},force=p.force})
    storage.blocked=assert(p.surface.create_entity{name='entity-ghost',inner_name='transport-belt',position={34.5,7.5},force=p.force})
+   for x=30,31 do assert(p.surface.create_entity{name='tile-ghost',inner_name='stone-path',position={x,8},force=p.force}) end
    storage.stage='construction';storage.started=game.tick
   elseif storage.stage=='construction' then
    local belts=p.surface.count_entities_filtered{name='transport-belt',area={{29,3},{34,6}},force=p.force}
    local inserter=p.surface.find_entity('fast-inserter',storage.inserter_position)
-   if belts==3 and inserter and game.tick-storage.started>=240 then
+   local tiles=p.surface.get_tile(30,8).name=='stone-path' and p.surface.get_tile(31,8).name=='stone-path'
+   if belts==3 and inserter and tiles and game.tick-storage.started>=240 then
     local e=storage.drone;assert(p.get_item_count('transport-belt')==1)
     assert(storage.rare.valid and storage.blocked.valid)
     assert(storage.provider.get_item_count('fast-inserter')==0)
     local filter=inserter.get_filter(1);assert(filter and filter.name=='iron-plate' and inserter.use_filters)
-    assert(#e.grid.equipment==0 and read(p).built==4)
-    record('stock_conservation',{builtBelts=belts,remainingBelts=p.get_item_count('transport-belt'),providerInserters=storage.provider.get_item_count('fast-inserter'),rareGhostUntouched=storage.rare.valid,blockedGhostUntouched=storage.blocked.valid,filter=filter,equipment=#e.grid.equipment,state=read(p)})
+    assert(#e.grid.equipment==0 and read(p).built==6 and p.get_item_count('stone-brick')==0)
+    record('stock_conservation',{builtTiles=2,remainingBricks=p.get_item_count('stone-brick'),builtBelts=belts,remainingBelts=p.get_item_count('transport-belt'),providerInserters=storage.provider.get_item_count('fast-inserter'),rareGhostUntouched=storage.rare.valid,blockedGhostUntouched=storage.blocked.valid,filter=filter,equipment=#e.grid.equipment,state=read(p)})
     command(p,'stay');storage.stayPosition={x=e.position.x,y=e.position.y}
     storage.stage='stationary';storage.started=game.tick
    elseif game.tick-storage.started>3600 then error('Automatic construction did not complete: '..helpers.table_to_json(read(p))) end
