@@ -11,7 +11,7 @@ test('belt tracing follows native underground pairs and branches without crossin
 		state,
 		to_luastring(`
  package.path=${JSON.stringify(`${root}/?.lua;`)}..package.path
- defines={entity_status={working=1}}
+ defines={entity_status={working=1},inventory={chest=1}}
  local force={name='player',is_chunk_charted=function(_,chunk) return chunk.x<2 end}
  local line={get_item_count=function() return 0 end,get_contents=function() return {} end}
  local function belt(id,x,kind)
@@ -47,6 +47,9 @@ test('belt tracing follows native underground pairs and branches without crossin
  assert(#trace.nodes==1 and trace.nodes[1].unpaired)
  for _,limit in ipairs({0,257,1.5,0/0,math.huge,'2'}) do args.trace_limit=limit;assert(not pcall(inspect,args)) end
  args.trace_limit=16;start.position.x=64.5;args.x=64.5;assert(not pcall(inspect,args))
+ start.type='container';start.get_inventory=function() return {get_contents=function() return {{name='coal',count=400,quality='normal'}} end} end
+ local chest=inspect(args)
+ assert(chest.found and chest.contents.items[1].count==400 and chest.trace_unavailable and not chest.belt_trace)
  `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));

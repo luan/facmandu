@@ -55,12 +55,12 @@ local function inspect(a)
  local e,miss,surface,force=target.find(a)
  if not e then return miss end
  if not supported[e.type] then return {found=false,reason='Not a supported transport entity; use inspect_machine for crafting machines'} end
- if a.trace_limit and not is_belt(e) then error('trace_limit requires a built belt or splitter',0) end
- if a.trace_limit and not force.is_chunk_charted(surface,{x=math.floor(e.position.x/32),y=math.floor(e.position.y/32)}) then error('Belt trace starts outside charted force territory',0) end
+ if a.trace_limit and is_belt(e) and not force.is_chunk_charted(surface,{x=math.floor(e.position.x/32),y=math.floor(e.position.y/32)}) then error('Belt trace starts outside charted force territory',0) end
  if a.item~=nil and (type(a.item)~='string' or not (prototypes.item[a.item] or prototypes.fluid[a.item])) then error('Unknown item or fluid prototype',0) end
  local status
  for name,id in pairs(defines.entity_status) do if id==e.status then status=name;break end end
  local row={found=true,force=force.name,surface=surface.name,name=e.name,type=e.type,unit_number=e.unit_number,position=e.position,direction=e.direction,status=status}
+ if a.trace_limit and not is_belt(e) then row.trace_unavailable='Downstream belt tracing requires a built belt or splitter. This entity inspection is complete; use its transport targets to find the belt.' end
  if a.item then
   if prototypes.fluid[a.item] then row.item={name=a.item,kind='fluid',count=e.get_fluid_count(a.item)}
   else row.item={name=a.item,quality='normal',count=e.get_item_count{name=a.item,quality='normal'}} end
