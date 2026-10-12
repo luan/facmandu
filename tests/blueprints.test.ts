@@ -374,7 +374,7 @@ test('compact rows expand exact native positions and preserve settings within th
 	assert.equal(expanded.entities[3]?.direction, 8);
 	assert.equal(blueprintInputSchema.safeParse(rows).success, true);
 	assert.equal(
-		blueprintRowsSchema.safeParse({ ...rows, entityRows: [{ ...rows.entityRows[0], count: 200 }] })
+		blueprintRowsSchema.safeParse({ ...rows, entityRows: [{ ...rows.entityRows[0], count: 1000 }] })
 			.success,
 		false
 	);
@@ -399,7 +399,7 @@ test('compact rows expand exact native positions and preserve settings within th
 test('blueprints reject arbitrary settings and unbounded layouts at the tool boundary', () => {
 	for (const entities of [
 		[],
-		Array(201).fill(design.entities[0]),
+		Array(1001).fill(design.entities[0]),
 		[{ ...design.entities[0], items: { 'iron-plate': 200 } }],
 		[{ ...design.entities[0], position: { x: 0.1, y: 0.5 } }]
 	]) {

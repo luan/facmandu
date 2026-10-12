@@ -84,7 +84,7 @@ export function blueprintCommand(
 	if (input.operation === 'place' && input.expectedDesign !== design)
 		throw new ServerError(409, 'Blueprint changed; inspect placement again');
 	const encoded = JSON.stringify({ ...input, design, player });
-	if (Buffer.byteLength(encoded) > 48000) throw new ServerError(400, 'Blueprint is too large');
+	if (Buffer.byteLength(encoded) > 128000) throw new ServerError(400, 'Blueprint is too large');
 	let delimiter = '=';
 	while (encoded.includes(`]${delimiter}]`)) delimiter += '=';
 	return `/silent-command local request=helpers.json_to_table([${delimiter}[${encoded}]${delimiter}])
@@ -95,7 +95,7 @@ return blueprint(request)
 end)
 if inventory and inventory.valid then inventory.destroy() end
 local reply=helpers.table_to_json(ok and {ok=true,result=result} or {ok=false,error=tostring(result):match("^[^\\n]*")})
-if #reply>65536 then reply='{"ok":false,"error":"Blueprint result too large"}' end
+if #reply>196608 then reply='{"ok":false,"error":"Blueprint result too large"}' end
 rcon.print(reply)`;
 }
 const replySchema = z.discriminatedUnion('ok', [

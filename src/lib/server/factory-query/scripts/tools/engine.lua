@@ -37,6 +37,8 @@ local power_diagnostics = require("scripts.tools.power_diagnostics")
 local train_diagnostics = require("scripts.tools.train_diagnostics")
 local logistic_requests = require("scripts.tools.logistic_requests")
 local planning         = require("scripts.tools.planning")
+local transport_route  = require("scripts.tools.transport_route")
+local bus_discovery    = require("scripts.tools.bus_discovery")
 local sweep            = require("scripts.sweep.tool")
 
 local MODULES = {
@@ -44,7 +46,7 @@ local MODULES = {
   research, tech_status, logistics, entity_count, environment, rockets, game_time,
   locate, kills, built, fluid_rate, trains,
   machine_diagnostics, transport_diagnostics, power_diagnostics, train_diagnostics, logistic_requests,
-  planning, resources, sweep,
+  planning, transport_route, bus_discovery, resources, sweep,
 }
 
 local INTERFACE = "ai-agent-bridge-tools"

@@ -2,12 +2,15 @@ import { z } from 'zod';
 import { factoryImagePendingSchema, factoryImageSchema } from './factory-images';
 
 const name = z.string().min(1).max(200);
+// A connected mine-to-bus expansion can exceed 200 entities. Keep one bounded
+// blueprint; increase this only after native placement and rendering benchmarks.
+export const MAX_BLUEPRINT_ENTITIES = 1000;
 const coordinate = z.number().min(-10000).max(10000).multipleOf(0.5);
 const vector = z.strictObject({ x: z.number().min(-64).max(64), y: z.number().min(-64).max(64) });
 const wire = z.tuple([
-	z.number().int().min(1).max(200),
+	z.number().int().min(1).max(MAX_BLUEPRINT_ENTITIES),
 	z.number().int().min(1).max(65535),
-	z.number().int().min(1).max(200),
+	z.number().int().min(1).max(MAX_BLUEPRINT_ENTITIES),
 	z.number().int().min(1).max(65535)
 ]);
 export const blueprintEntitySchema = z.strictObject({
@@ -69,19 +72,19 @@ export const blueprintDesignSchema = z.strictObject({
 	force: name,
 	wires: z.array(wire).max(1000).default([]),
 	label: z.string().min(1).max(120),
-	entities: z.array(blueprintEntitySchema).max(200).default([]),
+	entities: z.array(blueprintEntitySchema).max(MAX_BLUEPRINT_ENTITIES).default([]),
 	tiles: z.array(blueprintTileSchema).max(1024).default([])
 });
 const entityRows = z
 	.array(
 		z.strictObject({
 			entity: blueprintEntitySchema.omit({ wires: true }),
-			count: z.number().int().min(1).max(200),
+			count: z.number().int().min(1).max(MAX_BLUEPRINT_ENTITIES),
 			step: z.strictObject({ x: coordinate, y: coordinate })
 		})
 	)
 	.min(1)
-	.max(200)
+	.max(MAX_BLUEPRINT_ENTITIES)
 	.describe(
 		'Repeat an entity along a row: copy 0 uses entity.position, copy n adds n * step. Use for straight belts, pipes and machine rows. Settings and relative inserter reach are retained. Wire individually after expansion.'
 	);
@@ -92,8 +95,9 @@ export const blueprintRowsSchema = blueprintDesignSchema
 	})
 	.refine(
 		(input) =>
-			input.entities.length + input.entityRows.reduce((sum, row) => sum + row.count, 0) <= 200,
-		'Expanded blueprint exceeds 200 entities'
+			input.entities.length + input.entityRows.reduce((sum, row) => sum + row.count, 0) <=
+			MAX_BLUEPRINT_ENTITIES,
+		`Expanded blueprint exceeds ${MAX_BLUEPRINT_ENTITIES} entities`
 	);
 
 export function expandBlueprintRows(input: z.infer<typeof blueprintRowsSchema>): BlueprintRequest {
@@ -219,11 +223,19 @@ export const blueprintReferenceSchema = z.discriminatedUnion('operation', [
 		operation: z.literal('create'),
 		label: z.string().min(1).max(120).optional(),
 		entityChanges: z
-			.array(z.strictObject({ index: z.number().int().min(1).max(200), changes: entityPatch }))
-			.max(200)
+			.array(
+				z.strictObject({
+					index: z.number().int().min(1).max(MAX_BLUEPRINT_ENTITIES),
+					changes: entityPatch
+				})
+			)
+			.max(MAX_BLUEPRINT_ENTITIES)
 			.default([]),
-		removedEntityIndices: z.array(z.number().int().min(1).max(200)).max(200).default([]),
-		addedEntities: z.array(blueprintEntitySchema).max(200).default([]),
+		removedEntityIndices: z
+			.array(z.number().int().min(1).max(MAX_BLUEPRINT_ENTITIES))
+			.max(MAX_BLUEPRINT_ENTITIES)
+			.default([]),
+		addedEntities: z.array(blueprintEntitySchema).max(MAX_BLUEPRINT_ENTITIES).default([]),
 		addedEntityRows: entityRows.optional()
 	}),
 	designReference.extend({
@@ -306,23 +318,23 @@ export const blueprintArtifactSchema = z
 					height: z.number().positive()
 				})
 			)
-			.max(200)
+			.max(MAX_BLUEPRINT_ENTITIES)
 			.default([]),
 		tiles: z.array(blueprintTileSchema).max(1024).default([]),
 		warnings: z.array(z.string()).default([]),
 		inserter_transfers: z
 			.array(
 				z.object({
-					inserter: z.number().int().min(1).max(200),
+					inserter: z.number().int().min(1).max(MAX_BLUEPRINT_ENTITIES),
 					pickup: z.object({ x: z.number(), y: z.number() }),
 					drop: z.object({ x: z.number(), y: z.number() }),
-					pickup_entity: z.number().int().min(1).max(200).optional(),
-					drop_entity: z.number().int().min(1).max(200).optional(),
+					pickup_entity: z.number().int().min(1).max(MAX_BLUEPRINT_ENTITIES).optional(),
+					drop_entity: z.number().int().min(1).max(MAX_BLUEPRINT_ENTITIES).optional(),
 					drop_belt_side: z.enum(['left', 'right', 'center']).optional(),
 					belt_lane_items_per_second: z.number().positive().optional()
 				})
 			)
-			.max(200)
+			.max(MAX_BLUEPRINT_ENTITIES)
 			.default([]),
 		cost: z.array(z.object({ name: z.string(), count: z.number().positive() }))
 	})
