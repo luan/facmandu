@@ -102,6 +102,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
 						...turn,
 						answer: activity?.answer ?? turn.answer,
 						progress: activity?.progress,
+						feedback: activity?.feedback,
 						mods: cards.success ? cards.data.mods : [],
 						results: results.filter((item) => item.tool !== 'mod_cards')
 					};

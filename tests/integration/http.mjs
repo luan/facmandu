@@ -2658,6 +2658,10 @@ done
 	assert.equal(liveWeb.turns[0].state, 'running');
 	assert.match(liveWeb.turns[0].progress, /Thinking… · \d+m \d+s elapsed/);
 	assert.equal(liveWeb.turns[0].results[0].tool, 'server_status');
+	assert.equal(
+		liveWeb.turns[0].feedback,
+		`Server checked: ${liveWeb.turns[0].results[0].result.running ? 'running' : 'stopped'}.`
+	);
 	await action(
 		serverAssistantPath,
 		cookies.stranger,

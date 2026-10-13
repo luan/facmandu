@@ -5,6 +5,7 @@ import {
 	assistantElapsed,
 	assistantFinalText,
 	assistantText,
+	assistantToolFeedback,
 	assistantToolProgress
 } from '../src/lib/server/assistant-events';
 
@@ -63,4 +64,54 @@ test('accepted completion replaces drafts and older replies retain their final s
 		);
 	}
 	assert.equal(assistantFinalText({ text: 'Replay.', data: {} }), 'Replay.');
+});
+
+test('partial layout progress counts rows and revisions without exposing entity settings', () => {
+	assert.equal(
+		assistantToolProgress('blueprint_operation', {
+			operation: 'create',
+			args: { entities: [{}], entityRows: [{ count: 20 }], private: 'secret' }
+		}),
+		'Drafting blueprint: 21 entities described…'
+	);
+	assert.equal(
+		assistantToolProgress('blueprint_operation', {
+			operation: 'create',
+			args: { entityChanges: [{}, {}, {}] }
+		}),
+		'Drafting blueprint: 3 entity edits described…'
+	);
+});
+
+test('tool feedback distinguishes proposed drafts, placement faults and actual query results', () => {
+	assert.equal(
+		assistantToolFeedback('blueprint_operation', {
+			entities: 700,
+			importValidated: true,
+			warnings: ['one', 'two']
+		}),
+		'Draft validated: 700 entities; 2 warnings. Not placed.'
+	);
+	assert.equal(
+		assistantToolFeedback('blueprint_operation', {
+			kind: 'factory-result',
+			result: { ready: false, blocked: [{}], power: { uncovered_total: 2, unconnected_total: 3 } }
+		}),
+		'Placement check: 1 blocked position; 5 planned power gaps.'
+	);
+	assert.equal(
+		assistantToolFeedback('blueprint_operation', {
+			error: 'Blueprint entities overlap: private payload'
+		}),
+		'Layout validation found overlapping entities.'
+	);
+	assert.equal(
+		assistantToolFeedback('factory_batch', { result: { results: [{ ok: true }, { ok: false }] } }),
+		'Completed 2 factory queries; 1 failed.'
+	);
+	assert.equal(
+		assistantToolFeedback('route_belt', { result: { found: false } }),
+		'No valid belt route found in the searched area.'
+	);
+	assert.equal(assistantToolFeedback('blueprint_operation', { entities: 700 }), '');
 });

@@ -12,6 +12,8 @@ export function assistantErrorMessage(cause: unknown): string {
 		)
 			return 'Your model provider suspended this account. Check billing or the monthly spending limit, then retry or choose another provider.';
 		if ('message' in error && typeof error.message === 'string') {
+			if (/operation was aborted/iu.test(error.message))
+				return 'The model response was interrupted. Saved drafts are available below; retry to continue.';
 			if (/\boverloaded\b|overloaded_error/iu.test(error.message))
 				return 'The model provider is temporarily overloaded. Your work is saved; wait briefly and retry, or choose another model.';
 			if (/exceeded request buffer limit/iu.test(error.message))

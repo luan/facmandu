@@ -7,6 +7,7 @@
  import { blueprintArtifactSchema } from '$lib/blueprints';
  import { assistantResultGroups } from '$lib/factory-results';
  import FactoryResultView from '$lib/components/FactoryResult.svelte';
+ import BlueprintResult from '$lib/components/BlueprintResult.svelte';
  import { serverAssistantPlanSchema, type FactoryResult, type AssistantMod } from '$lib/assistant-results';
  import { modThumbnailUrl } from '$lib/utils';
  import ModPreviewSheet from '../../routes/(app)/modlists/[id]/ModPreviewSheet.svelte';
@@ -30,7 +31,7 @@
   voice.stop();
   // Detach the view without cancelling the persisted run in the previous chat.
   const running = runningViews.get(id);
-  controller = running?.controller; busy = !!running; steeringBusy = false; progress = running?.progress ?? '';
+  controller = running?.controller; busy = !!running; steeringBusy = false; feedback = running?.feedback ?? ''; progress = running?.progress ?? '';
   chat = id; contextUsage = null; turns = []; plans = []; combineablePlanIds = []; selectedMods = []; selectedTurn = ''; prompt = ''; error = ''; refreshError = ''; text = ''; activePrompt = ''; activeMods = []; activeResults = []; loading = true;
   if (running) { activePrompt = running.prompt; text = running.text; activeResults = running.results; activeMods = running.mods; contextUsage = running.contextUsage; }
   await refresh(true, true);
@@ -62,9 +63,17 @@
  const voice = new AssistantVoice({ change: state => voiceState = state, request: ask });
  $effect(() => { listId; serverId; if (!open) voice.stop(); return () => voice.stop(); });
  let gamePlayer = $state<string | null>(null);
- let open = $state(false); let sidebar = $state<'history' | 'activity' | null>(null); let prompt = $state(''); let busy = $state(false); let progress = $state(''); let text = $state(''); let error = $state(''); let refreshError = $state('');
- let turns = $state<{ id: string; prompt: string; answer: string; state: string; progress?: string; mods: AssistantMod[]; results?: FactoryResult[]; plans?: ModlistPlan[] }[]>([]);
-  const inProgress = $derived(busy || turns.some(turn => turn.state === 'running'));
+ let open = $state(false); let sidebar = $state<'history' | 'activity' | null>(null); let prompt = $state(''); let busy = $state(false); let progress = $state(''); let feedback = $state(''); let text = $state(''); let error = $state(''); let refreshError = $state('');
+ let turns = $state<{ id: string; prompt: string; answer: string; state: string; progress?: string; feedback?: string; mods: AssistantMod[]; results?: FactoryResult[]; plans?: ModlistPlan[] }[]>([]);
+  const runningTurn = $derived(turns.findLast(turn => turn.state === 'running'));
+  const inProgress = $derived(busy || !!runningTurn);
+ function latestSavedDraft(results: FactoryResult[]) {
+  for (const item of results.toReversed()) {
+   const draft = blueprintArtifactSchema.safeParse(item.result);
+   if (draft.success) return draft.data;
+  }
+  return undefined;
+ }
  function layoutLabel(item: FactoryResult) {
   if (!item.display) return null;
   const design = blueprintArtifactSchema.safeParse(item.result);
@@ -87,9 +96,13 @@
  let selectedMods = $state<string[]>([]);
  let selectedTurn = $state('');
  let controller = $state<AbortController>();
- const runningViews = new Map<string, { controller: AbortController; prompt: string; text: string; progress: string; results: FactoryResult[]; mods: AssistantMod[]; contextUsage: AssistantContextUsage | null }>();
+ const runningViews = new Map<string, { controller: AbortController; prompt: string; text: string; progress: string; feedback: string; results: FactoryResult[]; mods: AssistantMod[]; contextUsage: AssistantContextUsage | null }>();
  let activePrompt = $state('');
  let activeMods = $state<AssistantMod[]>([]);
+  const visiblePrompt = $derived(activePrompt || runningTurn?.prompt || '');
+  const visibleText = $derived(activePrompt ? text : runningTurn?.answer || '');
+  const visibleResults = $derived(activePrompt ? activeResults : runningTurn?.results || []);
+  const visibleMods = $derived(activePrompt ? activeMods : runningTurn?.mods || []);
  let previewName = $state<string | null>(null);
  let previewOpen = $state(false);
  let models = $state<{ id: string; name: string; efforts: string[]; defaultEffort: string; effortLabels?: Partial<Record<string, string>> }[]>([]);
@@ -154,7 +167,7 @@
    if (!response.ok) throw new Error(data.message);
    if (selectedChat && chat !== selectedChat) return false;
    chat = data.chat.id; gamePlayer = data.chat.gamePlayer ?? null; chats = data.chats; hasMore = data.hasMore; compacted = Boolean(data.chat.compactedAt); contextUsage = data.chat.contextUsage ?? null; turns = data.turns;
-   if (!busy) progress = turns.findLast(turn => turn.state === 'running')?.progress ?? '';
+   if (!busy) { progress = runningTurn?.progress ?? ''; feedback = runningTurn?.feedback ?? ''; }
    plans = data.plans; combineablePlanIds = data.combineablePlanIds ?? [];
    if (data.models) { models = data.models; modelError = data.modelError; modelCatalogLoaded = true; }
    if (resetModel || !model || (data.models && !models.some(item => item.id === model))) model = models.some(item => item.id === data.model) ? data.model : models[0]?.id ?? '';
@@ -206,12 +219,12 @@
  }
  async function ask(message: string): Promise<string> {
   if (inProgress || loading) throw new Error('The assistant is still working. Wait for its response, then ask again.');
-  followOutput = true; busy = true; error = ''; text = ''; activeMods = []; activeResults = []; progress = 'Reading request…'; controller = new AbortController();
+  followOutput = true; busy = true; error = ''; text = ''; activeMods = []; activeResults = []; progress = 'Reading request…'; feedback = ''; controller = new AbortController();
   const previousPlanId = plans[0]?.id;
   activePrompt = message;
   const requestController = controller;
   const requestChat = chat;
-  const view = { controller: requestController, prompt: message, text: '', progress, results: activeResults, mods: activeMods, contextUsage };
+  const view = { controller: requestController, prompt: message, text: '', progress, feedback: '', results: activeResults, mods: activeMods, contextUsage };
   runningViews.set(requestChat, view);
   const ownsView = () => chat === requestChat && controller === requestController;
   let answer = '';
@@ -226,13 +239,13 @@
    const decoder = new TextDecoder(); let buffer = ''; let complete = false;
    for (;;) { const { done, value } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true });
     let newline = buffer.indexOf('\n');
-    while (newline >= 0) { const event = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1); if (event.delta) answer += event.delta; if (typeof event.answer === 'string') answer = event.answer; if (event.error) responseError = event.error; view.text = answer; if (event.results) view.results = event.results; if (event.mods) view.mods = event.mods; if (event.progress) view.progress = event.progress; if (event.contextUsage) view.contextUsage = event.contextUsage; if (ownsView()) { if (event.compacted) compacted = true; if (event.contextUsage) contextUsage = event.contextUsage; if (event.results) activeResults = event.results; if (event.mods) activeMods = event.mods; text = answer; if (event.progress) progress = event.progress; if (event.error) error = event.error; } if (event.done || event.error) complete = true; newline = buffer.indexOf('\n'); }
+    while (newline >= 0) { const event = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1); if (event.delta) answer += event.delta; if (typeof event.answer === 'string') answer = event.answer; if (event.error) responseError = event.error; view.text = answer; if (event.results) view.results = event.results; if (event.mods) view.mods = event.mods; if (event.progress) view.progress = event.progress; if (typeof event.feedback === 'string') view.feedback = event.feedback; if (event.contextUsage) view.contextUsage = event.contextUsage; if (ownsView()) { if (event.compacted) compacted = true; if (event.contextUsage) contextUsage = event.contextUsage; if (event.results) activeResults = event.results; if (event.mods) activeMods = event.mods; text = answer; if (event.progress) progress = event.progress; if (typeof event.feedback === 'string') feedback = event.feedback; if (event.error) error = event.error; } if (event.done || event.error) complete = true; newline = buffer.indexOf('\n'); }
     if (complete) break;
    }
    if (responseError) throw new Error(responseError);
    return answer;
   } catch (cause) { const message = requestController.signal.aborted ? 'Stopped' : cause instanceof SyntaxError ? 'The response was interrupted. Retry.' : cause instanceof Error ? cause.message : 'Request failed'; if (ownsView()) error = message; throw new Error(message); }
-  finally { runningViews.delete(requestChat); if (ownsView()) { busy = false; controller = undefined; progress = ''; if (!accepted) { text = ''; activePrompt = ''; activeMods = []; activeResults = []; } await refresh(); if (!serverId && plans[0]?.applied && plans[0].id !== previousPlanId) await invalidate('app:modlist'); } }
+  finally { runningViews.delete(requestChat); if (ownsView()) { busy = false; controller = undefined; progress = ''; feedback = ''; if (!accepted) { text = ''; activePrompt = ''; activeMods = []; activeResults = []; } await refresh(); if (!serverId && plans[0]?.applied && plans[0].id !== previousPlanId) await invalidate('app:modlist'); } }
  }
  async function apply(id: string) {
   busy = true; error = ''; progress = 'Applying changes…';
@@ -348,7 +361,7 @@
 {/snippet}
 {#snippet toolActivity(items: FactoryResult[], title: string)}
  <section class="space-y-2"><h3 class="line-clamp-2 text-xs text-muted-foreground">{title}</h3>
-  {#each items as item}<details class="border border-border bg-background text-sm"><summary class="cursor-pointer px-3 py-2 text-muted-foreground">{item.title}</summary><FactoryResultView {item} {serverId} /></details>{/each}
+  {#each [...items].reverse() as item}<details class="border border-border bg-background text-sm"><summary class="cursor-pointer px-3 py-2 text-muted-foreground">{item.title}</summary><FactoryResultView {item} {serverId} /></details>{/each}
  </section>
 {/snippet}
 <Sheet.Root bind:open>
@@ -380,7 +393,9 @@
      <section class="space-y-4" aria-label="Conversation turn">
       <div class="flex justify-end"><p class="max-w-[90%] whitespace-pre-wrap break-words border border-border bg-white/5 px-4 py-3 text-sm leading-relaxed">{turn.prompt}</p></div>
       {#if turn.state === 'error'}
+       {@const saved = latestSavedDraft(turn.results ?? [])}
        <div class="flex flex-wrap items-center gap-3"><p class="text-sm text-destructive">{turn.answer || 'Could not finish this response.'}</p>{#if !gamePlayer}<Button variant="outline" size="sm" disabled={busy} onclick={() => { prompt = `Continue my interrupted request: ${turn.prompt}\nVerify completed changes before repeating any writes, and finish what remains.`; void send(); }}><RefreshCwIcon class="size-4" />Retry</Button>{/if}</div>
+      {#if saved}<BlueprintResult blueprint={saved} {serverId} unfinished />{/if}
       {:else}<div class="pr-2"><AssistantMessage text={turn.answer} /></div>{/if}
       {@render modCards(turn.mods, turn.id)}
       {#if !serverId}
@@ -394,7 +409,7 @@
         </section>
        {/if}
       {/if}
-      {#each resultGroups.primary as item}
+      {#each resultGroups.primary.filter(item => turn.state !== 'error' || !blueprintArtifactSchema.safeParse(item.result).success) as item}
        {@const failedSetup = setupId(item, 'failed')}
        {@const earlierLayout = layoutLabel(item)}
        <div class="space-y-2">
@@ -415,7 +430,7 @@
       {/each}
      </section>
     {:else}
-     {#if loading}<p role="status" class="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircleIcon class="size-4 animate-spin" />Loading conversation…</p>{:else if !activePrompt}
+     {#if loading}<p role="status" class="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircleIcon class="size-4 animate-spin" />Loading conversation…</p>{:else if !visiblePrompt}
       <div class="grid gap-3 py-4">
        {#each (serverId ? ['How is the server doing?', 'What is limiting production?', 'What happened recently?'] : ['What overlaps in this list?', 'Which companion mods would add something useful?', 'Which mods do I use across my other lists?']) as suggestion}
         <Button variant="outline" class="!h-auto justify-start whitespace-normal px-4 py-3 text-left" disabled={busy} onclick={() => { prompt = suggestion; void send(); }}><MessageSquareIcon class="shrink-0" />{suggestion}</Button>
@@ -423,12 +438,12 @@
       </div>
      {/if}
     {/each}
-    {#if activePrompt}
-     {@const resultGroups = assistantResultGroups(activeResults)}
+    {#if visiblePrompt}
+     {@const resultGroups = assistantResultGroups(visibleResults)}
      <section class="space-y-4" aria-label="Current response">
-      <div class="flex justify-end"><p class="max-w-[90%] whitespace-pre-wrap break-words border border-border bg-white/5 px-4 py-3 text-sm leading-relaxed">{activePrompt}</p></div>
-      {#if text}<div class="pr-2"><AssistantMessage {text} /></div>{/if}
-      {@render modCards(activeMods)}
+      <div class="flex justify-end"><p class="max-w-[90%] whitespace-pre-wrap break-words border border-border bg-white/5 px-4 py-3 text-sm leading-relaxed">{visiblePrompt}</p></div>
+      {#if visibleText}<div class="pr-2"><AssistantMessage text={visibleText} /></div>{/if}
+      {@render modCards(visibleMods)}
       {#each resultGroups.primary as item}<FactoryResultView {item} {serverId} />{/each}
      </section>
     {/if}
@@ -443,8 +458,8 @@
    </div>
   {/if}
   {#if inProgress || voiceState.error || voiceState.active || voiceState.connecting}
-  <div class="flex h-8 shrink-0 items-center gap-2 px-5 text-xs text-muted-foreground" role="status" aria-live="polite">
-   {#if inProgress}<LoaderCircleIcon class="size-3.5 animate-spin motion-reduce:animate-none" /><span class="truncate">{progress || 'Thinking…'}</span>{:else if voiceState.error}<span class="truncate text-destructive" title={voiceState.error}>{voiceState.error}</span>{:else if voiceState.active || voiceState.connecting}<MicIcon class="size-3.5" /><span class="truncate">{voiceState.status}</span>{/if}
+  <div class="shrink-0 space-y-1 border-t border-border px-5 py-3 text-sm" role="status" aria-live="polite">
+   {#if inProgress}{#if feedback}<p>{feedback}</p>{/if}<p class="flex items-center gap-2 text-xs text-muted-foreground"><LoaderCircleIcon class="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" /><span>{progress || 'Thinking…'}</span></p>{:else if voiceState.error}<span class="truncate text-destructive" title={voiceState.error}>{voiceState.error}</span>{:else if voiceState.active || voiceState.connecting}<MicIcon class="size-3.5" /><span class="truncate">{voiceState.status}</span>{/if}
   </div>
   {/if}
   {#if voiceState.active || voiceState.connecting}

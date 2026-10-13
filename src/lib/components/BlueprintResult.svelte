@@ -4,7 +4,7 @@
  import Button from './ui/button/button.svelte';
  import FactoryImage from './FactoryImage.svelte';
  import { factoryImageSchema, factoryImagePendingSchema, type FactoryImage as ImageData } from '$lib/factory-images';
- let { blueprint, serverId }: {blueprint:BlueprintArtifact;serverId?:string} = $props();
+ let { blueprint, serverId, unfinished = false }: {blueprint:BlueprintArtifact;serverId?:string;unfinished?:boolean} = $props();
  let rendered=$state<ImageData | {id:string;pending:true}>();
  $effect(()=>{blueprint.blueprint;rendered=undefined;error='';});
  let rendering=$state(false);
@@ -26,9 +26,9 @@
  }
 </script>
 <section class="overflow-hidden border border-border bg-white/[0.025] text-sm" aria-label={blueprint.label}>
- <header class="flex flex-wrap items-center justify-between gap-3 border-b border-border p-3"><h3 class="font-semibold">Blueprint design · {blueprint.label}</h3><span class="text-xs text-muted-foreground">{blueprint.entities.length} entities{blueprint.tiles.length ? ` · ${blueprint.tiles.length} construction tiles` : ''} · Native blueprint</span></header>
+ <header class="flex flex-wrap items-center justify-between gap-3 border-b border-border p-3"><h3 class="font-semibold">{unfinished ? 'Saved draft' : 'Blueprint design'} · {blueprint.label}</h3><span class="text-xs text-muted-foreground">{blueprint.entities.length} entities{blueprint.tiles.length ? ` · ${blueprint.tiles.length} construction tiles` : ''} · Native blueprint</span></header>
  {#if image && serverId}<FactoryImage {image} {serverId} label={`Sprite layout for ${blueprint.label}`} onretry={()=>void render()} retrying={rendering} />{:else}
- <svg class="h-80 w-full bg-black/20" viewBox={`${bounds.left} ${bounds.top} ${bounds.right-bounds.left} ${bounds.bottom-bounds.top}`} role="img" aria-label={`Layout for ${blueprint.label}`}>
+ {#if !unfinished}<svg class="h-80 w-full bg-black/20" viewBox={`${bounds.left} ${bounds.top} ${bounds.right-bounds.left} ${bounds.bottom-bounds.top}`} role="img" aria-label={`Layout for ${blueprint.label}`}>
   {#each blueprint.tiles as tile}<rect x={tile.position.x} y={tile.position.y} width="1" height="1" fill="#414141" stroke="#737373" stroke-width="0.04"><title>{tile.name}</title></rect>{/each}
   {#each blueprint.entities as entity}
    <g><title>{entity.name}{entity.recipe ? ` · ${entity.recipe}` : ''} · {entity.position.x}, {entity.position.y}</title>
@@ -36,12 +36,12 @@
     <path d="M -0.16 0.1 L 0 -0.16 L 0.16 0.1" fill="none" stroke="#ffffff" stroke-width="0.065" transform={`translate(${entity.position.x},${entity.position.y}) rotate(${entity.direction*22.5})`} />
    </g>
   {/each}
- </svg>
+ </svg>{/if}
  {#if blueprint.renderError}<p class="px-3 pt-3 text-xs text-amber-200">{blueprint.renderError}</p>{/if}
  {#if serverId}<div class="p-3"><Button size="sm" disabled={rendering} onclick={()=>void render()}>{rendering?'Rendering sprites…':'Render sprite preview'}</Button></div>{/if}
  {/if}
  <div class="space-y-3 border-t border-border p-3">
-  <p class="text-xs text-muted-foreground">Native import validated · Design preview</p>
+  <p class="text-xs text-muted-foreground">{unfinished ? 'Unfinished design. Native import passed; connections and operation are not verified.' : 'Native import validated · Design preview'}</p>
   {#if blueprint.warnings.length}<details><summary class="cursor-pointer text-xs text-amber-200">{blueprint.warnings.length} design {blueprint.warnings.length === 1 ? 'check' : 'checks'}</summary><ul class="mt-2 space-y-1 text-xs text-amber-200">{#each blueprint.warnings as warning}<li>{warning}</li>{/each}</ul></details>{/if}
   <details><summary class="cursor-pointer text-xs">Construction materials</summary><ul class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">{#each blueprint.cost as item}<li>{item.count} × {item.name}{item.quality && item.quality !== 'normal' ? ` (${item.quality})` : ''}</li>{/each}</ul></details>
   <div class="flex gap-2"><Button size="sm" onclick={() => void copy()}>{#if copied}<CheckIcon />{:else}<CopyIcon />{/if}Copy blueprint</Button><Button size="sm" variant="outline" onclick={download}><DownloadIcon />Download</Button></div>

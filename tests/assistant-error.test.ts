@@ -78,3 +78,10 @@ test('upstream request buffer rejection preserves completed actions without leak
 	assert.match(message, /continue from them/u);
 	assert.doesNotMatch(message, /private-token/u);
 });
+
+test('an upstream abort reports the saved work without exposing the provider payload', () => {
+	const message = assistantErrorMessage(new Error('The operation was aborted. private-token'));
+	assert.match(message, /model response was interrupted/u);
+	assert.match(message, /Saved drafts/u);
+	assert.doesNotMatch(message, /private-token/u);
+});

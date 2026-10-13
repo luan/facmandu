@@ -113,12 +113,16 @@ async function syncPanel(
 		.find((entry) => entry);
 	const state = {
 		current: current?.id,
-		status:
+		status: [
 			(!sourceChat || sourceChat === current?.id
 				? progress && gameText(progress, 500)
 				: undefined) ??
-			activity?.progress ??
-			(turn?.state === 'running' ? 'Working…' : 'Ready'),
+				activity?.progress ??
+				(turn?.state === 'running' ? 'Working…' : 'Ready'),
+			activity?.feedback
+		]
+			.filter(Boolean)
+			.join(' '),
 		answer: gamePanelText(turn?.answer ?? '', 6000),
 		running: turn?.state === 'running',
 		messages,

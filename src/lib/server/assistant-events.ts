@@ -41,13 +41,86 @@ export function assistantToolProgress(tool: string, input: unknown) {
 				? input.tool
 				: '';
 	const operation = name.replaceAll('_', ' ');
-	if (tool === 'blueprint_operation') return `Blueprint${operation ? `: ${operation}` : ''}…`;
+	if (tool === 'blueprint_operation') {
+		const args = object(object(input)?.args);
+		if (name === 'create' && args) {
+			const edits = Array.isArray(args.entityChanges) ? args.entityChanges.length : 0;
+			const entities =
+				[args.entities, args.addedEntities].reduce<number>(
+					(sum, items) => sum + (Array.isArray(items) ? items.length : 0),
+					0
+				) +
+				[args.entityRows, args.addedEntityRows].reduce<number>(
+					(sum, rows) =>
+						sum +
+						(Array.isArray(rows)
+							? rows.reduce<number>((total, row: unknown) => {
+									const count = object(row)?.count;
+									return total + (typeof count === 'number' && Number.isFinite(count) ? count : 0);
+								}, 0)
+							: 0),
+					0
+				);
+			if (edits) return `Drafting blueprint: ${edits} entity edits described…`;
+			if (entities) return `Drafting blueprint: ${entities} entities described…`;
+		}
+		return `Blueprint${operation ? `: ${operation}` : ''}…`;
+	}
 	if (tool === 'factory_action') return `Factory action${operation ? `: ${operation}` : ''}…`;
 	if (tool.startsWith('factory_')) return `Inspecting factory${operation ? `: ${operation}` : ''}…`;
 	if (tool === 'plan_production') return 'Calculating production…';
 	if (tool === 'render_blueprint') return 'Rendering blueprint…';
 	if (tool === 'sandbox_blueprint') return 'Testing blueprint…';
 	return `${tool.replaceAll('_', ' ')}…`;
+}
+
+function object(value: unknown): Record<string, unknown> | undefined {
+	return value && typeof value === 'object' && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: undefined;
+}
+
+// Completed tool facts stay visible while the next model call is thinking.
+// Describe evidence, never infer construction or throughput from an exported draft.
+export function assistantToolFeedback(tool: string, output: unknown) {
+	const wrapper = object(output);
+	const value = object(wrapper?.result) ?? wrapper;
+	if (!value) return '';
+	if (typeof value.error === 'string') {
+		if (/overlap/i.test(value.error)) return 'Layout validation found overlapping entities.';
+		return `${tool.replaceAll('_', ' ')} failed; details are in Activity.`;
+	}
+	const entities = Array.isArray(value.entities) ? value.entities.length : value.entities;
+	if (tool === 'blueprint_operation') {
+		if (typeof value.ready === 'boolean') {
+			const blocked = Array.isArray(value.blocked) ? value.blocked.length : 0;
+			const power = object(value.power);
+			const gaps = [power?.uncovered_total, power?.unconnected_total].reduce<number>(
+				(sum, count) => sum + (typeof count === 'number' ? count : 0),
+				0
+			);
+			return `Placement check: ${blocked ? `${blocked} blocked ${blocked === 1 ? 'position' : 'positions'}` : 'no blocked positions'}${gaps ? `; ${gaps} planned power gaps` : ''}.`;
+		}
+		if (
+			typeof entities === 'number' &&
+			(value.importValidated === true || typeof value.blueprint === 'string')
+		) {
+			const warnings = Array.isArray(value.warnings) ? value.warnings.length : 0;
+			return `Draft validated: ${entities} entities${warnings ? `; ${warnings} warnings` : ''}. Not placed.`;
+		}
+	}
+	if (tool === 'route_belt') {
+		if (value.found === false) return 'No valid belt route found in the searched area.';
+		if (typeof entities === 'number')
+			return `Belt route drafted: ${entities} entities. Not placed.`;
+	}
+	if (tool === 'factory_batch' && Array.isArray(value.results)) {
+		const failed = value.results.filter((row: unknown) => object(row)?.ok === false).length;
+		return `Completed ${value.results.length} factory queries${failed ? `; ${failed} failed` : ''}.`;
+	}
+	if (tool === 'server_status' && typeof value.running === 'boolean')
+		return `Server checked: ${value.running ? 'running' : 'stopped'}.`;
+	return typeof wrapper?.title === 'string' ? `${wrapper.title}: result received.` : '';
 }
 
 export function assistantElapsed(progress: string, started: number, now: number) {

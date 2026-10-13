@@ -10,6 +10,7 @@ import {
 	assistantElapsed,
 	assistantFinalText,
 	assistantText,
+	assistantToolFeedback,
 	assistantToolProgress,
 	submissionEvents
 } from './assistant-events';
@@ -24,7 +25,7 @@ const state = globalThis as typeof globalThis & {
 	__facmanduServerAssistantRequests?: Map<string, AbortController>;
 	__facmanduServerAssistantActivity?: Map<
 		string,
-		{ answer: string; progress: string; results: FactoryResult[] }
+		{ answer: string; progress: string; feedback: string; results: FactoryResult[] }
 	>;
 };
 state.__facmanduServerAssistantRequests ??= new Map();
@@ -83,18 +84,20 @@ export async function finishServerTurn(
 	let progress = 'Thinking…';
 	let notifying = false;
 	let lastNotification = Date.now();
-	const activity = { answer: '', progress, results: [] as FactoryResult[] };
+	const activity = { answer: '', progress, feedback: '', results: [] as FactoryResult[] };
 	serverAssistantActivity.set(turn.id, activity);
 	const send = (event: object) => {
 		if ('progress' in event && typeof event.progress === 'string') progress = event.progress;
 		activity.progress = assistantElapsed(progress, turn.createdAt.getTime(), Date.now());
 		if ('answer' in event && typeof event.answer === 'string') activity.answer = event.answer;
+		if ('feedback' in event && typeof event.feedback === 'string')
+			activity.feedback = event.feedback;
 		if ('delta' in event && typeof event.delta === 'string') activity.answer += event.delta;
 		if ('results' in event) {
 			const parsed = factoryResultSchema.array().safeParse(event.results);
 			if (parsed.success) activity.results = parsed.data;
 		}
-		sendEvent({ ...event, progress: activity.progress });
+		sendEvent({ ...event, progress: activity.progress, feedback: activity.feedback });
 	};
 	// Report liveness without spending model tokens or interrupting its work.
 	const heartbeat = setInterval(() => {
@@ -104,7 +107,7 @@ export async function finishServerTurn(
 		if (notifyProgress && !notifying && Date.now() - lastNotification >= 60_000) {
 			lastNotification = Date.now();
 			notifying = true;
-			void notifyProgress(activity.progress)
+			void notifyProgress([activity.feedback, activity.progress].filter(Boolean).join(' '))
 				.catch(() => {})
 				.finally(() => {
 					notifying = false;
@@ -248,6 +251,7 @@ export async function finishServerTurn(
 					});
 					send({
 						results: results.filter((item) => item.tool !== 'mod_cards'),
+						feedback: assistantToolFeedback(tool, { error: chunk.errorText }),
 						progress: 'Recovering from tool error…'
 					});
 				}
@@ -259,11 +263,20 @@ export async function finishServerTurn(
 					const parsed = factoryResultSchema.safeParse(chunk.data);
 					if (parsed.success) {
 						results.push(parsed.data);
-						send({ results: results.filter((item) => item.tool !== 'mod_cards') });
+						send({
+							results: results.filter((item) => item.tool !== 'mod_cards'),
+							feedback:
+								assistantToolFeedback(parsed.data.tool ?? '', parsed.data) || activity.feedback
+						});
 					}
 				}
 				if (chunk.type === 'tool-output') {
-					send({ progress: 'Thinking…' });
+					send({
+						progress: 'Thinking…',
+						feedback:
+							assistantToolFeedback(toolNames.get(chunk.toolCallId) ?? '', chunk.output) ||
+							activity.feedback
+					});
 					const cards = assistantModsSchema.safeParse(chunk.output);
 					if (cards.success) {
 						const previous = results.find((item) => item.tool === 'mod_cards');
