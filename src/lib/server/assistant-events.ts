@@ -106,7 +106,28 @@ export function assistantToolFeedback(tool: string, output: unknown) {
 	if (tool === 'report_progress' && typeof value.message === 'string') return value.message;
 	if (typeof value.error === 'string') {
 		if (/overlap/i.test(value.error)) return 'Layout validation found overlapping entities.';
-		return `${tool.replaceAll('_', ' ')} failed; details are in Activity.`;
+		return `${tool.replaceAll('_', ' ')} failed; expand the tool step for details.`;
+	}
+	if (
+		value.operation === 'place_blueprint' &&
+		typeof value.placed === 'number' &&
+		typeof value.requested === 'number'
+	)
+		return `Placed ${value.placed} of ${value.requested} construction ghosts. Real items are required to build them.`;
+	if (
+		value.operation === 'check_build' &&
+		typeof value.constructed === 'number' &&
+		typeof value.requested === 'number'
+	) {
+		const machines = Array.isArray(value.machines) ? value.machines : [];
+		const working = machines.filter(
+			(machine: unknown) => object(machine)?.status === 'working'
+		).length;
+		const delivery =
+			object(value.measurement)?.measured === true
+				? 'Delivery measurement available.'
+				: 'Delivery rate remains unmeasured.';
+		return `Built ${value.constructed} of ${value.requested} entities${working ? `; ${working} ${working === 1 ? 'machine' : 'machines'} working` : ''}. ${delivery}`;
 	}
 	const entities = Array.isArray(value.entities) ? value.entities.length : value.entities;
 	if (tool === 'blueprint_operation') {

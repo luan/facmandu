@@ -133,6 +133,43 @@ test('tool feedback distinguishes proposed drafts, placement faults and actual q
 	assert.equal(assistantToolFeedback('blueprint_operation', { entities: 700 }), '');
 });
 
+test('construction feedback distinguishes ghosts, completed machines and measured delivery', () => {
+	assert.equal(
+		assistantToolFeedback('blueprint_operation', {
+			result: { operation: 'place_blueprint', placed: 40, requested: 40 }
+		}),
+		'Placed 40 of 40 construction ghosts. Real items are required to build them.'
+	);
+	assert.equal(
+		assistantToolFeedback('check_build', {
+			result: {
+				operation: 'check_build',
+				constructed: 40,
+				requested: 40,
+				machines: [{ status: 'working' }, { status: 'no_power' }]
+			}
+		}),
+		'Built 40 of 40 entities; 1 machine working. Delivery rate remains unmeasured.'
+	);
+	assert.equal(
+		assistantToolFeedback('check_build', {
+			result: { operation: 'check_build', constructed: 0, requested: 40, ghosts: 40 }
+		}),
+		'Built 0 of 40 entities. Delivery rate remains unmeasured.'
+	);
+	assert.equal(
+		assistantToolFeedback('check_build', {
+			result: {
+				operation: 'check_build',
+				constructed: 40,
+				requested: 40,
+				measurement: { measured: true }
+			}
+		}),
+		'Built 40 of 40 entities. Delivery measurement available.'
+	);
+});
+
 test('public tool-call preambles remain separate from final text and private reasoning', () => {
 	const base = {
 		conversationId: 'conversation',
