@@ -40,7 +40,7 @@ describe('Toby native harness', () => {
 				'Completed 4 factory queries.'
 			)
 		).toEqual([
-			{ text: 'Blueprint\nDraft validated: 1 entities; 1 warnings. Not placed.' },
+			{ text: 'Blueprint\nDraft validated: 1 entity; 1 warning.' },
 			{ text: 'Belt connection\nNo route through occupied tiles' },
 			{ text: 'Inspecting factory…\nCompleted 4 factory queries.' }
 		]);
