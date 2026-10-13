@@ -1,8 +1,8 @@
+import { assistantToolFeedback } from './assistant-events';
 import { assistantTimeline, factoryResultSchema } from './assistant-results';
 import { blueprintArtifactSchema } from './blueprints';
 import { factoryPreviewPendingSchema, factoryViewSchema } from './factory-images';
 import { gameText } from './game-chat';
-import { assistantToolFeedback } from './server/assistant-events';
 
 function results(value: string) {
 	try {

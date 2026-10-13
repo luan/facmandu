@@ -3220,6 +3220,8 @@ done
 		const liveGame = await json(`${serverPath}/assistant?models=0`, { cookie: cookies.owner });
 		const frankChat = liveGame.chats.find((chat) => chat.gamePlayer === 'Frank');
 		assert.ok(frankChat);
+		assert.equal(frankChat.state, 'running');
+		assert.equal(frankChat.progress, 'Server checked: stopped.');
 		const liveGameTurn = await json(`${serverPath}/assistant?chat=${frankChat.id}&models=0`, {
 			cookie: cookies.owner
 		});

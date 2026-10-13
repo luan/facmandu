@@ -60,7 +60,7 @@ import { authorizedList } from './modlist-plans';
 export { inspectList } from './modlist-management-tools';
 
 import type { TranscriptContext } from '@earendil-works/pi-ai';
-import { assistantStreamProgress } from './assistant-events';
+import { assistantStreamProgress } from '$lib/assistant-events';
 import { factoryActionInspectJsonSchema, factoryActionJsonSchema } from './factory-actions';
 import { blueprintToolJsonSchema } from './factory-blueprints';
 import { addFactoryImages } from './factory-image-context';

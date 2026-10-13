@@ -1,13 +1,6 @@
 import type { ConversationStreamChunk } from '@flue/runtime';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import {
-	assistantMilestone,
-	assistantModsSchema,
-	type FactoryResult,
-	factoryResultSchema
-} from '$lib/assistant-results';
-import { assistantErrorMessage } from './assistant-error';
-import {
 	assistantElapsed,
 	assistantFinalText,
 	assistantPreamble,
@@ -15,7 +8,14 @@ import {
 	assistantToolFeedback,
 	assistantToolProgress,
 	submissionEvents
-} from './assistant-events';
+} from '$lib/assistant-events';
+import {
+	assistantMilestone,
+	assistantModsSchema,
+	type FactoryResult,
+	factoryResultSchema
+} from '$lib/assistant-results';
+import { assistantErrorMessage } from './assistant-error';
 import { db } from './db';
 import { assistantChat, serverAssistantTurn as turnTable } from './db/schema';
 import { requireGamePlayer } from './game-player';

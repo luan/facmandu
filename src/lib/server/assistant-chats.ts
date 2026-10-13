@@ -1,11 +1,11 @@
 import { normalizeContext } from '@earendil-works/pi-ai';
 import { error } from '@sveltejs/kit';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, sql } from 'drizzle-orm';
 import { assistantTitle } from '$lib/assistant-title';
 import { loadAssistantModel } from './assistant-models';
 import { db } from './db';
 import { genID } from './db/ids';
-import { assistantChat } from './db/schema';
+import { assistantChat, serverAssistantTurn } from './db/schema';
 
 type Target = { listId: string } | { serverId: string };
 const scope = (userId: string, target: Target) =>
@@ -18,7 +18,21 @@ const scope = (userId: string, target: Target) =>
 // Callers authorize access to the list/server first; chat ownership is always private to its author.
 export function chatHistory(userId: string, target: Target) {
 	return db
-		.select()
+		.select({
+			...getTableColumns(assistantChat),
+			state:
+				'serverId' in target
+					? sql<
+							'running' | 'done' | 'error' | null
+						>`(SELECT ${serverAssistantTurn.state} FROM ${serverAssistantTurn} WHERE ${serverAssistantTurn.chatId} = ${assistantChat}.${assistantChat.id} ORDER BY ${serverAssistantTurn.createdAt} DESC, ${serverAssistantTurn.id} DESC LIMIT 1)`
+					: sql<null>`NULL`,
+			turnId:
+				'serverId' in target
+					? sql<
+							string | null
+						>`(SELECT ${serverAssistantTurn.id} FROM ${serverAssistantTurn} WHERE ${serverAssistantTurn.chatId} = ${assistantChat}.${assistantChat.id} ORDER BY ${serverAssistantTurn.createdAt} DESC, ${serverAssistantTurn.id} DESC LIMIT 1)`
+					: sql<null>`NULL`
+		})
 		.from(assistantChat)
 		.where(scope(userId, target))
 		.orderBy(desc(assistantChat.updatedAt), desc(assistantChat.id));

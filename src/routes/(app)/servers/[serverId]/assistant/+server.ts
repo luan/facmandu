@@ -77,7 +77,13 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
 		{
 			...catalog,
 			chat,
-			chats: await chatHistory(locals.user.id, target),
+			chats: (await chatHistory(locals.user.id, target)).map(({ turnId, ...conversation }) => ({
+				...conversation,
+				progress: turnId
+					? serverAssistantActivity.get(turnId)?.feedback ||
+						serverAssistantActivity.get(turnId)?.progress
+					: undefined
+			})),
 			hasMore: turns.length > 30,
 			model:
 				turns.find(

@@ -8,7 +8,7 @@ import {
 	assistantText,
 	assistantToolFeedback,
 	assistantToolProgress
-} from '../src/lib/server/assistant-events';
+} from '../src/lib/assistant-events';
 
 test('progress names the actual tool operation and elapsed time without exposing its inputs', () => {
 	assert.equal(

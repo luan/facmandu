@@ -18,11 +18,7 @@ import {
 	useTool
 } from '@flue/runtime';
 import { sqlite, start } from '@flue/runtime/node';
-import {
-	assistantFinalText,
-	assistantText,
-	submissionEvents
-} from '../src/lib/server/assistant-events';
+import { assistantFinalText, assistantText, submissionEvents } from '../src/lib/assistant-events';
 
 test('zero durability deadline lets an active submission pass one hour without stopping', async () => {
 	const directory = await mkdtemp(join(tmpdir(), 'facmandu-deadline-'));

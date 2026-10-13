@@ -6,7 +6,9 @@
  import { factoryViewSchema, factoryPreviewPendingSchema } from '$lib/factory-images';
  import { blueprintArtifactSchema } from '$lib/blueprints';
  import { assistantResultGroups } from '$lib/factory-results';
+ import { assistantToolFeedback } from '$lib/assistant-events';
  import FactoryResultView from '$lib/components/FactoryResult.svelte';
+ import LazyDetails from '$lib/components/LazyDetails.svelte';
  import BlueprintResult from '$lib/components/BlueprintResult.svelte';
  import { assistantMilestone, assistantTimeline, savedBlueprintDrafts, serverAssistantPlanSchema, type FactoryResult, type AssistantMod } from '$lib/assistant-results';
  import { modThumbnailUrl } from '$lib/utils';
@@ -14,13 +16,16 @@
  import AssistantMessage from '$lib/components/AssistantMessage.svelte';
  import { onDestroy, onMount, tick, untrack } from 'svelte';
  import { invalidate } from '$app/navigation';
- import { RefreshCwIcon, MessageSquareIcon, CheckIcon, LoaderCircleIcon, PackageIcon, PlusIcon, XIcon, ChevronRightIcon, MicIcon, MicOffIcon, PhoneOffIcon } from '@lucide/svelte';
+ import { RefreshCwIcon, MessageSquareIcon, CheckIcon, LoaderCircleIcon, PackageIcon, PlusIcon, XIcon, ChevronRightIcon, MicIcon, MicOffIcon, PhoneOffIcon, AlertTriangleIcon, SearchIcon, ArrowDownIcon } from '@lucide/svelte';
  import { Button, buttonVariants } from '$lib/components/ui/button';
  import * as Sheet from '$lib/components/ui/sheet';
  let { listId, serverId, contextLabel = '' }: { listId?: string; serverId?: string; contextLabel?: string } = $props();
  let activeResults = $state<FactoryResult[]>([]);
  let chat = $state('');
- let chats = $state<{ id: string; title: string; updatedAt: string; compactedAt: string | null }[]>([]);
+ let chats = $state<{ id: string; title: string; updatedAt: string; compactedAt: string | null; state?: 'running' | 'done' | 'error' | null; progress?: string; gameForce?: string | null }[]>([]);
+ let chatSearch = $state('');
+ const drafts = new Map<string, string>();
+ const visibleChats = $derived(chats.filter(item => item.title.toLowerCase().includes(chatSearch.trim().toLowerCase())));
  let hasMore = $state(false);
  let olderLoading = $state(false);
  let compacted = $state(false);
@@ -28,11 +33,12 @@
 
  async function selectChat(id: string) {
   if (loading) return;
+  if (chat) drafts.set(chat, prompt);
   voice.stop();
   // Detach the view without cancelling the persisted run in the previous chat.
   const running = runningViews.get(id);
   controller = running?.controller; busy = !!running; steeringBusy = false; feedback = running?.feedback ?? ''; progress = running?.progress ?? '';
-  chat = id; contextUsage = null; turns = []; plans = []; combineablePlanIds = []; selectedMods = []; selectedTurn = ''; prompt = ''; error = ''; refreshError = ''; text = ''; activePrompt = ''; activeMods = []; activeResults = []; loading = true;
+  chat = id; contextUsage = null; turns = []; plans = []; combineablePlanIds = []; selectedMods = []; selectedTurn = ''; prompt = drafts.get(id) ?? ''; error = ''; refreshError = ''; text = ''; activePrompt = ''; activeMods = []; activeResults = []; loading = true;
   if (running) { activePrompt = running.prompt; text = running.text; activeResults = running.results; activeMods = running.mods; contextUsage = running.contextUsage; }
   await refresh(true, true);
  }
@@ -68,6 +74,23 @@
   const runningTurn = $derived(turns.findLast(turn => turn.state === 'running'));
   const inProgress = $derived(busy || !!runningTurn);
  let selectedDrafts = $state<Record<string, number>>({});
+ let designPanel = $state(false);
+ let selectedDesign = $state('');
+ const designs = $derived.by(() => {
+  const saved = new Map<string, { id: string; item: FactoryResult; label: string; entities: number }>();
+  for (const item of [...turns.flatMap(turn => assistantResultGroups(turn.results ?? []).primary), ...assistantResultGroups(visibleResults).primary]) {
+   const design = blueprintArtifactSchema.safeParse(item.result);
+   if (!design.success) continue;
+   const id = design.data.designId ?? design.data.blueprint;
+   saved.set(id, { id, item, label: design.data.label, entities: design.data.entities.length });
+  }
+  return [...saved.values()];
+ });
+ const currentDesign = $derived(designs.find(design => design.id === selectedDesign) ?? designs.at(-1));
+ function showDesign(item: FactoryResult) {
+  const design = blueprintArtifactSchema.safeParse(item.result);
+  if (design.success) { selectedDesign = design.data.designId ?? design.data.blueprint; designPanel = true; }
+ }
  function layoutLabel(item: FactoryResult) {
   if (!item.display) return null;
   const design = blueprintArtifactSchema.safeParse(item.result);
@@ -75,6 +98,13 @@
   const snapshot = factoryViewSchema.or(factoryPreviewPendingSchema).safeParse(item.result);
   return snapshot.success ? `Existing factory · ${snapshot.data.surface}` : null;
  }
+ function toolOutcome(item: FactoryResult) {
+  return assistantToolFeedback(item.tool ?? '', item);
+ }
+ function toolFailed(item: FactoryResult) {
+  return !!item.result && typeof item.result === 'object' && 'error' in item.result;
+ }
+ function jumpToLatest() { followOutput = true; if (feed) feed.scrollTop = feed.scrollHeight; }
  const latestLayoutTurn = $derived(activeResults.some(item => layoutLabel(item)) ? 'active' : turns.findLast(turn => turn.results?.some(item => layoutLabel(item)))?.id);
  type ModlistPlan = {
   id: string;
@@ -102,7 +132,8 @@
  let models = $state<{ id: string; name: string; efforts: string[]; defaultEffort: string; effortLabels?: Partial<Record<string, string>> }[]>([]);
  let model = $state('');
  const visibleContext = $derived(contextUsage?.model === model || gamePlayer ? contextUsage : null);
- const contextPercent = $derived(visibleContext?.tokens !== null && visibleContext?.tokens !== undefined && visibleContext.window > 0 ? Math.round(visibleContext.tokens / visibleContext.window * 100) : null);
+ const contextBudget = $derived(visibleContext ? Math.max(1, visibleContext.window - visibleContext.reserve) : 0);
+ const contextPercent = $derived(visibleContext?.tokens !== null && visibleContext?.tokens !== undefined && visibleContext.window > 0 ? Math.round(visibleContext.tokens / contextBudget * 100) : null);
  let effort = $state('');
  const effortChoices = $derived(models.find(item => item.id === model)?.efforts ?? []);
  $effect(() => { if (!effortChoices.includes(effort)) effort = models.find(item => item.id === model)?.defaultEffort ?? ''; });
@@ -179,7 +210,7 @@
    if (!selectedChat || chat === selectedChat) {
    loading = false;
    clearTimeout(pollTimer);
-   if (open && !busy && (gamePlayer || turns.some(turn => turn.state === 'running') || (activePrompt && refreshError))) pollTimer = setTimeout(() => void refresh(), 1500);
+   if (open && !busy && (gamePlayer || chats.some(conversation => conversation.state === 'running') || turns.some(turn => turn.state === 'running') || (activePrompt && refreshError))) pollTimer = setTimeout(() => void refresh(), 1500);
    }
   }
  }
@@ -209,7 +240,7 @@
    finally { if (chat === requestChat) steeringBusy = false; }
    return;
   }
-  const message = prompt; const requestChat = chat; prompt = '';
+  const message = prompt; const requestChat = chat; prompt = ''; drafts.delete(chat);
   try { await ask(message); } catch { if (chat === requestChat && !prompt) prompt = message; }
  }
  async function ask(message: string): Promise<string> {
@@ -234,7 +265,7 @@
    const decoder = new TextDecoder(); let buffer = ''; let complete = false;
    for (;;) { const { done, value } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true });
     let newline = buffer.indexOf('\n');
-    while (newline >= 0) { const event = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1); if (event.delta) answer += event.delta; if (typeof event.answer === 'string') answer = event.answer; if (event.error) responseError = event.error; view.text = answer; if (event.results) view.results = event.results; if (event.mods) view.mods = event.mods; if (event.progress) view.progress = event.progress; if (typeof event.feedback === 'string') view.feedback = event.feedback; if (event.contextUsage) view.contextUsage = event.contextUsage; if (ownsView()) { if (event.compacted) compacted = true; if (event.contextUsage) contextUsage = event.contextUsage; if (event.results) activeResults = event.results; if (event.mods) activeMods = event.mods; text = answer; if (event.progress) progress = event.progress; if (typeof event.feedback === 'string') feedback = event.feedback; if (event.error) error = event.error; } if (event.done || event.error) complete = true; newline = buffer.indexOf('\n'); }
+    while (newline >= 0) { const event = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1); if (event.delta) answer += event.delta; if (typeof event.answer === 'string') answer = event.answer; if (event.error) responseError = event.error; chats = chats.map(item => item.id === requestChat ? { ...item, state: event.done ? 'done' : event.error ? 'error' : 'running', progress: event.feedback || event.progress || item.progress } : item); view.text = answer; if (event.results) view.results = event.results; if (event.mods) view.mods = event.mods; if (event.progress) view.progress = event.progress; if (typeof event.feedback === 'string') view.feedback = event.feedback; if (event.contextUsage) view.contextUsage = event.contextUsage; if (ownsView()) { if (event.compacted) compacted = true; if (event.contextUsage) contextUsage = event.contextUsage; if (event.results) activeResults = event.results; if (event.mods) activeMods = event.mods; text = answer; if (event.progress) progress = event.progress; if (typeof event.feedback === 'string') feedback = event.feedback; if (event.error) error = event.error; } if (event.done || event.error) complete = true; newline = buffer.indexOf('\n'); }
     if (complete) break;
    }
    if (responseError) throw new Error(responseError);
@@ -362,16 +393,17 @@
  </div>{/if}
 {/snippet}
 {#snippet responseTimeline(items: FactoryResult[])}
- <section class="space-y-3" aria-label="Response activity">
+ <section class="space-y-3 border-l border-border/70 pl-3" aria-label="Response activity">
   {#each assistantTimeline(items) as entry}
    {#if entry.kind === 'progress'}
     <div class="text-sm text-muted-foreground"><AssistantMessage text={entry.message} {serverId} /></div>
    {:else}
-    <details class="text-sm text-muted-foreground"><summary class="cursor-pointer py-1 text-xs">{entry.items.length} tool {entry.items.length === 1 ? 'step' : 'steps'} · {entry.items.at(-1)?.title}</summary>
+    {@const latest = entry.items.at(-1)}
+    <LazyDetails class="text-sm text-muted-foreground" summaryClass="flex cursor-pointer list-none items-start gap-2 py-1 text-xs [&::-webkit-details-marker]:hidden">{#snippet summary()}<ChevronRightIcon class="mt-0.5 size-3 shrink-0" /><span class="min-w-0"><span class="block font-medium text-foreground/80">{latest?.title} <span class="font-normal text-muted-foreground">· {entry.items.length} {entry.items.length === 1 ? 'step' : 'steps'}</span></span>{#if latest && toolOutcome(latest)}<span class="mt-0.5 block leading-relaxed">{toolOutcome(latest)}</span>{/if}</span>{/snippet}
      <div class="mt-2 space-y-2 border-l border-border pl-3">
-      {#each entry.items as item}<details class="text-sm"><summary class="cursor-pointer py-1">{item.title}</summary><FactoryResultView {item} {serverId} /></details>{/each}
+      {#each entry.items as item}<LazyDetails class="text-sm" summaryClass="flex cursor-pointer list-none items-start gap-2 py-1.5 [&::-webkit-details-marker]:hidden">{#snippet summary()}{#if toolFailed(item)}<AlertTriangleIcon class="mt-0.5 size-3.5 shrink-0 text-destructive" />{:else}<CheckIcon class="mt-0.5 size-3.5 shrink-0 text-emerald-400/80" />{/if}<span class="min-w-0"><span class="block text-xs font-medium text-foreground/80">{item.title}</span>{#if toolOutcome(item)}<span class="mt-0.5 block text-xs leading-relaxed">{toolOutcome(item)}</span>{/if}</span><ChevronRightIcon class="ml-auto mt-0.5 size-3 shrink-0" />{/snippet}<FactoryResultView {item} {serverId} /></LazyDetails>{/each}
      </div>
-    </details>
+    </LazyDetails>
    {/if}
   {/each}
  </section>
@@ -383,16 +415,18 @@
    <div class="flex items-center gap-3 pr-6">
     <Sheet.Title class="flex shrink-0 items-center gap-2"><MessageSquareIcon class="size-5" />Toby</Sheet.Title>
     <div class="min-w-0 flex-1"><p class="truncate text-sm font-medium">{chats.find(item => item.id === chat)?.title || 'New conversation'}</p>{#if contextLabel}<p class="truncate text-xs text-muted-foreground">{contextLabel}</p>{/if}</div>
+    {#if designs.length}<Button variant="ghost" size="sm" aria-expanded={designPanel} onclick={() => designPanel = !designPanel}>Designs <span class="text-xs text-muted-foreground">{designs.length}</span></Button>{/if}
     <Button variant="ghost" size="sm" class="lg:hidden" aria-expanded={sidebar === 'history'} onclick={() => sidebar = sidebar === 'history' ? null : 'history'}>Chats</Button>
-    <TooltipButton tooltip="New chat" variant="ghost" size="icon" disabled={loading} onclick={createChat}><PlusIcon /></TooltipButton>
+    <TooltipButton tooltip="New chat" variant="ghost" size="icon" class="lg:hidden" disabled={loading} onclick={createChat}><PlusIcon /></TooltipButton>
    </div>
    <Sheet.Description class="sr-only">{serverId ? 'Ask about this server and its factory.' : 'Ask about mods or review changes to this list.'}</Sheet.Description>
   </Sheet.Header>
-  <div class="harness-layout">
+  <div class="harness-layout" class:design-panel={designPanel && designs.length > 0}>
    <aside class="harness-history border-r border-border bg-black/10" data-open={sidebar === 'history'} aria-label="Conversations">
-    <h2 class="px-4 pb-3 pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conversations</h2>
-    <nav class="space-y-1 px-2 pb-4" aria-label="Chat history">
-     {#each chats as conversation (conversation.id)}<button type="button" class="w-full border border-transparent px-3 py-3 text-left text-sm hover:bg-white/5 disabled:opacity-50" class:active-chat={chat === conversation.id} aria-current={chat === conversation.id ? 'page' : undefined} disabled={loading} onclick={() => { sidebar = null; void selectChat(conversation.id); }}><span class="line-clamp-2">{conversation.title}</span><span class="mt-1 block text-xs text-muted-foreground">{new Date(conversation.updatedAt).toLocaleDateString()}</span></button>{/each}
+    <div class="flex items-center justify-between px-3 py-3"><h2 class="text-xs font-semibold text-muted-foreground">Chats</h2><TooltipButton tooltip="New chat" variant="ghost" size="icon" disabled={loading} onclick={createChat}><PlusIcon class="size-4" /></TooltipButton></div>
+    <label class="mx-3 mb-3 flex items-center gap-2 border border-border bg-background/50 px-2 py-1.5"><SearchIcon class="size-3.5 shrink-0 text-muted-foreground" /><input bind:value={chatSearch} aria-label="Find chats" placeholder="Find chats" class="min-w-0 w-full border-0 bg-transparent text-xs outline-none" data-1p-ignore /></label>
+    <nav class="space-y-0.5 px-2 pb-4" aria-label="Chat history">
+     {#each visibleChats as conversation (conversation.id)}<button type="button" class="flex min-h-10 w-full items-center gap-2 border border-transparent px-2.5 py-2 text-left text-xs hover:bg-white/5 disabled:opacity-50" class:active-chat={chat === conversation.id} aria-current={chat === conversation.id ? 'page' : undefined} title={[conversation.title, conversation.progress, new Date(conversation.updatedAt).toLocaleString()].filter(Boolean).join('\n')} disabled={loading} onclick={() => { sidebar = null; void selectChat(conversation.id); }}>{#if conversation.state === 'running'}<LoaderCircleIcon class="size-3.5 shrink-0 animate-spin text-primary" /><span class="sr-only">Running</span>{:else if conversation.state === 'error'}<AlertTriangleIcon class="size-3.5 shrink-0 text-amber-300" /><span class="sr-only">Needs attention</span>{:else}<MessageSquareIcon class="size-3.5 shrink-0 text-muted-foreground" />{/if}<span class="truncate">{conversation.title}</span></button>{:else}<p class="px-2.5 py-2 text-xs text-muted-foreground">No matching chats.</p>{/each}
     </nav>
    </aside>
    <main class="flex min-h-0 min-w-0 flex-col" aria-label="Assistant conversation">
@@ -430,8 +464,8 @@
        {@const earlierLayout = layoutLabel(item)}
        <div class="space-y-2">
         {#if earlierLayout && turn.id !== latestLayoutTurn}
-         <details class="border border-border bg-white/[0.025] text-sm"><summary class="cursor-pointer px-3 py-2 font-medium">Earlier layout · {earlierLayout}</summary><FactoryResultView {item} {serverId} /></details>
-        {:else}<FactoryResultView {item} {serverId} />{/if}
+         <LazyDetails class="border border-border bg-white/[0.025] text-sm" summaryClass="cursor-pointer px-3 py-2 font-medium">{#snippet summary()}Earlier layout · {earlierLayout}{/snippet}<FactoryResultView {item} {serverId} /></LazyDetails>
+        {:else if blueprintArtifactSchema.safeParse(item.result).success}{@render designCard(item)}{:else}<FactoryResultView {item} {serverId} />{/if}
         {#if failedSetup && !serverId}<div class="flex justify-end"><TooltipButton tooltip={inProgress ? 'Response in progress' : 'Retry setup on the same server'} disabled={inProgress} size="sm" onclick={() => retrySetup(failedSetup)}><RefreshCwIcon />Retry setup</TooltipButton></div>{/if}
         {#if item.tool === 'prepare_server_mod_list' && serverId}
          {@const plan = serverAssistantPlanSchema.safeParse(item.result)}
@@ -461,12 +495,13 @@
       {@render responseTimeline(resultGroups.details)}
       {#if visibleText}<div class="pr-2"><AssistantMessage text={visibleText} {serverId} /></div>{/if}
       {@render modCards(visibleMods)}
-      {#each resultGroups.primary as item}<FactoryResultView {item} {serverId} />{/each}
+      {#each resultGroups.primary as item}{#if blueprintArtifactSchema.safeParse(item.result).success}{@render designCard(item)}{:else}<FactoryResultView {item} {serverId} />{/if}{/each}
      </section>
     {/if}
 
    </div>
   </div>
+  {#if !followOutput}<div class="flex justify-center py-1"><Button variant="secondary" size="sm" onclick={jumpToLatest}><ArrowDownIcon class="size-3.5" />Jump to latest</Button></div>{/if}
   {#if !serverId && selectedMods.length}
    <div class="flex shrink-0 items-center gap-2 border-t border-border bg-background px-5 py-2 text-sm">
     <span class="min-w-0 flex-1 truncate">{selectedMods.length} {selectedMods.length === 1 ? 'mod' : 'mods'} selected</span>
@@ -487,8 +522,8 @@
   {/if}
   <section class="mx-auto flex w-full max-w-4xl shrink-0 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-xs text-muted-foreground" aria-label="Context window">
    {#if visibleContext}
-    <span title="Tokens in the latest model request and its response, including cached input. Not cumulative usage.">Context {visibleContext.tokens === null ? 'not measured yet' : visibleContext.tokens.toLocaleString()} / {visibleContext.window > 0 ? visibleContext.window.toLocaleString() : 'unknown'} tokens{contextPercent !== null ? ` · ${contextPercent}%` : ''}</span>
-    {#if contextPercent !== null}<progress class="h-1.5 w-20 accent-primary" aria-label="Context used" max="100" value={Math.min(100, contextPercent)}></progress>{/if}
+    <span title="Tokens in the latest model request and its response, including cached input. Not cumulative usage.">Working context {visibleContext.tokens === null ? 'not measured yet' : visibleContext.tokens.toLocaleString()} / {visibleContext.window > 0 ? contextBudget.toLocaleString() : 'unknown'} tokens{contextPercent !== null ? ` · ${contextPercent}%` : ''}</span>
+    {#if contextPercent !== null}<progress class="h-1.5 w-20 accent-primary" aria-label="Working context used" max="100" value={Math.min(100, contextPercent)}></progress>{/if}
     {#if visibleContext.compacting}<span>Compacting…</span>{:else if visibleContext.compactionFailed}<span class="text-destructive" role="status">Compaction failed; context retained</span>{:else}<span title={visibleContext.window > 0 ? `Automatic compaction above ${(visibleContext.window - visibleContext.reserve).toLocaleString()} tokens. Recent context stays verbatim; older context is summarized. Full chat history remains available.` : 'The provider has not supplied a context limit. Compaction can still recover a context overflow.'}>Auto compaction{compacted ? ' · Earlier context summarized' : ''}</span>{/if}
    {:else}<span>Context usage appears after a response.</span>{/if}
   </section>
@@ -512,6 +547,13 @@
    {/if}
   </form>
    </main>
+   {#if designPanel && currentDesign}
+    <aside class="harness-designs min-h-0 overflow-y-auto border-l border-border bg-black/10" aria-label="Design workspace">
+     <header class="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background px-4 py-3"><h2 class="text-sm font-semibold">Designs</h2><TooltipButton tooltip="Close designs" variant="ghost" size="icon" onclick={() => designPanel = false}><XIcon class="size-4" /></TooltipButton></header>
+     <nav class="space-y-1 border-b border-border p-3" aria-label="Saved designs">{#each designs as design (design.id)}<button type="button" class="flex w-full items-center justify-between gap-3 border border-transparent px-2 py-2 text-left text-xs hover:bg-white/5" class:active-chat={design.id === currentDesign.id} aria-current={design.id === currentDesign.id ? 'true' : undefined} onclick={() => selectedDesign = design.id}><span class="truncate">{design.label}</span><span class="shrink-0 text-muted-foreground">{design.entities}</span></button>{/each}</nav>
+     <div class="p-3"><FactoryResultView item={currentDesign.item} {serverId} /></div>
+    </aside>
+   {/if}
 
   </div>
  </Sheet.Content>
@@ -519,18 +561,26 @@
 
 <ModPreviewSheet bind:open={previewOpen} modName={previewName} />
 
+{#snippet designCard(item: FactoryResult)}
+ {@const blueprint = blueprintArtifactSchema.safeParse(item.result)}
+ {#if blueprint.success}<button type="button" class="flex w-full items-center gap-3 border border-border bg-white/[0.025] px-4 py-3 text-left hover:bg-white/5" onclick={() => showDesign(item)}><PackageIcon class="size-5 shrink-0 text-primary" /><span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">{blueprint.data.label}</span><span class="mt-1 block text-xs text-muted-foreground">{blueprint.data.entities.length} entities · Native import validated</span></span><ChevronRightIcon class="size-4 shrink-0 text-muted-foreground" /></button>{/if}
+{/snippet}
+
 <style>
  .harness-layout { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; flex: 1; min-height: 0; }
  .harness-history { display: none; min-height: 0; overflow-y: auto; }
  .harness-history[data-open="true"] { display: block; max-height: 16rem; }
  .harness-history { grid-row: 1; }
  .harness-layout > main { grid-row: 2; }
+ .harness-designs { position: absolute; inset: 4.5rem 0 0; z-index: 20; background: var(--background); }
  .active-chat { border-color: var(--border); background: #ffffff08; color: var(--primary); }
  @media (min-width: 1024px) {
   .harness-layout { grid-template-columns: 14rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
   .harness-layout > main, .harness-history { grid-row: 1; }
   .harness-history { grid-column: 1; }
   .harness-layout > main { grid-column: 2; }
+  .harness-layout.design-panel { grid-template-columns: 14rem minmax(0, 1fr) minmax(22rem, 35%); }
+  .harness-designs { position: static; grid-row: 1; grid-column: 3; }
   .harness-history, .harness-history[data-open="true"] { display: block; max-height: none; }
  }
 </style>

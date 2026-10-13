@@ -1,5 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { and, desc, eq, sql } from 'drizzle-orm';
+import { assistantFinalText, submissionEvents } from '$lib/assistant-events';
 import {
 	type AssistantMod,
 	assistantModsSchema,
@@ -8,7 +9,6 @@ import {
 } from '$lib/assistant-results';
 import { chatHistory, newChat, resolveChat, touchChat } from '$lib/server/assistant-chats';
 import { assistantErrorMessage } from '$lib/server/assistant-error';
-import { assistantFinalText, submissionEvents } from '$lib/server/assistant-events';
 import { assistantModelCatalog } from '$lib/server/assistant-models';
 import { authenticationForm, requireSameOrigin } from '$lib/server/auth';
 import { db, userHasModlistAccess } from '$lib/server/db';

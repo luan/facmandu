@@ -7,7 +7,7 @@ import {
 	type ToolCall
 } from '@earendil-works/pi-ai';
 import { z } from 'zod';
-import { assistantStreamProgress } from '../src/lib/server/assistant-events';
+import { assistantStreamProgress } from '../src/lib/assistant-events';
 import { decodeToolArguments, decodeToolStream } from '../src/lib/server/tool-arguments';
 
 const input = z.strictObject({
