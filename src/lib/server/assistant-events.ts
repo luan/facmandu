@@ -145,13 +145,13 @@ export function assistantToolFeedback(tool: string, output: unknown) {
 			(value.importValidated === true || typeof value.blueprint === 'string')
 		) {
 			const warnings = Array.isArray(value.warnings) ? value.warnings.length : 0;
-			return `Draft validated: ${entities} entities${warnings ? `; ${warnings} ${warnings === 1 ? 'warning' : 'warnings'}` : ''}.`;
+			return `Draft validated: ${entities} ${entities === 1 ? 'entity' : 'entities'}${warnings ? `; ${warnings} ${warnings === 1 ? 'warning' : 'warnings'}` : ''}.`;
 		}
 	}
 	if (tool === 'route_belt') {
 		if (value.found === false) return 'No valid belt route found in the searched area.';
 		if (typeof entities === 'number')
-			return `Belt route drafted: ${entities} entities.`;
+			return `Belt route drafted: ${entities} ${entities === 1 ? 'entity' : 'entities'}.`;
 	}
 	if (tool === 'factory_batch' && Array.isArray(value.results)) {
 		const failed = value.results.filter((row: unknown) => object(row)?.ok === false).length;
