@@ -250,3 +250,32 @@ test('machine snapshots include actual attached loaders and their upstream belt 
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 	lua.lua_close(state);
 });
+
+test('coordinate inspections select visible factory entities while explicit IDs retain helper access', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ package.path=${JSON.stringify(`${resolve('src/lib/server/factory-query')}/?.lua;`)}..package.path
+ local force={name='player'}
+ local hidden={valid=true,name='hidden-pole',type='electric-pole',unit_number=1,position={x=.5,y=.5},prototype={has_flag=function(flag) assert(flag=='not-selectable-in-game');return true end}}
+ local machine={valid=true,name='plant',type='assembling-machine',unit_number=2,position={x=.5,y=.5},prototype={has_flag=function() return false end}}
+ local surface={valid=true,name='nauvis',find_entities_filtered=function(q) assert(q.force=='player');return {hidden,machine} end}
+ game={forces={player=force},surfaces={nauvis=surface}}
+ prototypes={entity={plant={},['hidden-pole']={}}}
+ local find=require('scripts.tools.target').find
+ assert(find{force='player',surface='nauvis',x=.5,y=.5}==machine)
+ assert(find{force='player',surface='nauvis',x=.5,y=.5,unit_number=1}==hidden)
+ hidden.prototype.has_flag=function() return false end;hidden.prototype.selectable_in_game=false
+ assert(find{force='player',surface='nauvis',x=.5,y=.5}==machine)
+ hidden.prototype.selectable_in_game=true;hidden.prototype.selection_box={left_top={x=0,y=0},right_bottom={x=0,y=0}}
+ assert(find{force='player',surface='nauvis',x=.5,y=.5}==machine)
+ hidden.prototype.selection_box=nil
+ local entity,result=find{force='player',surface='nauvis',x=.5,y=.5}
+ assert(entity==nil and result.ambiguous,'Two real overlapping entities still need an explicit choice')
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+	lua.lua_close(state);
+});
