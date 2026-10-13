@@ -80,6 +80,7 @@ const titles: Record<string, string> = {
 	research_queue: 'Research queue',
 	tech_status: 'Technology',
 	item_rate: 'Item production',
+	science_summary: 'Science production',
 	fluid_rate: 'Fluid production',
 	top_items: 'Top production',
 	production_since: 'Production totals',
@@ -1067,6 +1068,43 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 	}
 	if (setupTool) {
 		serverSetupView(view, tool, data);
+	} else if (tool === 'science_summary') {
+		view.icon = 'production';
+		const current = record(data.research);
+		view.cards = [
+			research(
+				{ tech: current.name, researching: current.active, progress: current.progress },
+				'current_research'
+			)
+		];
+		const packs = rows(data.sciences);
+		view.tables = [
+			{
+				title: 'Observed rates',
+				columns: ['Science', 'Produced / min', 'Consumed / min', 'Current research / unit'],
+				rows: packs.map((pack) => [
+					humanName(pack.item),
+					display(pack.produced_per_min),
+					display(pack.consumed_per_min),
+					pack.required_per_unit === undefined ? '—' : display(pack.required_per_unit)
+				]),
+				prototypes: packs.map((pack) => [
+					prototype('item', pack.item),
+					undefined,
+					undefined,
+					undefined
+				])
+			}
+		];
+		view.notes.push(
+			`Rates across ${display(data.surfaces_shown)} surfaces. Buffers and delivered supply are not checked.`
+		);
+		if (current.active === false)
+			view.notes.push('Research is idle; zero rates alone do not indicate a science shortage.');
+		if (data.surfaces_shown !== data.surfaces_total)
+			view.notes.push(
+				`Showing ${display(data.surfaces_shown)} of ${display(data.surfaces_total)} surfaces.`
+			);
 	} else if (
 		['production_plan', 'plan_production', 'plan_factory'].includes(tool) ||
 		data.kind === 'factory_plan'

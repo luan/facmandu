@@ -166,3 +166,44 @@ test('host catalog loads reviewed contracts with real engine enum values and no 
 		assert.match(tool.params.force ?? '', name === 'list_forces' ? /optional/ : /string!/);
 	}
 });
+
+test('science snapshots discover modded packs, sum qualities and surfaces, and keep limits explicit', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ defines={flow_precision_index={one_minute=1}}
+ remote={interfaces={}}
+ prototypes={item={['automation-science-pack']={},['modded-card']={}},quality={normal={},uncommon={}}}
+ local force={name='player',technologies={
+  a={research_unit_ingredients={{name='automation-science-pack',amount=1},{name='modded-card',amount=2}}},
+  b={research_unit_ingredients={{name='modded-card',amount=3}}}
+ },research_progress=0.25}
+ force.current_research=force.technologies.a;force.current_research.name='electronics'
+ force.get_item_production_statistics=function(surface) return {get_flow_count=function(a)
+  return (a.category=='input' and 10 or 2)*(a.name.quality=='uncommon' and 2 or 1)*surface.index
+ end} end
+ game={tick=120,forces={player=force},surfaces={a={name='nauvis',index=1},b={name='platform-1',index=2}}}
+ ${factoryBundle(sources, ['scripts.tools.production'])}
+ local result=functions.science_summary{force='player'}
+ assert(result.total==2 and #result.sciences==2 and result.window=='one_minute')
+ assert(result.sciences[1].item=='automation-science-pack' and tonumber(result.sciences[1].produced_per_min)==90)
+ assert(tonumber(result.sciences[1].consumed_per_min)==18 and tonumber(result.sciences[1].net_per_min)==72)
+ assert(result.sciences[2].required_per_unit==2 and result.research.name=='electronics')
+ assert(#result.sciences[2].surface_rates==2 and result.sciences[2].surface_rates[2][1]==2)
+ force.current_research=nil;assert(functions.science_summary{force='player'}.research.active==false)
+ assert(not pcall(functions.science_summary,{}));assert(not pcall(functions.science_summary,{force='other'}))
+ assert(not pcall(functions.science_summary,{force='player',window='wrong'}))
+ force.technologies={}
+ for i=1,80 do local name='card-'..i;prototypes.item[name]={};force.technologies[name]={research_unit_ingredients={{name=name,amount=1}}} end
+ prototypes.item['z-current-card']={};force.current_research={name='current',research_unit_ingredients={{name='z-current-card',amount=1}}};force.technologies.current=force.current_research
+ for i=3,17 do game.surfaces[i]={name='surface-'..i,index=i} end
+ local limited=functions.science_summary{force='player'}
+ assert(limited.truncated and limited.total==81 and limited.shown==64 and limited.surfaces_total==17 and limited.surfaces_shown==16)
+ assert(limited.sciences[1].item=='z-current-card','Active research packs must survive the result bound')
+ assert(#limited.sciences[1].surface_rates==4 and limited.sciences[1].surface_rates_total==16)
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});

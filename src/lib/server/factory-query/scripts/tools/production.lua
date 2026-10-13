@@ -20,6 +20,10 @@ local MAX_TOP_N = 50
 local M = {}
 
 M.manifest = {
+  science_summary = {
+    desc = "One synchronized snapshot of every science item actually used by this force's technologies, including modded packs, recent production/consumption across created surfaces and current research requirements. Use first for science/research supply questions instead of guessing pack names and querying each separately. Rates are observations, not capacity or delivery proof; idle research and buffered outputs can give zero rates without a shortage. Up to 64 packs and 16 surfaces; truncation is explicit. Read only.",
+    params = {window = "string default one_minute; a span from " .. flow.window_names},
+  },
   item_rate = {
     desc = "Recent production and consumption rate of one item on one surface, items/min over all qualities. Five-second windows can show bursts; use at least one_minute to check sustained capacity. Production is not delivery: also inspect output routing and destination counts over game ticks before claiming a full belt. For totals use production_since. Unknown surface: found=false.",
     params = {
@@ -115,6 +119,50 @@ local function top_items(a)
   }
 end
 
-M.functions = { item_rate = item_rate, top_items = top_items }
+local function science_summary(a)
+  local force=force_lookup.require_force(a.force)
+  local window_name=a.window or 'one_minute'
+  local window=flow.require_window(window_name)
+  local required={}
+  local research=force.current_research
+  if research then for _,part in pairs(research.research_unit_ingredients or {}) do required[part.name]=part.amount end end
+  local names,seen={},{}
+  for _,tech in pairs(force.technologies) do
+    for _,ingredient in pairs(tech.research_unit_ingredients or {}) do
+      if prototypes.item[ingredient.name] and not seen[ingredient.name] then
+        seen[ingredient.name]=true;names[#names+1]=ingredient.name
+      end
+    end
+  end
+  table.sort(names,function(x,y) if (required[x]~=nil)~=(required[y]~=nil) then return required[x]~=nil end return x<y end)
+  local surfaces={}
+  for _,surface in pairs(game.surfaces) do surfaces[#surfaces+1]=surface end
+  table.sort(surfaces,function(x,y) return x.index<y.index end)
+  local pack_total,surface_total=#names,#surfaces
+  names=bounded.cut(names,64);surfaces=bounded.cut(surfaces,16)
+  local spec={qualities=flow.quality_names(),window=window}
+  local packs={}
+  for _,name in ipairs(names) do
+    local produced,consumed=0,0
+    local locations={}
+    spec.item=name
+    for _,surface in ipairs(surfaces) do
+      local stats=force.get_item_production_statistics(surface)
+      local input,output=flow.item_flow(stats,spec,'input'),flow.item_flow(stats,spec,'output')
+      produced=produced+input;consumed=consumed+output
+      if input~=0 or output~=0 then locations[#locations+1]={surface.index,bounded.round(input,2),bounded.round(output,2)} end
+    end
+    packs[#packs+1]={item=name,produced_per_min=bounded.round(produced,2),consumed_per_min=bounded.round(consumed,2),net_per_min=bounded.round(produced-consumed,2),required_per_unit=required[name],surface_rates=bounded.cut(locations,4),surface_rates_total=#locations}
+  end
+  local surface_names={}
+  for _,surface in ipairs(surfaces) do surface_names[#surface_names+1]={index=surface.index,name=surface.name} end
+  local ingredients=research and research.research_unit_ingredients or {}
+  return {force=force.name,observed_at_tick=game.tick,window=window_name,all_qualities=true,
+    research=research and {active=true,name=research.name,progress=force.research_progress,ingredients=bounded.cut(ingredients,64),ingredients_total=#ingredients} or {active=false},
+    sciences=packs,total=pack_total,shown=#packs,surfaces=surface_names,surfaces_total=surface_total,surfaces_shown=#surfaces,truncated=pack_total>#packs or surface_total>#surfaces,
+    note='Force production across the shown surfaces, not delivered science or maximum capacity. surface_rates entries are [surface index, produced/min, consumed/min], up to four locations per pack; totals include every shown surface. Zero rates alone do not prove a shortage; check active research, buffers and the relevant machines before expanding.'}
+end
+
+M.functions = { item_rate = item_rate, top_items = top_items, science_summary = science_summary }
 
 return M

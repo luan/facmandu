@@ -6,6 +6,23 @@ import { assistantResultGroups, presentFactoryResult } from '../src/lib/factory-
 const view = (tool: string, result: unknown) =>
 	presentFactoryResult({ kind: 'factory-result', title: tool.replaceAll('_', ' '), result });
 
+test('science snapshots show native packs and idle research without claiming a shortage', () => {
+	const result = view('science_summary', {
+		force: 'player',
+		window: 'one_minute',
+		all_qualities: true,
+		research: { active: false },
+		surfaces_total: 2,
+		surfaces_shown: 2,
+		sciences: [{ item: 'modded-card', produced_per_min: 0, consumed_per_min: 0 }]
+	});
+	assert.equal(result.title, 'Science production');
+	assert.equal(result.cards[0]?.title, 'No active research');
+	assert.deepEqual(result.tables[0]?.rows, [['Modded card', '0', '0', '—']]);
+	assert.deepEqual(result.tables[0]?.prototypes?.[0]?.[0], { kind: 'item', name: 'modded-card' });
+	assert.ok(result.notes.some((note) => note.includes('zero rates alone')));
+});
+
 test('saved research and force results render domain facts without envelope bookkeeping', () => {
 	const research = view('available_research', {
 		force: 'player',
