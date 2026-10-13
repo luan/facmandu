@@ -1077,7 +1077,14 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 				'current_research'
 			)
 		];
-		const packs = rows(data.sciences);
+		const priority = (pack: Data) =>
+			pack.required_per_unit !== undefined
+				? 2
+				: (resultNumber(pack.produced_per_min) ?? 0) > 0 ||
+						(resultNumber(pack.consumed_per_min) ?? 0) > 0
+					? 1
+					: 0;
+		const packs = rows(data.sciences).sort((a, b) => priority(b) - priority(a));
 		view.tables = [
 			{
 				title: 'Observed rates',

@@ -23,6 +23,27 @@ test('science snapshots show native packs and idle research without claiming a s
 	assert.ok(result.notes.some((note) => note.includes('zero rates alone')));
 });
 
+test('science snapshots keep active research and flowing packs above unused packs', () => {
+	const result = view('science_summary', {
+		research: { active: true, name: 'electronics' },
+		sciences: [
+			{ item: 'unused-card', produced_per_min: 0, consumed_per_min: 0 },
+			{ item: 'space-science-pack', produced_per_min: 30, consumed_per_min: 0 },
+			{
+				item: 'automation-science-pack',
+				produced_per_min: 0,
+				consumed_per_min: 0,
+				required_per_unit: 1
+			}
+		]
+	});
+	assert.deepEqual(
+		result.tables[0]?.rows.map((row) => row[0]),
+		['Automation science pack', 'Space science pack', 'Unused card']
+	);
+	assert.equal(result.tables[0]?.prototypes?.[1]?.[0]?.name, 'space-science-pack');
+});
+
 test('saved research and force results render domain facts without envelope bookkeeping', () => {
 	const research = view('available_research', {
 		force: 'player',
