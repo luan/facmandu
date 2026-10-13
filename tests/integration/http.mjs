@@ -143,6 +143,7 @@ for (let index = 0; index < 25; index++)
 	metadata.set(`bulk-${index}`, catalog(`bulk-${index}`, '1.0.0'));
 let oauthSubject = 'fixture-openai-owner';
 const requestedModels = [];
+const titleRequests = [];
 let socketRecoveryFailures = 0;
 const webSteeringStarted = Promise.withResolvers();
 const webSteeringRelease = Promise.withResolvers();
@@ -356,13 +357,22 @@ const fixture = createServer(async (request, response) => {
 			let bytes = Buffer.concat(chunks);
 			if (request.headers['content-encoding'] === 'zstd') bytes = zstdDecompressSync(bytes);
 			const body = JSON.parse(bytes.toString());
-			requestedModels.push(body.model);
-			assert.ok(request.headers.authorization.startsWith('Bearer header.'));
-			const currentRequest = JSON.stringify(
-				body.input.findLast(
-					(item) => item.role === 'user' && JSON.stringify(item).includes('facmandu-request')
-				) ?? body.input.filter((item) => item.role === 'user').at(-1)
+			const wantsTitle = JSON.stringify(body).includes(
+				'Give this Factorio task a short specific title'
 			);
+			if (wantsTitle) {
+				titleRequests.push(body);
+				assert.equal(body.model, 'gpt-6-luna');
+				assert.equal((body.tools ?? []).length, 0, 'Naming must not load agent tools');
+			} else requestedModels.push(body.model);
+			assert.ok(request.headers.authorization.startsWith('Bearer header.'));
+			const currentRequest = wantsTitle
+				? ''
+				: JSON.stringify(
+						body.input.findLast(
+							(item) => item.role === 'user' && JSON.stringify(item).includes('facmandu-request')
+						) ?? body.input.filter((item) => item.role === 'user').at(-1)
+					);
 			const requestIndex = body.input.findLastIndex(
 				(item) => item.role === 'user' && JSON.stringify(item).includes('facmandu-request')
 			);
@@ -869,6 +879,8 @@ const fixture = createServer(async (request, response) => {
 				);
 				item.content[0].text = 'Recovered socket response.';
 			}
+			if (wantsTitle && item.type === 'message')
+				item.content[0].text = 'Factorio production upgrade';
 			const preamble =
 				wantsServerSaves && item.type === 'function_call'
 					? {
@@ -1738,6 +1750,8 @@ try {
 	const conversation = await json(assistantPath, { cookie: cookies.owner });
 	assert.equal(conversation.model, 'gpt-6-sol');
 	assert.deepEqual([...new Set(requestedModels)], ['gpt-6-sol']);
+	assert.ok(titleRequests.length > 0);
+	assert.equal(conversation.chat.title, 'Factorio production upgrade');
 	assert.equal(calls.get('/codex/backend-api/codex/models'), 1);
 	assert.equal(conversation.plans.length, 1, JSON.stringify(conversation));
 	assert.ok(conversation.plans[0].changes.some((change) => change.includes('agent-addon')));
@@ -2958,7 +2972,10 @@ done
 						0,
 						JSON.stringify({
 							name: player,
-							force: 'player',
+							force:
+								{ Bob: 'beta', Charlie: 'beta', Eve: 'eve', Frank: 'frank', PanelUser: 'panel' }[
+									player
+								] ?? 'player',
 							surface: 'nauvis',
 							position: { x: 12, y: 34 },
 							admin: false,
@@ -3063,6 +3080,16 @@ done
 			{ chat: aliceChat.id, serverId, sdp: 'v=0\r\nfixture-offer' },
 			403
 		);
+
+		const crewPanel = nextPanelUpdate('Crewmate');
+		await appendFile(gameLog, uiLine('Crewmate', 'select', 1, { chat: aliceChat.id }));
+		const crewHistory = await crewPanel;
+		assert.equal(crewHistory.current, aliceChat.id);
+		assert.ok(
+			crewHistory.messages.some((message) => message.text.includes('Alice: fixture-game-alice'))
+		);
+		assert.equal(crewHistory.chats[0].state, 'done');
+		assert.equal(crewHistory.chats[0].author, 'Alice');
 		const bobReply = nextGameReply('Bob');
 		await appendFile(
 			gameLog,
@@ -3073,6 +3100,9 @@ done
 		const bobChat = chats.find((chat) => chat.gamePlayer === 'Bob');
 		assert.ok(bobChat);
 		assert.notEqual(aliceChat.id, bobChat.id);
+		const bobPanel = nextPanelUpdate('Bob');
+		await appendFile(gameLog, uiLine('Bob', 'refresh', 1));
+		assert.ok((await bobPanel).chats.every((chat) => chat.id !== aliceChat.id));
 		assert.equal(
 			(await json(`${serverPath}/assistant?chat=${bobChat.id}`, { cookie: cookies.owner })).turns[0]
 				.prompt,
@@ -3178,6 +3208,31 @@ done
 		passed(
 			'in-game steering bypasses the idle cooldown and updates the active response without replay'
 		);
+		await action(`${serverPath}?/manage`, cookies.owner, { ...gameSettings, actions: 'admins' });
+		const crewReply = nextGameReply('Crewmate');
+		await appendFile(
+			gameLog,
+			uiLine('Crewmate', 'send', 2, {
+				chat: aliceChat.id,
+				prompt: 'fixture-game-question-action: could you queue Automation?'
+			})
+		);
+		await crewReply;
+		const sharedTurns = await json(`${serverPath}/assistant?chat=${aliceChat.id}&models=0`, {
+			cookie: cookies.owner
+		});
+		assert.equal(sharedTurns.turns.at(-1).gamePlayer, 'Crewmate');
+		const crewMenu = codexMenus.findLast((menu) =>
+			menu.request.includes('fixture-game-question-action')
+		);
+		assert.match(crewMenu.request, /Crewmate/u);
+		assert.ok(
+			assistantToolOutputs
+				.filter((output) => output.callId === 'call_game_question_action')
+				.at(-1)
+				.output.includes('Factory actions are not enabled for this player')
+		);
+		await action(`${serverPath}?/manage`, cookies.owner, gameSettings);
 		const panelRefresh = nextPanelUpdate('PanelUser');
 		await appendFile(gameLog, uiLine('PanelUser', 'refresh', 1));
 		assert.deepEqual((await panelRefresh).chats, []);
@@ -3804,7 +3859,7 @@ done
 	assert.match(await freshReply.text(), /Fixture contextual explanation/);
 	const savedFresh = await json(freshPath, { cookie: cookies.owner });
 	assert.equal(savedFresh.turns.length, 1);
-	assert.equal(savedFresh.chat.title, 'fixture-fresh-chat');
+	assert.equal(savedFresh.chat.title, 'Factorio production upgrade');
 	assert.ok(savedFresh.chats.some((chat) => chat.id === originalChat));
 	const originalServerHistory = await json(serverAssistantPath, { cookie: cookies.owner });
 	const serverOriginal = originalServerHistory.chat.id;

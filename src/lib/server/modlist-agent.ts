@@ -85,6 +85,7 @@ type Context = {
 	model: string;
 	chatId?: string;
 	gamePlayer?: string;
+	gameForce?: string;
 } & ({ listId: string; serverId?: never } | { serverId: string; listId?: never });
 const providerName = (context: Context) => {
 	const target = `${context.userId}-${context.serverId ? `server-${context.serverId}` : context.listId}`;
@@ -600,6 +601,7 @@ ModlistAssistant.initialData = v.union([
 		userId: v.string(),
 		serverId: v.string(),
 		gamePlayer: v.optional(v.string()),
+		gameForce: v.optional(v.string()),
 		model: v.string(),
 		chatId: v.optional(v.string())
 	})
@@ -708,7 +710,7 @@ const registeredAgent = runtimeState.agent;
 registeredAgent.durability = FacmanduAssistant.durability;
 export async function agentHandle(
 	userId: string,
-	target: string | { serverId: string; gamePlayer?: string },
+	target: string | { serverId: string; gamePlayer?: string; gameForce?: string },
 	selectedModel?: string,
 	selectedEffort?: string,
 	chatId?: string
@@ -730,7 +732,8 @@ export async function agentHandle(
 					serverId: target.serverId,
 					model: details.id,
 					chatId,
-					gamePlayer: target.gamePlayer
+					gamePlayer: target.gamePlayer,
+					gameForce: target.gameForce
 				};
 	await registerAssistantProvider(context, loaded, effort);
 	const id =

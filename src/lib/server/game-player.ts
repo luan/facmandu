@@ -27,7 +27,12 @@ export function assertGameAction(
 	)
 		throw new ServerError(403, 'Factory actions are not enabled for this player');
 }
-export async function requireGamePlayer(server: ManagedServer, ownerId: string, name: string) {
+export async function requireGamePlayer(
+	server: ManagedServer,
+	ownerId: string,
+	name: string,
+	force?: string
+) {
 	const config = (await serverConfig(server)).gameAssistant;
 	if (!config.enabled || config.ownerId !== ownerId)
 		throw new ServerError(403, 'In-game assistant is disabled');
@@ -38,5 +43,7 @@ export async function requireGamePlayer(server: ManagedServer, ownerId: string, 
 	);
 	const parsed = gamePlayerSchema.safeParse(JSON.parse(output));
 	if (!parsed.success) throw new ServerError(403, 'Player is not connected');
+	if (force !== undefined && parsed.data.force !== force)
+		throw new ServerError(403, 'This chat belongs to another force');
 	return { config, player: parsed.data };
 }

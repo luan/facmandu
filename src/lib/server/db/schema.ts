@@ -301,6 +301,7 @@ export const assistantTurn = sqliteTable('assistant_turn', {
 export const serverAssistantTurn = sqliteTable(
 	'server_assistant_turn',
 	{
+		gamePlayer: text('game_player'),
 		chatId: text('chat_id').references(() => assistantChat.id, { onDelete: 'cascade' }),
 		id: text('id').primaryKey(),
 		userId: text('user_id')
@@ -339,6 +340,7 @@ export const recommendationFeedback = sqliteTable(
 
 export const assistantChat = sqliteTable('assistant_chat', {
 	gamePlayer: text('game_player'),
+	gameForce: text('game_force'),
 	id: text('id').primaryKey(),
 	userId: text('user_id')
 		.notNull()

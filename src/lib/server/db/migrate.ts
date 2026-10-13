@@ -94,6 +94,15 @@ CREATE TABLE IF NOT EXISTS recommendation_feedback (
 		)
 	)
 		await client.execute('ALTER TABLE assistant_chat ADD COLUMN game_player TEXT');
+	for (const [table, column] of [
+		['assistant_chat', 'game_force'],
+		['server_assistant_turn', 'game_player']
+	]) {
+		if (
+			!(await client.execute(`PRAGMA table_info(${table})`)).rows.some((row) => row.name === column)
+		)
+			await client.execute(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT`);
+	}
 	await client.executeMultiple(`CREATE TABLE IF NOT EXISTS factory_watch (
 	 id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
 	 server_id TEXT NOT NULL REFERENCES native_server(id) ON DELETE CASCADE,

@@ -60,7 +60,7 @@ export async function touchChat(
 		.update(assistantChat)
 		.set({
 			updatedAt: new Date(),
-			title: initial ? fallback : chat.title
+			...(initial ? { title: fallback } : {})
 		})
 		.where(eq(assistantChat.id, chat.id));
 	if (initial) void nameChat(chat, prompt, fallback).catch(() => {});

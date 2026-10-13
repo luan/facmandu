@@ -2,7 +2,13 @@ import { createHash } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { useDataWriter, useDelivery, usePersistentState, useTool } from '@flue/runtime';
+import {
+	useAgentStart,
+	useDataWriter,
+	useDelivery,
+	usePersistentState,
+	useTool
+} from '@flue/runtime';
 import * as v from 'valibot';
 import { z } from 'zod';
 import { serverToolGroups } from '$lib/assistant-routing';
@@ -49,14 +55,36 @@ const manifestSchema = z.object({
 		z.object({ desc: z.string(), params: z.record(z.string(), z.string()).optional() })
 	)
 });
-export function serverAssistantTools(context: {
+export function serverAssistantTools(initialContext: {
 	userId: string;
 	serverId: string;
 	gamePlayer?: string;
+	gameForce?: string;
 	chatId?: string;
 }) {
 	const writeArtifact = useDataWriter('factory-result');
 	const delivery = useDelivery();
+	const [actor, setActor] = usePersistentState<{ name?: string; force?: string }>('game-actor', {
+		name: initialContext.gamePlayer,
+		force: initialContext.gameForce
+	});
+	// Only trusted host deliveries can switch the actor. Shared history never
+	// grants the original author's admin rights to a later player.
+	const incoming =
+		delivery.kind === 'signal' && delivery.type === 'facmandu-request'
+			? delivery.attributes?.gamePlayer
+			: undefined;
+	const context = {
+		...initialContext,
+		gamePlayer: incoming ?? actor.name ?? initialContext.gamePlayer,
+		gameForce:
+			(incoming && delivery.kind === 'signal' ? delivery.attributes?.gameForce : undefined) ??
+			actor.force ??
+			initialContext.gameForce
+	};
+	useAgentStart(() => {
+		if (incoming) setActor({ name: incoming, force: context.gameForce });
+	});
 	const requestId = delivery.kind === 'signal' ? (delivery.attributes?.requestId ?? '') : '';
 	const [observed, setObserved] = usePersistentState<{
 		requestId: string;
@@ -79,7 +107,8 @@ export function serverAssistantTools(context: {
 	let targets = observed.targets;
 	const server = async () => {
 		const instance = await requireServer(context.userId, context.serverId);
-		if (context.gamePlayer) await requireGamePlayer(instance, context.userId, context.gamePlayer);
+		if (context.gamePlayer)
+			await requireGamePlayer(instance, context.userId, context.gamePlayer, context.gameForce);
 		return instance;
 	};
 	const groups = useAssistantToolGroups(
@@ -209,7 +238,12 @@ export function serverAssistantTools(context: {
 				const request: Record<string, unknown> = { ...data.args, operation: data.operation };
 				let actor: { name: string; requireAdmin: boolean } | undefined;
 				if (context.gamePlayer) {
-					const { player } = await requireGamePlayer(instance, context.userId, context.gamePlayer);
+					const { player } = await requireGamePlayer(
+						instance,
+						context.userId,
+						context.gamePlayer,
+						context.gameForce
+					);
 					if (data.args.force !== undefined && data.args.force !== player.force)
 						throw new ServerError(403, 'You can only inspect your own force');
 					request.force = player.force;
@@ -255,7 +289,8 @@ export function serverAssistantTools(context: {
 					const { config, player } = await requireGamePlayer(
 						await server(),
 						context.userId,
-						context.gamePlayer
+						context.gamePlayer,
+						context.gameForce
 					);
 					assertGameAction(config, context.userId, player, data.args.force);
 					actor = { name: player.name, requireAdmin: config.actions === 'admins' };
@@ -284,7 +319,12 @@ export function serverAssistantTools(context: {
 			async run({ data }) {
 				const instance = await server();
 				if (context.gamePlayer) {
-					const { player } = await requireGamePlayer(instance, context.userId, context.gamePlayer);
+					const { player } = await requireGamePlayer(
+						instance,
+						context.userId,
+						context.gamePlayer,
+						context.gameForce
+					);
 					if (data.force !== player.force)
 						throw new ServerError(403, 'You can only view your own force');
 				}
@@ -351,7 +391,12 @@ export function serverAssistantTools(context: {
 			async run({ data }) {
 				const instance = await server();
 				if (context.gamePlayer) {
-					const { player } = await requireGamePlayer(instance, context.userId, context.gamePlayer);
+					const { player } = await requireGamePlayer(
+						instance,
+						context.userId,
+						context.gamePlayer,
+						context.gameForce
+					);
 					if (data.player !== player.name || data.force !== player.force)
 						throw new ServerError(403, 'Read your own sandbox session');
 				}
@@ -404,7 +449,8 @@ export function serverAssistantTools(context: {
 					const { config, player } = await requireGamePlayer(
 						instance,
 						context.userId,
-						context.gamePlayer
+						context.gamePlayer,
+						context.gameForce
 					);
 					if (data.args.force !== player.force)
 						throw new ServerError(403, 'You can only use your own force');
@@ -518,7 +564,14 @@ export function serverAssistantTools(context: {
 			async run({ data }) {
 				const instance = await server();
 				const player = context.gamePlayer
-					? (await requireGamePlayer(instance, context.userId, context.gamePlayer)).player
+					? (
+							await requireGamePlayer(
+								instance,
+								context.userId,
+								context.gamePlayer,
+								context.gameForce
+							)
+						).player
 					: null;
 				const route = await designBeltRoute(instance, {
 					...data,
@@ -562,7 +615,12 @@ export function serverAssistantTools(context: {
 							? {
 									...data,
 									force: (
-										await requireGamePlayer(await server(), context.userId, context.gamePlayer)
+										await requireGamePlayer(
+											await server(),
+											context.userId,
+											context.gamePlayer,
+											context.gameForce
+										)
 									).player.force
 								}
 							: data
@@ -610,7 +668,14 @@ export function serverAssistantTools(context: {
 			async run({ data }) {
 				const instance = await server();
 				const player = context.gamePlayer
-					? (await requireGamePlayer(instance, context.userId, context.gamePlayer)).player
+					? (
+							await requireGamePlayer(
+								instance,
+								context.userId,
+								context.gamePlayer,
+								context.gameForce
+							)
+						).player
 					: null;
 				return result(
 					'planner_calculation',
@@ -765,7 +830,8 @@ export function serverAssistantTools(context: {
 			const instance = await server();
 			const manifest = manifestSchema.parse(await factoryQuery(instance, { op: 'catalog' }));
 			const player = context.gamePlayer
-				? (await requireGamePlayer(instance, context.userId, context.gamePlayer)).player
+				? (await requireGamePlayer(instance, context.userId, context.gamePlayer, context.gameForce))
+						.player
 				: null;
 			if (
 				player &&
@@ -818,7 +884,8 @@ export function serverAssistantTools(context: {
 			const instance = await server();
 			const manifest = manifestSchema.parse(await factoryQuery(instance, { op: 'catalog' }));
 			const player = context.gamePlayer
-				? (await requireGamePlayer(instance, context.userId, context.gamePlayer)).player
+				? (await requireGamePlayer(instance, context.userId, context.gamePlayer, context.gameForce))
+						.player
 				: null;
 			if (
 				player &&

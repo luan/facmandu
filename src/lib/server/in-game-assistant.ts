@@ -10,6 +10,7 @@ import { touchChat } from './assistant-chats';
 import { db } from './db';
 import { genID } from './db/ids';
 import { assistantChat, type ManagedServer, managedServer, serverAssistantTurn } from './db/schema';
+import { forceChatScope } from './game-chat-scope';
 import { requireGamePlayer } from './game-player';
 import {
 	finishServerTurn,
@@ -54,8 +55,20 @@ async function reply(server: ManagedServer, player: string, answer: string, sour
 			`/silent-command local p=game.get_player(${JSON.stringify(player)}); if p and p.connected then p.force.print(${JSON.stringify(`Toby: ${text}`)}) end`
 		);
 	const session = sessions.get(server.id);
-	if (session)
-		await syncPanel(server, session, player, undefined, undefined, sourceChat).catch(() => {});
+	if (session) await syncForcePanels(server, session, player, sourceChat);
+}
+async function syncForcePanels(
+	server: ManagedServer,
+	session: Session,
+	player: string,
+	sourceChat?: string
+) {
+	// Each snapshot rechecks the viewer's current native force before reading history.
+	await Promise.allSettled(
+		[...new Set([player, ...session.panels.keys()])].map((viewer) =>
+			syncPanel(server, session, viewer, undefined, undefined, sourceChat)
+		)
+	);
 }
 async function syncPanel(
 	server: ManagedServer,
@@ -65,7 +78,7 @@ async function syncPanel(
 	progress?: string,
 	sourceChat?: string
 ) {
-	await requireGamePlayer(server, session.config.ownerId, player);
+	const { player: author } = await requireGamePlayer(server, session.config.ownerId, player);
 	const chats = await db
 		.select()
 		.from(assistantChat)
@@ -73,11 +86,35 @@ async function syncPanel(
 			and(
 				eq(assistantChat.userId, session.config.ownerId),
 				eq(assistantChat.serverId, server.id),
-				eq(assistantChat.gamePlayer, player)
+				forceChatScope(author)
 			)
 		)
 		.orderBy(desc(assistantChat.updatedAt))
 		.limit(8);
+	const chatRows = await Promise.all(
+		chats.map(async (chat) => {
+			const latest = await db
+				.select()
+				.from(serverAssistantTurn)
+				.where(eq(serverAssistantTurn.chatId, chat.id))
+				.orderBy(desc(serverAssistantTurn.createdAt))
+				.get();
+			const active = latest && serverAssistantActivity.get(latest.id);
+			return {
+				id: chat.id,
+				title: gameText(chat.title, 200),
+				state: latest?.state ?? 'idle',
+				status: gameText(
+					active?.feedback ||
+						active?.progress ||
+						latest?.answer ||
+						(latest?.state === 'running' ? 'Working…' : 'Ready'),
+					500
+				),
+				author: latest?.gamePlayer ?? chat.gamePlayer ?? undefined
+			};
+		})
+	);
 	const current =
 		chats.find((chat) => chat.id === (selected ?? session.panels.get(player))) ?? chats[0];
 	if (current) session.panels.set(player, current.id);
@@ -115,7 +152,11 @@ async function syncPanel(
 			available -= Buffer.byteLength(text);
 			if (text) messages.unshift({ role: 'assistant', text });
 		}
-		if (prompt) messages.unshift({ role: 'user', text: prompt });
+		if (prompt)
+			messages.unshift({
+				role: 'user',
+				text: `${entry.gamePlayer ?? current?.gamePlayer ?? 'Player'}: ${prompt}`
+			});
 		if (!available) break;
 	}
 	const design = turnsWithActivity
@@ -152,7 +193,7 @@ async function syncPanel(
 		blueprint: design?.blueprint,
 		design: design && gameText(design.label, 200),
 		materials: design?.cost.slice(0, 32).map((item) => ({ ...item, count: Math.ceil(item.count) })),
-		chats: chats.map((chat) => ({ id: chat.id, title: gameText(chat.title, 200) }))
+		chats: chatRows
 	};
 	if (sessions.get(server.id) !== session) return;
 	const encoded = JSON.stringify(JSON.stringify(state));
@@ -167,7 +208,11 @@ async function receiveUi(
 	line: LogLine,
 	message: NonNullable<ReturnType<typeof parseGameUi>>
 ) {
-	await requireGamePlayer(server, session.config.ownerId, message.player);
+	const { player: author } = await requireGamePlayer(
+		server,
+		session.config.ownerId,
+		message.player
+	);
 	if (sessions.get(server.id) !== session) return;
 	if (message.chat) {
 		const allowed = await db
@@ -178,7 +223,7 @@ async function receiveUi(
 					eq(assistantChat.id, message.chat),
 					eq(assistantChat.userId, session.config.ownerId),
 					eq(assistantChat.serverId, server.id),
-					eq(assistantChat.gamePlayer, message.player)
+					forceChatScope(author)
 				)
 			)
 			.get();
@@ -207,6 +252,7 @@ async function receiveUi(
 		});
 }
 async function chatFor(server: ManagedServer, ownerId: string, player: string, fresh = false) {
+	const { player: author } = await requireGamePlayer(server, ownerId, player);
 	const existing = !fresh
 		? await db
 				.select()
@@ -215,18 +261,29 @@ async function chatFor(server: ManagedServer, ownerId: string, player: string, f
 					and(
 						eq(assistantChat.userId, ownerId),
 						eq(assistantChat.serverId, server.id),
-						eq(assistantChat.gamePlayer, player)
+						forceChatScope(author)
 					)
 				)
 				.orderBy(desc(assistantChat.updatedAt), desc(assistantChat.id))
 				.get()
 		: null;
-	if (existing) return existing;
+	if (existing) {
+		// Only its original author can expose an unscoped legacy conversation.
+		if (!existing.gameForce) {
+			await db
+				.update(assistantChat)
+				.set({ gameForce: author.force })
+				.where(eq(assistantChat.id, existing.id));
+			return { ...existing, gameForce: author.force };
+		}
+		return existing;
+	}
 	const chat = {
 		id: genID('chat'),
 		userId: ownerId,
 		serverId: server.id,
 		gamePlayer: player,
+		gameForce: author.force,
 		title: `In game · ${player}`,
 		createdAt: new Date(),
 		updatedAt: new Date()
@@ -242,7 +299,7 @@ async function answer(
 	ready: (chat: string | null) => void
 ) {
 	const ownerId = session.config.ownerId;
-	await requireGamePlayer(server, ownerId, message.player);
+	const { player: author } = await requireGamePlayer(server, ownerId, message.player);
 	if (sessions.get(server.id) !== session) return;
 	if (/^(?:new|new chat|start fresh)$/iu.test(message.prompt)) {
 		const chat = await chatFor(server, ownerId, message.player, true);
@@ -259,14 +316,33 @@ async function answer(
 						eq(assistantChat.id, message.chatId),
 						eq(assistantChat.userId, ownerId),
 						eq(assistantChat.serverId, server.id),
-						eq(assistantChat.gamePlayer, message.player)
+						forceChatScope(author)
 					)
 				)
 				.get()
 		: await chatFor(server, ownerId, message.player, message.fresh);
 	if (!chat) return;
+	if (!chat.gameForce) {
+		// The scope query admits a legacy chat only for its original native author.
+		await db
+			.update(assistantChat)
+			.set({ gameForce: author.force })
+			.where(eq(assistantChat.id, chat.id));
+		chat.gameForce = author.force;
+	}
 	if (sessions.get(server.id) !== session) return;
-	if (serverAssistantRequests.has(chat.id) || serverAssistantRequests.size >= 8) {
+	if (serverAssistantRequests.has(chat.id)) {
+		ready(chat.id);
+		await steerServerTurn(
+			chat.id,
+			message.prompt,
+			`game-steer-${server.id}-${line.id}`,
+			message.player
+		);
+		await reply(server, message.player, 'Updated request.', chat.id);
+		return;
+	}
+	if (serverAssistantRequests.size >= 8) {
 		await reply(server, message.player, 'The assistant is busy. Try again shortly.');
 		return;
 	}
@@ -285,6 +361,7 @@ async function answer(
 				userId: ownerId,
 				serverId: server.id,
 				chatId: chat.id,
+				gamePlayer: message.player,
 				prompt: message.prompt,
 				state: 'running',
 				model: session.config.model,
@@ -310,7 +387,7 @@ async function answer(
 		panelTimer = setInterval(() => {
 			if (panelUpdating || controller.signal.aborted || sessions.get(server.id) !== session) return;
 			panelUpdating = true;
-			void syncPanel(server, session, message.player)
+			void syncForcePanels(server, session, message.player, chat.id)
 				.catch(() => {})
 				.finally(() => {
 					panelUpdating = false;
@@ -373,7 +450,11 @@ function receive(server: ManagedServer, session: Session, line: LogLine) {
 		session.routing.add(message.player);
 		session.ambientRecent.push(now);
 		void (async () => {
-			await requireGamePlayer(server, session.config.ownerId, message.player);
+			const { player: author } = await requireGamePlayer(
+				server,
+				session.config.ownerId,
+				message.player
+			);
 			const chats = await db
 				.select()
 				.from(assistantChat)
@@ -381,7 +462,7 @@ function receive(server: ManagedServer, session: Session, line: LogLine) {
 					and(
 						eq(assistantChat.userId, session.config.ownerId),
 						eq(assistantChat.serverId, server.id),
-						eq(assistantChat.gamePlayer, message.player)
+						forceChatScope(author)
 					)
 				)
 				.orderBy(desc(assistantChat.updatedAt))
@@ -458,7 +539,8 @@ function deliver(server: ManagedServer, session: Session, line: LogLine, message
 			void steerServerTurn(
 				message.chatId,
 				message.prompt,
-				`game-steer-${server.id}-${line.id}`
+				`game-steer-${server.id}-${line.id}`,
+				message.player
 			).catch(() => {});
 		} else launch(server, session, line, message);
 		return;
@@ -469,7 +551,12 @@ function deliver(server: ManagedServer, session: Session, line: LogLine, message
 			const chat = await pending.chat;
 			if (
 				chat &&
-				(await steerServerTurn(chat, message.prompt, `game-steer-${server.id}-${line.id}`))
+				(await steerServerTurn(
+					chat,
+					message.prompt,
+					`game-steer-${server.id}-${line.id}`,
+					message.player
+				))
 			) {
 				await reply(server, message.player, 'Updated request.');
 				return;
