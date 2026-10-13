@@ -321,9 +321,8 @@ function SimplexTableau:solve(floor_id, basis_cache)
             b_matrix[j] = self.matrix[self.cols[basic[j]--[[@cast -nil]]]]
         end
 
-        local new_lu = LUDecomposition:decompose(b_matrix)
-        if new_lu then
-            lu = new_lu
+        lu = LUDecomposition:decompose(b_matrix)
+        if lu then
             x_vector = lu:solve_right(self.solution)
             needs_factorization = false
             last_factorization = iterations
@@ -343,6 +342,7 @@ function SimplexTableau:solve(floor_id, basis_cache)
     ---@return boolean done
     ---@return SolverStatus state
     local function iterate()
+        if #non_basic == 0 then return solution_reached() end
         -- Compute the objective vector for the current basis
         local c_basic = {}  ---@type number[]
         for k = 1, #basic do
@@ -422,35 +422,33 @@ function SimplexTableau:solve(floor_id, basis_cache)
         return false, "in_progress"
     end
 
-    -- If a cached result was found, then we need to calculate the initial
-    if result.cache_invalid then
-        -- Find a solution
-        local done = false
-        local max_iterations = 4 * #basic
-        local factorization_interval = math.min(#basic, MAGIC_NUMBERS.simplex_max_factorization_interval)
-        repeat
-            -- If the factorization is too old, we need to recreate it
-            if iterations - last_factorization >= factorization_interval then
-                needs_factorization = true
-            end
-
-            -- Re-factorize if needed
-            if needs_factorization then refactorize() end
-            if not lu then
-                result.status = "no_solution"
-                break
-            end
-
-            -- Iterate through the solution
-            done, result.status = iterate()
-            iterations = iterations + 1
-        until done or iterations == max_iterations
-        if result.status ~= "solved" then return result end
-    else
-        -- Re-use the cached solution
+    -- A changed rate or machine can make the previous basis infeasible.
+    -- Rebuild that case; otherwise retain it and optimize for the current costs.
+    if not result.cache_invalid then
         refactorize()
-        result.status = "solved"
+        if not lu then return self:solve(floor_id) end
+        for i, amount in ipairs(x_vector) do
+            if amount ~= amount or amount < -MAGIC_NUMBERS.margin_of_error then
+                return self:solve(floor_id)
+            end
+            x_vector[i] = math.max(0, amount)
+        end
     end
+
+    local done = false
+    local max_iterations = 4 * #basic
+    local factorization_interval = math.min(#basic, MAGIC_NUMBERS.simplex_max_factorization_interval)
+    repeat
+        if iterations - last_factorization >= factorization_interval then needs_factorization = true end
+        if needs_factorization then refactorize() end
+        if not lu then
+            result.status = "no_solution"
+            break
+        end
+        done, result.status = iterate()
+        iterations = iterations + 1
+    until done or iterations == max_iterations
+    if result.status ~= "solved" then return result end
 
     -- Cache the solution basis for later
     result.simplex_basis_cache = {}

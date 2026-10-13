@@ -73,6 +73,38 @@ test('native planner solver respects supply, recycling balances, output goals an
    end
   end
  end
+ local cached_line={id=1,products={['item/plate']=1},ingredients={['item/ore']=2},machine_constraints={{id=1,count=2,mode='maximum',coefficient=1}}}
+ local cached_floor={id=10,level=1,line_ids={1},products={{name='plate',type='item',amount=100}},inputs={{name='ore',type='item',amount=7,mode='maximum'}},maximize_product={name='plate',type='item'}}
+ local cached_data={floor_data_map={[10]=cached_floor},line_data_map={[1]=cached_line}}
+ local first=engine.solve_floor(cached_data,10);near(first.products['item/plate'],2)
+ cached_floor.simplex_basis=first.simplex_basis_cache
+ cached_line.machine_constraints[1].count=5
+ local changed=engine.solve_floor(cached_data,10)
+ assert(changed.status=='solved');near(changed.products['item/plate'],3.5);near(changed.ingredients['item/ore'],7)
+ for _,cap in ipairs{1,0,12,7,3,100} do
+  cached_floor.simplex_basis=changed.simplex_basis_cache
+  cached_floor.inputs[1].amount=cap
+  changed=engine.solve_floor(cached_data,10)
+  assert(changed.status=='solved');near(changed.products['item/plate'] or 0,math.min(5,cap/2))
+ end
+ for _,count in ipairs{0,.5,2,3.5,5,1} do
+  cached_floor.simplex_basis=changed.simplex_basis_cache
+  cached_floor.inputs[1].amount=7
+  cached_line.machine_constraints[1]={count=count,mode='exact',coefficient=1}
+  changed=engine.solve_floor(cached_data,10)
+  if count>3.5 then assert(changed.status=='no_solution')
+  else assert(changed.status=='solved');near(changed.products['item/plate'] or 0,count) end
+ end
+ local alternatives={[1]={id=1,products={['item/plate']=1},ingredients={['item/ore']=1}},[2]={id=2,products={['item/plate']=1},ingredients={['item/ore']=2}}}
+ local optimization={id=10,level=1,line_ids={1,2},products={{name='plate',type='item',amount=100}},inputs={{name='ore',type='item',amount=10,mode='maximum'}},maximize_product={name='plate',type='item'}}
+ local competing={floor_data_map={[10]=optimization},line_data_map=alternatives}
+ local original=engine.solve_floor(competing,10);near(original.products['item/plate'],10)
+ optimization.simplex_basis=original.simplex_basis_cache
+ alternatives[2].products['item/plate']=3
+ local improved=engine.solve_floor(competing,10)
+ assert(improved.status=='solved');near(improved.products['item/plate'],15);near(improved.ingredients['item/ore'],10)
+ optimization.simplex_basis=improved.simplex_basis_cache;optimization.inputs={}
+ assert(engine.solve_floor(competing,10).status=='unbounded')
  -- One synthetic floor variable carries independent capacities for two child recipes.
  local synthetic={id=1,products={['item/plate']=1},ingredients={['item/ore']=2},machine_constraints={{id=2,count=7,mode='maximum',coefficient=2},{id=3,count=2,mode='exact',coefficient=1}}}
  local floor={id=10,level=1,line_ids={1},products={{name='plate',type='item',amount=100}},maximize_product={name='plate',type='item'}}

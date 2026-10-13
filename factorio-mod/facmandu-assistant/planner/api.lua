@@ -314,7 +314,6 @@ local function edit_line(force_name,player_name,id,expected_revision,line_id,pat
  local retained=line_object_ids(line)
  for object_id=first_id,storage.planner.next_object_ID-1 do if not retained[object_id] then OBJECT_INDEX[object_id]=nil end end
  line:index()
- factory:clear_solver_cache()
  solver.update(player,factory)
  lib.gui.run_refresh(player,'all')
  return updated_plan(force_name,player_name,id)

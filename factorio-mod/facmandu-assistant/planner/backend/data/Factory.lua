@@ -252,7 +252,6 @@ function Factory:set_constraints(inputs, maximize_product)
     self.inputs = lib.flib.deep_copy(inputs)
     self.maximize_product = maximize_product and lib.flib.shallow_copy(maximize_product)
     if #inputs > 0 or maximize_product then self.top_floor.solver = "simplex" end
-    self:clear_solver_cache()
     return true
 end
 
