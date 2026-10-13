@@ -208,3 +208,26 @@ test('public tool-call preambles remain separate from final text and private rea
 	assert.equal(assistantText(text, call), '');
 	assert.equal(assistantPreamble(text, { ...base, type: 'message-completed' }), undefined);
 });
+
+test('placement feedback reports foundation tiles even when no entity ghosts were requested', () => {
+	assert.equal(
+		assistantToolFeedback('blueprint_operation', {
+			operation: 'place_blueprint',
+			placed: 0,
+			requested: 0,
+			placed_tiles: 6,
+			requested_tiles: 6
+		}),
+		'Placed 6 of 6 tile ghosts. Real items are required to build them.'
+	);
+	assert.equal(
+		assistantToolFeedback('blueprint_operation', {
+			operation: 'place_blueprint',
+			placed: 2,
+			requested: 3,
+			placed_tiles: 6,
+			requested_tiles: 8
+		}),
+		'Placed 2 of 3 entity ghosts and 6 of 8 tile ghosts. Real items are required to build them.'
+	);
+});

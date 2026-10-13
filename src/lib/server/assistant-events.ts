@@ -112,8 +112,17 @@ export function assistantToolFeedback(tool: string, output: unknown) {
 		value.operation === 'place_blueprint' &&
 		typeof value.placed === 'number' &&
 		typeof value.requested === 'number'
-	)
+	) {
+		const tiles = value.placed_tiles;
+		const requestedTiles = value.requested_tiles;
+		if (typeof tiles === 'number' && typeof requestedTiles === 'number' && requestedTiles > 0) {
+			const entities = value.requested
+				? `${value.placed} of ${value.requested} entity ghosts and `
+				: '';
+			return `Placed ${entities}${tiles} of ${requestedTiles} tile ghosts. Real items are required to build them.`;
+		}
 		return `Placed ${value.placed} of ${value.requested} construction ghosts. Real items are required to build them.`;
+	}
 	if (
 		value.operation === 'check_build' &&
 		typeof value.constructed === 'number' &&
