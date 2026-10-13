@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { lauxlib, lua, lualib, to_luastring } from 'fengari';
-import { factoryBundle } from '../src/lib/server/factory-query-bundle';
+import { factoryBundle, factoryCommand } from '../src/lib/server/factory-query-bundle';
 
 const root = 'src/lib/server/factory-query/';
 const sources = Object.fromEntries(
@@ -72,6 +72,63 @@ assert(next(functions.agent_tools_v1().tools))`)
 		assert.equal(result, lua.LUA_OK, `${owner}: ${lua.lua_tojsstring(selected, -1)}`);
 	}
 	assert.throws(() => factoryBundle(sources, ['unreviewed.module']), /Unknown query module/);
+});
+
+test('native read batches share unused reply space and preserve every outcome within the wire limit', () => {
+	for (const overflow of [false, true]) {
+		const queries = Array.from({ length: 16 }, (_, index) => ({
+			tool: index === 15 || (!overflow && index > 0) ? 'game_time' : 'list_players',
+			args: { force: 'player', limit: 50 }
+		}));
+		const state = lauxlib.luaL_newstate();
+		lualib.luaL_openlibs(state);
+		const request = `{op='batch',queries={${queries.map((q) => `{tool='${q.tool}',args={force='player',limit=50}}`).join(',')}}}`;
+		const command = factoryCommand(sources, { op: 'batch', queries }, [
+			'scripts.tools.basics',
+			'scripts.tools.game_time'
+		]).replace(/^\/silent-command /u, '');
+		const status = lauxlib.luaL_dostring(
+			state,
+			to_luastring(`
+ local function encode(value)
+  if type(value)=='string' then return '"'..value:gsub('\\\\','\\\\\\\\'):gsub('"','\\\\"')..'"' end
+  if type(value)~='table' then return tostring(value) end
+  local rows={}
+  if #value>0 then for _,v in ipairs(value) do rows[#rows+1]=encode(v) end;return '['..table.concat(rows,',')..']' end
+  for k,v in pairs(value) do rows[#rows+1]=encode(k)..':'..encode(v) end
+  return '{'..table.concat(rows,',')..'}'
+ end
+ local captured
+ helpers={json_to_table=function() return ${request} end,table_to_json=encode}
+ rcon={print=function(value) captured=value end}
+ remote={interfaces={}}
+ local force={name='player',players={},connected_players={}}
+ for i=1,50 do force.players[i]={name=string.rep('a',128)..i,connected=true,admin=false} end
+ game={tick=120,ticks_played=120,connected_players=force.players,forces={player=force}}
+ ${command}
+ assert(captured and #captured<=65536)
+ return captured
+ `)
+		);
+		assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+		const reply = JSON.parse(lua.lua_tojsstring(state, -1));
+		assert.equal(reply.ok, true);
+		assert.equal(reply.result.results.length, 16);
+		assert.equal(
+			reply.result.results[0].ok,
+			true,
+			'A detailed result uses space left by small reads'
+		);
+		assert.equal(
+			reply.result.results[15].result.tick,
+			120,
+			'Later small reads retain their result'
+		);
+		assert.equal(
+			reply.result.results.some((row: { ok: boolean }) => !row.ok),
+			overflow
+		);
+	}
 });
 
 test('host catalog loads reviewed contracts with real engine enum values and no game access', async () => {
