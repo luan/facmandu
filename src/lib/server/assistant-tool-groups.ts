@@ -30,7 +30,7 @@ export function useAssistantToolGroups(allowed: readonly [string, ...string[]]) 
 	]);
 	useTool({
 		name: 'load_tools',
-		description: `Load additional capabilities for this request. Available groups: ${allowed.join(', ')}. Use when the current tools cannot complete the request. This does not perform an action.`,
+		description: `Load missing capabilities for this request. Already loaded: ${[...groups].join(', ')}. Available groups: ${allowed.join(', ')}. Call only for groups absent from the loaded menu. This does not perform an action.`,
 		input: v.object({
 			groups: v.pipe(v.array(v.picklist(allowed)), v.minLength(1), v.maxLength(allowed.length))
 		}),
