@@ -394,7 +394,7 @@
        {#if drafts.length > 1}<label class="block text-sm text-muted-foreground">Saved drafts ({drafts.length})<select class="mt-2 w-full border border-border bg-background px-3 py-2 text-foreground" value={selectedDrafts[turn.id] ?? drafts.length - 1} onchange={(event) => { selectedDrafts[turn.id] = Number(event.currentTarget.value); }}>{#each drafts as draft, index}<option value={index}>{draft.label} · {draft.entities.length} entities</option>{/each}</select></label>{/if}
        <BlueprintResult blueprint={saved} {serverId} unfinished />
       {/if}
-      {:else}<div class="pr-2"><AssistantMessage text={turn.answer} /></div>{/if}
+      {:else}<div class="pr-2"><AssistantMessage text={turn.answer} {serverId} /></div>{/if}
       {@render modCards(turn.mods, turn.id)}
       {#if !serverId}
        {#each turn.plans ?? [] as plan (plan.id)}
@@ -441,8 +441,8 @@
      {@const milestone = assistantMilestone(visibleResults)}
      <section class="space-y-4" aria-label="Current response">
       <div class="flex justify-end"><p class="max-w-[90%] whitespace-pre-wrap break-words border border-border bg-white/5 px-4 py-3 text-sm leading-relaxed">{visiblePrompt}</p></div>
-      {#if milestone && milestone !== visibleText}<section class="border-l-2 border-primary/50 pl-3 text-sm" aria-label="Latest update"><AssistantMessage text={milestone} /></section>{/if}
-      {#if visibleText}<div class="pr-2"><AssistantMessage text={visibleText} /></div>{/if}
+      {#if milestone && milestone !== visibleText}<section class="border-l-2 border-primary/50 pl-3 text-sm" aria-label="Latest update"><AssistantMessage text={milestone} {serverId} /></section>{/if}
+      {#if visibleText}<div class="pr-2"><AssistantMessage text={visibleText} {serverId} /></div>{/if}
       {@render modCards(visibleMods)}
       {#each resultGroups.primary as item}<FactoryResultView {item} {serverId} />{/each}
      </section>

@@ -1,7 +1,7 @@
 <script lang="ts">
  import { renderMarkdown } from '$lib/markdown';
- let { text }: { text: string } = $props();
- const html = $derived(renderMarkdown(text));
+ let { text, serverId }: { text: string; serverId?: string } = $props();
+ const html = $derived(renderMarkdown(text, serverId));
 </script>
 <div class="assistant-markdown text-sm leading-relaxed">{@html html}</div>
 <style>
@@ -16,6 +16,8 @@
  .assistant-markdown :global(h1), .assistant-markdown :global(h2), .assistant-markdown :global(h3), .assistant-markdown :global(h4) { font-size: 1rem; font-weight: 600; margin: 1rem 0 .5rem; }
  .assistant-markdown :global(strong) { font-weight: 600; color: var(--foreground); }
  .assistant-markdown :global(a) { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+ .assistant-markdown :global(.factorio-reference) { display: inline-flex; align-items: center; gap: .25rem; vertical-align: middle; }
+ .assistant-markdown :global(.factorio-reference img) { width: 1.25rem; height: 1.25rem; object-fit: contain; }
  .assistant-markdown :global(code) { font-family: monospace; font-size: .9em; background: #0003; padding: .1rem .25rem; }
  .assistant-markdown :global(pre) { overflow-x: auto; background: #0003; padding: .75rem; }
  .assistant-markdown :global(pre code) { padding: 0; background: none; }

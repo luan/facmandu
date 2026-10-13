@@ -30,3 +30,19 @@ test('assistant comparisons render accessible tables with inline formatting and 
 	assert.ok(!rendered.includes('<script>'));
 	assert.ok(!rendered.includes('<img'));
 });
+
+test('server replies use native prototype icons while preserving literal commands and safe markup', () => {
+	const rendered = renderMarkdown(
+		'**[item=plastic-bar]** and [img=fluid/petroleum-gas]\n\n`[item=coal]`\n\n```lua\ngame.print("[item=coal]")\n```\n\n[external](https://example.com/[item=coal])\n\n[item=../../secret] ![remote](https://example.com/tracker.png)',
+		'legacy'
+	);
+	assert.ok(rendered.includes('src="/api/servers/legacy/icons/item/plastic-bar"'));
+	assert.ok(rendered.includes('src="/api/servers/legacy/icons/fluid/petroleum-gas"'));
+	assert.ok(rendered.includes('<code>[item=coal]</code>'));
+	assert.ok(rendered.includes('game.print(&quot;[item=coal]&quot;)'));
+	assert.ok(rendered.includes('href="https://example.com/%5Bitem=coal%5D"'));
+	assert.equal((rendered.match(/<img /gu) ?? []).length, 2);
+	assert.ok(!rendered.includes('src="https:'));
+	assert.ok(!rendered.includes('/icons/item/../../secret'));
+	assert.ok(!renderMarkdown('[item=plastic-bar]').includes('<img'));
+});
