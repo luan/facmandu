@@ -6,6 +6,34 @@ import { assistantResultGroups, presentFactoryResult } from '../src/lib/factory-
 const view = (tool: string, result: unknown) =>
 	presentFactoryResult({ kind: 'factory-result', title: tool.replaceAll('_', ' '), result });
 
+test('shared blueprint tools show source links and theoretical rates without fabricated prototype icons', () => {
+	const searched = view('search_blueprints', {
+		results: [
+			{
+				title: 'Plastic module',
+				url: 'https://www.factoriocodex.com/blueprints/458/recipe-details/22921',
+				rates: [{ name: 'plastic-bar', direction: 'output', quality: 0, perSecond: 15 }]
+			}
+		]
+	});
+	assert.equal(searched.cards[0]?.link?.label, 'Open source');
+	assert.equal(searched.cards[0]?.details?.[0]?.entries[0]?.text, 'Plastic bar · 15/s');
+	assert.equal(searched.cards[0]?.prototype, undefined);
+	assert.match(searched.notes.join(' '), /Theoretical.*not checked/);
+	assert.equal(
+		view('search_blueprints', { results: [{ title: 'Unsafe', url: 'javascript:alert(1)' }] })
+			.cards[0]?.link,
+		undefined
+	);
+	const retrieved = view('fetch_blueprint', {
+		source: 'https://www.factoriocodex.com/blueprints/458/recipe-details/22921',
+		blueprint: { label: 'Plastic module', entities: [{ name: 'chemical-plant' }], tiles: [] }
+	});
+	assert.equal(retrieved.cards[0]?.badge, 'Retrieved');
+	assert.match(retrieved.notes.join(' '), /not checked against this save/);
+	assert.equal(view('fetch_blueprint', { error: 'Source timed out' }).cards.length, 0);
+});
+
 test('native saved plans show references, real prototypes and predictions without claiming a built factory', () => {
 	const result = view('factory_plan', {
 		planner: 'toby',

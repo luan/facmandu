@@ -6,6 +6,8 @@ import {
 	publicWebAddress,
 	publicWebUrl,
 	selectWebBlueprint,
+	searchFactoryBlueprints,
+	sharedBlueprint,
 	webPageText
 } from '../src/lib/server/assistant-web';
 
@@ -84,4 +86,97 @@ test('web page extraction removes executable content and bounds source text', ()
 		'Source & facts'
 	);
 	assert.equal(webPageText('x'.repeat(17000)).length, 16000);
+});
+
+test('Codex factory search returns component links and explicitly theoretical rates', async () => {
+	const result = await searchFactoryBlueprints(['coal'], ['plastic-bar'], async (address) => {
+		const url = new URL(address);
+		assert.equal(url.origin, 'https://www.factoriocodex.com');
+		assert.equal(url.pathname, '/api/v1/blueprints/components/search');
+		assert.equal(url.searchParams.get('i'), 'coal');
+		assert.equal(url.searchParams.get('o'), 'plastic-bar');
+		assert.equal(url.searchParams.get('o_mode'), 'AND');
+		assert.equal(url.searchParams.get('per_page'), '8');
+		return JSON.stringify({
+			total: 85,
+			data: [
+				{
+					id: 22921,
+					blueprint_id: 458,
+					label: 'Plastic',
+					description: null,
+					recipe_io: [{ item_name: 'plastic-bar', item_type: 'output', quality: 0, amount: 15 }]
+				}
+			]
+		});
+	});
+	assert.equal(
+		result.results[0]?.url,
+		'https://www.factoriocodex.com/blueprints/458/recipe-details/22921'
+	);
+	assert.deepEqual(result.results[0]?.rates, [
+		{ name: 'plastic-bar', direction: 'output', quality: 0, perSecond: 15 }
+	]);
+	assert.equal(result.untrusted, true);
+	assert.match(result.note, /theoretical.*not measured/);
+	await assert.rejects(searchFactoryBlueprints([], []), /Choose input/);
+});
+
+test('Codex retrieval preserves component settings and selects the current book version', async () => {
+	const blueprint = {
+		label: 'Configured',
+		entities: [
+			{
+				name: 'inserter',
+				position: { x: 0.5, y: 0.5 },
+				filters: [{ index: 1, name: 'plastic-bar' }],
+				pickup_position: { x: 0, y: -2 }
+			}
+		],
+		wires: [[1, 1, 2, 1]]
+	};
+	const encoded = encode({ blueprint });
+	const component = await sharedBlueprint(
+		'https://factoriocodex.com/blueprints/458/recipe-details/22921',
+		[],
+		async (url) => {
+			if (url.endsWith('/recipe-details/22921'))
+				return JSON.stringify({ label: 'Configured', description: 'Community design' });
+			assert.equal(url, 'https://www.factoriocodex.com/api/v1/blueprints/458/details/22921/string');
+			return encoded + '\n';
+		}
+	);
+	assert.ok('blueprint' in component);
+	assert.deepEqual(component.blueprint, { ...blueprint, tiles: [] });
+	const book = encode({
+		blueprint_book: { label: 'Current book', blueprints: [{ index: 7, blueprint }] }
+	});
+	const selected = await sharedBlueprint(
+		'https://www.factoriocodex.com/blueprints/458',
+		[7],
+		async (url) => {
+			assert.equal(url, 'https://www.factoriocodex.com/api/v1/blueprints/458');
+			return JSON.stringify({
+				title: 'Book',
+				current_version: 2,
+				versions: [
+					{ version_number: 1, blueprint_string: 'invalid retired version' },
+					{ version_number: 2, blueprint_string: book }
+				]
+			});
+		}
+	);
+	assert.ok('blueprint' in selected);
+	assert.deepEqual(selected.blueprint, component.blueprint);
+	for (const url of [
+		'https://factoriocodex.com.evil.example/blueprints/458',
+		'https://factoriocodex.com/blueprints/458/../private',
+		'https://factoriocodex.com/blueprints/0'
+	])
+		await assert.rejects(
+			sharedBlueprint(url, [], async () => {
+				throw new Error('Unexpected fetch');
+			}),
+			/Use a Factorio/
+		);
 });

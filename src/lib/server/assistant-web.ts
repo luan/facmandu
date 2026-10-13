@@ -42,7 +42,8 @@ export async function fetchPublicWeb(value: string, redirects = 0): Promise<stri
 	const addresses = await lookup(url.hostname, { all: true });
 	if (!addresses.length || addresses.some((item) => !publicWebAddress(item.address)))
 		throw new Error('Private network addresses are not available to the assistant');
-	const address = addresses[0];
+	// Some hosts resolve IPv6 without having a working IPv6 route.
+	const address = addresses.find((item) => item.family === 4) ?? addresses[0];
 	if (!address) throw new Error('Web host has no public address');
 	const result = await new Promise<{ text: string; location?: string }>((resolve, reject) => {
 		// Pin the checked address so a DNS change cannot redirect a fetch into the local network.
@@ -143,6 +144,67 @@ export async function searchBlueprints(query: string) {
 		untrusted: true
 	};
 }
+export async function searchFactoryBlueprints(
+	inputs: string[],
+	outputs: string[],
+	read = fetchPublicWeb
+) {
+	const names = z.array(z.string().min(1).max(200)).max(8);
+	names.parse(inputs);
+	names.parse(outputs);
+	if (!inputs.length && !outputs.length) throw new Error('Choose input or output items');
+	const url = new URL('https://www.factoriocodex.com/api/v1/blueprints/components/search');
+	url.searchParams.set('page', '1');
+	url.searchParams.set('per_page', '8');
+	if (inputs.length) url.searchParams.set('i', inputs.join(','));
+	if (outputs.length) url.searchParams.set('o', outputs.join(','));
+	url.searchParams.set('i_mode', 'AND');
+	url.searchParams.set('o_mode', 'AND');
+	const response = z
+		.object({
+			total: z.number().int().nonnegative(),
+			data: z
+				.array(
+					z.object({
+						id: z.number().int().positive(),
+						blueprint_id: z.number().int().positive(),
+						label: z.string(),
+						description: z.string().nullish(),
+						recipe_io: z
+							.array(
+								z.object({
+									item_name: z.string(),
+									item_type: z.enum(['input', 'output']),
+									quality: z.number().int().nonnegative(),
+									amount: z.number().finite().nonnegative()
+								})
+							)
+							.max(1000)
+					})
+				)
+				.max(8)
+		})
+		.parse(JSON.parse(await read(url.href)));
+	return {
+		inputs,
+		outputs,
+		total: response.total,
+		results: response.data.map((item) => ({
+			title: item.label,
+			url: `https://www.factoriocodex.com/blueprints/${item.blueprint_id}/recipe-details/${item.id}`,
+			description: item.description?.slice(0, 1000),
+			rates: item.recipe_io.slice(0, 32).map((row) => ({
+				name: row.item_name,
+				direction: row.item_type,
+				quality: row.quality,
+				perSecond: row.amount
+			})),
+			ratesTruncated: item.recipe_io.length > 32
+		})),
+		note: 'Community theoretical maximum rates, not measured production or compatibility with this save. Verify decoded recipes, game/mod prototypes, unlocks and connections before adapting.',
+		untrusted: true
+	};
+}
 const position = z.object({ x: z.number().finite(), y: z.number().finite() });
 const sourceBlueprint = z
 	.object({
@@ -193,8 +255,46 @@ export function selectWebBlueprint(encoded: string, path: number[]) {
 	const string = `0${deflateSync(JSON.stringify({ blueprint })).toString('base64')}`;
 	return { blueprint, string };
 }
-export async function schoolBlueprint(urlValue: string, path: number[]) {
+export async function sharedBlueprint(urlValue: string, path: number[], read = fetchPublicWeb) {
 	const url = publicWebUrl(urlValue);
+	if (['factoriocodex.com', 'www.factoriocodex.com'].includes(url.hostname)) {
+		const ids = /^\/blueprints\/([1-9]\d{0,9})(?:\/recipe-details(?:\/([1-9]\d{0,9}))?)?\/?$/.exec(
+			url.pathname
+		);
+		if (!ids) throw new Error('Use a Factorio Codex blueprint or component URL');
+		const base = `https://www.factoriocodex.com/api/v1/blueprints/${ids[1]}`;
+		const metadata = z
+			.object({
+				title: z.string().optional(),
+				label: z.string().optional(),
+				description: z.string().optional(),
+				blueprint_string: z.string().optional(),
+				current_version: z.number().int().positive().optional(),
+				versions: z
+					.array(
+						z.object({
+							version_number: z.number().int().positive(),
+							blueprint_string: z.string()
+						})
+					)
+					.max(100)
+					.optional()
+			})
+			.parse(JSON.parse(await read(ids[2] ? `${base}/recipe-details/${ids[2]}` : base)));
+		const encoded = ids[2]
+			? await read(`${base}/details/${ids[2]}/string`)
+			: (metadata.blueprint_string ??
+				metadata.versions?.find((version) => version.version_number === metadata.current_version)
+					?.blueprint_string);
+		if (!encoded) throw new Error('This source did not return a blueprint string');
+		return {
+			source: url.href,
+			title: metadata.title ?? metadata.label,
+			description: metadata.description?.slice(0, 8000),
+			untrusted: true,
+			...selectWebBlueprint(encoded.trim(), path)
+		};
+	}
 	if (
 		![
 			'factorio.school',
@@ -203,7 +303,7 @@ export async function schoolBlueprint(urlValue: string, path: number[]) {
 			'www.factorioprints.com'
 		].includes(url.hostname)
 	)
-		throw new Error('Use a Factorio School or Factorio Prints blueprint URL');
+		throw new Error('Use a Factorio School, Factorio Prints or Factorio Codex blueprint URL');
 	const id = /^\/view\/([A-Za-z0-9_-]{1,80})\/?$/.exec(url.pathname)?.[1];
 	if (!id) throw new Error('Use the blueprint’s /view/ URL');
 	const record = z
@@ -212,14 +312,12 @@ export async function schoolBlueprint(urlValue: string, path: number[]) {
 			descriptionMarkdown: z.string().optional(),
 			blueprintString: z.object({ sha: z.string().regex(/^[a-f0-9]{40}$/) })
 		})
-		.parse(
-			JSON.parse(await fetchPublicWeb(`https://www.factorio.school/api/blueprintDetails/${id}`))
-		);
+		.parse(JSON.parse(await read(`https://www.factorio.school/api/blueprintDetails/${id}`)));
 	const encoded = z
 		.object({ blueprintString: z.string() })
 		.parse(
 			JSON.parse(
-				await fetchPublicWeb(
+				await read(
 					`https://www.factorio.school/api/blueprintStringBySha/${record.blueprintString.sha}`
 				)
 			)

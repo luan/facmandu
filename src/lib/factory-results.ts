@@ -10,6 +10,7 @@ export type PrototypeRef = {
 export type ResultDetail = { label: string; entries: { text: string; prototype?: PrototypeRef }[] };
 export type ResultCard = {
 	title: string;
+	link?: { href: string; label: string };
 	prototype?: PrototypeRef;
 	subtitle?: string;
 	badge?: string;
@@ -1060,6 +1061,76 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 					notes: [task.data.summary, task.data.error].filter((text): text is string => !!text)
 				}
 			];
+		return view;
+	}
+	if (tool === 'search_blueprints' || tool === 'fetch_blueprint') {
+		if (string(data.error)) {
+			view.notes = [string(data.error)];
+			view.empty = 'Source unavailable.';
+			return view;
+		}
+		const sourceLink = (value: unknown) =>
+			string(value).startsWith('https://')
+				? { href: string(value), label: 'Open source' }
+				: undefined;
+		if (tool === 'search_blueprints') {
+			const qualityNames = new Map([
+				[1, 'Uncommon'],
+				[2, 'Rare'],
+				[3, 'Epic'],
+				[5, 'Legendary']
+			]);
+			view.context = string(data.query) || 'Factory modules';
+			view.cards = rows(data.results).map((row) => ({
+				title: string(row.title),
+				link: sourceLink(row.url),
+				metrics: [],
+				notes: [string(row.description)].filter(Boolean),
+				details: ['input', 'output'].flatMap((direction) => {
+					const rates = rows(row.rates).filter((rate) => rate.direction === direction);
+					return rates.length
+						? [
+								{
+									label: direction === 'input' ? 'Inputs' : 'Outputs',
+									entries: rates.map((rate) => ({
+										text: `${humanName(rate.name)} · ${display(rate.perSecond)}/s${resultNumber(rate.quality) ? ` · ${qualityNames.get(resultNumber(rate.quality) ?? 0) ?? `Quality ${display(rate.quality)}`}` : ''}`
+									}))
+								}
+							]
+						: [];
+				})
+			}));
+			view.notes = [
+				rows(data.results).some((row) => rows(row.rates).length)
+					? 'Theoretical maximum rates; compatibility with this save is not checked.'
+					: 'Community designs; compatibility with this save is not checked.'
+			];
+		} else {
+			const blueprint = record(data.blueprint);
+			view.link = sourceLink(data.source);
+			view.cards = [
+				{
+					title: string(blueprint.label ?? data.book ?? data.title) || 'Shared blueprint',
+					badge: 'Retrieved',
+					metrics: data.book
+						? numeric('Blueprints', data.total)
+						: [
+								...numeric('Entities', rows(blueprint.entities).length),
+								...numeric('Tiles', rows(blueprint.tiles).length)
+							],
+					notes: [string(data.description)].filter(Boolean)
+				}
+			];
+			if (data.book)
+				view.tables = [
+					{
+						title: 'Book entries',
+						columns: ['Index', 'Blueprint'],
+						rows: rows(data.entries).map((entry) => [display(entry.index), string(entry.label)])
+					}
+				];
+			view.notes = ['Retrieved design; not checked against this save.'];
+		}
 		return view;
 	}
 	if (tool === 'blueprint_operation') {

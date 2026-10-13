@@ -15,6 +15,7 @@
  const snapshot = $derived(factoryViewSchema.or(factoryPreviewPendingSchema).safeParse(item.result));
  const blueprint = $derived(blueprintArtifactSchema.safeParse(item.result));
  const view = $derived(presentFactoryResult(item));
+ const sharedString = $derived(item.tool === 'fetch_blueprint' && item.result && typeof item.result === 'object' && 'string' in item.result && typeof item.result.string === 'string' && /^0[A-Za-z0-9+/=]+$/.test(item.result.string) && item.result.string.length <= 1024 * 1024 ? item.result.string : '');
  const Icon = $derived(({ research: FlaskConicalIcon, players: UsersIcon, production: ChartNoAxesCombinedIcon, location: MapPinIcon, server: ServerIcon })[view.icon]);
  let expanded = $state(false);
  let copied = $state('');
@@ -39,6 +40,7 @@
     {#if card.metrics.length}<dl class="flex flex-wrap gap-x-7 gap-y-3">{#each card.metrics as metric}<div class={metric.fraction !== undefined ? 'w-full' : 'min-w-16'}><dt class="text-xs text-muted-foreground">{metric.label}</dt><dd class="mt-0.5 font-semibold tabular-nums">{metric.value}</dd>{#if metric.fraction !== undefined}<progress aria-label={metric.label} value={metric.fraction} max="1" class="mt-1 h-1.5 w-full accent-primary"></progress>{/if}</div>{/each}</dl>{/if}
     {#if card.details?.length}<div class="space-y-2 text-xs">{#each card.details as detail}{#if card.badge === 'Choose recipe' || card.badge === 'Choose machine'}<details><summary class="cursor-pointer text-muted-foreground">{detail.entries.length} {detail.label.toLowerCase()}</summary><ul class="mt-2 grid gap-2 sm:grid-cols-2">{#each detail.entries as entry}<li class="inline-flex items-center gap-1.5">{#if entry.prototype && serverId}<PrototypeIcon prototype={entry.prototype} {serverId} />{/if}<span>{entry.text}</span></li>{/each}</ul></details>{:else}<div class="flex flex-wrap items-center gap-x-3 gap-y-1.5"><span class="text-muted-foreground">{detail.label}</span>{#each detail.entries as entry}<span class="inline-flex items-center gap-1.5">{#if entry.prototype && serverId}<PrototypeIcon prototype={entry.prototype} {serverId} />{/if}<span>{entry.text}</span></span>{/each}</div>{/if}{/each}</div>{/if}
     {#if card.notes.length}<ul class="space-y-1 text-xs text-muted-foreground">{#each card.notes as note}<li>{note}</li>{/each}</ul>{/if}
+    {#if card.link}<a href={card.link.href} target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 text-xs text-primary">{card.link.label}<ArrowUpRightIcon class="size-3.5" /></a>{/if}
     {#if card.gps}<div class="flex items-center gap-2"><code class="min-w-0 break-all text-xs text-primary">{card.gps}</code><TooltipButton tooltip="Copy map location" variant="ghost" size="sm" onclick={() => copyValue(card.gps ?? '', 'Could not copy location.')}>{#if copied === card.gps}<CheckIcon />{:else}<CopyIcon />{/if}</TooltipButton></div>{/if}
    </div>
   {/each}
@@ -53,6 +55,7 @@
  {#if view.assumptions.length}<details class="border-t border-border px-3 py-2 text-xs text-muted-foreground"><summary class="cursor-pointer">Calculation</summary><ul class="mt-2 space-y-1">{#each view.assumptions as assumption}<li>{assumption}</li>{/each}</ul></details>{/if}
  {#if view.notes.length}<ul class="space-y-1 border-t border-border px-3 py-2 text-xs text-amber-200">{#each view.notes as note}<li>{note}</li>{/each}</ul>{/if}
  {#if view.reference}<div class="flex items-center justify-between gap-2 border-t border-border px-3 py-2.5"><code class="break-all text-xs text-primary">{view.reference}</code><Button size="sm" variant="outline" onclick={() => copyValue(view.reference ?? '', 'Could not copy plan reference.')}>{#if copied === view.reference}<CheckIcon />{:else}<CopyIcon />{/if}Copy plan reference</Button></div>{/if}
+ {#if sharedString}<div class="border-t border-border px-3 py-2.5"><Button size="sm" variant="outline" onclick={() => copyValue(sharedString, 'Could not copy blueprint.')}>{#if copied === sharedString}<CheckIcon />{:else}<CopyIcon />{/if}Copy blueprint</Button></div>{/if}
  {#if view.link}<a href={view.link.href} class="flex items-center justify-between border-t border-border px-3 py-2.5 text-sm font-medium text-primary hover:bg-white/5">{view.link.label}<ArrowUpRightIcon class="size-4" /></a>{/if}
  {#if copyError}<p role="alert" class="px-3 py-2 text-xs text-destructive">{copyError}</p>{/if}
 </section>
