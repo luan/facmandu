@@ -51,6 +51,50 @@ test('target memory is bounded and ignores unidentified entities', () => {
 	});
 });
 
+test('native machine connections and belt traces provide inspectable IDs within their own scope', () => {
+	const targets = rememberFactoryTargets(
+		{},
+		{
+			force: 'player',
+			surface: 'nauvis',
+			found: true,
+			name: 'electric-furnace',
+			unit_number: 10,
+			x: 5.5,
+			y: 8.5,
+			connections: {
+				items: [
+					{ transport: { name: 'fast-inserter', unit_number: 11, position: { x: 5.5, y: 6.5 } } }
+				]
+			},
+			belt_trace: {
+				nodes: [target, { name: 'transport-belt', unit_number: 12, position: { x: 1.5, y: -0.5 } }]
+			},
+			foreign: { ...target, force: 'enemy', unit_number: 13 }
+		}
+	);
+	for (const [unit_number, x, y] of [
+		[10, 5.5, 8.5],
+		[11, 5.5, 6.5],
+		[12, 1.5, -0.5]
+	] as const)
+		assert.deepEqual(resolveFactoryTarget({ ...args, unit_number }, targets), {
+			...args,
+			unit_number,
+			x,
+			y
+		});
+	assert.deepEqual(resolveFactoryTarget({ ...args, unit_number: 13 }, targets), {
+		...args,
+		unit_number: 13
+	});
+	assert.deepEqual(resolveFactoryTarget({ ...args, surface: 'gleba', unit_number: 11 }, targets), {
+		...args,
+		surface: 'gleba',
+		unit_number: 11
+	});
+});
+
 test('independent batch queries retain valid reads while refusing invalid names, parameters and forces', () => {
 	const tools = {
 		game_time: { params: { force: 'string!' } },

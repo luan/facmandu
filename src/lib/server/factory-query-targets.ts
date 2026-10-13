@@ -8,8 +8,7 @@ const targetSchema = z.object({
 });
 const discoverySchema = z.object({
 	force: z.string(),
-	surface: z.string(),
-	entities: z.array(targetSchema)
+	surface: z.string()
 });
 export type FactoryTargets = Record<string, z.infer<typeof targetSchema>>;
 const key = (force: unknown, surface: unknown, unit: unknown) =>
@@ -19,11 +18,39 @@ export function rememberFactoryTargets(previous: FactoryTargets, result: unknown
 	const discovery = discoverySchema.safeParse(result);
 	if (!discovery.success) return previous;
 	const targets = new Map(Object.entries(previous));
-	for (const entity of discovery.data.entities) {
-		if (!entity.unit_number) continue;
-		const id = key(discovery.data.force, discovery.data.surface, entity.unit_number);
+	const pending: unknown[] = [result];
+	const seen = new Set<object>();
+	// Native graphs include targets inside machine connections and belt traces.
+	// Bound traversal independently of the native query's output limit.
+	for (let scanned = 0; scanned < pending.length && scanned < 2000; scanned++) {
+		const value = pending[scanned];
+		if (!value || typeof value !== 'object' || seen.has(value)) continue;
+		seen.add(value);
+		if (Array.isArray(value)) {
+			pending.push(...value.slice(0, 2000 - pending.length));
+			continue;
+		}
+		const row = value as Record<string, unknown>;
+		if (
+			(row.force !== undefined && row.force !== discovery.data.force) ||
+			(row.surface !== undefined && row.surface !== discovery.data.surface)
+		)
+			continue;
+		pending.push(...Object.values(row).slice(0, 2000 - pending.length));
+		if (typeof row.name !== 'string' || typeof row.unit_number !== 'number') continue;
+		const position =
+			row.position && typeof row.position === 'object'
+				? (row.position as Record<string, unknown>)
+				: {};
+		const entity = targetSchema.safeParse({
+			...row,
+			x: row.x ?? position.x,
+			y: row.y ?? position.y
+		});
+		if (!entity.success || !entity.data.unit_number) continue;
+		const id = key(discovery.data.force, discovery.data.surface, entity.data.unit_number);
 		targets.delete(id);
-		targets.set(id, entity);
+		targets.set(id, entity.data);
 	}
 	// Keep 500 observed targets per chat; native reads recheck their scope and IDs.
 	return Object.fromEntries([...targets].slice(-500));

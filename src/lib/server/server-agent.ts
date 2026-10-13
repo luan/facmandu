@@ -796,8 +796,7 @@ export function serverAssistantTools(context: {
 				})
 				.parse(batch);
 			for (const query of parsed.results)
-				if (query.ok && query.tool === 'find_entities' && requestId)
-					targets = rememberFactoryTargets(targets, query.result);
+				if (query.ok && requestId) targets = rememberFactoryTargets(targets, query.result);
 			if (requestId) setObserved({ requestId, targets });
 			let cursor = 0;
 			return result('factory_batch', 'Factory inspection batch', {
@@ -841,7 +840,7 @@ export function serverAssistantTools(context: {
 					);
 				throw cause;
 			}
-			if (data.tool === 'find_entities' && requestId) {
+			if (requestId) {
 				targets = rememberFactoryTargets(targets, result);
 				setObserved({ requestId, targets });
 			}
