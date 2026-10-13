@@ -627,14 +627,22 @@ local function blueprint(request)
     issue(report.missing,{index=index,name=wanted.name,position=position,reason=ghost and 'Awaiting construction' or 'No matching entity or ghost'})
    else
     report.constructed=report.constructed+1
-    local recipe=(found.type=='assembling-machine' or found.type=='furnace') and found.get_recipe()
+    local recipe;if found.type=='assembling-machine' or found.type=='furnace' then recipe=found.get_recipe() end
     local mismatch=(found.prototype.supports_direction and found.direction~=wanted.direction) or (wanted.recipe and (not recipe or recipe.name~=wanted.recipe)) or (wanted.type and found.type=='underground-belt' and found.belt_to_ground_type~=wanted.type)
     if mismatch then report.faults_total=report.faults_total+1;issue(report.faults,{index=index,name=found.name,position=position,reason='Direction, recipe or underground type differs from the design',direction=found.direction,recipe=recipe and recipe.name}) end
-    if found.type=='assembling-machine' or found.type=='furnace' then
+    if found.type=='assembling-machine' or found.type=='furnace' or found.type=='mining-drill' then
      local state=status(found) or 'unknown'
      report.machines_total=report.machines_total+1
      report.machine_status_counts[state]=(report.machine_status_counts[state] or 0)+1
-     issue(report.machines,{index=index,name=found.name,position=position,status=state,recipe=recipe and recipe.name,crafting=found.is_crafting(),powered=found.is_connected_to_electric_network()})
+     local drill=found.type=='mining-drill'
+     local mined=drill and found.mining_target
+     local drop=drill and found.drop_target
+     local crafting;if not drill then crafting=found.is_crafting() end
+     issue(report.machines,{index=index,name=found.name,type=found.type,position=position,status=state,recipe=recipe and recipe.name,
+      crafting=crafting,powered=found.is_connected_to_electric_network(),
+      mining_target=mined and mined.valid and {name=mined.name,position=mined.position,amount=mined.amount} or nil,
+      drop_position=drill and found.drop_position or nil,
+      drop_target=drop and drop.valid and drop.force==force and {name=drop.name,unit_number=drop.unit_number,position=drop.position} or nil})
     elseif found.type=='inserter' then
      local producer=found.pickup_target
      if producer and producer.valid and producer.force==force and (producer.type=='assembling-machine' or producer.type=='furnace') then

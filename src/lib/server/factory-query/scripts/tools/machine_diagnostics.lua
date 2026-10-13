@@ -46,7 +46,7 @@ local function inspect_machine(a)
     local p=mined and mined.valid and force.is_chunk_charted(surface,{x=math.floor(mined.position.x/32),y=math.floor(mined.position.y/32)}) and mined.prototype
     local mining=p and p.mineable_properties
     local row={found=true,force=force.name,surface=surface.name,name=entity.name,type=entity.type,
-      unit_number=entity.unit_number,x=entity.position.x,y=entity.position.y,
+      unit_number=entity.unit_number,x=entity.position.x,y=entity.position.y,direction=entity.direction,
       status=status_name(entity.status),active=entity.active,energy_j=bounded.round(entity.energy,0),
       electric_network_id=entity.electric_network_id,connected_to_power_source=entity.is_connected_to_electric_network(),
       modules=items(entity.get_module_inventory()),fuel=items(entity.get_fuel_inventory()),
@@ -86,7 +86,7 @@ local function inspect_machine(a)
   local recipe = entity.get_recipe()
   local row = {
     found = true, force = force.name, surface = surface.name,
-    name = entity.name, type = entity.type, unit_number = entity.unit_number,
+    name = entity.name, type = entity.type, unit_number = entity.unit_number, direction = entity.direction,
     x = entity.position.x, y = entity.position.y,
     status = entity.status and status_name(entity.status) or nil,
     active = entity.active, crafting = entity.is_crafting(),

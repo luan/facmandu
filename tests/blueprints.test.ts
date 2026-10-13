@@ -1043,3 +1043,34 @@ test('build delivery uses game ticks and rejects short, changed or drained sampl
 	])
 		assert.equal(measureBuildOutput(before, invalid).measured, false);
 });
+
+test('build verification includes working and stalled mining drills without treating them as crafters', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ local force={name='player',recipes={{enabled=true,products={{type='item',name='drill'}}}}}
+ local prototype={type='mining-drill',tile_width=3,tile_height=3,supports_direction=true,items_to_place_this={{name='drill'}},has_flag=function() return false end}
+ prototypes={entity={drill=prototype},item={stone={}}}
+ local drop={valid=true,name='belt',unit_number=2,force=force,position={x=2.5,y=.5}}
+ local drilled={name='drill',type='mining-drill',force=force,position={x=.5,y=.5},unit_number=1,direction=4,prototype=prototype,status=1,mining_target={valid=true,name='stone',position={x=.5,y=.5},amount=100},drop_target=drop,drop_position=drop.position,is_connected_to_electric_network=function() return true end}
+ local surface={name='nauvis',find_entities_filtered=function() return {drilled} end}
+ game={tick=120,forces={player=force},surfaces={nauvis=surface},create_inventory=function()
+  local saved;return {{set_stack=function() end,set_blueprint_entities=function(e) saved=e end,get_blueprint_entities=function() return saved end,get_blueprint_tiles=function() return {} end,cost_to_build={}}}
+ end}
+ defines={entity_status={working=1,no_minable_resources=2}}
+ ${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
+ local request={operation='check',force='player',surface='nauvis',position={x=0,y=0},item='stone',outputs={},entities={{name='drill',position={x=.5,y=.5},direction=4}}}
+ local check=blueprint(request)
+ assert(check.constructed==1 and check.machines_total==1 and check.machine_status_counts.working==1)
+ assert(check.machines[1].powered and check.machines[1].type=='mining-drill' and check.machines[1].mining_target.amount==100)
+ assert(check.machines[1].drop_target.unit_number==2 and check.machines[1].crafting==nil)
+ drilled.status=2;drilled.mining_target=nil;drop.force={name='enemy'}
+ check=blueprint(request)
+ assert(check.machine_status_counts.no_minable_resources==1 and not check.machines[1].mining_target and not check.machines[1].drop_target)
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+	lua.lua_close(state);
+});
