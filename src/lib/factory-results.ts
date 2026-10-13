@@ -22,6 +22,7 @@ export type ResultTable = {
 	title: string;
 	columns: string[];
 	rows: string[][];
+	previewCount?: number;
 	prototypes?: (PrototypeRef | undefined)[][];
 };
 export type ResultView = {
@@ -1150,6 +1151,7 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 		view.tables = [
 			{
 				title: 'Observed rates',
+				previewCount: Math.min(8, packs.filter((pack) => priority(pack) > 0).length),
 				columns: ['Science', 'Produced / min', 'Consumed / min', 'Current research / unit'],
 				rows: packs.map((pack) => [
 					humanName(pack.item),

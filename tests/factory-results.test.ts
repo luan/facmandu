@@ -45,6 +45,7 @@ test('science snapshots show native packs and idle research without claiming a s
 	});
 	assert.equal(result.title, 'Science production');
 	assert.equal(result.cards[0]?.title, 'No active research');
+	assert.equal(result.tables[0]?.previewCount, 0);
 	assert.deepEqual(result.tables[0]?.rows, [['Modded card', '0', '0', '—']]);
 	assert.deepEqual(result.tables[0]?.prototypes?.[0]?.[0], { kind: 'item', name: 'modded-card' });
 	assert.ok(result.notes.some((note) => note.includes('zero rates alone')));
@@ -69,6 +70,7 @@ test('science snapshots keep active research and flowing packs above unused pack
 		['Automation science pack', 'Space science pack', 'Unused card']
 	);
 	assert.equal(result.tables[0]?.prototypes?.[1]?.[0]?.name, 'space-science-pack');
+	assert.equal(result.tables[0]?.previewCount, 2);
 });
 
 test('saved research and force results render domain facts without envelope bookkeeping', () => {
