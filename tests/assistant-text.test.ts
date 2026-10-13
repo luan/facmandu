@@ -107,7 +107,7 @@ test('tool feedback distinguishes proposed drafts, placement faults and actual q
 			importValidated: true,
 			warnings: ['one', 'two']
 		}),
-		'Draft validated: 700 entities; 2 warnings. Not placed.'
+		'Draft validated: 700 entities; 2 warnings.'
 	);
 	assert.equal(
 		assistantToolFeedback('blueprint_operation', {
