@@ -232,6 +232,15 @@ function defaults.migrate(player_table)
             local new_defaults = {}
             for _, category in pairs(storage.planner.prototypes[data_type]) do
                 local previous_default = default_map[category.name]
+                -- Mods can add burner categories without invalidating the chosen fuel.
+                if not previous_default and data_type == "fuels" then
+                    for _, candidate in ipairs(default) do
+                        if candidate.proto and prototyper.util.find(data_type, candidate.proto.name, category.name) then
+                            previous_default = candidate
+                            break
+                        end
+                    end
+                end
                 local fallback_proto = fallback[category.id]  ---@as DefaultPrototype
                 new_defaults[category.id] = (not previous_default) and fallback_proto
                     or migrate_prototype_default(data_type, fallback_proto, previous_default, category.name)

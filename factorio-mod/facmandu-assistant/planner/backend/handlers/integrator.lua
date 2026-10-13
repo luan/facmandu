@@ -35,6 +35,10 @@ end
 remote.add_interface("toby-planner-integration", {
     invalidate = invalidate
 })
+-- Existing integrations keep working when Toby replaces the external planner.
+if not script.active_mods.factoryplanner then
+    remote.add_interface("fp-integration", {invalidate=invalidate})
+end
 
 
 -- ** STATIC INTEGRATIONS **
@@ -51,6 +55,10 @@ local function seek_provided_interfaces()
     for mod, _ in pairs(script.active_mods) do
         local interface = "toby-planner-integration-" .. mod
         local functions = interface_list[interface]
+        if not functions then
+            interface = "fp-integration-" .. mod
+            functions = interface_list[interface]
+        end
         if functions then interfaces[interface] = functions--[[@as table<string, true>]] end
     end
 end
@@ -240,7 +248,7 @@ end
 
 
 -- Adds vanilla recycling and compacting recipes through the open API
-remote.add_interface("toby-planner-integration-factoryplanner", {
+remote.add_interface("toby-planner-integration-facmandu-assistant", {
     recycling_recipes = (function()
         local recycling_recipes = {}
         for _, proto in pairs(prototypes.recipe) do

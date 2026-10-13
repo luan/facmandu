@@ -4,6 +4,7 @@ local books = {}
 function books.init()
     storage.books = storage.books or {}
     storage.book_versions = storage.book_versions or {}
+    storage.book_sync = storage.book_sync or {}
 end
 
 function books.list(force)
@@ -11,23 +12,46 @@ function books.list(force)
 end
 
 function books.remember(player, state)
-    if not state.current or not state.blueprint then return end
+    books.init()
     local entries = books.list(player.force)
-    local existing
-    for _, entry in ipairs(entries) do if entry.id == state.current then existing = entry; break end end
-    if existing and existing.blueprint == state.blueprint then return end
-    -- Retain all saved entries at the limit; raise after profiling save size.
-    if not existing and #entries >= 32 then return false end
-    if not existing then existing = {id=state.current};entries[#entries + 1] = existing end
-    local title = state.design or 'Toby design'
-    for _, chat in ipairs(state.chats) do if chat.id == state.current then title = chat.title; break end end
-    existing.title = title
-    existing.design = state.design or title
-    existing.blueprint = state.blueprint
-    existing.tick = game.tick
+    local accepted, pending, changed = {}, 0, false
+    local function remember(id, chat_id, title, design, blueprint)
+        for _, entry in ipairs(entries) do
+            if entry.id == id then
+                -- A saved artifact ID is immutable; do not replace a different design.
+                return entry.blueprint == blueprint
+            end
+        end
+        -- Retain saved entries at the limit; raise after profiling save size.
+        if #entries >= 32 then return false end
+        entries[#entries + 1] = {id=id, chatId=chat_id, title=title, design=design,
+            blueprint=blueprint, tick=game.tick}
+        changed = true
+        return true
+    end
+    for _, artifact in ipairs(state.blueprints or {}) do
+        if remember(artifact.id, artifact.chatId, artifact.title, artifact.label, artifact.blueprint) then
+            accepted[#accepted + 1] = artifact.id
+        else pending = pending + 1 end
+    end
+    -- Legacy draft packets have no artifact IDs. Keep them separate from completed designs.
+    if not state.blueprints and state.current and state.blueprint and state.designStage ~= 'Inspection' then
+        local title = state.design or 'Toby design'
+        for _, chat in ipairs(state.chats) do if chat.id == state.current then title = chat.title; break end end
+        local existing
+        for _, entry in ipairs(entries) do if entry.id == state.current then existing = entry; break end end
+        if existing and existing.blueprint ~= state.blueprint then
+            existing.blueprint = state.blueprint;existing.design = state.design or title;existing.title = title
+            changed = true
+        elseif not existing and not remember(state.current, state.current, title, state.design or title, state.blueprint) then
+            pending = pending + 1
+        end
+    end
+    if storage.book_sync[player.force.index] ~= pending then changed = true end
+    storage.book_sync[player.force.index] = pending
     storage.books[player.force.index] = entries
-    storage.book_versions[player.force.index] = (storage.book_versions[player.force.index] or 0) + 1
-    return true
+    if changed then storage.book_versions[player.force.index] = (storage.book_versions[player.force.index] or 0) + 1 end
+    return {blueprints=accepted}
 end
 
 local function decode(source)
@@ -41,16 +65,24 @@ end
 function books.export(force)
     local entries = books.list(force)
     if #entries == 0 then error('No saved Toby designs on this force yet', 0) end
-    local items, version, bytes = {}, nil, 0
-    for i, entry in ipairs(entries) do
+    local items, groups, version, bytes = {}, {}, nil, 0
+    for _, entry in ipairs(entries) do
         local data, size = decode(entry.blueprint)
         bytes = bytes + size
         if bytes > 2000000 then error('Toby book exceeds the supported size; take individual designs instead', 0) end
         local blueprint = data.blueprint or data.blueprint_book
         version = blueprint.version
-        data.index = 0
-        items[#items + 1] = {index=i - 1, blueprint_book={item='blueprint-book', label=entry.title,
-            description='Toby · ' .. entry.design, version=version, active_index=0, blueprints={data}}}
+        local chat_id = entry.chatId or entry.id
+        local group = groups[chat_id]
+        if not group then
+            group = {index=#items, blueprint_book={item='blueprint-book', label=entry.title,
+                description='Toby designs', version=version, active_index=0, blueprints={}}}
+            groups[chat_id] = group
+            items[#items + 1] = group
+        end
+        blueprint.label = entry.design
+        data.index = #group.blueprint_book.blueprints
+        group.blueprint_book.blueprints[#group.blueprint_book.blueprints + 1] = data
     end
     return '0' .. helpers.encode_string(helpers.table_to_json({blueprint_book={item='blueprint-book',
         label='Toby · ' .. force.name, description='Shared Toby designs · Save this book in Game blueprints.',
@@ -91,6 +123,7 @@ function books.take(player, update)
 end
 
 function books.merge(source, destination)
+    books.init()
     local entries = books.list(destination)
     for _, entry in ipairs(storage.books[source] or {}) do
         local found = false
@@ -101,6 +134,7 @@ function books.merge(source, destination)
     storage.book_versions[destination.index] = (storage.book_versions[destination.index] or 0) + 1
     storage.books[source] = nil
     storage.book_versions[source] = nil
+    storage.book_sync[source] = nil
 end
 
 return books

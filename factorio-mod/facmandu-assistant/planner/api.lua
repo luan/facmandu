@@ -32,7 +32,19 @@ local function unlocked_machine(force,line,machine,items)
  if not machine or not line:is_machine_compatible(machine) or not lib.availability.is_machine_available(force,machine) then return false end
  local prototype=prototypes.entity[machine.name]
  if not prototype then return false end
- for _,item in pairs(prototype.items_to_place_this or {}) do if items[item.name] then return true end end
+ for _,item in pairs(prototype.items_to_place_this or {}) do
+  if items[item.name]==nil then
+   items[item.name]=false
+   local proto=prototyper.util.find('items',item.name,'item')
+   local producers=proto and RECIPE_MAPS.produce[proto.category_id][proto.id]
+   for id in pairs(producers or {}) do
+    local recipe=prototyper.util.find('recipes',id)
+    local native=recipe and force.recipes[recipe.name]
+    if native and native.enabled then items[item.name]=true;break end
+   end
+  end
+  if items[item.name] then return true end
+ end
  return false
 end
 local function reference(player, factory)
@@ -68,7 +80,9 @@ local function read_plan(force_name,player_name,id)
  packed.blueprint_strings=nil
  local result={planId=factory.id,name=factory.name,reference=reference(player,factory),revision=factory.revision or 0,
   force=player.force.name,forceIndex=player.force.index,district=factory.parent.name,location=factory.parent.location_proto.name,
-  status=factory.top_floor.solver_error or 'solved',valid=factory.valid,products=rates(factory:as_list()),
+  status=not factory.valid and 'invalid' or factory.tick_of_solver_update and 'pending' or factory.top_floor.solver_error or 'solved',
+  valid=factory.valid,products=rates(factory:as_list()),
+  note='Saved native plan and predicted rates. This does not measure production or authorize construction.',
   ingredients=rates(factory.top_floor.ingredients),byproducts=rates(factory.top_floor.byproducts),factory=packed}
  -- Bound wire reads; large manual plans remain editable in the native planner.
  if #helpers.table_to_json(result)>262144 then error('Plan is too large for an agent read',0) end
@@ -120,9 +134,6 @@ local function calculate(force_name,player_name,surface_name,products,recipes,in
  -- Match native ghost placement: a machine must have an item produced by an
  -- enabled recipe. Planner visibility alone includes future machines.
  local items={}
- for _,recipe in pairs(player.force.recipes) do
-  if recipe.enabled then for _,product in pairs(recipe.products) do if product.type=='item' then items[product.name]=true end end end
- end
  local selected=state.context.object_id
  local factory, district
  local ok,result=pcall(function()
@@ -236,6 +247,11 @@ remote.add_interface('facmandu-toby-planner',{
     local result=lib.flib.deep_copy(saved.result)
     result.reference=reference(player,factory)
     result.force=player.force.name;result.player=player.name
+    result.replayed=true
+    result.currentRevision=factory.revision or 0
+    if result.currentRevision~=result.revision then
+     result.note='This creation request already succeeded. Read the shared plan reference to use its current settings and rates.'
+    end
     return result
    end
   end

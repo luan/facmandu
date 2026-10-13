@@ -19,7 +19,7 @@ test('Toby panel sends native player requests and preserves typed drafts across 
  prototypes={item={},fluid={},recipe={},entity={},technology={}}
  local handlers={};local interface;local last
  package.preload.drone=function() return {init=function() end,built=function() end,tick=function() end,animate=function() end,read=function() return {available=false} end} end
- storage={};defines={events={on_player_created=1,on_player_joined_game=2,on_gui_click=3,on_gui_selection_state_changed=4,on_gui_closed=5,on_gui_text_changed=6,on_gui_selected_tab_changed=7,on_gui_confirmed=8,on_built_entity=9,on_lua_shortcut=10,on_player_changed_force=11,on_forces_merged=12}}
+ storage={};defines={events={on_player_created=1,on_player_joined_game=2,on_gui_click=3,on_gui_selection_state_changed=4,on_gui_closed=5,on_gui_text_changed=6,on_gui_selected_tab_changed=7,on_gui_confirmed=8,on_built_entity=9,on_lua_shortcut=10,on_player_changed_force=11,on_forces_merged=12,on_player_display_resolution_changed=13,on_player_display_scale_changed=14}}
  script={on_init=function(fn) handlers.init=fn end,on_configuration_changed=function(fn) handlers.migrate=fn end,on_event=function(event,fn) handlers[event]=fn end,on_nth_tick=function() end}
  remote={add_interface=function(name,api) assert(name=='facmandu-assistant');interface=api end,
  call=function(name,operation,force,player,id) assert(name=='facmandu-toby-planner' and operation=='read_plan' and force=='player' and player=='Alice' and id==99);return {reference='toby://plan/1/99'} end}
@@ -30,7 +30,7 @@ test('Toby panel sends native player requests and preserves typed drafts across 
  end
  helpers={table_to_json=function(data) if data.operation then last=data end;return encode(data) end};log=function() end
  local function gui(parent,name)
-  local element={type='flow',parent=parent,tags={},name=name or '',valid=true,style={},children={}}
+  local element={type='flow',parent=parent,tags={},name=name or '',valid=true,visible=true,style={},children={}}
   element.add=function(spec)
    local child=gui(element,spec.name);element.children[#element.children+1]=child;for key,value in pairs(spec) do if key~="style" then child[key]=value end end
    if spec.name then element[spec.name]=child end
@@ -57,7 +57,7 @@ test('Toby panel sends native player requests and preserves typed drafts across 
   if element.name==name then return element end
   for _,child in ipairs(element.children) do local found=find(child,name);if found then return found end end
  end
- assert(find(frame,'facmandu-toby-new').caption=='New')
+ assert(find(frame,'facmandu-toby-new').tooltip=='New conversation · Other tasks keep working')
  storage.gui[1].message.text='More glass'
  handlers[6]({player_index=1,element=storage.gui[1].message})
  handlers.migrate();frame=player.gui.screen['facmandu-toby-panel']
@@ -65,8 +65,12 @@ test('Toby panel sends native player requests and preserves typed drafts across 
  interface.update_player(1,{status='Working',running=true,answer='First answer',current='one',chats={{id='one',title='Glass',state='running',status='Connecting belts',author='Alice'},{id='two',title='Science',state='done',status='Blueprint ready'}}})
  assert(storage.gui[1].message.text=='More glass')
  assert(storage.gui[1].send.caption=='Steer' and storage.gui[1].stop.visible)
- assert(storage.gui[1].task_cards[1].running and storage.gui[1].task_cards[1].status.caption=='Connecting belts')
- assert(not storage.gui[1].task_cards[2].running and storage.gui[1].task_cards[2].marker.caption=='Done')
+ assert(storage.gui[1].heading.caption=='Glass' and storage.gui[1].status.caption=='Working')
+ handlers[3]({player_index=1,element=storage.gui[1].tasks.children[2].children[1]})
+ assert(last.operation=='select' and last.chat=='two')
+ interface.update_player(1,{status='Ready',answer='',current='one',chats={{id='one',title='Glass'},{id='two',title='Science'}},messages={{role='user',author='Bob',text='Bob: Build glass'}}})
+ assert(storage.gui[1].conversation.children[1].children[1].caption=='Bob')
+ assert(storage.gui[1].conversation.children[1].children[2].caption=='Build glass')
  handlers[3]({player_index=1,element=find(frame,'facmandu-toby-new')})
  assert(last.operation=='new' and last.player=='Alice')
  assert(storage.gui[1].message.text=='More glass')
@@ -104,7 +108,27 @@ test('Toby panel sends native player requests and preserves typed drafts across 
  assert(interface.attach_plan(1,99)=='toby://plan/1/99')
  assert(storage.gui[1].message.text=='Build my plan\\nPlan: toby://plan/1/99')
  assert(storage.drafts[1]==storage.gui[1].message.text)
+ player.display_resolution.width=600
+ handlers[13]({player_index=1})
+ assert(storage.gui[1].frame.style.width==520 and storage.gui[1].content_width>270)
+ assert(storage.gui[1].message.text=='Build my plan\\nPlan: toby://plan/1/99')
  assert(storage.books[1][1].id=='one' and storage.books[1][1].blueprint=='0abc=')
+ local artifacts={{id=string.rep('a',64),chatId='one',title='Glass',label='Furnaces',blueprint='0def='},{id=string.rep('b',64),chatId='one',title='Glass',label='Belts',blueprint='0ghi='}}
+ local packet={force='player',status='Ready',answer='',current='one',chats={{id='one',title='Glass'}},blueprints=artifacts}
+ storage.gui[1].frame.visible=false
+ local receipt=interface.update_player(1,packet)
+ assert(#receipt.blueprints==2 and receipt.blueprints[1]==artifacts[1].id)
+ assert(#interface.update_player(1,packet).blueprints==2)
+ artifacts[1].blueprint='0changed='
+ assert(#interface.update_player(1,packet).blueprints==1)
+ packet.force='enemy';assert(not pcall(interface.update_player,1,packet));packet.force='player'
+ for i=1,29 do
+  packet.blueprints={{id=string.format('%064x',i),chatId='one',title='Glass',label='Design '..i,blueprint='0abc='}}
+  assert(#interface.update_player(1,packet).blueprints==1)
+ end
+ packet.blueprints={{id=string.rep('c',64),chatId='one',title='Glass',label='Beyond capacity',blueprint='0abc='}}
+ assert(#interface.update_player(1,packet).blueprints==0)
+ assert(#interface.update_player(1,packet).blueprints==0)
  handlers[11]({player_index=1})
  assert(not storage.players[1] and not storage.gui[1].frame.valid)
  handlers['facmandu-toby-toggle']({player_index=1});handlers['facmandu-toby-toggle']({player_index=1})

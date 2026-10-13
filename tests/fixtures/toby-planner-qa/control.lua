@@ -25,6 +25,19 @@ end)
 local checked=false
 local merged_id
 script.on_nth_tick(5,function()
+ if storage.qa_done then
+  if not checked then
+   checked=true
+   local player=game.get_player(1)
+   local plan=remote.call('facmandu-toby-planner','read_plan','player',player.name,storage.planId)
+   assert(math.abs(plan.products[1].perMinute-240)<.001 and plan.factory.inputs[1].amount==4)
+   local book=remote.call('facmandu-assistant','export_book','player',player.name)
+   local decoded=helpers.json_to_table(helpers.decode_string(book:sub(2)))
+   assert(decoded.blueprint_book.blueprints[1].blueprint_book.label=='Iron supply')
+   log('TOBY_PLAN_AND_BOOK_RELOAD_OK')
+  end
+  return
+ end
  if checked then
   if merged_id then
    local player=game.get_player(1)
@@ -46,14 +59,20 @@ script.on_nth_tick(5,function()
    local inventory=game.create_inventory(1)
    inventory[1].set_stack('blueprint')
    inventory[1].set_blueprint_entities{{entity_number=1,name='transport-belt',position={x=0,y=0}}}
-   local blueprint=inventory[1].export_stack();inventory.destroy()
+   local blueprint=inventory[1].export_stack()
+   inventory[1].set_blueprint_entities{{entity_number=1,name='stone-furnace',position={x=0,y=0}}}
+   local second=inventory[1].export_stack();inventory.destroy()
    remote.call('facmandu-assistant','update_player',player.index,{status='Routing supply belts',answer='Current plan: '..plan.reference,current='qa-running',running=true,
     chats={{id='qa-running',title='Iron supply',state='running',status='Routing supply belts',author=player.name},{id='qa-done',title='Green circuits',state='done',status='Blueprint ready',author=player.name},{id='qa-error',title='Oil refining',state='error',status='Needs an unlocked recipe',author=player.name}},
     messages={{role='user',text='Build from '..plan.reference},{role='assistant',text='The shared plan can produce 240 plates/min. I am connecting the supply.'}},
-    activity={{text='Read shared factory plan'},{text='Validated iron supply cap'}},blueprint=blueprint,design='Iron smelting',designStage='Validated draft'})
+    activity={{text='Read shared factory plan'},{text='Validated iron supply cap'}},blueprint=blueprint,design='Iron smelting',designStage='Validated draft',
+    force='player',blueprints={{id=string.rep('a',64),chatId='qa-running',title='Iron supply',label='Supply belts',blueprint=blueprint},{id=string.rep('b',64),chatId='qa-running',title='Iron supply',label='Smelters',blueprint=second}}})
    local exported=remote.call('facmandu-assistant','export_book','player',player.name)
    local decoded=helpers.json_to_table(helpers.decode_string(exported:sub(2)))
    assert(decoded.blueprint_book.blueprints[1].blueprint_book.label=='Iron supply')
+   local designs=decoded.blueprint_book.blueprints[1].blueprint_book.blueprints
+   assert(#designs==2 and designs[1].blueprint.label=='Supply belts' and designs[2].blueprint.label=='Smelters')
+   log('TOBY_MULTI_DESIGN_BOOK_OK')
    inventory=game.create_inventory(1);assert(inventory[1].import_stack(exported)==0);inventory.destroy()
    player.set_controller{type=defines.controllers.god}
    assert(remote.call('facmandu-assistant','take_book','player',player.name,false))
@@ -68,6 +87,8 @@ script.on_nth_tick(5,function()
    assert(#updated.blueprint_book.blueprints==2)
    remote.call('facmandu-assistant','attach_plan' ,player.index,storage.planId)
    assert(player.gui.screen['facmandu-toby-panel'])
+   storage.qa_done=true
+   if game.is_multiplayer() then game.server_save('toby-planner-qa') end
    log('TOBY_SHARED_PLAN_REFERENCE_AND_BOOK_OK')
    game.take_screenshot{player=player,resolution=player.display_resolution,show_gui=true,path='toby-harness.png',force_render=true}
    game.set_wait_for_screenshots_to_finish()
