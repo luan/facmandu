@@ -131,6 +131,14 @@ test('tool feedback distinguishes proposed drafts, placement faults and actual q
 		'No valid belt route found in the searched area.'
 	);
 	assert.equal(assistantToolFeedback('blueprint_operation', { entities: 700 }), '');
+	assert.equal(
+		assistantToolFeedback('blueprint_operation', {
+			entities: 0,
+			tiles: 144,
+			importValidated: true
+		}),
+		'Draft validated: 144 tiles.'
+	);
 });
 
 test('construction feedback distinguishes ghosts, completed machines and measured delivery', () => {

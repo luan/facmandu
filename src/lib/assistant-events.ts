@@ -168,7 +168,14 @@ export function assistantToolFeedback(tool: string, output: unknown) {
 			(value.importValidated === true || typeof value.blueprint === 'string')
 		) {
 			const warnings = Array.isArray(value.warnings) ? value.warnings.length : 0;
-			return `Draft validated: ${entities} ${entities === 1 ? 'entity' : 'entities'}${warnings ? `; ${warnings} ${warnings === 1 ? 'warning' : 'warnings'}` : ''}.`;
+			const tiles = Array.isArray(value.tiles) ? value.tiles.length : value.tiles;
+			const parts = [
+				...(entities || !tiles ? [`${entities} ${entities === 1 ? 'entity' : 'entities'}`] : []),
+				...(typeof tiles === 'number' && tiles > 0
+					? [`${tiles} ${tiles === 1 ? 'tile' : 'tiles'}`]
+					: [])
+			];
+			return `Draft validated: ${parts.join(', ')}${warnings ? `; ${warnings} ${warnings === 1 ? 'warning' : 'warnings'}` : ''}.`;
 		}
 	}
 	if (tool === 'route_belts' && Array.isArray(value.results)) {

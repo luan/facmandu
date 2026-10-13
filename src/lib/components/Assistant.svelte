@@ -82,7 +82,7 @@
  $effect(() => { listId; serverId; if (!open) voice.stop(); return () => voice.stop(); });
  let gamePlayer = $state<string | null>(null);
  let open = $state(false); let sidebar = $state<'history' | null>(null); let prompt = $state(''); let busy = $state(false); let progress = $state(''); let feedback = $state(''); let text = $state(''); let error = $state(''); let refreshError = $state('');
- let turns = $state<{ id: string; prompt: string; answer: string; state: string; createdAt?: string; progress?: string; feedback?: string; mods: AssistantMod[]; results?: FactoryResult[]; plans?: ModlistPlan[] }[]>([]);
+ let turns = $state<{ id: string; prompt: string; answer: string; state: string; createdAt?: string; model?: string | null; effort?: string | null; progress?: string; feedback?: string; mods: AssistantMod[]; results?: FactoryResult[]; plans?: ModlistPlan[] }[]>([]);
   const runningTurn = $derived(turns.findLast(turn => turn.state === 'running'));
   const inProgress = $derived(busy || !!runningTurn);
  let selectedDrafts = $state<Record<string, number>>({});
@@ -220,6 +220,11 @@
    if (data.models) { models = data.models; modelError = data.modelError; modelCatalogLoaded = true; }
    if (resetModel || !model || (data.models && !models.some(item => item.id === model))) model = models.some(item => item.id === data.model) ? data.model : models[0]?.id ?? '';
    if (resetModel || !effort) effort = data.effort;
+   // Polls can learn an external run's model after its durable receipt arrives.
+   if (!busy && runningTurn?.model && models.some(item => item.id === runningTurn.model)) {
+    model = runningTurn.model;
+    if (runningTurn.effort && models.find(item => item.id === model)?.efforts.includes(runningTurn.effort)) effort = runningTurn.effort;
+   }
    if (turns.at(-1)?.answer === error || (activePrompt && turns.at(-1)?.prompt === activePrompt && turns.at(-1)?.state === 'done')) error = '';
    // After a detached stream, persisted activity owns both text and tool updates.
    if (!busy && activePrompt && turns.at(-1)?.prompt === activePrompt) { text = ''; activePrompt = ''; activeMods = []; activeResults = []; }
@@ -575,8 +580,8 @@
      {:else}
       <TooltipButton tooltip={loading ? 'Loading conversation' : inProgress ? 'Wait for the current response' : 'Start voice'} disabled={loading || inProgress} variant="ghost" size="icon" onclick={() => voice.start({ chat, listId, serverId })}><MicIcon /></TooltipButton>
      {/if}
-     <label class="flex min-w-0 items-center gap-2 text-xs"><span class="sr-only">Assistant model</span><select aria-label="Assistant model" title={models.find(item => item.id === model)?.name} class="min-w-0 max-w-36 sm:max-w-56 border py-1.5 pl-2 pr-8 text-xs" bind:value={model} disabled={busy || !models.length}>{#each models as item}<option value={item.id}>{item.name}</option>{/each}</select></label>
-     <label class="flex items-center gap-2 text-xs text-muted-foreground"><span>Effort</span><select aria-label="Thinking effort" class="border py-1.5 pl-2 pr-8 text-xs" bind:value={effort} disabled={busy || !effortChoices.length}>{#each effortChoices as level}<option value={level}>{models.find((item) => item.id === model)?.effortLabels?.[level] ?? ({ minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' } as Record<string, string>)[level] ?? level}</option>{/each}</select></label>
+     <label class="flex min-w-0 items-center gap-2 text-xs"><span class="sr-only">Assistant model</span><select aria-label="Assistant model" title={models.find(item => item.id === model)?.name} class="min-w-0 max-w-36 sm:max-w-56 border py-1.5 pl-2 pr-8 text-xs" bind:value={model} disabled={inProgress || !models.length}>{#each models as item}<option value={item.id}>{item.name}</option>{/each}</select></label>
+     <label class="flex items-center gap-2 text-xs text-muted-foreground"><span>Effort</span><select aria-label="Thinking effort" class="border py-1.5 pl-2 pr-8 text-xs" bind:value={effort} disabled={inProgress || !effortChoices.length}>{#each effortChoices as level}<option value={level}>{models.find((item) => item.id === model)?.effortLabels?.[level] ?? ({ minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' } as Record<string, string>)[level] ?? level}</option>{/each}</select></label>
      {/if}
     {/snippet}
    </Prompt>
