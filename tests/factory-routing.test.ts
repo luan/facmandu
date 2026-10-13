@@ -191,6 +191,7 @@ test('bus discovery returns actual matching lanes and distinguishes mixed cargo 
  assert(matched.mixedLeft==true and matched.mixedRight==false)
  assert(matched.connection.position.x==0.5 and matched.connection.position.y==1.5 and matched.connection.approachAvailable)
  assert(matched.connection.capacityPerMinute==900)
+ assert(matched.connection.laneApproaches.both and not matched.connection.laneApproaches.left and not matched.connection.laneApproaches.right)
  args.product='unknown';assert(not pcall(find,args));args.product='glass'
  args.x=0/0;assert(not pcall(find,args))
  `)

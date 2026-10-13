@@ -3,7 +3,7 @@
 local force_lookup=require('scripts.tools.force_lookup')
 local surface_lookup=require('scripts.tools.surface_lookup')
 local M={}
-M.manifest={find_buses={desc='Find candidate parallel belt corridors near an inspected factory, including actual belts carrying a requested item and exposed upstream taps traced through at most 128 native belt entities. Reads only this force’s built belts. A candidate has at least three nearby parallel lanes connected by overlapping straight runs of at least 16 tiles. Item counts are a snapshot, not throughput. Inspect the matching belt before connecting; a truncated scan cannot prove absence. This does not build, chart terrain or change any belt.',params={surface='string! surface name',x='number! center x',y='number! center y',product='string optional exact item prototype to locate in bus lanes',radius='number optional default 128, maximum 512'}}}
+M.manifest={find_buses={desc='Find candidate parallel belt corridors near an inspected factory, including actual belts carrying a requested item and exposed upstream taps traced through at most 128 native belt entities. Reads only this force’s built belts. A candidate has at least three nearby parallel lanes connected by overlapping straight runs of at least 16 tiles. Item counts are a snapshot, not throughput. Connection laneApproaches reports available native left/right side-loading or both-lane inline approaches; upstream taps prefer an open inline join. Inspect the matching belt before connecting; a truncated scan cannot prove absence. This does not build, chart terrain or change any belt.',params={surface='string! surface name',x='number! center x',y='number! center y',product='string optional exact item prototype to locate in bus lanes',radius='number optional default 128, maximum 512'}}}
 local function find(a)
  local force=force_lookup.require_force(a.force)
  local surface,missing=surface_lookup.find(a.surface)
@@ -14,35 +14,55 @@ local function find(a)
  if a.x==nil or a.y==nil or radius<1 or radius>512 then error('Use x/y and a radius from 1 to 512',0) end
  if a.product and not prototypes.item[a.product] then error('Use an exact item prototype from this game',0) end
  local scanned=surface.find_entities_filtered{force=force,type='transport-belt',position={x=a.x,y=a.y},radius=radius,limit=8192}
- local function accessible(e)
+ local cached_approaches={}
+ local function approaches(e)
+  if cached_approaches[e.unit_number] then return cached_approaches[e.unit_number] end
+  local result={left=false,right=false,both=false,any=false}
+  local inline=false
+  for _,input in pairs(e.belt_neighbours.inputs) do if input.force==force and input.direction==e.direction then inline=true end end
   for _,step in ipairs({{dx=0,dy=-1,d=0},{dx=1,dy=0,d=4},{dx=0,dy=1,d=8},{dx=-1,dy=0,d=12}}) do
    if (step.d+8)%16~=e.direction then
     local position={x=e.position.x-step.dx,y=e.position.y-step.dy}
     if force.is_chunk_charted(surface,{x=math.floor(position.x/32),y=math.floor(position.y/32)}) then
      local occupied=surface.find_entities_filtered{position=position,type={'transport-belt','underground-belt','splitter','loader','loader-1x1','entity-ghost'},limit=1}
-     if #occupied==0 and surface.can_place_entity{name=e.name,position=position,direction=step.d,force=force,build_check_type=defines.build_check_type.manual,forced=false} then return true end
+     if #occupied==0 and surface.can_place_entity{name=e.name,position=position,direction=step.d,force=force,build_check_type=defines.build_check_type.manual,forced=false} then
+      result.any=true
+      if step.d==e.direction then result.both=true end
+      if inline and e.belt_shape=='straight' then
+       if step.d==(e.direction+4)%16 then result.left=true end
+       if step.d==(e.direction+12)%16 then result.right=true end
+      end
+     end
     end
    end
   end
-  return false
+  cached_approaches[e.unit_number]=result
+  return result
  end
  local function upstream_tap(start)
   local queue,seen={start},{}
+  local fallback
   for i=1,128 do
    local e=queue[i]
    if not e then break end
    if not seen[e.unit_number] then
     seen[e.unit_number]=true
-    if e.type=='transport-belt' and accessible(e) then return e end
+    if e.type=='transport-belt' then
+     local lanes=approaches(e)
+     -- Prefer an inline tap so a dense bus does not force a failed side-loading attempt.
+     if lanes.both then return e end
+     if lanes.any and not fallback then fallback=e end
+    end
     for _,input in pairs(e.belt_neighbours.inputs) do
-     if input.force==force and (input.type=='transport-belt' or input.type=='underground-belt') then queue[#queue+1]=input end
+     if input.force==force and (input.type=='transport-belt' or input.type=='underground-belt') and force.is_chunk_charted(surface,{x=math.floor(input.position.x/32),y=math.floor(input.position.y/32)}) then queue[#queue+1]=input end
     end
     if e.type=='underground-belt' and e.belt_to_ground_type=='output' then
      local input=e.underground_belt_neighbour
-     if input and input.force==force then queue[#queue+1]=input end
+     if input and input.force==force and force.is_chunk_charted(surface,{x=math.floor(input.position.x/32),y=math.floor(input.position.y/32)}) then queue[#queue+1]=input end
     end
    end
   end
+  return fallback
  end
  local columns={}
  for _,e in ipairs(scanned) do
@@ -99,13 +119,14 @@ local function find(a)
      end
     end
     if target then target=upstream_tap(target) or target end
-    local approach=target and accessible(target) or false
+    local lane_approaches=target and approaches(target) or nil
+    local approach=lane_approaches and lane_approaches.any or false
     if approach and (not a.product or counts.left+counts.right>0) then accessible_connections=accessible_connections+1 end
     if counts.left+counts.right>0 then matching=matching+1 end
     nearest=math.min(nearest,distance)
     local mixed_left,mixed_right
     if a.product then mixed_left=counts.totalLeft>counts.left;mixed_right=counts.totalRight>counts.right end
-    lanes[#lanes+1]={direction=run.column.direction,length=run.last-run.first+1,position=run.column.lane,productLeft=counts.left,productRight=counts.right,mixedLeft=mixed_left,mixedRight=mixed_right,connection=target and {name=target.name,unit_number=target.unit_number,position=target.position,direction=target.direction,approachAvailable=approach,capacityPerMinute=target.prototype.belt_speed*480*60} or nil}
+    lanes[#lanes+1]={direction=run.column.direction,length=run.last-run.first+1,position=run.column.lane,productLeft=counts.left,productRight=counts.right,mixedLeft=mixed_left,mixedRight=mixed_right,connection=target and {name=target.name,unit_number=target.unit_number,position=target.position,direction=target.direction,approachAvailable=approach,laneApproaches=lane_approaches,capacityPerMinute=target.prototype.belt_speed*480*60} or nil}
    end
    table.sort(lanes,function(a,b)
     local am,bm=a.productLeft+a.productRight>0,b.productLeft+b.productRight>0
