@@ -26,6 +26,7 @@ script.on_nth_tick(5,function()
  remote.call('facmandu-assistant','open_player',player.index)
  local panel=player.gui.screen['facmandu-toby-panel']
  assert(panel and panel.valid)
+ assert(player.gui.top['facmandu-toby-open'].type=='sprite-button','Upgrade retained the old text launcher')
  local function contains(element,text)
   if element.type=='label' and element.caption==text then return true end
   for _,child in pairs(element.children) do if contains(child,text) then return true end end

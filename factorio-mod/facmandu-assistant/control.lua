@@ -37,6 +37,8 @@ local function remember_draft(player)
  storage.drafts[player.index]=text
 end
 local function button(player)
+ local existing=player.gui.top[PREFIX..'open']
+ if existing and existing.type~='sprite-button' then existing.destroy() end
  if not player.gui.top[PREFIX..'open'] then
   player.gui.top.add{type='sprite-button',name=PREFIX..'open',sprite='toby-launcher',style='slot_button',tooltip={'shortcut-name.facmandu-toby-open'}}
  end
