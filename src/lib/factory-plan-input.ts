@@ -14,6 +14,12 @@ const plannerProduct = {
 	temperature: plannerTemperature
 };
 const plannerPower = { name: plannerName, type: v.literal('entity') };
+const plannerBelt = {
+	name: plannerName,
+	type: v.literal('item'),
+	belt: plannerName,
+	beltStack: v.optional(v.pipe(plannerRate, v.integer()))
+};
 const plannerQuantity = v.pipe(v.number(), v.finite(), v.minValue(0), v.maxValue(1000000));
 const plannerWatts = v.pipe(v.number(), v.finite(), v.minValue(0), v.maxValue(1e12));
 const plannerModules = v.pipe(
@@ -91,6 +97,7 @@ export const nativePlannerProducts = v.pipe(
 					'Only fluids have temperatures'
 				)
 			),
+			v.strictObject({ ...plannerBelt, beltCount: plannerRate }),
 			v.strictObject({
 				...plannerPower,
 				watts: v.pipe(plannerWatts, v.minValue(Number.MIN_VALUE))
@@ -109,11 +116,8 @@ export const nativePlannerInputs = v.pipe(
 					mode: v.picklist(['exact', 'maximum'])
 				}),
 				v.strictObject({
-					name: plannerName,
-					type: v.literal('item'),
+					...plannerBelt,
 					beltCount: plannerQuantity,
-					belt: plannerName,
-					beltStack: v.optional(v.pipe(plannerRate, v.integer())),
 					mode: v.picklist(['exact', 'maximum'])
 				}),
 				v.strictObject({
@@ -168,6 +172,11 @@ const blockProducts = v.pipe(
 				v.strictObject({
 					...plannerProduct,
 					perMinute: plannerRate,
+					mode: v.optional(v.picklist(['exact', 'maximum']))
+				}),
+				v.strictObject({
+					...plannerBelt,
+					beltCount: plannerRate,
 					mode: v.optional(v.picklist(['exact', 'maximum']))
 				}),
 				v.strictObject({

@@ -93,6 +93,43 @@ test('planner targets preserve fluid temperatures and reject item temperatures a
 		recipes: [{ name: 'steam', constraint: { count: 2, mode: 'exact' }, fuel: { name: 'coal' } }]
 	};
 	assert.deepEqual(v.parse(nativeFactoryPlanInput, plan), plan);
+	const beltTarget = {
+		name: 'iron-plate',
+		type: 'item',
+		beltCount: 1,
+		belt: 'transport-belt',
+		beltStack: 2
+	};
+	assert.equal(
+		v.safeParse(nativeFactoryPlanInput, { ...plan, products: [beltTarget] }).success,
+		true
+	);
+	assert.equal(
+		v.safeParse(savedFactoryPlanInput, {
+			operation: 'edit_block',
+			...scope,
+			floorId: 8,
+			settings: {
+				linked: false,
+				mode: 'output',
+				products: [{ ...beltTarget, mode: 'maximum' }],
+				inputs: []
+			}
+		}).success,
+		true
+	);
+	for (const target of [
+		{ ...beltTarget, beltCount: 0 },
+		{ ...beltTarget, perMinute: 60 },
+		{ ...beltTarget, machineCount: 2 },
+		{ ...beltTarget, type: 'fluid' },
+		{ ...beltTarget, beltStack: 1.5 },
+		{ ...beltTarget, watts: 1000 }
+	])
+		assert.equal(
+			v.safeParse(nativeFactoryPlanInput, { ...plan, products: [target] }).success,
+			false
+		);
 	assert.equal(
 		v.safeParse(nativeFactoryPlanInput, {
 			...plan,
