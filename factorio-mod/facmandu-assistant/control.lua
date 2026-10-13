@@ -25,7 +25,7 @@ end
 local function label(parent,caption,width,style)
  local element=parent.add{type='label',caption=caption,style=style or 'label'}
  element.style.single_line=false
- element.style.maximal_width=width
+ element.style.width=width
  return element
 end
 local function panel(player)
@@ -58,7 +58,7 @@ local function panel(player)
   local content=tabs.add{type='scroll-pane',name=PREFIX..entry[1],direction='vertical',horizontal_scroll_policy='never'}
   content.style.width=432;content.style.height=height-240
   local rows=content.add{type='flow',direction='vertical'}
-  rows.style.vertical_spacing=12
+  rows.style.vertical_spacing=12;rows.style.width=410
   tabs.add_tab(tab,content)
   refs[entry[1]]=rows
   if entry[1]=='conversation' then refs.history=content end
@@ -133,7 +133,6 @@ local function update(player_index,state)
   items[#items+1]=chat.title
  end
  if state.drone then drone.activity(player,state.drone) end
- local previous=storage.players[player.index]
  storage.players[player.index]=state
  button(player)
  local refs=storage.gui[player.index]
@@ -146,8 +145,10 @@ local function update(player_index,state)
  refs.chats.items=#items>0 and items or {'New conversation'}
  for i,chat in ipairs(state.chats) do if chat.id==state.current then refs.chats.selected_index=i;break end end
  -- Progress updates never recreate a transcript the player is reading.
- if not previous or helpers.table_to_json(previous.messages or {})~=helpers.table_to_json(state.messages or {}) or previous.answer~=state.answer or previous.current~=state.current then
-  if not previous or previous.current~=state.current then refs.conversation.clear() end
+ -- Factorio 2.1 does not lay out newly populated inactive tabs; refresh on selection.
+ local message_signature=helpers.table_to_json(state.messages or {})..state.answer
+ if refs.tabs.selected_tab_index==1 and (refs.message_signature~=message_signature or refs.conversation_chat~=state.current) then
+  if not refs.message_signature or refs.conversation_chat~=state.current then refs.conversation.clear() end
   local messages=state.messages or (#state.answer>0 and {{role='assistant',text=state.answer}} or {})
   if refs.conversation.children[1] and refs.conversation.children[1].type~='flow' then refs.conversation.clear() end
   for i,message in ipairs(messages) do
@@ -168,13 +169,15 @@ local function update(player_index,state)
   end
   for i=#refs.conversation.children,#messages+1,-1 do refs.conversation.children[i].destroy() end
   if #messages==0 then label(refs.conversation,'What shall we build?',410,'heading_2_label') end
-  if not previous or previous.current~=state.current then refs.history.scroll_to_bottom() end
+  if not refs.message_signature or refs.conversation_chat~=state.current then refs.history.scroll_to_bottom() end
+  refs.message_signature=message_signature;refs.conversation_chat=state.current
  end
- if not previous or helpers.table_to_json(previous.activity or {})~=helpers.table_to_json(state.activity or {}) or previous.current~=state.current then
+ local activity_signature=helpers.table_to_json{activity=state.activity,current=state.current,running=state.running,status=#(state.activity or {})==0 and state.status or nil}
+ if refs.tabs.selected_tab_index==2 and refs.activity_signature~=activity_signature then
   if refs.activity.children[1] and refs.activity.children[1].type~='frame' then refs.activity.clear() end
   for i,entry in ipairs(state.activity or {}) do
    local card=refs.activity.children[i]
-   if not card then card=refs.activity.add{type='frame',style='inside_shallow_frame',direction='vertical'};label(card,'',390) end
+   if not card then card=refs.activity.add{type='frame',style='inside_shallow_frame',direction='vertical'};card.style.width=410;label(card,'',390) end
    if card.children[1].caption~=entry.text then
     card.children[1].caption=entry.text
     if card.children[2] then card.children[2].destroy() end
@@ -183,8 +186,10 @@ local function update(player_index,state)
   end
   for i=#refs.activity.children,#(state.activity or {})+1,-1 do refs.activity.children[i].destroy() end
   if #(state.activity or {})==0 then label(refs.activity,state.running and state.status or 'No tools used in this turn.',410) end
+  refs.activity_signature=activity_signature
  end
- if not previous or previous.blueprint~=state.blueprint or previous.design~=state.design or previous.designStage~=state.designStage or helpers.table_to_json(previous.designWarnings or {})~=helpers.table_to_json(state.designWarnings or {}) or previous.current~=state.current then
+ local design_signature=helpers.table_to_json{blueprint=state.blueprint,design=state.design,stage=state.designStage,warnings=state.designWarnings,materials=state.materials,current=state.current,running=state.running}
+ if refs.tabs.selected_tab_index==3 and refs.design_signature~=design_signature then
   refs.design.clear()
   if state.blueprint then
    label(refs.design,state.designStage or 'Design',410,'heading_2_label')
@@ -201,6 +206,7 @@ local function update(player_index,state)
     for _,item in ipairs(state.materials) do references.add(materials,'item',item.name,item.count) end
    end
   else label(refs.design,state.running and 'Design in progress. Validated drafts appear here as they are created.' or 'No design created in this chat.',410) end
+  refs.design_signature=design_signature
  end
  drone_status(player,refs)
 end
@@ -310,7 +316,11 @@ script.on_event(defines.events.on_gui_selection_state_changed,function(event)
  end
 end)
 script.on_event(defines.events.on_gui_selected_tab_changed,function(event)
- if event.element.valid and event.element.name==PREFIX..'tabs' then storage.tabs[event.player_index]=event.element.selected_tab_index end
+ if event.element.valid and event.element.name==PREFIX..'tabs' then
+  storage.tabs[event.player_index]=event.element.selected_tab_index
+  local state=storage.players[event.player_index]
+  if state then update(event.player_index,state) end
+ end
 end)
 remote.add_interface('facmandu-assistant',{update_player=update,open_player=function(index) local player=game.get_player(index);if not player then error('Player not found',0) end open(player);return true end})
 script.on_event(defines.events.on_gui_closed,function(event)

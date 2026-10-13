@@ -16,7 +16,12 @@ test('Toby panel sends native player requests and preserves typed drafts across 
  storage={};defines={events={on_player_created=1,on_player_joined_game=2,on_gui_click=3,on_gui_selection_state_changed=4,on_gui_closed=5,on_gui_text_changed=6,on_gui_selected_tab_changed=7,on_gui_confirmed=8,on_built_entity=9}}
  script={on_init=function(fn) handlers.init=fn end,on_configuration_changed=function(fn) handlers.migrate=fn end,on_event=function(event,fn) handlers[event]=fn end,on_nth_tick=function() end}
  remote={add_interface=function(name,api) assert(name=='facmandu-assistant');interface=api end}
- helpers={table_to_json=function(data) last=data;return '{}' end};log=function() end
+ local function encode(data)
+  if type(data)~='table' then return tostring(data) end
+  local parts={};for key,value in pairs(data) do parts[#parts+1]=tostring(key)..'='..encode(value) end
+  table.sort(parts);return table.concat(parts,'|')
+ end
+ helpers={table_to_json=function(data) if data.operation then last=data end;return encode(data) end};log=function() end
  local function gui(parent,name)
   local element={type='flow',parent=parent,tags={},name=name or '',valid=true,style={},children={}}
   element.add=function(spec)

@@ -28,6 +28,7 @@ script.on_nth_tick(60,function()
   assert(#chat.children==2 and #chat.children[2].children==3)
   local icons=chat.children[2].children[3];assert(#icons.children==2)
   assert(icons.children[1].sprite=='item/plastic-bar' and icons.children[2].sprite=='fluid/petroleum-gas')
+  tabs.selected_tab_index=3;remote.call(api,'update_player',p.index,state)
   local design=tabs['facmandu-toby-design'].children[1]
   assert(design.children[1].caption=='Working draft')
   assert(design.children[3].caption=='Supply connection not checked yet.')
@@ -36,6 +37,7 @@ script.on_nth_tick(60,function()
   local old=design.children[1]
   remote.call(api,'update_player',p.index,state)
   assert(old.valid and tabs.selected_tab_index==2,'Progress recreated a tab')
+  assert(tabs['facmandu-toby-activity'].children[1].children[1].children[1].caption=='Factory inspection\nFound 6 chemical plants.')
   local d={entity=storage.entity,activity=state.drone}
   visuals.update(p,d)
   assert(d.visual.valid and d.shadow.valid and d.display=='thinking')
