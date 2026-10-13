@@ -63,6 +63,7 @@ export function panelBlueprints(
 				title: gameText(chat.gameForce ? chat.title : design.data.label, 200),
 				label: gameText(design.data.label, 200),
 				blueprint: design.data.blueprint,
+				...(design.data.designId ? { designId: design.data.designId } : {}),
 				...(design.data.revisionOf ? { revisionOf: design.data.revisionOf } : {})
 			}
 		];

@@ -25,8 +25,10 @@ const draft = {
 describe('Toby native harness', () => {
 	test('books forward validated revision ancestry for native replacement', () => {
 		const revisionOf = 'a'.repeat(64);
+		const designId = 'b'.repeat(64);
 		const chat = { id: 'chat', title: 'More glass', gameForce: 'player' };
-		const design = { ...draft, display: true, result: { ...draft.result, revisionOf } };
+		const design = { ...draft, display: true, result: { ...draft.result, designId, revisionOf } };
+		expect(panelBlueprints(JSON.stringify([design]), chat, 'player')[0]?.designId).toBe(designId);
 		expect(panelBlueprints(JSON.stringify([design]), chat, 'player')[0]?.revisionOf).toBe(
 			revisionOf
 		);
