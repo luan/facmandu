@@ -1,8 +1,8 @@
 {
- "name": "toby-upgrade-qa",
- "version": "0.0.1",
- "title": "Disposable Toby upgrade QA",
- "author": "Luan",
- "factorio_version": "2.1",
- "dependencies": ["facmandu-assistant >= 0.0.1"]
+	"name": "toby-upgrade-qa",
+	"version": "0.0.1",
+	"title": "Disposable Toby upgrade QA",
+	"author": "Luan",
+	"factorio_version": "2.1",
+	"dependencies": ["facmandu-assistant >= 0.0.1"]
 }
