@@ -73,3 +73,39 @@ assert(next(functions.agent_tools_v1().tools))`)
 	}
 	assert.throws(() => factoryBundle(sources, ['unreviewed.module']), /Unknown query module/);
 });
+
+test('host catalog loads reviewed contracts with real engine enum values and no game access', async () => {
+	const { factoryCatalog } = await import('../src/lib/server/factory-query-catalog');
+	const catalog = factoryCatalog(sources, {
+		inventory: { crafter_input: 2 },
+		flow_precision_index: { five_seconds: 0, one_minute: 1 },
+		space_platform_state: {
+			waiting_for_starter_pack: 0,
+			starter_pack_requested: 8,
+			starter_pack_on_the_way: 1,
+			on_the_path: 2,
+			waiting_for_departure: 3,
+			no_schedule: 4,
+			no_path: 5,
+			waiting_at_station: 6,
+			paused: 7
+		}
+	});
+	const { z } = await import('zod');
+	const parsed = z
+		.object({
+			v: z.literal(1),
+			tools: z.record(
+				z.string(),
+				z.object({ module: z.string(), desc: z.string(), params: z.record(z.string(), z.string()) })
+			)
+		})
+		.parse(catalog);
+	assert.ok(Object.keys(parsed.tools).length >= 40);
+	assert.match(parsed.tools.item_rate?.params.window ?? '', /five_seconds, one_minute/);
+	assert.ok(parsed.tools.toby_drone);
+	for (const [name, tool] of Object.entries(parsed.tools)) {
+		assert.match(tool.module, /^scripts\.(tools|sweep)\./);
+		assert.match(tool.params.force ?? '', name === 'list_forces' ? /optional/ : /string!/);
+	}
+});

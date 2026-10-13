@@ -1,11 +1,20 @@
-// Minimal bindings for the fengari Lua calls used to read mod settings.lua
-// files. Covers only what mod-settings-defs.ts needs, not the whole API.
+// Bindings used for reviewed query contracts and sandboxed mod settings.
 declare module 'fengari' {
 	type LuaState = object;
 	type LuaHook = () => void;
 	export const lua: {
 		readonly LUA_OK: number;
 		readonly LUA_MASKCOUNT: number;
+		readonly LUA_TSTRING: number;
+		readonly LUA_TNUMBER: number;
+		readonly LUA_TBOOLEAN: number;
+		readonly LUA_TTABLE: number;
+		lua_type(state: LuaState, index: number): number;
+		lua_absindex(state: LuaState, index: number): number;
+		lua_tonumber(state: LuaState, index: number): number;
+		lua_toboolean(state: LuaState, index: number): boolean;
+		lua_next(state: LuaState, index: number): boolean;
+		lua_close(state: LuaState): void;
 		lua_getglobal(state: LuaState, name: string | Uint8Array): void;
 		lua_setglobal(state: LuaState, name: string | Uint8Array): void;
 		lua_pushnil(state: LuaState): void;

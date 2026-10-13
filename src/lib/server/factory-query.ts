@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ManagedServer } from './db/schema';
 import { factoryBundle, luaString } from './factory-query-bundle';
+import { factoryCatalog, factoryDefinesSchema } from './factory-query-catalog';
 import { ServerError } from './server-files';
 import { serverStatus } from './server-process';
 import { rconScript } from './server-rcon';
@@ -68,17 +69,23 @@ const catalogSchema = z.object({
 });
 
 export async function factoryQuery(server: ManagedServer, request: Record<string, unknown>) {
-	if (!(await serverStatus(server)).running)
-		throw new ServerError(409, 'Start this server to query the factory');
-	let manifest = manifests.get(server.id);
+	const status = await serverStatus(server);
+	if (!status.running) throw new ServerError(409, 'Start this server to query the factory');
+	const key = `${server.id}:${status.version.version}`;
+	let manifest = manifests.get(key);
 	if (!manifest) {
-		manifest = execute(server, { op: 'catalog' }).then((value) => ({
-			catalog: value,
-			tools: catalogSchema.parse(value).tools
-		}));
-		manifests.set(server.id, manifest);
+		manifest = (async () => {
+			const raw = await rconScript(
+				server,
+				'/silent-command rcon.print(helpers.table_to_json({inventory=defines.inventory,flow_precision_index=defines.flow_precision_index,space_platform_state=defines.space_platform_state}))'
+			);
+			const defines = factoryDefinesSchema.parse(JSON.parse(raw));
+			const catalog = factoryCatalog(sources, defines);
+			return { catalog, tools: catalogSchema.parse(catalog).tools };
+		})();
+		manifests.set(key, manifest);
 		manifest.catch(() => {
-			if (manifests.get(server.id) === manifest) manifests.delete(server.id);
+			if (manifests.get(key) === manifest) manifests.delete(key);
 		});
 	}
 	const contract = await manifest;
