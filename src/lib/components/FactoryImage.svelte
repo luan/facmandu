@@ -7,9 +7,12 @@
  let zoom=$state(1); let unavailable=$state(false); let ready=$state(false);
  let viewportWidth=$state(0); let windowHeight=$state(800);
  let naturalWidth=$state(0); let naturalHeight=$state(0);
+ const imageUrl=$derived(factoryImageUrl(serverId,image));
+ const imageWidth=$derived('width' in image ? image.width : 0);
+ const imageHeight=$derived('height' in image ? image.height : 0);
  const fittedWidth=$derived(naturalWidth && naturalHeight && viewportWidth ? Math.min(naturalWidth,Math.max(1,viewportWidth-32),windowHeight*0.55*naturalWidth/naturalHeight) : 0);
  $effect(()=>{
-  const url=factoryImageUrl(serverId,image);const known='width' in image;zoom=1;unavailable=false;ready=known;naturalWidth=known?image.width:0;naturalHeight=known?image.height:0;
+  const url=imageUrl;const known=imageWidth>0 && imageHeight>0;zoom=1;unavailable=false;ready=known;naturalWidth=imageWidth;naturalHeight=imageHeight;
   if(known) return;
   const controller=new AbortController();let timer:ReturnType<typeof setTimeout> | undefined;
   async function check(){
