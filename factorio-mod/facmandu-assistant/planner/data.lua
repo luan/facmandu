@@ -1,0 +1,5 @@
+require("planner.prototypes.flib")
+require("planner.prototypes.styles")
+require("planner.prototypes.sprites")
+require("planner.prototypes.hotkeys")
+require("planner.prototypes.shortcuts")

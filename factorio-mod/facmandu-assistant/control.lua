@@ -1,3 +1,9 @@
+local bootstrap=require('events').scope('bootstrap')
+bootstrap.on_init(function() storage.planner={} end)
+bootstrap.on_configuration_changed(function() storage.planner=storage.planner or {} end)
+require('planner.control')
+require('planner.api')
+local events=require('events').scope('toby')
 local PREFIX='facmandu-toby-'
 local drone=require('drone')
 local references=require('references')
@@ -19,7 +25,7 @@ local function emit(player,operation,prompt,chat)
 end
 local function button(player)
  if not player.gui.top[PREFIX..'open'] then
-  player.gui.top.add{type='button',name=PREFIX..'open',caption='Toby',tooltip='Open Toby · Ctrl+Shift+T'}
+  player.gui.top.add{type='sprite-button',name=PREFIX..'open',sprite='toby-launcher',style='slot_button',tooltip={'shortcut-name.facmandu-toby-open'}}
  end
 end
 local function label(parent,caption,width,style)
@@ -44,6 +50,7 @@ local function panel(player)
  local body=frame.add{type='frame',style='inside_shallow_frame',direction='vertical'}
  body.style.horizontally_stretchable=true
  local navigation=body.add{type='flow',direction='horizontal'}
+ navigation.add{type='button',name=PREFIX..'planning',caption='Planning',style='toby_planner_button_frame_tool',tooltip='Open production planning · Works without AI'}
  local chats=navigation.add{type='drop-down',name=PREFIX..'chats',items={'New conversation'},selected_index=1}
  chats.style.horizontally_stretchable=true
  navigation.add{type='button',name=PREFIX..'new',caption='New chat',tooltip='Start a separate conversation; existing runs keep working'}
@@ -211,17 +218,19 @@ local function update(player_index,state)
  drone_status(player,refs)
 end
 local function open(player)
- panel(player)
+ local refs=panel(player)
+ refs.frame.visible=true
+ player.opened=refs.frame
  local state=storage.players[player.index]
  if state then local old=storage.players[player.index];storage.players[player.index]=nil;update(player.index,old) end
  emit(player,'refresh')
 end
-script.on_init(function()
+events.on_init(function()
  storage.players={};storage.drafts={};storage.tabs={};storage.gui={};storage.sequence=0
  drone.init()
  for _,player in pairs(game.players) do button(player) end
 end)
-script.on_configuration_changed(function()
+events.on_configuration_changed(function()
  drone.init()
  storage.players=storage.players or {};storage.drafts=storage.drafts or {};storage.tabs=storage.tabs or {};storage.gui=storage.gui or {}
  for _,player in pairs(game.players) do
@@ -232,20 +241,27 @@ script.on_configuration_changed(function()
   end
  end
 end)
-script.on_event(defines.events.on_player_created,function(event) button(game.get_player(event.player_index)) end)
-script.on_event(defines.events.on_player_joined_game,function(event) button(game.get_player(event.player_index)) end)
-script.on_event('facmandu-toby-toggle',function(event)
+events.on_event(defines.events.on_player_created,function(event) button(game.get_player(event.player_index)) end)
+events.on_event(defines.events.on_player_joined_game,function(event) button(game.get_player(event.player_index)) end)
+events.on_event('facmandu-toby-toggle',function(event)
  local player=game.get_player(event.player_index)
  local frame=player.gui.screen[PREFIX..'panel']
- if frame then frame.destroy() else open(player) end
+ if frame and frame.visible then frame.destroy() else open(player) end
 end)
-script.on_event('facmandu-toby-claim-drone',function(event)
+events.on_event(defines.events.on_lua_shortcut,function(event)
+ if event.prototype_name=='facmandu-toby-open' then
+  local player=game.get_player(event.player_index)
+  local frame=player.gui.screen[PREFIX..'panel']
+  if frame and frame.visible then frame.destroy() else open(player) end
+ end
+end)
+events.on_event('facmandu-toby-claim-drone',function(event)
  local player=game.get_player(event.player_index)
  local ok,message=pcall(drone.bind,player,player.selected)
  if not ok then player.print(message);return end
  open(player);storage.gui[player.index].tabs.selected_tab_index=4;storage.tabs[player.index]=4
 end)
-script.on_event('facmandu-toby-open-drone',function(event)
+events.on_event('facmandu-toby-open-drone',function(event)
  local player=game.get_player(event.player_index)
  open(player);storage.gui[player.index].tabs.selected_tab_index=4;storage.tabs[player.index]=4
 end)
@@ -259,20 +275,26 @@ local function take_blueprint(player,inspect)
  if frame then frame.destroy() end
  if inspect then player.opened=player.cursor_stack end
 end
-script.on_event('facmandu-toby-design',function(event) take_blueprint(game.get_player(event.player_index),true) end)
+events.on_event('facmandu-toby-design',function(event) take_blueprint(game.get_player(event.player_index),true) end)
 local function send(player)
  local refs=storage.gui[player.index]
  if not refs or not refs.frame.valid then return end
  local text=refs.message.text:match('^%s*(.-)%s*$')
  if #text>0 and #text<=6000 then emit(player,'send',text,selected(player));refs.message.text='';storage.drafts[player.index]='' end
 end
-script.on_event(defines.events.on_gui_confirmed,function(event)
+events.on_event(defines.events.on_gui_confirmed,function(event)
  if event.element.valid and event.element.name==PREFIX..'message' then
   local player=game.get_player(event.player_index)
   if event.control and event.shift then take_blueprint(player,true) else send(player) end
  end
 end)
-script.on_event(defines.events.on_gui_click,function(event)
+events.on_event(defines.events.on_gui_click,function(event)
+ if event.element and event.element.valid and event.element.name==PREFIX..'planning' then
+  local player=game.get_player(event.player_index)
+  if storage.gui[player.index] and storage.gui[player.index].frame.valid then storage.gui[player.index].frame.visible=false end
+  main_dialog.toggle(player)
+  return
+ end
  local element=event.element
  if not element.valid then return end
  local player=game.get_player(event.player_index)
@@ -297,8 +319,8 @@ script.on_event(defines.events.on_gui_click,function(event)
   take_blueprint(player,name==PREFIX..'inspect-blueprint')
  end
 end)
-script.on_event(defines.events.on_built_entity,drone.built)
-script.on_nth_tick(5,function(event)
+events.on_event(defines.events.on_built_entity,drone.built)
+events.on_nth_tick(5,function(event)
  if event.tick%10==0 then drone.tick() end
  drone.animate()
  if event.tick%60~=0 then return end
@@ -306,16 +328,16 @@ script.on_nth_tick(5,function(event)
   if refs.frame.valid then local player=game.get_player(index);if player then drone_status(player,refs) end end
  end
 end)
-script.on_event(defines.events.on_gui_text_changed,function(event)
+events.on_event(defines.events.on_gui_text_changed,function(event)
  if event.element.valid and event.element.name==PREFIX..'message' then storage.drafts[event.player_index]=bounded_text(event.element.text,6000) end
 end)
-script.on_event(defines.events.on_gui_selection_state_changed,function(event)
+events.on_event(defines.events.on_gui_selection_state_changed,function(event)
  if event.element.valid and event.element.name==PREFIX..'chats' then
   local player=game.get_player(event.player_index)
   emit(player,'select',nil,selected(player))
  end
 end)
-script.on_event(defines.events.on_gui_selected_tab_changed,function(event)
+events.on_event(defines.events.on_gui_selected_tab_changed,function(event)
  if event.element.valid and event.element.name==PREFIX..'tabs' then
   storage.tabs[event.player_index]=event.element.selected_tab_index
   local state=storage.players[event.player_index]
@@ -323,6 +345,6 @@ script.on_event(defines.events.on_gui_selected_tab_changed,function(event)
  end
 end)
 remote.add_interface('facmandu-assistant',{update_player=update,open_player=function(index) local player=game.get_player(index);if not player then error('Player not found',0) end open(player);return true end})
-script.on_event(defines.events.on_gui_closed,function(event)
+events.on_event(defines.events.on_gui_closed,function(event)
  if event.element and event.element.valid and event.element.name==PREFIX..'panel' then event.element.destroy() end
 end)

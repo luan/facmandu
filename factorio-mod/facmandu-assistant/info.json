@@ -1,9 +1,9 @@
 {
 	"name": "facmandu-assistant",
-	"version": "0.0.5",
+	"version": "0.0.6",
 	"title": "[WIP] Toby",
 	"author": "Luan",
 	"factorio_version": "2.1",
-	"description": "In-game chat, blueprints and Toby's own automatic construction companion. Uses your server's assistant permissions. No free items or research.",
-	"dependencies": ["base >= 2.1.0"]
+	"description": "Production planning, in-game chat, blueprints and Toby's automatic construction companion. Planning works without AI. Uses your server's assistant permissions. No free items or research.",
+	"dependencies": ["base >= 2.1.20", "(?) pypostprocessing"]
 }
