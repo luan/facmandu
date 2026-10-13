@@ -18,6 +18,10 @@ test('progress names the actual tool operation and elapsed time without exposing
 		'Inspecting factory: inspect transport…'
 	);
 	assert.equal(assistantToolProgress('sandbox_blueprint', null), 'Testing blueprint…');
+	assert.equal(
+		assistantToolProgress('factory_lookup', { tool: 'planning_recipes' }),
+		'Inspecting factory: planning recipes…'
+	);
 	assert.equal(assistantToolProgress('factory_action', { operation: 42 }), 'Factory action…');
 	assert.equal(assistantElapsed('Reasoning…', 1000, 86000), 'Reasoning… · 1m 25s elapsed');
 	assert.equal(assistantElapsed('Thinking…', 1000, 500), 'Thinking… · 0m 0s elapsed');

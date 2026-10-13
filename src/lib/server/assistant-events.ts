@@ -31,13 +31,16 @@ export function assistantStreamProgress(
 }
 
 export function assistantToolProgress(tool: string, input: unknown) {
-	const operation =
+	const name =
 		input &&
 		typeof input === 'object' &&
 		'operation' in input &&
 		typeof input.operation === 'string'
-			? input.operation.replaceAll('_', ' ')
-			: '';
+			? input.operation
+			: input && typeof input === 'object' && 'tool' in input && typeof input.tool === 'string'
+				? input.tool
+				: '';
+	const operation = name.replaceAll('_', ' ');
 	if (tool === 'blueprint_operation') return `Blueprint${operation ? `: ${operation}` : ''}…`;
 	if (tool === 'factory_action') return `Factory action${operation ? `: ${operation}` : ''}…`;
 	if (tool.startsWith('factory_')) return `Inspecting factory${operation ? `: ${operation}` : ''}…`;
