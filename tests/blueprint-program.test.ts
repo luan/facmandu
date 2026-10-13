@@ -53,6 +53,14 @@ test('layout programs cannot access host capabilities, change force or bypass bl
 	);
 	await assert.rejects(runBlueprintProgram('while true do end', base), /instructions/);
 	await assert.rejects(
+		runBlueprintProgram("local s='abcdefgh';for i=1,30 do s=s..s end;return design", base),
+		/string exceeds/
+	);
+	await assert.rejects(
+		runBlueprintProgram("string.rep('x',1000000000);return design", base),
+		/nil value/
+	);
+	await assert.rejects(
 		runBlueprintProgram('design.entities[1]=design;return design', base),
 		/cyclic table/
 	);

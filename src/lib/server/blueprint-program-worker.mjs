@@ -22,6 +22,18 @@ for (const name of [
 	lua.lua_pushnil(state);
 	lua.lua_setglobal(state, to_luastring(name));
 }
+// These C helpers can allocate a huge string before an instruction hook runs.
+for (const [library, fields] of [
+	['string', ['rep', 'format', 'gsub', 'dump']],
+	['table', ['concat']]
+]) {
+	lua.lua_getglobal(state, to_luastring(library));
+	for (const field of fields) {
+		lua.lua_pushnil(state);
+		lua.lua_setfield(state, -2, to_luastring(field));
+	}
+	lua.lua_pop(state, 1);
+}
 function push(value) {
 	if (value === null) lua.lua_pushnil(state);
 	else if (typeof value === 'string') lua.lua_pushstring(state, to_luastring(value));
@@ -39,15 +51,19 @@ function push(value) {
 }
 push(request.design);
 lua.lua_setglobal(state, to_luastring('design'));
-let remaining = 100;
+let remaining = 50000;
 lua.lua_sethook(
 	state,
 	() => {
 		if (--remaining <= 0)
 			lauxlib.luaL_error(state, to_luastring('Layout program exceeded 500,000 instructions'));
+		for (let index = 1; index <= lua.lua_gettop(state); index++) {
+			if (lua.lua_type(state, index) === lua.LUA_TSTRING && lua.lua_rawlen(state, index) > 128000)
+				lauxlib.luaL_error(state, to_luastring('Layout string exceeds 128,000 bytes'));
+		}
 	},
 	lua.LUA_MASKCOUNT,
-	5000
+	10
 );
 let nodes = 0;
 const arrayFields = new Set(['entities', 'tiles', 'wires', 'filters', 'chunk-filter']);
