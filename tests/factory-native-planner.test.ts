@@ -14,6 +14,7 @@ test('saved planner edits retain native settings and reject unknown, unbounded o
 		modules: [{ name: 'speed-module', quality: 'normal', count: 2 }],
 		beacon: { name: 'beacon', count: 1, modules: [{ name: 'speed-module', count: 2 }] },
 		constraint: { count: 1.5, mode: 'maximum' },
+		productionPercent: 50,
 		temperatures: { steam: 165 },
 		active: false
 	};
@@ -27,6 +28,9 @@ test('saved planner edits retain native settings and reject unknown, unbounded o
 		{ beacon: { name: 'beacon', count: 1001 } },
 		{ temperatures: Object.fromEntries(Array.from({ length: 17 }, (_, i) => [`fluid${i}`, 165])) },
 		{ constraint: { count: -1, mode: 'exact' } },
+		{ productionPercent: 1001 },
+		{ powerMode: 'night' },
+		{ neighborCount: 4.01 },
 		{}
 	])
 		assert.equal(
@@ -47,6 +51,33 @@ test('saved planner edits retain native settings and reject unknown, unbounded o
 		v.safeParse(savedFactoryPlanInput, { operation: 'nest_line', ...scope, lineId: 7 }).success,
 		true
 	);
+	assert.equal(
+		v.safeParse(savedFactoryPlanInput, {
+			operation: 'edit_line',
+			...scope,
+			lineId: 7,
+			patch: { productionPercent: false }
+		}).success,
+		true
+	);
+	assert.equal(
+		v.safeParse(savedFactoryPlanInput, {
+			operation: 'edit_line',
+			...scope,
+			lineId: 7,
+			patch: { powerMode: 'peak', neighborCount: 0.5 }
+		}).success,
+		true
+	);
+	assert.equal(
+		v.safeParse(savedFactoryPlanInput, {
+			operation: 'edit_line',
+			...scope,
+			lineId: 7,
+			patch: { powerMode: false, neighborCount: false }
+		}).success,
+		true
+	);
 });
 test('planner targets preserve fluid temperatures and reject item temperatures and dual goals', () => {
 	const product = { name: 'steam', type: 'fluid', temperature: 165, perMinute: 60 };
@@ -62,6 +93,13 @@ test('planner targets preserve fluid temperatures and reject item temperatures a
 		recipes: [{ name: 'steam', constraint: { count: 2, mode: 'exact' }, fuel: { name: 'coal' } }]
 	};
 	assert.deepEqual(v.parse(nativeFactoryPlanInput, plan), plan);
+	assert.equal(
+		v.safeParse(nativeFactoryPlanInput, {
+			...plan,
+			recipes: [{ name: 'iron-plate', productionPercent: false }]
+		}).success,
+		false
+	);
 	for (const target of [
 		{ ...product, type: 'item' },
 		{ ...product, machineCount: 2 },
@@ -136,7 +174,8 @@ test('nested block and recipe edits require saved scope, revisions and stable ID
 			recipe: { name: 'iron-plate', constraint: { count: 2, mode: 'exact' } }
 		},
 		{ operation: 'move_line', lineId: 7, floorId: 8, afterLineId: 9 },
-		{ operation: 'remove_line', lineId: 7 }
+		{ operation: 'remove_line', lineId: 7 },
+		{ operation: 'set_solver', floorId: 8, solver: 'sequential', recursive: true }
 	]) {
 		const request = { ...scope, ...operation };
 		assert.deepEqual(v.parse(savedFactoryPlanInput, request), request);

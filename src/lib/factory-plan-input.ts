@@ -55,10 +55,23 @@ const plannerLineFields = {
 		)
 	),
 	productionType: v.optional(v.picklist(['produce', 'consume'])),
+	productionPercent: v.optional(v.pipe(v.number(), v.finite(), v.minValue(0), v.maxValue(1000))),
+	powerMode: v.optional(v.picklist(['average', 'peak'])),
+	neighborCount: v.optional(v.pipe(v.number(), v.finite(), v.minValue(0), v.maxValue(4))),
 	active: v.optional(v.boolean())
 };
 export const nativePlannerLinePatch = v.pipe(
-	v.strictObject({ recipe: v.optional(plannerName), ...plannerLineFields }),
+	v.strictObject({
+		recipe: v.optional(plannerName),
+		...plannerLineFields,
+		productionPercent: v.optional(
+			v.union([v.literal(false), v.pipe(v.number(), v.finite(), v.minValue(0), v.maxValue(1000))])
+		),
+		powerMode: v.optional(v.union([v.literal(false), v.picklist(['average', 'peak'])])),
+		neighborCount: v.optional(
+			v.union([v.literal(false), v.pipe(v.number(), v.finite(), v.minValue(0), v.maxValue(4))])
+		)
+	}),
 	v.check((value) => Object.keys(value).length > 0, 'Choose at least one line edit')
 );
 export const nativePlannerProducts = v.pipe(
@@ -250,5 +263,14 @@ export const savedFactoryPlanInput = v.variant('operation', [
 		reference,
 		expectedRevision: revision,
 		lineId
+	}),
+	v.strictObject({
+		operation: v.literal('set_solver'),
+		...scope,
+		reference,
+		expectedRevision: revision,
+		floorId: lineId,
+		solver: v.picklist(['sequential', 'simplex', 'gaussian']),
+		recursive: v.optional(v.boolean(), false)
 	})
 ]);
