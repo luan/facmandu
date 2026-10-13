@@ -30,6 +30,7 @@ type GameMessage = {
 	ambient?: true;
 	chatId?: string;
 	fresh?: boolean;
+	panel?: true;
 };
 type Session = {
 	stop: () => void;
@@ -138,7 +139,7 @@ async function syncPanel(
 	});
 	const turn = turnsWithActivity[0];
 	const activity = turn && serverAssistantActivity.get(turn.id);
-	const messages: { role: 'user' | 'assistant'; text: string }[] = [];
+	const messages: { role: 'user' | 'assistant'; text: string; author?: string }[] = [];
 	let available = 12000;
 	for (const entry of turnsWithActivity) {
 		const answer = gamePanelText(entry.answer, Math.min(6000, available));
@@ -155,6 +156,7 @@ async function syncPanel(
 		if (prompt)
 			messages.unshift({
 				role: 'user',
+				author: entry.gamePlayer ?? current?.gamePlayer ?? 'Player',
 				text: `${entry.gamePlayer ?? current?.gamePlayer ?? 'Player'}: ${prompt}`
 			});
 		if (!available) break;
@@ -197,9 +199,11 @@ async function syncPanel(
 	};
 	if (sessions.get(server.id) !== session) return;
 	const encoded = JSON.stringify(JSON.stringify(state));
+	// Keep the legacy click handler while installed clients still have the text launcher.
+	// Remove this replacement once the minimum supported mod has its native icon.
 	await rconScript(
 		server,
-		`/silent-command local p=game.get_player(${JSON.stringify(player)}); local i=remote.interfaces['facmandu-assistant']; if p and p.connected and i and i.update_player then remote.call('facmandu-assistant','update_player',p.index,helpers.json_to_table(${encoded})) end`
+		`/silent-command local p=game.get_player(${JSON.stringify(player)}); local i=remote.interfaces['facmandu-assistant']; if p and p.connected and i and i.update_player then local b=p.gui.top['facmandu-toby-open']; if b and b.type=='button' and helpers.is_valid_sprite_path('entity/toby-drone') then local index=b.get_index_in_parent(); b.destroy(); local icon=p.gui.top.add{type='sprite-button',name='facmandu-toby-open',sprite='entity/toby-drone',style='slot_button',tooltip='Open Toby · Ctrl+Shift+T'}; if index~=icon.get_index_in_parent() then p.gui.top.swap_children(index,icon.get_index_in_parent()) end end; remote.call('facmandu-assistant','update_player',p.index,helpers.json_to_table(${encoded})) end`
 	);
 }
 async function receiveUi(
@@ -248,7 +252,8 @@ async function receiveUi(
 		admit(server, session, line, {
 			player: message.player,
 			prompt: message.prompt,
-			chatId: message.chat
+			chatId: message.chat,
+			panel: true
 		});
 }
 async function chatFor(server: ManagedServer, ownerId: string, player: string, fresh = false) {
@@ -508,7 +513,8 @@ function admit(server: ManagedServer, session: Session, line: LogLine, message: 
 	if (
 		(!session.pending.has(message.player) && session.pending.size >= 4) ||
 		session.recent.length >= 10 ||
-		(!session.pending.has(message.player) &&
+		(!message.panel &&
+			!session.pending.has(message.player) &&
 			now - (session.players.get(message.player) ?? 0) < 15_000)
 	)
 		return;
@@ -541,7 +547,14 @@ function deliver(server: ManagedServer, session: Session, line: LogLine, message
 				message.prompt,
 				`game-steer-${server.id}-${line.id}`,
 				message.player
-			).catch(() => {});
+			)
+				.then((updated) => {
+					if (updated) return reply(server, message.player, 'Updated request.', message.chatId);
+					launch(server, session, line, message);
+				})
+				.catch(() =>
+					reply(server, message.player, 'Could not update the request. Try again.').catch(() => {})
+				);
 		} else launch(server, session, line, message);
 		return;
 	}

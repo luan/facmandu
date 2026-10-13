@@ -417,6 +417,7 @@ const fixture = createServer(async (request, response) => {
 			const wantsCompaction = currentRequest.includes('fixture-long-context');
 			const wantsGame = currentRequest.includes('fixture-game-');
 			const wantsGameQuestionAction = currentRequest.includes('fixture-game-question-action');
+			const wantsSavedPlan = currentRequest.includes('fixture-game-planner-create');
 			if (wantsGame) {
 				assert.equal(body.model, 'gpt-6-luna');
 				assert.equal(body.reasoning.effort, 'medium');
@@ -549,6 +550,25 @@ const fixture = createServer(async (request, response) => {
 			const item =
 				cohesiveCall ??
 				inspectionCall ??
+				(wantsSavedPlan && !called('factory_plan')
+					? {
+							type: 'function_call',
+							id: 'fc_saved_plan',
+							call_id: 'call_saved_plan',
+							name: 'factory_plan',
+							arguments: JSON.stringify({
+								plan: {
+									operation: 'create',
+									name: 'Iron supply',
+									force: 'foreign',
+									player: 'Alice',
+									surface: 'nauvis',
+									products: [{ name: 'iron-plate', type: 'item', perMinute: 300 }],
+									recipes: [{ name: 'iron-plate', machine: 'stone-furnace' }]
+								}
+							})
+						}
+					: null) ??
 				(wantsGameQuestionAction && !called('factory_action')
 					? {
 							type: 'function_call',
@@ -2973,13 +2993,39 @@ done
 						JSON.stringify({
 							name: player,
 							force:
-								{ Bob: 'beta', Charlie: 'beta', Eve: 'eve', Frank: 'frank', PanelUser: 'panel' }[
-									player
-								] ?? 'player',
+								{
+									Bob: 'beta',
+									Charlie: 'beta',
+									Eve: 'eve',
+									Frank: 'frank',
+									FranksPeer: 'frank',
+									PanelUser: 'panel'
+								}[player] ?? 'player',
 							surface: 'nauvis',
 							position: { x: 12, y: 34 },
-							admin: false,
+							admin: player === 'Admin',
 							connected: true
+						})
+					);
+				} else if (command.includes("local interface='facmandu-toby-planner'")) {
+					const data = JSON.parse(/helpers\.json_to_table\(\[=\[(.*?)\]=\]\)/su.exec(command)[1]);
+					assert.equal(data.operation, 'create');
+					assert.ok(['Admin', 'Crewmate'].includes(data.player));
+					assert.equal(data.force, 'player');
+					assert.deepEqual(data.actor, { name: data.player });
+					assert.match(data.requestKey, /^[a-f0-9]{64}$/u);
+					reply(
+						id,
+						0,
+						JSON.stringify({
+							ok: true,
+							result: {
+								planner: 'toby',
+								status: 'solved',
+								planId: 42,
+								reference: 'toby://plan/1/42',
+								revision: 0
+							}
 						})
 					);
 				} else if (command.includes('p.force.print(')) {
@@ -3191,15 +3237,22 @@ done
 			).turns[0].state,
 			'running'
 		);
-		const steeringAck = nextGameReply('Frank');
+		const steeringAck = nextGameReply('FranksPeer');
 		await appendFile(
 			gameLog,
-			'106.001 [CHAT] Frank: @ fixture-game-steering-update: copper instead\n'
+			uiLine('FranksPeer', 'send', 1, {
+				chat: frankChat.id,
+				prompt: 'fixture-game-steering-update: copper instead'
+			})
 		);
 		assert.match(await steeringAck, /Updated request/);
 		const steeredReply = nextGameReply('Frank');
 		gameSteeringRelease.resolve();
 		assert.match(await steeredReply, /Steered to copper/);
+		assert.match(
+			codexMenus.findLast((menu) => menu.request.includes('fixture-game-steering-update')).request,
+			/FranksPeer/u
+		);
 		assert.equal(
 			gameReplies.length,
 			7,
@@ -3231,6 +3284,28 @@ done
 				.filter((output) => output.callId === 'call_game_question_action')
 				.at(-1)
 				.output.includes('Factory actions are not enabled for this player')
+		);
+		const crewPlan = nextGameReply('Crewmate');
+		await appendFile(
+			gameLog,
+			uiLine('Crewmate', 'send', 3, { chat: aliceChat.id, prompt: 'fixture-game-planner-create' })
+		);
+		await crewPlan;
+		assert.ok(
+			assistantToolOutputs
+				.findLast((output) => output.callId === 'call_saved_plan')
+				.output.includes('toby://plan/1/42')
+		);
+		const savedPlan = nextGameReply('Admin');
+		await appendFile(
+			gameLog,
+			uiLine('Admin', 'send', 1, { chat: aliceChat.id, prompt: 'fixture-game-planner-create' })
+		);
+		await savedPlan;
+		assert.ok(
+			assistantToolOutputs
+				.findLast((output) => output.callId === 'call_saved_plan')
+				.output.includes('toby://plan/1/42')
 		);
 		await action(`${serverPath}?/manage`, cookies.owner, gameSettings);
 		const panelRefresh = nextPanelUpdate('PanelUser');

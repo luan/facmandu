@@ -252,7 +252,9 @@ export async function finishServerTurn(
 				});
 				await db
 					.update(turnTable)
-					.set({ prompt: sql`${turnTable.prompt} || ${`\n\nFollow-up: ${prompt}`}` })
+					.set({
+						prompt: sql`${turnTable.prompt} || ${`\n\nFollow-up: ${latestGame ? `${latestGame.player.name}: ` : ''}${prompt}`}`
+					})
 					.where(eq(turnTable.id, turn.id));
 				return joined.submissionId;
 			});

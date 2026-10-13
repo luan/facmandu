@@ -412,6 +412,39 @@ test('Helmod calculations use its native rates and reject unavailable recipes an
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 });
 
+test('native planning prefers Toby and refuses to silently drop unsupported constraints', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const root = resolve('src/lib/server/factory-query');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ package.path=${JSON.stringify(`${root}/?.lua;`)}..package.path
+ game={forces={player={name='player'}}};script={active_mods={['facmandu-assistant']='0.0.6'}}
+ local calls={}
+ local native={interfaces={['facmandu-toby-planner']={solve=true},['facmandu-factory-planner']={solve=true}},
+  call=function(interface,method,force,player,surface,products,recipes,inputs,maximize)
+   calls[#calls+1]=interface
+   assert(method=='solve' and force=='player' and player=='Alice' and surface=='nauvis')
+   if interface=='facmandu-toby-planner' then
+    assert(products[1].machineCount==8 and inputs[1].mode=='maximum' and maximize.name=='iron-plate')
+   end
+   return {planner=interface,status='solved'}
+  end}
+ local tools=require('scripts.tools.mod_planners').provider(native).functions
+ local args={force='player',player='Alice',surface='nauvis',products={{name='iron-plate',type='item',machineCount=8}},recipes={{name='iron-plate'}},inputs={{name='iron-ore',type='item',perMinute=300,mode='maximum'}},maximize={name='iron-plate',type='item'}}
+ assert(tools.mod_integrations{force='player'}.mods.toby.planner.solve)
+ assert(tools.solve_factory_plan(args).planner=='facmandu-toby-planner')
+ native.interfaces['facmandu-toby-planner']=nil
+ assert(not pcall(tools.solve_factory_plan,args));args.inputs=nil;args.maximize=nil
+ assert(not pcall(tools.solve_factory_plan,args));assert(#calls==1)
+ args.products={{name='iron-plate',type='item',perMinute=300}}
+ assert(tools.solve_factory_plan(args).planner=='facmandu-factory-planner' and #calls==2)
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
+
 test('platform request inspection distinguishes automatic sections and reports import locations', () => {
 	const state = lauxlib.luaL_newstate();
 	lualib.luaL_openlibs(state);

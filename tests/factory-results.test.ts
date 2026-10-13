@@ -6,6 +6,33 @@ import { assistantResultGroups, presentFactoryResult } from '../src/lib/factory-
 const view = (tool: string, result: unknown) =>
 	presentFactoryResult({ kind: 'factory-result', title: tool.replaceAll('_', ' '), result });
 
+test('native saved plans show references, real prototypes and predictions without claiming a built factory', () => {
+	const result = view('factory_plan', {
+		planner: 'toby',
+		name: 'Glass supply',
+		force: 'player',
+		surface: 'nauvis',
+		status: 'solved',
+		reference: 'toby://plan/1/42',
+		products: [{ name: 'kr-glass', type: 'item', perMinute: 240 }],
+		lines: [{ recipe: 'kr-glass', machine: 'electric-furnace', machines: 4 }],
+		ingredients: [{ name: 'kr-sand', type: 'item', perMinute: 480 }]
+	});
+	assert.equal(result.reference, 'toby://plan/1/42');
+	assert.deepEqual(result.cards[0]?.prototype, { kind: 'item', name: 'kr-glass' });
+	assert.deepEqual(result.tables[0]?.prototypes?.[0], [
+		{ kind: 'recipe', name: 'kr-glass' },
+		{ kind: 'entity', name: 'electric-furnace' },
+		undefined
+	]);
+	assert.equal(result.cards[0]?.badge, 'Calculated');
+	assert.match(result.notes.join(' '), /not measured/u);
+	assert.equal(
+		view('factory_plan', { reference: 'https://untrusted.example' }).reference,
+		undefined
+	);
+});
+
 test('science snapshots show native packs and idle research without claiming a shortage', () => {
 	const result = view('science_summary', {
 		force: 'player',

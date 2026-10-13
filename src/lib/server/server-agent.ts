@@ -25,7 +25,8 @@ import { fetchPublicWeb, schoolBlueprint, searchBlueprints, webPageText } from '
 import { factoryAction, factoryActionInspect } from './factory-actions';
 import { factoryBlueprint } from './factory-blueprints';
 import { FactoryImagePending, renderFactoryBlueprint } from './factory-images';
-import { factoryPlanInput, planFactory } from './factory-planning';
+import { savedFactoryPlan, savedFactoryPlanInput } from './factory-native-planner';
+import { factoryPlanInput, nativeFactoryPlanInput, planFactory } from './factory-planning';
 import { factoryQuery } from './factory-query';
 import {
 	type FactoryTargets,
@@ -598,6 +599,39 @@ export function serverAssistantTools(initialContext: {
 		});
 	if (groups.has('planning'))
 		useTool({
+			name: 'factory_plan',
+			description:
+				'Create a saved force-shared plan in Toby native planning when the player asks for a planner plan. List or read plans by their toby://plan/forceIndex/planId reference; use the actual saved recipes, machine counts, inputs and solver results for subsequent blueprint or authorized game work. set_inputs changes input budgets/output maximization only with the freshly read expectedRevision. Use plan.operation=create/list/read/set_inputs. Planning is available to connected force members, like the manual planner; world changes still require factory-action permission. Calculations use unlocked game content; a saved solver plan is not a blueprint or a built factory. create is retry-safe. Temporary calculations use solve_factory_plan instead. Never use hidden GUI selection as plan context.',
+			input: v.object({ plan: savedFactoryPlanInput }),
+			async run({ data, toolCallId }) {
+				const instance = await server();
+				const request = { ...data.plan };
+				let actor: { name: string } | undefined;
+				if (context.gamePlayer) {
+					const { player } = await requireGamePlayer(
+						instance,
+						context.userId,
+						context.gamePlayer,
+						context.gameForce
+					);
+					request.force = player.force;
+					request.player = player.name;
+					actor = { name: player.name };
+				}
+				return result(
+					'factory_plan',
+					'Saved factory plan',
+					await savedFactoryPlan(
+						instance,
+						request,
+						createHash('sha256').update(`${requestId}:${toolCallId}`).digest('hex'),
+						actor
+					)
+				);
+			}
+		});
+	if (groups.has('planning'))
+		useTool({
 			name: 'plan_production',
 			description:
 				'Calculate a production plan from this save’s actual recipes, unlocks and machine speeds. Target per_min is units per minute. Returns required inputs, machines, recipe choices and measured production. Supply exact recipe choices by product name and machine choices by recipe name when ambiguous; exact choices are looked up before catalog limits. For a module fed by existing supplies, declare their names and item/fluid types in external_inputs: the plan reports their required rates without recursively redesigning their upstream production. This declaration does not verify that the supply can sustain the rate; inspect it separately. Plans never build or change anything. Set display=true when the user should see the rich production plan; leave intermediate calculations in tool activity.',
@@ -633,38 +667,8 @@ export function serverAssistantTools(initialContext: {
 		useTool({
 			name: 'solve_factory_plan',
 			description:
-				'Calculate a temporary production chain using the installed Factory Planner native simplex solver and its Toby adapter. Check mod_integrations.solve first; plan_production remains available without this adapter. Supply exact unlocked recipe choices, optional compatible machines and desired product rates per minute. Uses player defaults, unlocks and actual surface properties. Returns solver predictions, external inputs, machine counts and any solver error; does not build or measure the factory, import a plan, or change the player’s existing plans, preferences or selection. In-game calculations use the asking player’s own force and preferences.',
-			input: v.object({
-				force: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
-				player: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
-				surface: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
-				products: v.pipe(
-					v.array(
-						v.object({
-							name: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
-							type: v.picklist(['item', 'fluid']),
-							perMinute: v.pipe(
-								v.number(),
-								v.finite(),
-								v.minValue(Number.MIN_VALUE),
-								v.maxValue(1000000)
-							)
-						})
-					),
-					v.minLength(1),
-					v.maxLength(8)
-				),
-				recipes: v.pipe(
-					v.array(
-						v.object({
-							name: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
-							machine: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(200)))
-						})
-					),
-					v.minLength(1),
-					v.maxLength(24)
-				)
-			}),
+				'Calculate a temporary production chain using Toby built-in native simplex planning; the external Factory Planner adapter is a fallback. Check mod_integrations planner capabilities first. Input limits, output maximization and machine-count goals require built-in Toby planning. Give each product either perMinute or machineCount, exact unlocked recipes, optional compatible machines and exact/maximum input rates. plan_production remains available without either planner. Uses player defaults, unlocks and actual surface properties. Returns solver predictions, external inputs, machine counts and any solver error; does not build or measure the factory, import a plan, or change the player’s existing plans, preferences or selection. In-game calculations use the asking player’s own force and preferences.',
+			input: nativeFactoryPlanInput,
 			async run({ data }) {
 				const instance = await server();
 				const player = context.gamePlayer
@@ -679,7 +683,7 @@ export function serverAssistantTools(initialContext: {
 					: null;
 				return result(
 					'planner_calculation',
-					'Factory Planner calculation',
+					'Native production calculation',
 					await factoryQuery(instance, {
 						op: 'call',
 						tool: 'solve_factory_plan',
@@ -970,6 +974,7 @@ const lookupGroups: Record<string, string> = {
 	read_sandbox: 'planning',
 	export_sandbox: 'planning',
 	solve_factory_plan: 'planning',
+	factory_plan: 'planning',
 	helmod_recipe: 'planning',
 	task_list: 'planning',
 	toby_drone: 'logistics'

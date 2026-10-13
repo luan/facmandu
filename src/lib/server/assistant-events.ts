@@ -84,6 +84,8 @@ export function assistantToolProgress(tool: string, input: unknown) {
 		return `Blueprint${operation ? `: ${operation}` : ''}…`;
 	}
 	if (tool === 'factory_action') return `Factory action${operation ? `: ${operation}` : ''}…`;
+	if (tool === 'factory_plan') return `Factory plan${operation ? `: ${operation}` : ''}…`;
+	if (tool === 'solve_factory_plan') return 'Solving native production plan…';
 	if (tool.startsWith('factory_')) return `Inspecting factory${operation ? `: ${operation}` : ''}…`;
 	if (tool === 'plan_production') return 'Calculating production…';
 	if (tool === 'render_blueprint') return 'Rendering blueprint…';
@@ -103,6 +105,14 @@ export function assistantToolFeedback(tool: string, output: unknown) {
 	const wrapper = object(output);
 	const value = object(wrapper?.result) ?? wrapper;
 	if (!value) return '';
+	if (tool === 'factory_plan' || tool === 'solve_factory_plan' || tool === 'planner_calculation') {
+		if (Array.isArray(value.plans))
+			return `Found ${value.plans.length} shared factory plans${value.truncated ? ' (more available)' : ''}.`;
+		if (typeof value.reference === 'string')
+			return `Factory plan ${value.reference} · ${typeof value.status === 'string' ? value.status : 'saved'}.`;
+		if (typeof value.status === 'string')
+			return `Native solver: ${value.status}. Production remains unmeasured.`;
+	}
 	if (tool === 'report_progress' && typeof value.message === 'string') return value.message;
 	if (typeof value.error === 'string') {
 		if (/overlap/i.test(value.error)) return 'Layout validation found overlapping entities.';

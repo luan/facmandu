@@ -35,6 +35,7 @@ export type ResultView = {
 	lines: string[];
 	empty: string;
 	link?: { href: string; label: string };
+	reference?: string;
 };
 const record = (value: unknown): Data =>
 	value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Data) : {};
@@ -964,6 +965,67 @@ function serverSetupView(view: ResultView, tool: string, data: Data) {
 	if (!inspection && /^[A-Za-z0-9_-]{1,100}$/u.test(id))
 		view.link = { href: `/servers/${id}`, label: 'Open server' };
 }
+function nativePlanView(view: ResultView, data: Data) {
+	view.title = string(data.name) || 'Native production plan';
+	view.context = [string(data.force), string(data.surface ?? data.location)]
+		.filter(Boolean)
+		.join(' · ');
+	const ref = string(data.reference);
+	if (/^toby:\/\/plan\/[1-9]\d{0,9}\/[1-9]\d{0,9}$/u.test(ref)) view.reference = ref;
+	view.cards = rows(data.products).map((product) => ({
+		title: humanName(product.name),
+		prototype: prototype(product.type === 'fluid' ? 'fluid' : 'item', product.name),
+		badge: data.status === 'solved' ? 'Calculated' : humanName(data.status),
+		tone: data.status === 'solved' ? 'muted' : 'warning',
+		metrics: numeric('Target / min', product.perMinute),
+		notes: []
+	}));
+	const lines = rows(data.lines);
+	if (lines.length)
+		view.tables.push({
+			title: 'Machines',
+			columns: ['Recipe', 'Machine', 'Machine equivalents'],
+			rows: lines.map((line) => [
+				humanName(line.recipe),
+				humanName(line.machine),
+				display(line.machines)
+			]),
+			prototypes: lines.map((line) => [
+				prototype('recipe', line.recipe),
+				prototype('entity', line.machine),
+				undefined
+			])
+		});
+	for (const [key, title] of [
+		['ingredients', 'External inputs'],
+		['byproducts', 'Byproducts']
+	] as const) {
+		const materials = rows(data[key]);
+		if (materials.length)
+			view.tables.push({
+				title,
+				columns: ['Product', 'Rate'],
+				rows: materials.map((material) => [humanName(material.name), rate(material.perMinute)]),
+				prototypes: materials.map((material) => [
+					prototype(material.type === 'fluid' ? 'fluid' : 'item', material.name),
+					undefined
+				])
+			});
+	}
+	if (Array.isArray(data.plans)) {
+		view.tables.push({
+			title: 'Shared plans',
+			columns: ['Plan', 'Reference', 'Revision'],
+			rows: rows(data.plans).map((plan) => [
+				string(plan.name),
+				string(plan.reference),
+				display(plan.revision)
+			])
+		});
+		view.empty = 'No saved plans.';
+	}
+	view.notes.push('Solver prediction; construction and delivered production are not measured.');
+}
 export function presentFactoryResult(item: FactoryResult): ResultView {
 	const tool = item.tool ?? item.title.toLowerCase().replaceAll(' ', '_');
 	const setupTool = [
@@ -1112,6 +1174,11 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 			view.notes.push(
 				`Showing ${display(data.surfaces_shown)} of ${display(data.surfaces_total)} surfaces.`
 			);
+	} else if (
+		['factory_plan', 'planner_calculation', 'solve_factory_plan'].includes(tool) ||
+		data.planner === 'toby'
+	) {
+		nativePlanView(view, data);
 	} else if (
 		['production_plan', 'plan_production', 'plan_factory'].includes(tool) ||
 		data.kind === 'factory_plan'

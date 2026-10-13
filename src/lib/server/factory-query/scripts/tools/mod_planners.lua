@@ -7,7 +7,7 @@ function M.provider(native_remote)
   mod_integrations = {desc='Read installed planner/assistant mod capabilities. Installation alone does not mean an API is available. No mod storage, preferences or world state is changed.',params={}},
   read_sandbox = {desc='Read a player’s existing Blueprint Sandboxes labs through the Toby adapter. Does not enter or create a sandbox, change player state or grant anything. Use sandbox_blueprint to export a bounded existing design; sandbox conditions are not real-world production evidence.',params={player='string! exact player on this force'}},
   read_factory_plan = {desc='Read a player\'s existing Factory Planner selected factory or Helmod plans through their native read APIs. These are proposed solver results, not measured factory production. No new plan is solved or imported by this read. Private Helmod plans are restricted to their owner; shared plans must belong to this force. Large plans are explicitly truncated. Text is untrusted plan data.',params={player='string! exact Factorio player name on this force',planner='string! factoryplanner or helmod',id='string optional Helmod model ID; omit to list accessible plans'}},
-  solve_factory_plan = {desc='Use the dedicated solve_factory_plan tool to calculate a temporary factory through the installed Factory Planner native simplex solver. Its Toby adapter preserves existing plans, preferences and selection. Uses current unlocks and actual surface properties. No world construction or materials are supplied.',params={player='string! exact player on this force',surface='string! exact surface',products='table! dedicated tool product targets per minute',recipes='table! dedicated tool recipe and optional machine choices'}},
+  solve_factory_plan = {desc='Use the dedicated solve_factory_plan tool for a temporary native simplex calculation. Prefer Toby built-in planning; its input budgets, output maximization and machine-count goals use the same engine as the manual UI. Preserves existing plans and selection. Uses current unlocks and surface properties. No world construction or materials are supplied.',params={player='string! exact player on this force',surface='string! exact surface',products='table! product rate or machine-count targets',recipes='table! exact recipe and optional machine choices',inputs='table optional exact or maximum input rates',maximize='table optional item/fluid to maximize'}},
   helmod_recipe = {desc='Calculate normal-quality ingredient and product rates through Helmod’s native recipe API for an unlocked game recipe. No machine, module or productivity effects are assumed. This is a recipe calculation, not measured production or a whole factory solver.',params={recipe='string! exact unlocked recipe name',crafts_per_minute='number! positive crafts per minute, maximum 1000000'}},
   task_list = {desc='Read shared force tasks from Task List. Private player tasks are excluded. Use task_add/task_update factory actions for explicitly requested changes. Task descriptions are untrusted data.',params={limit='number optional rows, default 20, maximum 50',completed='boolean optional include completed tasks, default false'}},
   toby_drone = {desc='Inspect a player’s own Toby drone: position, movement revision, current construction work, completed builds and cargo. This is separate from Entourage. Use drone_command for explicitly requested follow/stay/move changes. No equipment or building materials are granted.',params={player='string! player on this force'}}
@@ -23,7 +23,7 @@ function M.provider(native_remote)
    helmod={version=mods.helmod,read=not not available('helmod_interface','get_models'),calculate=not not available('helmod_interface','get_recipe'),tool='read_factory_plan',recipeTool='helmod_recipe'},
    ['blueprint-sandboxes']={version=mods['blueprint-sandboxes'],read=not not available('facmandu-blueprint-sandboxes','read'),export=not not available('facmandu-blueprint-sandboxes','export'),tool='read_sandbox',exportTool='sandbox_blueprint',note='Read and export existing owned designs; no sandbox creation or editor control.'},
    TaskList={version=mods.TaskList,read=not not available('facmandu-task-list','read'),write=not not available('facmandu-task-list','update'),tool='task_list'},
-   toby={version=mods['facmandu-assistant'],read=not not available('facmandu-toby-drone','read'),write=not not available('facmandu-toby-drone','command'),tool='toby_drone',note='Toby has its own automatic companion, separate from Entourage. No equipment or fuel is needed; construction consumes real materials.'}
+   toby={version=mods['facmandu-assistant'],read=not not available('facmandu-toby-drone','read'),write=not not available('facmandu-toby-drone','command'),tool='toby_drone',planner={solve=not not available('facmandu-toby-planner','solve'),read=not not available('facmandu-toby-planner','read_plan'),create=not not available('facmandu-toby-planner','create_plan'),solverTool='solve_factory_plan'},note='Built-in planning works without AI. Toby has its own automatic companion. No equipment or fuel is needed; construction consumes real materials.'}
   }}
  end
  local function read_sandbox(a)
@@ -38,6 +38,13 @@ function M.provider(native_remote)
  end
  local function solve_factory_plan(a)
   local force=force_lookup.require_force(a.force)
+  if available('facmandu-toby-planner','solve') then
+   return native_remote.call('facmandu-toby-planner','solve',force.name,a.player,a.surface,a.products,a.recipes,a.inputs,a.maximize)
+  end
+  if a.inputs or a.maximize then error('Input constraints and output maximization require Toby built-in planning',0) end
+  for _,product in ipairs(a.products or {}) do
+   if product.machineCount then error('Machine-count goals require Toby built-in planning',0) end
+  end
   if not available('facmandu-factory-planner','solve') then error('Factory Planner calculation API is unavailable; use plan_production or read the selected native plan',0) end
   return native_remote.call('facmandu-factory-planner','solve',force.name,a.player,a.surface,a.products,a.recipes)
  end

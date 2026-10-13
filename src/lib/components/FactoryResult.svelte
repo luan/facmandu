@@ -21,7 +21,7 @@
  let copyError = $state('');
  async function copyLayout() { if (!snapshot.success || !snapshot.data.blueprint) return; try { await navigator.clipboard.writeText(snapshot.data.blueprint); copied = snapshot.data.blueprint; copyError = ''; } catch { copyError = 'Could not copy layout. Download it instead.'; } }
  function downloadLayout() { if (!snapshot.success || !snapshot.data.blueprint) return; const url = URL.createObjectURL(new Blob([snapshot.data.blueprint], {type: 'text/plain'})); const link = document.createElement('a'); link.href = url; link.download = 'factory-layout.txt'; link.click(); URL.revokeObjectURL(url); }
- async function copyGPS(gps: string) { try { await navigator.clipboard.writeText(gps); copied = gps; copyError = ''; } catch { copyError = 'Could not copy location.'; } }
+ async function copyValue(value: string, failure: string) { try { await navigator.clipboard.writeText(value); copied = value; copyError = ''; } catch { copyError = failure; } }
 </script>
 {#if blueprint.success}
 <BlueprintResult blueprint={blueprint.data} {serverId} />
@@ -39,7 +39,7 @@
     {#if card.metrics.length}<dl class="flex flex-wrap gap-x-7 gap-y-3">{#each card.metrics as metric}<div class={metric.fraction !== undefined ? 'w-full' : 'min-w-16'}><dt class="text-xs text-muted-foreground">{metric.label}</dt><dd class="mt-0.5 font-semibold tabular-nums">{metric.value}</dd>{#if metric.fraction !== undefined}<progress aria-label={metric.label} value={metric.fraction} max="1" class="mt-1 h-1.5 w-full accent-primary"></progress>{/if}</div>{/each}</dl>{/if}
     {#if card.details?.length}<div class="space-y-2 text-xs">{#each card.details as detail}{#if card.badge === 'Choose recipe' || card.badge === 'Choose machine'}<details><summary class="cursor-pointer text-muted-foreground">{detail.entries.length} {detail.label.toLowerCase()}</summary><ul class="mt-2 grid gap-2 sm:grid-cols-2">{#each detail.entries as entry}<li class="inline-flex items-center gap-1.5">{#if entry.prototype && serverId}<PrototypeIcon prototype={entry.prototype} {serverId} />{/if}<span>{entry.text}</span></li>{/each}</ul></details>{:else}<div class="flex flex-wrap items-center gap-x-3 gap-y-1.5"><span class="text-muted-foreground">{detail.label}</span>{#each detail.entries as entry}<span class="inline-flex items-center gap-1.5">{#if entry.prototype && serverId}<PrototypeIcon prototype={entry.prototype} {serverId} />{/if}<span>{entry.text}</span></span>{/each}</div>{/if}{/each}</div>{/if}
     {#if card.notes.length}<ul class="space-y-1 text-xs text-muted-foreground">{#each card.notes as note}<li>{note}</li>{/each}</ul>{/if}
-    {#if card.gps}<div class="flex items-center gap-2"><code class="min-w-0 break-all text-xs text-primary">{card.gps}</code><TooltipButton tooltip="Copy map location" variant="ghost" size="sm" onclick={() => copyGPS(card.gps ?? '')}>{#if copied === card.gps}<CheckIcon />{:else}<CopyIcon />{/if}</TooltipButton></div>{/if}
+    {#if card.gps}<div class="flex items-center gap-2"><code class="min-w-0 break-all text-xs text-primary">{card.gps}</code><TooltipButton tooltip="Copy map location" variant="ghost" size="sm" onclick={() => copyValue(card.gps ?? '', 'Could not copy location.')}>{#if copied === card.gps}<CheckIcon />{:else}<CopyIcon />{/if}</TooltipButton></div>{/if}
    </div>
   {/each}
  </div>
@@ -51,6 +51,7 @@
  {#if !view.cards.length && !view.tables.length && !view.lines.length && view.empty}<p class="p-3 text-muted-foreground">{view.empty}</p>{/if}
  {#if view.assumptions.length}<details class="border-t border-border px-3 py-2 text-xs text-muted-foreground"><summary class="cursor-pointer">Calculation</summary><ul class="mt-2 space-y-1">{#each view.assumptions as assumption}<li>{assumption}</li>{/each}</ul></details>{/if}
  {#if view.notes.length}<ul class="space-y-1 border-t border-border px-3 py-2 text-xs text-amber-200">{#each view.notes as note}<li>{note}</li>{/each}</ul>{/if}
+ {#if view.reference}<div class="flex items-center justify-between gap-2 border-t border-border px-3 py-2.5"><code class="break-all text-xs text-primary">{view.reference}</code><Button size="sm" variant="outline" onclick={() => copyValue(view.reference ?? '', 'Could not copy plan reference.')}>{#if copied === view.reference}<CheckIcon />{:else}<CopyIcon />{/if}Copy plan reference</Button></div>{/if}
  {#if view.link}<a href={view.link.href} class="flex items-center justify-between border-t border-border px-3 py-2.5 text-sm font-medium text-primary hover:bg-white/5">{view.link.label}<ArrowUpRightIcon class="size-4" /></a>{/if}
  {#if copyError}<p role="alert" class="px-3 py-2 text-xs text-destructive">{copyError}</p>{/if}
 </section>
