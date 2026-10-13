@@ -6,6 +6,7 @@ import { assistantMilestone } from '$lib/assistant-results';
 import { gamePanelText, gameReply, gameText, parseGameChat, parseGameUi } from '$lib/game-chat';
 import { panelActivity, panelDesign, panelDrone, panelUpdates } from '$lib/toby-panel';
 import { routeAmbientChat } from './ambient-chat';
+import { touchChat } from './assistant-chats';
 import { db } from './db';
 import { genID } from './db/ids';
 import { assistantChat, type ManagedServer, managedServer, serverAssistantTurn } from './db/schema';
@@ -294,13 +295,7 @@ async function answer(
 			.returning();
 		const turn = inserted[0];
 		if (!turn) return;
-		await db
-			.update(assistantChat)
-			.set({
-				updatedAt: new Date(),
-				...(chat.title.startsWith('In game ·') ? { title: message.prompt.slice(0, 100) } : {})
-			})
-			.where(eq(assistantChat.id, chat.id));
+		await touchChat(chat, message.prompt);
 		if (sessions.get(server.id) !== session) {
 			await db
 				.update(serverAssistantTurn)
@@ -401,6 +396,7 @@ function receive(server: ManagedServer, session: Session, line: LogLine) {
 						.get();
 					return {
 						id: chat.id,
+						title: chat.title,
 						prompt: (last?.prompt ?? chat.title).slice(-1500),
 						answer: (last?.answer ?? '').slice(-1500),
 						running: serverAssistantRequests.has(chat.id)
