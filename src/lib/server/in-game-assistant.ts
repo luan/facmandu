@@ -548,9 +548,9 @@ function deliver(server: ManagedServer, session: Session, line: LogLine, message
 				`game-steer-${server.id}-${line.id}`,
 				message.player
 			)
-				.then((updated) => {
-					if (updated) return reply(server, message.player, 'Updated request.', message.chatId);
-					launch(server, session, line, message);
+				.then(async (updated) => {
+					if (updated) await reply(server, message.player, 'Updated request.', message.chatId);
+					else launch(server, session, line, message);
 				})
 				.catch(() =>
 					reply(server, message.player, 'Could not update the request. Try again.').catch(() => {})
