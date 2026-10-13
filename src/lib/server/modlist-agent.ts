@@ -606,7 +606,7 @@ ModlistAssistant.initialData = v.union([
 ]);
 type RuntimeState = {
 	implementation: typeof ModlistAssistant;
-	agent?: typeof ModlistAssistant;
+	agent?: typeof FacmanduAssistant;
 	runtime?: ReturnType<typeof start>;
 	observeStop?: () => void;
 	progress?: Map<string, (event: object) => void>;
