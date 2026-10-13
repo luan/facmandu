@@ -24,9 +24,9 @@ import type { FactoryImage } from '$lib/factory-images';
 import { useAssistantToolGroups } from './assistant-tool-groups';
 import {
 	fetchPublicWeb,
-	sharedBlueprint,
 	searchBlueprints,
 	searchFactoryBlueprints,
+	sharedBlueprint,
 	webPageText
 } from './assistant-web';
 import { designBeltRoutes } from './belt-route-batch';

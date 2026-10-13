@@ -5,8 +5,8 @@ import {
 	fetchPublicWeb,
 	publicWebAddress,
 	publicWebUrl,
-	selectWebBlueprint,
 	searchFactoryBlueprints,
+	selectWebBlueprint,
 	sharedBlueprint,
 	webPageText
 } from '../src/lib/server/assistant-web';
@@ -89,7 +89,7 @@ test('web page extraction removes executable content and bounds source text', ()
 });
 
 test('Codex factory search returns component links and explicitly theoretical rates', async () => {
-	const result = await searchFactoryBlueprints(['coal'], ['plastic-bar'], async (address) => {
+	const result = await searchFactoryBlueprints(['coal'], ['plastic-bar'], (address) => {
 		const url = new URL(address);
 		assert.equal(url.origin, 'https://www.factoriocodex.com');
 		assert.equal(url.pathname, '/api/v1/blueprints/components/search');
@@ -139,11 +139,11 @@ test('Codex retrieval preserves component settings and selects the current book 
 	const component = await sharedBlueprint(
 		'https://factoriocodex.com/blueprints/458/recipe-details/22921',
 		[],
-		async (url) => {
+		(url) => {
 			if (url.endsWith('/recipe-details/22921'))
 				return JSON.stringify({ label: 'Configured', description: 'Community design' });
 			assert.equal(url, 'https://www.factoriocodex.com/api/v1/blueprints/458/details/22921/string');
-			return encoded + '\n';
+			return `${encoded}\n`;
 		}
 	);
 	assert.ok('blueprint' in component);
@@ -154,7 +154,7 @@ test('Codex retrieval preserves component settings and selects the current book 
 	const selected = await sharedBlueprint(
 		'https://www.factoriocodex.com/blueprints/458',
 		[7],
-		async (url) => {
+		(url) => {
 			assert.equal(url, 'https://www.factoriocodex.com/api/v1/blueprints/458');
 			return JSON.stringify({
 				title: 'Book',
@@ -174,7 +174,7 @@ test('Codex retrieval preserves component settings and selects the current book 
 		'https://factoriocodex.com/blueprints/0'
 	])
 		await assert.rejects(
-			sharedBlueprint(url, [], async () => {
+			sharedBlueprint(url, [], () => {
 				throw new Error('Unexpected fetch');
 			}),
 			/Use a Factorio/

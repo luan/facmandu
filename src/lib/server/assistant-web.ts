@@ -147,7 +147,7 @@ export async function searchBlueprints(query: string) {
 export async function searchFactoryBlueprints(
 	inputs: string[],
 	outputs: string[],
-	read = fetchPublicWeb
+	read: (url: string) => string | Promise<string> = fetchPublicWeb
 ) {
 	const names = z.array(z.string().min(1).max(200)).max(8);
 	names.parse(inputs);
@@ -255,7 +255,11 @@ export function selectWebBlueprint(encoded: string, path: number[]) {
 	const string = `0${deflateSync(JSON.stringify({ blueprint })).toString('base64')}`;
 	return { blueprint, string };
 }
-export async function sharedBlueprint(urlValue: string, path: number[], read = fetchPublicWeb) {
+export async function sharedBlueprint(
+	urlValue: string,
+	path: number[],
+	read: (url: string) => string | Promise<string> = fetchPublicWeb
+) {
 	const url = publicWebUrl(urlValue);
 	if (['factoriocodex.com', 'www.factoriocodex.com'].includes(url.hostname)) {
 		const ids = /^\/blueprints\/([1-9]\d{0,9})(?:\/recipe-details(?:\/([1-9]\d{0,9}))?)?\/?$/.exec(
