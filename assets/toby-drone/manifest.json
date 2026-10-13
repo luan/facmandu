@@ -66,14 +66,14 @@
 		"shadow": "evaluated model projected along northwest sun, softened .65 px"
 	},
 	"files": {
-		"sprites/error.png": "e9f21fa611b8a1f817cbf23c2a8bbed6953980cd6141c7567db7799e407c6a6e",
-		"sprites/icon.png": "237e56de5bebaabc808ecadab79f2fb8c9f8355a63f4cd6b56d03e04665ec2ba",
-		"sprites/idle.png": "3a630fe43d8c2e5148f44de274a2089c23351dd3f8db9f852d9087b8c66013b1",
-		"sprites/inspecting.png": "5509d5897332924d6a031e6a8b361f95ce02e2cdafee8eee698159b5b16b7adb",
-		"sprites/shadow.png": "28187b5c0a23a832b798fe9007e1ef5584a61794efd0a06d397e130315f11d23",
-		"sprites/speaking.png": "5821b0434d60ffa4e01f4a627fd66b4dbb12f4e0a6aef4beec665ea977bc359a",
-		"sprites/success.png": "884a3b06da439e6e20a85251b48c2fc80059bd48f5b5de40af85d81ff3feaf00",
-		"sprites/thinking.png": "584614389c65dead943f6c8882af7771d074f527e638625eefdba0b7c8d5c155",
-		"sprites/working.png": "67e0a735c2f3867751ba86c07d9c76ed8ce5927eadf7fec33e38f1686f88cda4"
+		"sprites/error.png": "e04e44ed023f3f631fe0dfa5f624f6c1b6b22774b3168dc8f5b4c920ecbe41a2",
+		"sprites/icon.png": "56e00dbc4eaedf7efc79f1711dd6f6b978809fc7f9ff0b262fbf9e1fa5ae4b4e",
+		"sprites/idle.png": "66e9ad927f82b2831eaa066a3c0572b0a8f187e668a107eb2d1745f021943312",
+		"sprites/inspecting.png": "ba2f9c863bbe5a58187c46e55a2f200e91dfd0374b0ea54727503025fe284249",
+		"sprites/shadow.png": "38295a5698f5cee9bc64cd37248c08f0725f6b2291f70a212c576345cabae1ea",
+		"sprites/speaking.png": "ba1cdb66022364349c764bd6679c9413c535209ecd9f0a249ff4b7e646f87dfe",
+		"sprites/success.png": "587fdabf0a754f0fef8e3f591cc848f2002a53eaf606e6b5b4284129afe97395",
+		"sprites/thinking.png": "4051e258c4e46d876de303b38cf6f5daefc1ad9d87b6aa7f15f2d41ddb4e85cb",
+		"sprites/working.png": "46a2a49376dd37b023d779f5d05f7b783d0ea1c7fb5fc7c5095444786c6acd1f"
 	}
 }

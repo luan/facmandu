@@ -1,5 +1,5 @@
 """Run with Blender --background --python build_model.py. Deterministic editable source."""
-import bpy, math, json
+import bpy, math, json, sys
 from pathlib import Path
 from mathutils import Vector
 from bpy_extras.object_utils import world_to_camera_view
@@ -57,7 +57,7 @@ cube('Battery pack rear',(0,.32,.34),(.53,.23,.3),dark,.035)
 for x in (-.25,-.15,-.05,.05,.15,.25):cube('Cooling fins rear',(x,.449,.34),(.033,.034,.23),edge,.003)
 cyl('Head gimbal',(0,-.015,.52),.105,.21,edge)
 cyl('Gimbal swivel',(0,-.04,.57),.13,.24,dark,'X')
-head=bpy.data.objects.new('CRT head tilt',None);asset.objects.link(head);head.location=(0,-.085,.86);head.rotation_euler.x=math.radians(-12)
+head=bpy.data.objects.new('CRT head tilt',None);asset.objects.link(head);head.location=(0,-.07,.77);head.rotation_euler.x=math.radians(-12);head.rotation_euler.y=math.radians(-7);head.scale=(1.62,1.2,1.35)
 cube('CRT cast back',(0,.07,0),(.68,.44,.5),dark,.075,head)
 cube('CRT ochre housing',(0,-.025,0),(.75,.36,.55),paint,.05,head)
 cube('Steel screen bezel',(0,-.219,0),(.68,.072,.465),edge,.033,head)
@@ -99,10 +99,16 @@ for x in (-.309,.309):
 for x in (-.36,.36):
     o=cyl('Head hinge',(x,.05,0),.086,.062,edge,'X');o.parent=head
     for z in (-.12,-.06,0,.06,.12):cube('Side head vent',(x*1.018,.083,z),(.014,.15,.027),black,.004,head)
-# Asymmetric sensor stalk and wired service hardware.
-rod('Antenna',(.255,.125,1.105),(.29,.16,1.35),.012,edge)
-cyl('Antenna collar',(.255,.125,1.11),.036,.065,dark)
-cube('Antenna receiver',(.29,.16,1.35),(.055,.045,.065),dark,.016)
+# An overqualified television riding an undersized chassis, with mismatched aerials.
+rod('Bent aerial lower',(.39,.12,1.13),(.44,.16,1.25),.018,edge)
+rod('Bent aerial elbow',(.44,.16,1.25),(.52,.15,1.24),.018,edge)
+cyl('Aerial collar',(.39,.12,1.13),.041,.07,dark)
+bpy.ops.mesh.primitive_uv_sphere_add(segments=20,ring_count=12,radius=.05,location=(.52,.15,1.24))
+bulb=own(bpy.context.object);bulb.name='Oversized aerial tip';bulb.data.materials.append(paint)
+rod('Broken aerial',(-.40,.16,1.10),(-.52,.17,1.18),.022,edge)
+rod('Broken aerial kink',(-.52,.17,1.18),(-.59,.17,1.14),.018,rust)
+# Large improvised repair straps make the oversized head look salvaged.
+for x in (-.24,.24):cube('Roof repair strap',(x,.015,.304),(.045,.25,.018),edge,.003,head)
 hose('Gimbal cable',[(-.19,.13,.88),(-.25,.25,.73),(-.19,.26,.51),(0,.18,.42)],.023)
 # Paired duct housings, exposed fan hubs and fixed counter-rotating blades.
 for side in (-1,1):
@@ -118,11 +124,11 @@ for side in (-1,1):
     for i in range(3):
         o=cube('Hazard stripe',(x+(i-1)*.064,-.19,.28),(.033,.018,.18),black,.002);o.rotation_euler.y=-.3
     # Stowed tool arms retain useful silhouette at all headings.
-    a=(side*.33,-.23,.31);b=(side*.47,-.40,.13);c=(side*.30,-.54,.03)
-    rod('Arm piston',a,b,.038,edge);rod('Tool forearm',b,c,.043,dark)
-    cyl('Arm elbow',b,.06,.095,paint,'X')
-    for offset in (-.035,.035):rod('Gripper finger',(c[0]+offset,c[1],c[2]),(c[0]+offset,c[1]-.085,c[2]-.025),.015,edge)
-    hose('Arm hydraulic line',[(side*.27,-.1,.28),(side*.49,-.22,.24),(side*.48,-.4,.11)],.012)
+    a=(side*.30,-.30,.26);b=(side*.37,-.42,.18);c=(side*.32,-.49,.17)
+    rod('Arm piston',a,b,.027,edge);rod('Tool forearm',b,c,.031,dark)
+    cyl('Arm elbow',b,.043,.07,paint,'X')
+    for offset in (-.028,.028):rod('Gripper finger',(c[0]+offset,c[1],c[2]),(c[0]+offset,c[1]-.055,c[2]-.015),.015,edge)
+    hose('Arm hydraulic line',[(side*.27,-.18,.27),(side*.39,-.31,.23),(side*.37,-.42,.18)],.012)
     for y in (-.23,.23):cyl('Deck bolt',(side*.33,y,.48),.023,.019,edge,vertices=6)
 # Small deliberately placed chips, seams and latch catches, no randomized surface noise.
 for x,y in [(-.31,-.28),(.19,-.29),(.34,.20),(-.28,.19)]:cube('Paint chip',(x,y,.477),(.053,.018,.004),edge,.002)
@@ -145,6 +151,10 @@ bpy.context.view_layer.update()
 root.rotation_euler.z=0
 bpy.context.preferences.filepaths.save_version=0
 bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'toby.blend'))
+if '--preview-only' in sys.argv:
+    scene.render.resolution_x=768;scene.render.resolution_y=768
+    scene.render.filepath=str(ROOT/'model-preview.png');bpy.ops.render.render(write_still=True)
+    raise SystemExit(0)
 if screen_plane:screen_plane.hide_render=True
 raw=ROOT/'renders';raw.mkdir(exist_ok=True)
 views=[]
