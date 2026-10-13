@@ -27,6 +27,7 @@ local SimpleItem = require("planner.backend.data.SimpleItem")
 ---@field ingredients SimpleItem[]
 ---@field production_ratio number
 ---@field machine_requirement MachineRequirement?
+---@field machine_constraint {count: number, mode: "exact" | "maximum"}?
 ---@field is_linearly_dependent boolean?
 local Line = Object.methods()
 Line.__index = Line
@@ -59,6 +60,19 @@ local function init(recipe_proto, production_type)
     end
 
     return object
+end
+
+
+-- Counts describe operating capacity; construction still rounds up whole machines.
+function Line:set_machine_constraint(constraint)
+    if constraint ~= nil then
+        if type(constraint) ~= "table" or type(constraint.count) ~= "number"
+            or constraint.count ~= constraint.count or constraint.count < 0 or constraint.count > 1000000
+            or (constraint.mode ~= "exact" and constraint.mode ~= "maximum")
+            or self.recipe.proto.energy <= MAGIC_NUMBERS.minimum_energy then return false end
+    end
+    self.machine_constraint = constraint and {count=constraint.count, mode=constraint.mode} or nil
+    return true
 end
 
 
@@ -380,6 +394,7 @@ function Line:pack(full)
         machine = self.machine:pack(full),
         beacon = self.beacon and self.beacon:pack(full),
         comment = self.comment,
+        machine_constraint = self.machine_constraint and lib.flib.shallow_copy(self.machine_constraint),
 
         products = (full) and SimpleItem.pack_items(self.products) or nil,
         byproducts = (full) and SimpleItem.pack_items(self.byproducts) or nil,
@@ -397,6 +412,7 @@ local function unpack(packed_self)
     unpacked_self.machine = Machine.unpack(packed_self.machine, unpacked_self)  ---@as Machine
     unpacked_self.beacon = packed_self.beacon and Beacon.unpack(packed_self.beacon, unpacked_self)  ---@as Beacon
     unpacked_self.comment = packed_self.comment
+    unpacked_self.machine_constraint = packed_self.machine_constraint and lib.flib.shallow_copy(packed_self.machine_constraint)
 
     return unpacked_self
 end
@@ -406,6 +422,7 @@ end
 ---@return boolean valid
 function Line:validate(player)
     self.valid = self.recipe:validate(player)
+    if self.recipe.valid then self.valid = self:set_machine_constraint(self.machine_constraint) and self.valid end
 
     if self.recipe.valid then self.valid = self.machine:validate(player) and self.valid end
 
@@ -433,6 +450,8 @@ function Line:repair(player)
         -- Repairing a beacon always either fixes or gets it removed, so no influence on validity
         if not self.beacon:repair(player) then self.beacon = nil end
     end
+
+    self.valid = self:set_machine_constraint(self.machine_constraint) and self.valid
 
     return self.valid
 end

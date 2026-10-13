@@ -18,17 +18,6 @@ local function place_line(player, tags, _)
     lib.gui.run_refresh(player, "production")
 end
 
----@param line Line
----@return Floor
-local function convert_line_to_subfloor(line)
-    local subfloor = Floor.init(line.parent.level + 1, line.parent.solver)
-    line.parent:replace(line, subfloor)
-    line.next, line.previous = nil, nil
-    subfloor:insert(line)
-    return subfloor
-end
-
-
 -- Handles any line recipe, with or without subfloor
 ---@param player LuaPlayer
 ---@param tags ActOnLineObjectRecipe
@@ -40,7 +29,7 @@ local function handle_line_recipe_click(player, tags, action)
     if action == "open_subfloor" then
         local new_context = line  ---@as LineObject
         if line.class == "Line" then
-            new_context = convert_line_to_subfloor(line)
+            new_context = Floor.create_subfloor(line)
             solver.update(player)
         end
 
@@ -52,7 +41,7 @@ local function handle_line_recipe_click(player, tags, action)
 
     elseif action == "paste" then
         if line.class == "Line" then
-            local subfloor = convert_line_to_subfloor(line)
+            local subfloor = Floor.create_subfloor(line)
             if not lib.clipboard.paste(player, subfloor) then
                 subfloor.parent:replace(subfloor, line)
             end

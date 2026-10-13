@@ -24,6 +24,18 @@ local function emit(player,operation,prompt,chat)
  storage.sequence=(storage.sequence or 0)+1
  log('[FACMANDU_UI] '..helpers.table_to_json({player=player.name,operation=operation,prompt=prompt,chat=chat,sequence=storage.sequence}))
 end
+local function draft_key(player,state)
+ return tostring(state and state.forceIndex or player.force.index)..'/'..(state and state.current or 'new')
+end
+local function remember_draft(player)
+ local refs=storage.gui[player.index]
+ local text=refs and refs.message.valid and refs.message.text or storage.drafts[player.index] or ''
+ storage.chat_drafts=storage.chat_drafts or {}
+ local drafts=storage.chat_drafts[player.index] or {}
+ storage.chat_drafts[player.index]=drafts
+ drafts[draft_key(player,storage.players[player.index])]=text
+ storage.drafts[player.index]=text
+end
 local function button(player)
  if not player.gui.top[PREFIX..'open'] then
   player.gui.top.add{type='sprite-button',name=PREFIX..'open',sprite='toby-launcher',style='slot_button',tooltip={'shortcut-name.facmandu-toby-open'}}
@@ -231,10 +243,18 @@ local function update(player_index,state)
  end
  if state.drone then drone.activity(player,state.drone) end
  state.forceIndex=player.force.index
+ local old=storage.players[player.index]
+ local changed=draft_key(player,old)~=draft_key(player,state)
+ if changed then
+  remember_draft(player)
+  local drafts=storage.chat_drafts[player.index]
+  storage.drafts[player.index]=drafts[draft_key(player,state)] or ''
+ end
  storage.players[player.index]=state
  local receipt=books.remember(player,state)
  button(player)
  local refs=storage.gui[player.index]
+ if changed and refs and refs.message.valid then refs.message.text=storage.drafts[player.index] end
  if not refs or not refs.frame.valid or not refs.frame.visible then return receipt end
  render_tasks(refs,state)
  if refs.tabs.selected_tab_index==5 then render_books(player,refs) end
@@ -326,11 +346,11 @@ local function open(player)
  if refs.tabs.selected_tab_index==5 then render_books(player,refs) end
  player.opened=refs.frame
  local state=storage.players[player.index]
- if state then local old=storage.players[player.index];storage.players[player.index]=nil;update(player.index,old) end
+ if state then update(player.index,state) end
  emit(player,'refresh')
 end
 events.on_init(function()
- storage.players={};storage.drafts={};storage.tabs={};storage.gui={};storage.sequence=0
+ storage.players={};storage.drafts={};storage.chat_drafts={};storage.tabs={};storage.gui={};storage.sequence=0
  books.init()
  drone.init()
  for _,player in pairs(game.players) do button(player) end
@@ -338,7 +358,7 @@ end)
 events.on_configuration_changed(function()
  books.init()
  drone.init()
- storage.players=storage.players or {};storage.drafts=storage.drafts or {};storage.tabs=storage.tabs or {};storage.gui=storage.gui or {}
+ storage.players=storage.players or {};storage.drafts=storage.drafts or {};storage.chat_drafts=storage.chat_drafts or {};storage.tabs=storage.tabs or {};storage.gui=storage.gui or {}
  for _,player in pairs(game.players) do
   button(player)
   local old=player.gui.screen[PREFIX..'panel']
@@ -354,7 +374,7 @@ local function rebuild_panel(event)
  local frame=player.gui.screen[PREFIX..'panel']
  if not frame then return end
  local refs=storage.gui[player.index]
- if refs and refs.message.valid then storage.drafts[player.index]=refs.message.text end
+ remember_draft(player)
  if refs and refs.tabs.valid then storage.tabs[player.index]=refs.tabs.selected_tab_index end
  local visible=frame.visible
  frame.destroy()
@@ -400,7 +420,7 @@ local function send(player)
  local refs=storage.gui[player.index]
  if not refs or not refs.frame.valid then return end
  local text=refs.message.text:match('^%s*(.-)%s*$')
- if #text>0 and #text<=6000 then emit(player,'send',text,selected(player));refs.message.text='';storage.drafts[player.index]='' end
+ if #text>0 and #text<=6000 then emit(player,'send',text,storage.players[player.index] and storage.players[player.index].current);refs.message.text='';storage.drafts[player.index]='';remember_draft(player) end
 end
 events.on_event(defines.events.on_gui_confirmed,function(event)
  if event.element.valid and event.element.name==PREFIX..'message' then
@@ -445,7 +465,7 @@ events.on_event(defines.events.on_gui_click,function(event)
   local ok,message=pcall(books.take,player,name==PREFIX..'update-book')
   if not ok then player.print(message) else refs.frame.destroy() end
  elseif name==PREFIX..'new' then emit(player,'new')
- elseif name==PREFIX..'stop' then emit(player,'stop',nil,selected(player))
+ elseif name==PREFIX..'stop' then emit(player,'stop',nil,storage.players[player.index] and storage.players[player.index].current)
  elseif name==PREFIX..'drone-follow' or name==PREFIX..'drone-stay' then
   local state=drone.read(player.force.name,player.name)
   local ok,message=pcall(drone.command,player.force.name,player.name,name==PREFIX..'drone-follow' and 'follow' or 'stay',state)
@@ -475,7 +495,7 @@ events.on_nth_tick(5,function(event)
  end
 end)
 events.on_event(defines.events.on_gui_text_changed,function(event)
- if event.element.valid and event.element.name==PREFIX..'message' then storage.drafts[event.player_index]=bounded_text(event.element.text,6000) end
+ if event.element.valid and event.element.name==PREFIX..'message' then event.element.text=bounded_text(event.element.text,6000);remember_draft(game.get_player(event.player_index)) end
 end)
 events.on_event(defines.events.on_gui_selection_state_changed,function(event)
  if event.element.valid and event.element.name==PREFIX..'chats' then
@@ -502,7 +522,7 @@ remote.add_interface('facmandu-assistant',{
   if #text>0 then text=text..'\n' end
   text=text..'Plan: '..plan.reference
   if #text>6000 then player.print('Your draft is full. Copy the plan reference: '..plan.reference);return plan.reference end
-  refs.message.text=text;storage.drafts[index]=text
+  refs.message.text=text;remember_draft(player)
   refs.message.focus()
   return plan.reference
  end,
@@ -523,7 +543,9 @@ end)
 
 events.on_event(defines.events.on_player_changed_force,function(event)
  local player=game.get_player(event.player_index)
+ remember_draft(player)
  storage.players[player.index]=nil
+ storage.drafts[player.index]=storage.chat_drafts[player.index][draft_key(player,nil)] or ''
  local refs=storage.gui[player.index]
  if refs and refs.frame.valid then refs.frame.destroy() end
 end)

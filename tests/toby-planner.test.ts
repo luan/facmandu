@@ -60,6 +60,30 @@ test('native planner solver respects supply, recycling balances, output goals an
  local fixed=solve(10,'maximum',nil,2,false,100)
  assert(fixed.status=='solved');near(fixed.line_result_map[1].machine_amount,2);near(fixed.ingredients['item/ore'],4)
  assert(solve(1,'maximum',nil,2,false,100).status=='no_solution')
+
+ for _,mode in ipairs{'exact','maximum'} do
+  for _,count in ipairs{0,0.5,3,1000} do
+   local line={id=1,products={['item/plate']=1},ingredients={['item/ore']=2},machine_constraints={{id=1,count=count,mode=mode,coefficient=1}}}
+   local floor={id=10,level=1,line_ids={1},products={{name='plate',type='item',amount=100000}},inputs={{name='ore',type='item',amount=7,mode='maximum'}},maximize_product={name='plate',type='item'}}
+   local result=engine.solve_floor({floor_data_map={[10]=floor},line_data_map={[1]=line}},10)
+   if mode=='exact' and count>3.5 then assert(result.status=='no_solution')
+   else
+    assert(result.status=='solved',result.status)
+    near(result.products['item/plate'] or 0,math.min(count,3.5))
+   end
+  end
+ end
+ -- One synthetic floor variable carries independent capacities for two child recipes.
+ local synthetic={id=1,products={['item/plate']=1},ingredients={['item/ore']=2},machine_constraints={{id=2,count=7,mode='maximum',coefficient=2},{id=3,count=2,mode='exact',coefficient=1}}}
+ local floor={id=10,level=1,line_ids={1},products={{name='plate',type='item',amount=100}},maximize_product={name='plate',type='item'}}
+ local combined=engine.solve_floor({floor_data_map={[10]=floor},line_data_map={[1]=synthetic}},10)
+ assert(combined.status=='solved','combined '..combined.status);near(combined.products['item/plate'],2)
+ synthetic.machine_constraints[1].count=3
+ assert(engine.solve_floor({floor_data_map={[10]=floor},line_data_map={[1]=synthetic}},10).status=='no_solution','conflict')
+ synthetic.machine_constraints[1].count=7;synthetic.machine_constraints[2].coefficient=0
+ assert(engine.solve_floor({floor_data_map={[10]=floor},line_data_map={[1]=synthetic}},10).status=='no_solution','zero impossible')
+ synthetic.machine_constraints[2].count=0
+ local zero=engine.solve_floor({floor_data_map={[10]=floor},line_data_map={[1]=synthetic}},10);assert(zero.status=='solved','zero redundant '..zero.status)
  assert(solve(nil,nil,nil,nil,true).status=='unbounded')
  `)
 	);

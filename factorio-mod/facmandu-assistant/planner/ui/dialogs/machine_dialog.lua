@@ -4,6 +4,21 @@
 ---@field machine_backup Machine
 ---@field beacon_backup Beacon
 
+local function read_capacity(modal_data)
+    local text = modal_data.capacity_amount.text
+    if not text:match("%S") then return nil, true end
+    local count = tonumber(text)
+    if not count or count ~= count or count < 0 or count > 1000000
+        or modal_data.line.recipe.proto.energy <= MAGIC_NUMBERS.minimum_energy then return nil, false end
+    return {count=count, mode=modal_data.capacity_mode.selected_index == 1 and "maximum" or "exact"}, true
+end
+
+local function validate_capacity(player)
+    local modal_data = lib.globals.modal_data(player)
+    local _, valid = read_capacity(modal_data)
+    modal_data.modal_elements.dialog_submit_button.enabled = valid
+end
+
 -- ** LOCAL UTIL **
 ---@param parent_flow LuaGuiElement
 ---@param modal_elements table
@@ -245,6 +260,19 @@ local function open_machine_dialog(player, modal_data)
     add_machine_frame(flow_machine, player, modal_data.line)
     add_fuel_frame(flow_machine, player)
 
+    local capacity = content_frame.add{type="flow", direction="horizontal"}
+    capacity.style.vertical_align = "center"
+    capacity.add{type="label", caption="Operating machines", style="bold_label"}
+    local constraint = modal_data.line.machine_constraint
+    modal_data.capacity_amount = capacity.add{type="textfield", text=constraint and tostring(constraint.count) or "",
+        numeric=true, allow_decimal=true, allow_negative=false, tooltip="Blank: calculate from product targets. Fractional operating capacity is allowed.",
+        tags={mod="toby-planner", on_gui_text_changed="machine_capacity"}}
+    modal_data.capacity_amount.style.width = 100
+    modal_data.capacity_mode = capacity.add{type="drop-down", items={"At most", "Exactly"},
+        selected_index=constraint and constraint.mode == "exact" and 2 or 1}
+    capacity.add{type="label", caption="Current: " .. lib.format.number(modal_data.line.machine.amount, 3)}
+    validate_capacity(player)
+
     -- Modules
     modal_data.defaults_refresher = "machine_defaults_refresher"
     module_configurator.add_modules_flow(content_frame, modal_data)
@@ -258,6 +286,8 @@ local function close_machine_dialog(player, action)
     local machine, line = modal_data.object, modal_data.line
 
     if action == "submit" then
+        local constraint, valid = read_capacity(modal_data)
+        if not valid or not line:set_machine_constraint(constraint) then return end
         machine.module_set:normalize({sort=true})
 
         solver.update(player)
@@ -276,6 +306,7 @@ end
 local listeners = {}  ---@type ListenerDefinitions
 
 listeners.gui = {
+    on_gui_text_changed = {{name="machine_capacity", handler=validate_capacity}},
     on_gui_elem_changed = {
         {
             name = "choose_machine",

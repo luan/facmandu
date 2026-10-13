@@ -233,6 +233,13 @@ function builders.machine(line, parent_flow, metadata)
             tooltip_line = {"", "\n", {"toby-planner.machine_requirement", lib.format.number(count, 4), {"toby-planner.pl_machine", count}}}
         end
 
+        if line.machine_constraint then
+            style = "toby_flib_slot_button_blue"
+            tooltip_line = {"", tooltip_line, "\nOperating capacity: ",
+                line.machine_constraint.mode == "exact" and "exactly " or "at most ",
+                lib.format.number(line.machine_constraint.count, 4), " machines"}
+        end
+
         local title_line = (not quality_proto.always_show) and {"toby-planner.tt_title", machine_proto.localised_name}
             or {"toby-planner.tt_title_with_note", machine_proto.localised_name, quality_proto.rich_text}
         local tooltip = {"", title_line, tooltip_line, format_effects_tooltip(machine.effects_tooltip)}

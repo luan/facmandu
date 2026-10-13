@@ -307,6 +307,8 @@ local function generate_line_data(player, factory, line, requirement)
         fuel_item = fuel_item,
         priority_item = priority_item,
         machine_requirement = requirement,
+        machine_constraints = line.machine_constraint and {{id=line.id, count=line.machine_constraint.count,
+            mode=line.machine_constraint.mode, coefficient=1}} or nil,
         production_type = line.recipe.production_type,
     }  ---@type LineData
 end
@@ -337,6 +339,16 @@ local function generate_line_data_from_result(factory_data, floor_id, subfloor_r
     if subfloor_result.status ~= "solved" then return end
     local subfloor_data = factory_data.floor_data_map[subfloor_result.id]
     local subfloor_line = factory_data.line_data_map[subfloor_data.line_ids[1]--[[@cast -nil]]]
+    -- Subfloors solve per defining machine; lift each absolute capacity to the root.
+    local capacities = {}
+    for _, id in ipairs(subfloor_data.line_ids) do
+        local result = subfloor_result.line_result_map[id]
+        local line_data = factory_data.line_data_map[id]
+        for _, capacity in ipairs(line_data and line_data.machine_constraints or {}) do
+            capacities[#capacities + 1] = {id=capacity.id, count=capacity.count, mode=capacity.mode,
+                coefficient=capacity.coefficient * (result and result.machine_amount or 0)}
+        end
+    end
     factory_data.line_data_map[subfloor_result.id] = {
         id = subfloor_result.id,
         floor_id = floor_id,
@@ -345,6 +357,7 @@ local function generate_line_data_from_result(factory_data, floor_id, subfloor_r
         ingredients = subfloor_result.ingredients,
         priority_item = subfloor_line.priority_item,
         machine_requirement = subfloor_line.machine_requirement,
+        machine_constraints = capacities,
         production_type = "produce"
     }
 end
@@ -749,6 +762,15 @@ local function update_factory(factory_data, result_map)
 end
 
 
+local function has_machine_constraints(floor)
+    for line in floor:iterator() do
+        if line.class == "Floor" then
+            if has_machine_constraints(line) then return true end
+        elseif line.machine_constraint then return true end
+    end
+    return false
+end
+
 -- ** TOP LEVEL **
 --- Updates the whole factory calculations from top to bottom
 ---@param player LuaPlayer
@@ -757,7 +779,7 @@ function solver.update(player, factory)
     factory = factory or lib.context.get(player, "Factory")  ---@as Factory
     if factory and factory.valid then
         -- Supply bounds and maximization require inequalities at the root.
-        if factory.maximize_product or #(factory.inputs or {}) > 0 then
+        if factory.maximize_product or #(factory.inputs or {}) > 0 or has_machine_constraints(factory.top_floor) then
             factory.top_floor:set_solver("simplex", false)
         end
         -- Cancel any pending update as it'll be running right now

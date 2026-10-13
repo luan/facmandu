@@ -74,6 +74,18 @@ test('Toby panel sends native player requests and preserves typed drafts across 
  handlers[3]({player_index=1,element=find(frame,'facmandu-toby-new')})
  assert(last.operation=='new' and last.player=='Alice')
  assert(storage.gui[1].message.text=='More glass')
+ interface.update_player(1,{status='Ready',answer='',current='two',chats={{id='one',title='Glass'},{id='two',title='Science'}}})
+ assert(storage.gui[1].message.text=='')
+ storage.gui[1].message.text='Science draft';handlers[6]({player_index=1,element=storage.gui[1].message})
+ interface.update_player(1,{status='Ready',answer='',current='one',chats={{id='one',title='Glass'},{id='two',title='Science'}}})
+ assert(storage.gui[1].message.text=='More glass')
+ storage.gui[1].frame.visible=false
+ interface.update_player(1,{status='Ready',answer='',current='two',chats={{id='one',title='Glass'},{id='two',title='Science'}}})
+ interface.open_player(1)
+ assert(storage.gui[1].message.text=='Science draft')
+ handlers[13]({player_index=1});frame=player.gui.screen['facmandu-toby-panel']
+ assert(storage.gui[1].message.text=='Science draft')
+ interface.update_player(1,{status='Ready',answer='',current='one',chats={{id='one',title='Glass'},{id='two',title='Science'}}})
  handlers[8]({player_index=1,element=storage.gui[1].message})
  assert(last.player=='Alice' and last.operation=='send' and last.prompt=='More glass' and last.chat=='one')
  assert(storage.gui[1].message.text=='')
@@ -81,7 +93,7 @@ test('Toby panel sends native player requests and preserves typed drafts across 
  handlers[4]({player_index=1,element=storage.gui[1].chats})
  assert(last.operation=='select' and last.chat=='two')
  handlers[3]({player_index=1,element={valid=true,name='facmandu-toby-stop'}})
- assert(last.operation=='stop' and last.chat=='two')
+ assert(last.operation=='stop' and last.chat=='one')
  storage.gui[1].tabs.selected_tab_index=3
  handlers[7]({player_index=1,element=storage.gui[1].tabs})
  handlers['facmandu-toby-toggle']({player_index=1})

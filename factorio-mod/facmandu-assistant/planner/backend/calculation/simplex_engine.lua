@@ -35,6 +35,27 @@ local function item_cost(key)
     return 1
 end
 
+-- Nested recipes constrain the same root variable. Reduce bounds before building
+-- the tableau, avoiding redundant equalities and preserving its native cache keys.
+local function machine_bound(line_data)
+    local exact = line_data.machine_requirement and line_data.machine_requirement.count
+    local maximum
+    for _, capacity in ipairs(line_data.machine_constraints or {}) do
+        if capacity.coefficient == 0 then
+            if capacity.mode == "exact" and capacity.count > 0 then return nil, nil, false end
+        else
+            local count = capacity.count / capacity.coefficient
+            if capacity.mode == "exact" then
+                if exact and math.abs(exact - count) > MAGIC_NUMBERS.margin_of_error then return nil, nil, false end
+                exact = count
+            else maximum = math.min(maximum or math.huge, count) end
+        end
+    end
+    if exact and maximum and exact > maximum + MAGIC_NUMBERS.margin_of_error then return nil, nil, false end
+    return exact and "==" or "<=", exact or maximum, true
+end
+
+
 ---@param factory_data FactoryData
 ---@param floor_id ObjectID
 ---@return FloorResult?
@@ -133,10 +154,11 @@ function simplex_engine.solve_floor(factory_data, floor_id)
     
         -- Add aditional constraint for machine requirements
         for _, line_data in pairs(relevant_line_data) do
-            if line_data.machine_requirement then
-                local limit = line_data.machine_requirement.count
-                tableau:add_line_constraint(line_data.id, "==", limit, objective_vector.machine_limit)
+            local comparison, limit, valid = machine_bound(line_data)
+            if not valid then
+                return {id=floor_id, status="no_solution", products={}, ingredients={}, line_result_map={}}
             end
+            if limit then tableau:add_line_constraint(line_data.id, comparison, limit, objective_vector.machine_limit) end
         end
     else
         -- Artificially limit the top line to one machine so we get a solution for this subfloor

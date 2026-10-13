@@ -48,6 +48,15 @@ local function init(level, solver_name)
 end
 
 
+local function create_subfloor(line)
+    local floor = init(line.parent.level + 1, line.parent.solver)
+    line.parent:replace(line, floor)
+    line.next, line.previous = nil, nil
+    floor:insert(line)
+    return floor
+end
+
+
 function Floor:index()
     OBJECT_INDEX[self.id] = self
     for line in self:iterator() do line:index() end
@@ -432,4 +441,4 @@ function Floor:repair(player)
     return self.valid
 end
 
-return {init = init, unpack = unpack}
+return {init = init, unpack = unpack, create_subfloor = create_subfloor}
