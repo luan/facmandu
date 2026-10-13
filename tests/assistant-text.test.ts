@@ -288,6 +288,10 @@ test('factory summaries preserve partial evidence and distinguish machine status
 		''
 	);
 	assert.equal(
+		assistantToolFeedback('item_rate', { item: 'iron-plate', produced_per_min: '12.34' }),
+		'iron plate: 12.34/min produced.'
+	);
+	assert.equal(
 		assistantToolFeedback('science_summary', {
 			result: {
 				sciences: [{ item: 'space-science-pack' }],

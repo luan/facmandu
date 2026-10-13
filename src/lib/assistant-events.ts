@@ -1,5 +1,6 @@
 import type { AssistantMessageEventStream } from '@earendil-works/pi-ai';
 import type { ConversationStreamChunk } from '@flue/runtime';
+import { resultNumber } from './factory-results';
 
 // Large blueprint arguments stream before Flue can emit a complete tool-input.
 export function assistantStreamProgress(
@@ -220,12 +221,9 @@ export function assistantToolFeedback(tool: string, output: unknown): string {
 	}
 	if (tool === 'item_rate' || tool === 'fluid_rate') {
 		const product = value.item ?? value.fluid;
-		if (
-			typeof product === 'string' &&
-			typeof value.produced_per_min === 'number' &&
-			Number.isFinite(value.produced_per_min)
-		)
-			return `${product.replaceAll('_', ' ').replaceAll('-', ' ')}: ${Number(value.produced_per_min.toFixed(2))}/min produced${typeof value.surface === 'string' ? ` on ${value.surface}` : ''}.`;
+		const produced = resultNumber(value.produced_per_min);
+		if (typeof product === 'string' && produced !== undefined)
+			return `${product.replaceAll('_', ' ').replaceAll('-', ' ')}: ${Number(produced.toFixed(2))}/min produced${typeof value.surface === 'string' ? ` on ${value.surface}` : ''}.`;
 	}
 	if (tool === 'find_entities' && typeof value.total === 'number')
 		return `Found ${value.total} matching entities${typeof value.surface === 'string' ? ` on ${value.surface}` : ''}${value.truncated ? ' in a partial scan' : ''}${typeof value.shown === 'number' && value.shown < value.total ? `; showing ${value.shown}` : ''}.`;
