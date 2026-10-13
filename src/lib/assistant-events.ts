@@ -122,6 +122,16 @@ export function assistantToolFeedback(tool: string, output: unknown) {
 		if (/overlap/i.test(value.error)) return 'Layout validation found overlapping entities.';
 		return `${tool.replaceAll('_', ' ')} failed; expand the tool step for details.`;
 	}
+	if (tool === 'search_blueprints' && Array.isArray(value.results))
+		return `Found ${value.results.length} community designs; compatibility is not checked.`;
+	if (tool === 'fetch_blueprint') {
+		const blueprint = object(value.blueprint);
+		const count = Array.isArray(blueprint?.entities) ? blueprint.entities.length : value.entities;
+		if (typeof count === 'number')
+			return `Retrieved community blueprint: ${count} entities. Not validated against this save.`;
+		if (Array.isArray(value.entries))
+			return `Retrieved blueprint book: ${value.total ?? value.entries.length} entries.`;
+	}
 	if (
 		value.operation === 'place_blueprint' &&
 		typeof value.placed === 'number' &&

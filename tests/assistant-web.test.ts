@@ -8,6 +8,7 @@ import {
 	searchFactoryBlueprints,
 	selectWebBlueprint,
 	sharedBlueprint,
+	webBlueprintSummary,
 	webPageText
 } from '../src/lib/server/assistant-web';
 
@@ -148,6 +149,12 @@ test('Codex retrieval preserves component settings and selects the current book 
 	);
 	assert.ok('blueprint' in component);
 	assert.deepEqual(component.blueprint, { ...blueprint, tiles: [] });
+	const summary = webBlueprintSummary(component);
+	assert.ok(!('string' in summary) && !('blueprint' in summary));
+	assert.ok('entities' in summary && summary.entities === 1);
+	const detailed = webBlueprintSummary(component, true);
+	assert.ok('blueprint' in detailed);
+	assert.deepEqual(detailed.blueprint, component.blueprint);
 	const book = encode({
 		blueprint_book: { label: 'Current book', blueprints: [{ index: 7, blueprint }] }
 	});

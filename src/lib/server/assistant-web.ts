@@ -334,3 +334,33 @@ export async function sharedBlueprint(
 		...selectWebBlueprint(encoded.blueprintString, path)
 	};
 }
+
+export function webBlueprintSummary(
+	source: Awaited<ReturnType<typeof sharedBlueprint>>,
+	includeEntities = false
+) {
+	const blueprint = 'blueprint' in source ? source.blueprint : undefined;
+	if (!blueprint) return source;
+	const recipes = [
+		...new Set(
+			blueprint.entities.flatMap((entity) =>
+				typeof entity.recipe === 'string' ? [entity.recipe] : []
+			)
+		)
+	];
+	const prototypes = [...new Set(blueprint.entities.map((entity) => entity.name))];
+	return {
+		source: source.source,
+		title: source.title,
+		description: source.description?.slice(0, 2000),
+		label: blueprint.label,
+		entities: blueprint.entities.length,
+		tiles: blueprint.tiles.length,
+		recipes: recipes.slice(0, 64),
+		prototypes: prototypes.slice(0, 64),
+		truncated: recipes.length > 64 || prototypes.length > 64,
+		untrusted: true,
+		note: 'Full copyable blueprint is attached to tool activity. Render using its source URL; compatibility and operation are not validated.',
+		...(includeEntities ? { blueprint: blueprint } : {})
+	};
+}

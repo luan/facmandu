@@ -27,6 +27,7 @@ import {
 	searchBlueprints,
 	searchFactoryBlueprints,
 	sharedBlueprint,
+	webBlueprintSummary,
 	webPageText
 } from './assistant-web';
 import { designBeltRoutes } from './belt-route-batch';
@@ -322,9 +323,10 @@ export function serverAssistantTools(initialContext: {
 	useTool({
 		name: 'fetch_blueprint',
 		description:
-			'Retrieve an actual Factorio School/Prints or Factorio Codex blueprint (including a component URL from factory search), or inspect a blueprint book. For a book, returns entry indices; supply path=[index,...] to select a blueprint, preserving recipes, filters, wires and modules. This reads a design and never places anything. Use render_blueprint with its string for a rich sprite preview. Check live prototypes and recipes; do not silently discard unsupported settings when adapting it for placement.',
+			'Retrieve an actual Factorio School/Prints or Factorio Codex blueprint (including a component URL from factory search), or inspect a blueprint book. For a book, returns entry indices; supply path=[index,...] to select a blueprint, preserving recipes, filters, wires and modules. The full copyable source is attached to tool activity; the model receives a compact summary. Set includeEntities=true only when the layout itself needs adaptation. This never places anything. Use render_blueprint with the source URL for a rich sprite preview. Check live prototypes and recipes; do not silently discard unsupported settings when adapting it for placement.',
 		input: v.object({
 			url: v.pipe(v.string(), v.maxLength(2000)),
+			includeEntities: v.optional(v.boolean(), false),
 			path: v.optional(
 				v.pipe(v.array(v.pipe(v.number(), v.integer(), v.minValue(0))), v.maxLength(8)),
 				[]
@@ -332,11 +334,15 @@ export function serverAssistantTools(initialContext: {
 		}),
 		async run({ data }) {
 			await server();
-			return result(
-				'fetch_blueprint',
-				'Shared blueprint',
-				await sharedBlueprint(data.url, data.path)
-			);
+			const source = await sharedBlueprint(data.url, data.path);
+			writeArtifact(result('fetch_blueprint', 'Shared blueprint', source).output);
+			return {
+				output: result(
+					'fetch_blueprint',
+					'Shared blueprint',
+					webBlueprintSummary(source, data.includeEntities)
+				).output.result
+			};
 		}
 	});
 	if (
