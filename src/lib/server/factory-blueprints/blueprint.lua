@@ -116,7 +116,12 @@ local function construction_report(force,surface,entities,offset,cost)
  return {single_network_ready=ready,entities=#entities,networks=networks,total_networks=total,production_verified=false,note='Normal-quality stock is not reserved. Coverage and materials do not verify power, input/output connections or throughput.'}
 end
 local function power_report(force,surface,entities,offset,boxes)
- if surface.platform then return nil end -- Platforms share power without ordinary pole coverage.
+ if surface.platform or surface.has_global_electric_network then return nil end
+ -- Match the reviewed Power Propagation 1.6.0 extender and connection rules.
+ -- Revalidate the mod rules before extending this model to another version.
+ local propagation=script and script.active_mods and script.active_mods['power-propagation']=='1.6.0'
+ local function setting(name) return settings and settings.startup[name] and settings.startup[name].value end
+ local rails={['legacy-straight-rail']=true,['legacy-curved-rail']=true,['straight-rail']=true,['half-diagonal-rail']=true,['curved-rail-a']=true,['curved-rail-b']=true,['elevated-straight-rail']=true,['elevated-half-diagonal-rail']=true,['elevated-curved-rail-a']=true,['elevated-curved-rail-b']=true,['rail-ramp']=true,['rail-support']=true}
  local nodes,positions,consumers,sources={},{},{},{}
  local function position(e) return {x=e.position.x+offset.x,y=e.position.y+offset.y} end
  local function add(name,at,index,native)
@@ -144,9 +149,16 @@ local function power_report(force,surface,entities,offset,boxes)
   elseif p.electric_energy_source_prototype then
    if p.type=='solar-panel' or p.type=='generator' then sources[#sources+1]=i else consumers[#consumers+1]=i end
   end
+  if propagation and ((setting('power-propagation-through-powered-buildings') and p.electric_energy_source_prototype) or (setting('power-propagation-through-walls') and p.type=='wall') or (setting('power-propagation-through-rails') and rails[p.type])) then
+   local b=p.collision_box
+   local size=math.max(math.ceil(b.right_bottom.x-b.left_top.x),math.ceil(b.right_bottom.y-b.left_top.y))
+   local name='power-propagation-invisible-pole-'..size
+   if size>=1 and size<=30 and prototypes.entity[name] then add(name,position(e),i) end
+   if #nodes>128 then return {checked=false,note='Power geometry exceeds this inspection budget; inspect the connections in sections.'} end
+  end
  end
  if #consumers==0 then return nil end
- local unknown=false
+ local unknown=script and script.active_mods and script.active_mods['power-propagation'] and not propagation or false
  local planned=#nodes
  local sites,chunks={},{}
  for i=1,planned do
@@ -184,7 +196,9 @@ local function power_report(force,surface,entities,offset,boxes)
   local a=nodes[queue[cursor]];cursor=cursor+1
   for i,b in ipairs(nodes) do
    local dx,dy=a.position.x-b.position.x,a.position.y-b.position.y
-   if not reached[i] and dx*dx+dy*dy<=math.min(a.wire,b.wire)^2 then reached[i]=true;queue[#queue+1]=i end
+   local distance=dx*dx+dy*dy
+   local propagation_reach=propagation and math.min(64,a.supply+b.supply) or 0
+   if not reached[i] and distance<=math.max(math.min(a.wire,b.wire),propagation_reach)^2 then reached[i]=true;queue[#queue+1]=i end
   end
  end
  local uncovered,unconnected={},{}
@@ -197,7 +211,7 @@ local function power_report(force,surface,entities,offset,boxes)
  end
  -- A known path for every consumer proves coverage even when unrelated poles
  -- remain uncharted. Missing paths still retain that uncertainty.
- return {checked=not unknown or (uncovered_total==0 and unconnected_total==0),consumers=#consumers,existing_scan_radius=64,uncovered_total=uncovered_total,uncovered_entities=uncovered,unconnected_total=unconnected_total,unconnected_entities=unconnected,note='Bounded potential pole coverage and cable reach to an existing powered network or planned generator. Wiring, generator inputs, power headroom and production are not verified. Inspect and repair reported gaps before calling a production layout connected.'}
+ return {checked=not unknown or (uncovered_total==0 and unconnected_total==0),consumers=#consumers,existing_scan_radius=64,uncovered_total=uncovered_total,uncovered_entities=uncovered,unconnected_total=unconnected_total,unconnected_entities=unconnected,note='Bounded potential pole coverage and cable reach to an existing powered network or planned generator. '..(propagation and 'Includes the active Power Propagation settings and planned building extenders. ' or '')..'Wiring, generator inputs, power headroom and production are not verified. Inspect and repair reported gaps before calling a production layout connected.'}
 end
 local function control_example(kind)
  if kind=='asteroid-collector' then return {['chunk-filter']={{index=1,name='oxide-asteroid-chunk'}},control_behavior={circuit_set_filters=false,circuit_read_contents=true,include_hands=true,circuit_enabled=true,circuit_condition={first_signal={type='item',name='oxide-asteroid-chunk'},comparator='<',constant=5}}} end

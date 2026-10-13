@@ -686,6 +686,30 @@ test('native placement inspection identifies pole gaps and preserves uncertainty
  assert(blueprint(request).power.checked,'A known powered path must not be invalidated by unrelated uncharted poles')
  force.is_chunk_charted=function() return charted end
  charted=false;assert(not blueprint(request).power.checked,'Uncharted evidence cannot prove an absent power source')
+ charted=true;surface.find_entities_filtered=find
+ plant.collision_box={left_top={x=-1.4,y=-1.4},right_bottom={x=1.4,y=1.4}}
+ local extender=proto('electric-pole',1)
+ extender.get_max_wire_distance=function() return 1 end;extender.get_supply_area_distance=function() return 2 end
+ prototypes.entity['power-propagation-invisible-pole-3']=extender
+ script={active_mods={['power-propagation']='1.6.0'}}
+ settings={startup={['power-propagation-through-powered-buildings']={value=true}}}
+ request.entities={
+  {name='plant',position={x=5.5,y=0.5},direction=0},
+  {name='plant',position={x=9.5,y=0.5},direction=0},
+  {name='plant',position={x=13.5,y=0.5},direction=0}
+ }
+ local propagated=blueprint(request)
+ assert(propagated.power.checked and propagated.power.unconnected_total==0 and propagated.power.uncovered_total==0,'Planned powered buildings extend the active mod network')
+ assert(propagated.entities==3,'Extenders model normal mod behavior without exporting hidden poles')
+ settings.startup['power-propagation-through-powered-buildings'].value=false
+ assert(blueprint(request).power.uncovered_total>0,'Disabled propagation must not prove coverage')
+ settings.startup['power-propagation-through-powered-buildings'].value=true
+ request.entities[3].position.x=25.5
+ assert(blueprint(request).power.unconnected_total==1,'A disconnected planned extender does not supply itself')
+ script.active_mods['power-propagation']='1.6.1'
+ assert(not blueprint(request).power.checked,'An unreviewed mod version retains uncertainty about reported gaps')
+ script.active_mods={}
+ assert(blueprint(request).power.uncovered_total>0,'Absent mods must not imply propagation')
  `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
