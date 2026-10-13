@@ -465,7 +465,7 @@
    {#if refreshError}<p role="status" class="text-sm text-muted-foreground">{refreshError} <button type="button" class="underline" onclick={() => void refresh()}>Retry</button></p>{/if}
    {#if gamePlayer}<div class="flex items-center justify-between gap-3 text-sm text-muted-foreground"><span>In-game conversation with {gamePlayer}</span><Button variant="outline" size="sm" disabled={loading} onclick={createChat}>New web chat</Button></div>{:else}
    {#if modelError}<p role="status" class="text-sm text-muted-foreground">{modelError}</p>{/if}
-   <Prompt bind:value={prompt} label="Message" placeholder={serverId ? "Ask about this server…" : "Ask about this list…"} maxLength={6000} busy={inProgress} allowSteering={!!serverId} {send} disabledReason={loading ? 'Loading conversation' : steeringBusy ? 'Sending steering' : ''} stop={busy && controller ? stop : undefined}>
+   <Prompt bind:value={prompt} label="Message" placeholder={serverId ? "Ask about this server…" : "Ask about this list…"} maxLength={6000} busy={inProgress} allowSteering={!!serverId} {send} disabledReason={loading ? 'Loading conversation' : steeringBusy ? 'Sending steering' : ''} stop={inProgress ? stop : undefined}>
     {#snippet controls()}
      {#if voiceState.active || voiceState.connecting}
       <TooltipButton tooltip={voiceState.muted ? 'Unmute microphone' : 'Mute microphone'} variant="ghost" size="icon" disabled={voiceState.connecting} aria-pressed={voiceState.muted} onclick={() => voice.mute()}>{#if voiceState.muted}<MicOffIcon />{:else}<MicIcon />{/if}</TooltipButton>
