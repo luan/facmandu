@@ -39,6 +39,26 @@ export function assistantMilestone(results: readonly FactoryResult[]) {
 		: '';
 }
 
+export function assistantTimeline(results: readonly FactoryResult[]) {
+	const timeline: (
+		| { kind: 'progress'; message: string }
+		| { kind: 'tools'; items: FactoryResult[] }
+	)[] = [];
+	for (const item of results) {
+		if (item.tool === 'report_progress') {
+			const message = assistantMilestone([item]);
+			const last = timeline.at(-1);
+			if (message && !(last?.kind === 'progress' && last.message === message))
+				timeline.push({ kind: 'progress', message });
+		} else {
+			const last = timeline.at(-1);
+			if (last?.kind === 'tools') last.items.push(item);
+			else timeline.push({ kind: 'tools', items: [item] });
+		}
+	}
+	return timeline;
+}
+
 // A failed multi-product run must not hide earlier drafts behind the last small revision.
 export function savedBlueprintDrafts(results: readonly FactoryResult[]) {
 	const drafts = new Map<string, z.infer<typeof blueprintArtifactSchema>>();

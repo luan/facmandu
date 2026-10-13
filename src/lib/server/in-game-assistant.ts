@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { and, desc, eq } from 'drizzle-orm';
 import { assistantMilestone } from '$lib/assistant-results';
 import { gamePanelText, gameReply, gameText, parseGameChat, parseGameUi } from '$lib/game-chat';
-import { panelActivity, panelDesign, panelDrone } from '$lib/toby-panel';
+import { panelActivity, panelDesign, panelDrone, panelUpdates } from '$lib/toby-panel';
 import { routeAmbientChat } from './ambient-chat';
 import { db } from './db';
 import { genID } from './db/ids';
@@ -108,6 +108,12 @@ async function syncPanel(
 		const prompt = gamePanelText(entry.prompt, Math.min(2000, available));
 		available -= Buffer.byteLength(prompt);
 		if (answer) messages.unshift({ role: 'assistant', text: answer });
+		for (const update of panelUpdates(entry.results).toReversed()) {
+			if (update === entry.answer) continue;
+			const text = gamePanelText(update, Math.min(600, available));
+			available -= Buffer.byteLength(text);
+			if (text) messages.unshift({ role: 'assistant', text });
+		}
 		if (prompt) messages.unshift({ role: 'user', text: prompt });
 		if (!available) break;
 	}
@@ -131,7 +137,8 @@ async function syncPanel(
 		),
 		answer: gamePanelText(turn?.answer ?? '', 6000),
 		running: turn?.state === 'running',
-		messages,
+		// Native Toby accepts at most 16 rows; keep the newest messages within its wire contract.
+		messages: messages.slice(-16),
 		activity: panelActivity(turn?.results ?? '[]', activity?.progress, activity?.feedback),
 		drone: panelDrone(
 			turn?.state === 'running',

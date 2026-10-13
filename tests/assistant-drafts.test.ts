@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
 	assistantMilestone,
+	assistantTimeline,
 	type FactoryResult,
 	savedBlueprintDrafts
 } from '../src/lib/assistant-results';
@@ -57,4 +58,29 @@ test('the latest public milestone stays available while later inspection tools f
 		'Quartz supply is the bottleneck.'
 	);
 	assert.equal(assistantMilestone([inspection]), '');
+});
+
+test('public milestones retain chronological tool groups without replay duplicates or tool narration', () => {
+	const read: FactoryResult = {
+		kind: 'factory-result',
+		tool: 'factory_lookup',
+		title: 'Read',
+		result: { message: 'Internal tool text' }
+	};
+	const update: FactoryResult = {
+		kind: 'factory-result',
+		tool: 'report_progress',
+		title: 'Toby',
+		result: { message: 'Sand supply is limiting glass.' }
+	};
+	const final: FactoryResult = {
+		...update,
+		result: { message: 'Connected the new mine-to-bus design.' }
+	};
+	assert.deepEqual(assistantTimeline([read, read, update, update, read, final]), [
+		{ kind: 'tools', items: [read, read] },
+		{ kind: 'progress', message: 'Sand supply is limiting glass.' },
+		{ kind: 'tools', items: [read] },
+		{ kind: 'progress', message: 'Connected the new mine-to-bus design.' }
+	]);
 });

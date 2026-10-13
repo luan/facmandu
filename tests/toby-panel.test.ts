@@ -1,6 +1,6 @@
 // @ts-expect-error Bun supplies this built-in at runtime; the project uses Node type declarations.
 import { describe, expect, test } from 'bun:test';
-import { panelActivity, panelDesign, panelDrone } from '../src/lib/toby-panel';
+import { panelActivity, panelDesign, panelDrone, panelUpdates } from '../src/lib/toby-panel';
 
 const draft = {
 	kind: 'factory-result',
@@ -54,4 +54,26 @@ describe('Toby native harness', () => {
 		expect(panelDrone(false, '', 'Old fact', false)).toEqual({ phase: 'idle', message: '' });
 		expect(panelDrone(false, '', '', true).phase).toBe('error');
 	});
+});
+
+test('public milestones appear in the native conversation without reading tool narration', () => {
+	const updates = Array.from({ length: 6 }, (_, i) => ({
+		kind: 'factory-result',
+		tool: 'report_progress',
+		title: 'Toby',
+		result: { message: `Public ${i}` }
+	}));
+	expect(
+		panelUpdates(
+			JSON.stringify([
+				...updates,
+				{
+					kind: 'factory-result',
+					tool: 'factory_lookup',
+					title: 'Read',
+					result: { message: 'Internal' }
+				}
+			])
+		)
+	).toEqual(['Public 2', 'Public 3', 'Public 4', 'Public 5']);
 });

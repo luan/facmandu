@@ -1,4 +1,4 @@
-import { factoryResultSchema } from './assistant-results';
+import { assistantTimeline, factoryResultSchema } from './assistant-results';
 import { blueprintArtifactSchema } from './blueprints';
 import { factoryPreviewPendingSchema, factoryViewSchema } from './factory-images';
 import { gameText } from './game-chat';
@@ -55,6 +55,12 @@ export function panelActivity(value: string, progress?: string, feedback?: strin
 	if (progress || feedback)
 		rows.push({ text: gameText([progress, feedback].filter(Boolean).join('\n'), 700) });
 	return rows;
+}
+
+export function panelUpdates(value: string) {
+	return assistantTimeline(results(value))
+		.flatMap((entry) => (entry.kind === 'progress' ? [entry.message] : []))
+		.slice(-4);
 }
 function factoryError(value: unknown) {
 	if (!value || typeof value !== 'object' || !('error' in value)) return undefined;

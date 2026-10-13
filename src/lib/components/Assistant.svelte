@@ -8,7 +8,7 @@
  import { assistantResultGroups } from '$lib/factory-results';
  import FactoryResultView from '$lib/components/FactoryResult.svelte';
  import BlueprintResult from '$lib/components/BlueprintResult.svelte';
- import { assistantMilestone, savedBlueprintDrafts, serverAssistantPlanSchema, type FactoryResult, type AssistantMod } from '$lib/assistant-results';
+ import { assistantMilestone, assistantTimeline, savedBlueprintDrafts, serverAssistantPlanSchema, type FactoryResult, type AssistantMod } from '$lib/assistant-results';
  import { modThumbnailUrl } from '$lib/utils';
  import ModPreviewSheet from '../../routes/(app)/modlists/[id]/ModPreviewSheet.svelte';
  import AssistantMessage from '$lib/components/AssistantMessage.svelte';
@@ -63,7 +63,7 @@
  const voice = new AssistantVoice({ change: state => voiceState = state, request: ask });
  $effect(() => { listId; serverId; if (!open) voice.stop(); return () => voice.stop(); });
  let gamePlayer = $state<string | null>(null);
- let open = $state(false); let sidebar = $state<'history' | 'activity' | null>(null); let prompt = $state(''); let busy = $state(false); let progress = $state(''); let feedback = $state(''); let text = $state(''); let error = $state(''); let refreshError = $state('');
+ let open = $state(false); let sidebar = $state<'history' | null>(null); let prompt = $state(''); let busy = $state(false); let progress = $state(''); let feedback = $state(''); let text = $state(''); let error = $state(''); let refreshError = $state('');
  let turns = $state<{ id: string; prompt: string; answer: string; state: string; progress?: string; feedback?: string; mods: AssistantMod[]; results?: FactoryResult[]; plans?: ModlistPlan[] }[]>([]);
   const runningTurn = $derived(turns.findLast(turn => turn.state === 'running'));
   const inProgress = $derived(busy || !!runningTurn);
@@ -353,9 +353,19 @@
   {/each}
  </div>{/if}
 {/snippet}
-{#snippet toolActivity(items: FactoryResult[], title: string)}
- <section class="space-y-2"><h3 class="line-clamp-2 text-xs text-muted-foreground">{title}</h3>
-  {#each [...items].reverse() as item}<details class="border border-border bg-background text-sm"><summary class="cursor-pointer px-3 py-2 text-muted-foreground">{item.title}</summary><FactoryResultView {item} {serverId} /></details>{/each}
+{#snippet responseTimeline(items: FactoryResult[])}
+ <section class="space-y-3" aria-label="Response activity">
+  {#each assistantTimeline(items) as entry}
+   {#if entry.kind === 'progress'}
+    <div class="text-sm text-muted-foreground"><AssistantMessage text={entry.message} {serverId} /></div>
+   {:else}
+    <details class="text-sm text-muted-foreground"><summary class="cursor-pointer py-1 text-xs">{entry.items.length} tool {entry.items.length === 1 ? 'step' : 'steps'} · {entry.items.at(-1)?.title}</summary>
+     <div class="mt-2 space-y-2 border-l border-border pl-3">
+      {#each entry.items as item}<details class="text-sm"><summary class="cursor-pointer py-1">{item.title}</summary><FactoryResultView {item} {serverId} /></details>{/each}
+     </div>
+    </details>
+   {/if}
+  {/each}
  </section>
 {/snippet}
 <Sheet.Root bind:open>
@@ -366,7 +376,6 @@
     <Sheet.Title class="flex shrink-0 items-center gap-2"><MessageSquareIcon class="size-5" />Toby</Sheet.Title>
     <div class="min-w-0 flex-1"><p class="truncate text-sm font-medium">{chats.find(item => item.id === chat)?.title || 'New conversation'}</p>{#if contextLabel}<p class="truncate text-xs text-muted-foreground">{contextLabel}</p>{/if}</div>
     <Button variant="ghost" size="sm" class="lg:hidden" aria-expanded={sidebar === 'history'} onclick={() => sidebar = sidebar === 'history' ? null : 'history'}>Chats</Button>
-    <Button variant="ghost" size="sm" class="lg:hidden" aria-expanded={sidebar === 'activity'} onclick={() => sidebar = sidebar === 'activity' ? null : 'activity'}>Activity</Button>
     <TooltipButton tooltip="New chat" variant="ghost" size="icon" disabled={loading} onclick={createChat}><PlusIcon /></TooltipButton>
    </div>
    <Sheet.Description class="sr-only">{serverId ? 'Ask about this server and its factory.' : 'Ask about mods or review changes to this list.'}</Sheet.Description>
@@ -386,6 +395,7 @@
      {@const resultGroups = assistantResultGroups(turn.results ?? [])}
      <section class="space-y-4" aria-label="Conversation turn">
       <div class="flex justify-end"><p class="max-w-[90%] whitespace-pre-wrap break-words border border-border bg-white/5 px-4 py-3 text-sm leading-relaxed">{turn.prompt}</p></div>
+      {@render responseTimeline(resultGroups.details)}
       {#if turn.state === 'error'}
        {@const drafts = savedBlueprintDrafts(turn.results ?? [])}
        {@const saved = drafts[selectedDrafts[turn.id] ?? drafts.length - 1]}
@@ -438,10 +448,9 @@
     {/each}
     {#if visiblePrompt}
      {@const resultGroups = assistantResultGroups(visibleResults)}
-     {@const milestone = assistantMilestone(visibleResults)}
      <section class="space-y-4" aria-label="Current response">
       <div class="flex justify-end"><p class="max-w-[90%] whitespace-pre-wrap break-words border border-border bg-white/5 px-4 py-3 text-sm leading-relaxed">{visiblePrompt}</p></div>
-      {#if milestone && milestone !== visibleText}<section class="border-l-2 border-primary/50 pl-3 text-sm" aria-label="Latest update"><AssistantMessage text={milestone} {serverId} /></section>{/if}
+      {@render responseTimeline(resultGroups.details)}
       {#if visibleText}<div class="pr-2"><AssistantMessage text={visibleText} {serverId} /></div>{/if}
       {@render modCards(visibleMods)}
       {#each resultGroups.primary as item}<FactoryResultView {item} {serverId} />{/each}
@@ -459,7 +468,7 @@
   {/if}
   {#if inProgress || voiceState.error || voiceState.active || voiceState.connecting}
   <div class="shrink-0 space-y-1 border-t border-border px-5 py-3 text-sm" role="status" aria-live="polite">
-   {#if inProgress}{#if feedback}<p>{feedback}</p>{/if}<p class="flex items-center gap-2 text-xs text-muted-foreground"><LoaderCircleIcon class="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" /><span>{progress || 'Thinking…'}</span></p>{:else if voiceState.error}<span class="truncate text-destructive" title={voiceState.error}>{voiceState.error}</span>{:else if voiceState.active || voiceState.connecting}<MicIcon class="size-3.5" /><span class="truncate">{voiceState.status}</span>{/if}
+   {#if inProgress}{#if feedback && feedback !== assistantMilestone(visibleResults)}<p>{feedback}</p>{/if}<p class="flex items-center gap-2 text-xs text-muted-foreground"><LoaderCircleIcon class="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" /><span>{progress || 'Thinking…'}</span></p>{:else if voiceState.error}<span class="truncate text-destructive" title={voiceState.error}>{voiceState.error}</span>{:else if voiceState.active || voiceState.connecting}<MicIcon class="size-3.5" /><span class="truncate">{voiceState.status}</span>{/if}
   </div>
   {/if}
   {#if voiceState.active || voiceState.connecting}
@@ -495,14 +504,7 @@
    {/if}
   </form>
    </main>
-   <aside class="harness-activity border-l border-border bg-black/10" data-open={sidebar === 'activity'} aria-label="Tool activity">
-    <h2 class="px-4 pb-3 pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tool activity</h2>
-    <div class="space-y-4 px-3 pb-4">
-     {#if activeResults.length}{@render toolActivity(activeResults, 'Current request')}{/if}
-     {#each [...turns].reverse().filter(turn => turn.results?.length) as turn (turn.id)}{@render toolActivity(turn.results ?? [], turn.prompt)}{/each}
-     {#if !activeResults.length && !turns.some(turn => turn.results?.length)}<p class="text-sm text-muted-foreground">Reads and operation results appear here. Open an entry to inspect its evidence.</p>{/if}
-    </div>
-   </aside>
+
   </div>
  </Sheet.Content>
 </Sheet.Root>
@@ -511,18 +513,16 @@
 
 <style>
  .harness-layout { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; flex: 1; min-height: 0; }
- .harness-history, .harness-activity { display: none; min-height: 0; overflow-y: auto; }
- .harness-history[data-open="true"], .harness-activity[data-open="true"] { display: block; max-height: 16rem; }
+ .harness-history { display: none; min-height: 0; overflow-y: auto; }
+ .harness-history[data-open="true"] { display: block; max-height: 16rem; }
  .harness-history { grid-row: 1; }
  .harness-layout > main { grid-row: 2; }
- .harness-activity { grid-row: 3; }
  .active-chat { border-color: var(--border); background: #ffffff08; color: var(--primary); }
  @media (min-width: 1024px) {
-  .harness-layout { grid-template-columns: 14rem minmax(0, 1fr) 20rem; grid-template-rows: minmax(0, 1fr); }
-  .harness-layout > main, .harness-history, .harness-activity { grid-row: 1; }
+  .harness-layout { grid-template-columns: 14rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .harness-layout > main, .harness-history { grid-row: 1; }
   .harness-history { grid-column: 1; }
   .harness-layout > main { grid-column: 2; }
-  .harness-activity { grid-column: 3; }
-  .harness-history, .harness-activity, .harness-history[data-open="true"], .harness-activity[data-open="true"] { display: block; max-height: none; }
+  .harness-history, .harness-history[data-open="true"] { display: block; max-height: none; }
  }
 </style>
