@@ -31,6 +31,8 @@ export function assistantStreamProgress(
 }
 
 export function assistantToolProgress(tool: string, input: unknown) {
+	if (tool === 'task' && object(input)?.agent === 'factory_surveyor')
+		return 'Surveying a supply chain…';
 	if (tool === 'report_progress') return 'Updating you…';
 	if (tool === 'factory_batch') {
 		const queries = object(input)?.queries;
@@ -105,6 +107,8 @@ export function assistantToolFeedback(tool: string, output: unknown) {
 	const wrapper = object(output);
 	const value = object(wrapper?.result) ?? wrapper;
 	if (!value) return '';
+	if (tool === 'factory_task')
+		return `Factory survey ${typeof value.status === 'string' ? value.status : 'updated'}${typeof value.label === 'string' && value.label ? `: ${value.label}` : '.'}`;
 	if (tool === 'factory_plan' || tool === 'solve_factory_plan' || tool === 'planner_calculation') {
 		if (Array.isArray(value.plans))
 			return `Found ${value.plans.length} shared factory plans${value.truncated ? ' (more available)' : ''}.`;

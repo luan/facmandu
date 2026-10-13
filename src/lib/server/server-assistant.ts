@@ -12,8 +12,11 @@ import {
 import {
 	assistantMilestone,
 	assistantModsSchema,
+	assistantTaskFinish,
+	assistantTaskStart,
 	type FactoryResult,
-	factoryResultSchema
+	factoryResultSchema,
+	factoryTaskSchema
 } from '$lib/assistant-results';
 import { assistantErrorMessage } from './assistant-error';
 import { db } from './db';
@@ -127,6 +130,7 @@ export async function finishServerTurn(
 	heartbeat.unref();
 	const results: FactoryResult[] = [];
 	const toolNames = new Map<string, string>();
+	const tasks = new Map<string, FactoryResult>();
 	const stopWatching = watchCompaction(turn.chatId ?? keyOf(turn.userId, turn.serverId), send);
 	try {
 		send({ progress: 'Reading request…' });
@@ -282,15 +286,27 @@ export async function finishServerTurn(
 					send({ delta: chunk.delta, progress: 'Responding…' });
 				if (chunk.type === 'message-delta' && chunk.kind === 'reasoning')
 					send({ progress: 'Reasoning…' });
-				if (chunk.type === 'tool-input') toolNames.set(chunk.toolCallId, chunk.toolName);
+				if (chunk.type === 'tool-input') {
+					toolNames.set(chunk.toolCallId, chunk.toolName);
+					const task =
+						chunk.toolName === 'task' && assistantTaskStart(chunk.toolCallId, chunk.input);
+					if (task && !tasks.has(chunk.toolCallId)) {
+						tasks.set(chunk.toolCallId, task);
+						results.push(task);
+						send({ results: results.filter((item) => item.tool !== 'mod_cards') });
+					}
+				}
 				if (chunk.type === 'tool-output-error') {
+					const task = tasks.get(chunk.toolCallId);
+					if (task) assistantTaskFinish(task, undefined, chunk.errorText);
 					const tool = toolNames.get(chunk.toolCallId) ?? 'Tool';
-					results.push({
-						kind: 'factory-result',
-						tool,
-						title: `${tool} failed`,
-						result: { error: chunk.errorText }
-					});
+					if (!task)
+						results.push({
+							kind: 'factory-result',
+							tool,
+							title: `${tool} failed`,
+							result: { error: chunk.errorText }
+						});
 					send({
 						results: results.filter((item) => item.tool !== 'mod_cards'),
 						feedback: assistantToolFeedback(tool, { error: chunk.errorText }),
@@ -313,6 +329,14 @@ export async function finishServerTurn(
 					}
 				}
 				if (chunk.type === 'tool-output') {
+					const task = tasks.get(chunk.toolCallId);
+					if (task) {
+						assistantTaskFinish(task, chunk.output);
+						send({
+							results: results.filter((item) => item.tool !== 'mod_cards'),
+							feedback: assistantToolFeedback('factory_task', task)
+						});
+					}
 					send({
 						progress: 'Thinking…',
 						feedback:
@@ -371,6 +395,14 @@ export async function finishServerTurn(
 		}
 	} catch (cause) {
 		const failure = controller.signal.aborted ? 'Response stopped.' : assistantErrorMessage(cause);
+		for (const task of tasks.values())
+			if (factoryTaskSchema.safeParse(task.result).data?.status === 'running')
+				assistantTaskFinish(
+					task,
+					undefined,
+					'Parent response ended; survey completion is unconfirmed.',
+					true
+				);
 		const milestone = assistantMilestone(results);
 		const answer = milestone ? `${failure}\n\nLast update: ${milestone}` : failure;
 		// The turn ID identifies the durable receipt; provider payloads stay out of logs.
@@ -380,7 +412,7 @@ export async function finishServerTurn(
 			.set({ state: 'error', answer, results: JSON.stringify(results) })
 			.where(eq(turnTable.id, turn.id))
 			.catch(() => {});
-		send({ error: answer });
+		send({ error: answer, results: results.filter((item) => item.tool !== 'mod_cards') });
 	} finally {
 		if (current) {
 			current.closed = true;

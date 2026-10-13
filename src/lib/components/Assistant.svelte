@@ -10,7 +10,7 @@
  import FactoryResultView from '$lib/components/FactoryResult.svelte';
  import LazyDetails from '$lib/components/LazyDetails.svelte';
  import BlueprintResult from '$lib/components/BlueprintResult.svelte';
- import { assistantMilestone, assistantTimeline, savedBlueprintDrafts, serverAssistantPlanSchema, type FactoryResult, type AssistantMod } from '$lib/assistant-results';
+ import { assistantMilestone, assistantTimeline, savedBlueprintDrafts, serverAssistantPlanSchema, factoryTaskSchema, type FactoryResult, type AssistantMod } from '$lib/assistant-results';
  import { modThumbnailUrl } from '$lib/utils';
  import ModPreviewSheet from '../../routes/(app)/modlists/[id]/ModPreviewSheet.svelte';
  import AssistantMessage from '$lib/components/AssistantMessage.svelte';
@@ -116,6 +116,7 @@
  function toolFailed(item: FactoryResult) {
   return !!item.result && typeof item.result === 'object' && 'error' in item.result;
  }
+ function toolRunning(item: FactoryResult) { return item.tool === 'factory_task' && factoryTaskSchema.safeParse(item.result).data?.status === 'running'; }
  function jumpToLatest() { followOutput = true; if (feed) feed.scrollTop = feed.scrollHeight; }
  const latestLayoutTurn = $derived(activeResults.some(item => layoutLabel(item)) ? 'active' : turns.findLast(turn => turn.results?.some(item => layoutLabel(item)))?.id);
  type ModlistPlan = {
@@ -424,7 +425,7 @@
     {@const latest = entry.items.at(-1)}
     <LazyDetails class="text-sm text-muted-foreground" summaryClass="flex cursor-pointer list-none items-start gap-2 py-1 text-xs [&::-webkit-details-marker]:hidden">{#snippet summary()}<ChevronRightIcon class="mt-0.5 size-3 shrink-0" /><span class="min-w-0"><span class="block font-medium text-foreground/80">{latest?.title} <span class="font-normal text-muted-foreground">· {entry.items.length} {entry.items.length === 1 ? 'step' : 'steps'}</span></span>{#if latest && toolOutcome(latest)}<span class="mt-0.5 block leading-relaxed">{toolOutcome(latest)}</span>{/if}</span>{/snippet}
      <div class="mt-2 space-y-2 border-l border-border pl-3">
-      {#each entry.items as item}<LazyDetails class="text-sm" summaryClass="flex cursor-pointer list-none items-start gap-2 py-1.5 [&::-webkit-details-marker]:hidden">{#snippet summary()}{#if toolFailed(item)}<AlertTriangleIcon class="mt-0.5 size-3.5 shrink-0 text-destructive" />{:else}<CheckIcon class="mt-0.5 size-3.5 shrink-0 text-emerald-400/80" />{/if}<span class="min-w-0"><span class="block text-xs font-medium text-foreground/80">{item.title}</span>{#if toolOutcome(item)}<span class="mt-0.5 block text-xs leading-relaxed">{toolOutcome(item)}</span>{/if}</span><ChevronRightIcon class="ml-auto mt-0.5 size-3 shrink-0" />{/snippet}<FactoryResultView {item} {serverId} /></LazyDetails>{/each}
+      {#each entry.items as item}<LazyDetails class="text-sm" summaryClass="flex cursor-pointer list-none items-start gap-2 py-1.5 [&::-webkit-details-marker]:hidden">{#snippet summary()}{#if toolRunning(item)}<LoaderCircleIcon class="mt-0.5 size-3.5 shrink-0 animate-spin motion-reduce:animate-none text-primary" />{:else if toolFailed(item)}<AlertTriangleIcon class="mt-0.5 size-3.5 shrink-0 text-destructive" />{:else}<CheckIcon class="mt-0.5 size-3.5 shrink-0 text-emerald-400/80" />{/if}<span class="min-w-0"><span class="block text-xs font-medium text-foreground/80">{item.title}</span>{#if toolOutcome(item)}<span class="mt-0.5 block text-xs leading-relaxed">{toolOutcome(item)}</span>{/if}</span><ChevronRightIcon class="ml-auto mt-0.5 size-3 shrink-0" />{/snippet}<FactoryResultView {item} {serverId} /></LazyDetails>{/each}
      </div>
     </LazyDetails>
    {/if}
@@ -520,6 +521,10 @@
      <section class="space-y-4" aria-label="Current response">
       <div class="flex justify-end"><p class="max-w-[90%] whitespace-pre-wrap break-words border border-border bg-white/5 px-4 py-3 text-sm leading-relaxed">{visiblePrompt}</p></div>
       <div class="flex items-center gap-2 text-xs text-muted-foreground"><LoaderCircleIcon class="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" /><span>{responseStarted !== undefined && Number.isFinite(responseStarted) ? assistantElapsed('Working', responseStarted, clock) : 'Toby is working'}</span>{#if visibleResults.length}<span>· {visibleResults.filter(item => item.tool !== 'report_progress').length} steps</span>{/if}</div>
+      {#each visibleResults.filter(toolRunning) as item}
+       {@const task = factoryTaskSchema.parse(item.result)}
+       <div role="status" class="flex items-start gap-2 border-l-2 border-primary/40 pl-3 text-xs text-muted-foreground"><LoaderCircleIcon class="mt-0.5 size-3.5 shrink-0 animate-spin motion-reduce:animate-none text-primary" /><span><span class="block font-medium text-foreground/80">Supply-chain survey</span>{task.label}</span></div>
+      {/each}
       {@render responseTimeline(resultGroups.details)}
       {#if visibleText}<div class="pr-2"><AssistantMessage text={visibleText} {serverId} /></div>{/if}
       {@render modCards(visibleMods)}

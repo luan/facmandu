@@ -881,6 +881,30 @@ const fixture = createServer(async (request, response) => {
 				)
 					? 'List connected players with:\n```\n/players\n```'
 					: 'The console command above is ready to run.';
+			if (currentRequest.includes('fixture-worker-parent')) {
+				assert.ok(
+					body.tools.some((tool) => tool.name === 'task'),
+					'Survey delegation must be in the routed tool menu'
+				);
+				if (!called('task')) {
+					Object.assign(item, {
+						type: 'function_call',
+						id: 'fc_survey',
+						call_id: 'call_survey',
+						name: 'task',
+						arguments: JSON.stringify({
+							agent: 'factory_surveyor',
+							prompt:
+								'fixture-worker-child: Survey glass in force player on nauvis. Return evidence only, no writes.'
+						})
+					});
+					delete item.content;
+					delete item.role;
+				} else item.content[0].text = 'The survey returned its evidence.';
+			}
+			if (currentRequest.includes('fixture-worker-child') && item.type === 'message')
+				item.content[0].text =
+					'Read-only survey transport verified; this fixture performs no live factory reads.';
 			if (currentRequest.includes('fixture-empty-answer') && item.type === 'message')
 				item.content[0].text = currentInput.some((input) =>
 					JSON.stringify(input).includes('answer-recovery')
@@ -997,7 +1021,9 @@ const fixture = createServer(async (request, response) => {
 				routingQueries.push({ state, questions });
 				const server = 'research' in questions;
 				const selected = server
-					? ['server']
+					? state.request.startsWith('fixture-worker-parent')
+						? ['production']
+						: ['server']
 					: /^fixture-provision-/u.test(state.request)
 						? ['inspect', 'server']
 						: /^(fixture-plan|fixture-combined-review|fixture-direct-apply|fixture-lock-mod|fixture-unlock-mod|fixture-disable-locked|fixture-unlock-disable|fixture-select-release|fixture-select-incompatible|fixture-icebox-absent|fixture-bundled-lock|fixture-bundled-unlock|fixture-bundled-disable)/u.test(
@@ -2691,6 +2717,67 @@ done
 		'list assistant discovers its linked server, installs archives without changing the save and leaves it stopped'
 	);
 	passed('Decisions chat context and tool groups, dynamic expansion, and stopped server reads');
+	const workerChat = (
+		await (await action(serverAssistantPath, cookies.owner, { operation: 'new-chat' })).json()
+	).id;
+	const workerResponse = await request(serverAssistantPath, {
+		cookie: cookies.owner,
+		method: 'POST',
+		form: {
+			chat: workerChat,
+			prompt: 'fixture-worker-parent: survey glass supply',
+			model: 'gpt-6-luna',
+			effort: 'medium'
+		}
+	});
+	assert.equal(workerResponse.status, 200);
+	const workerEvents = (await workerResponse.text())
+		.trim()
+		.split('\n')
+		.map((line) => JSON.parse(line));
+	const taskStates = workerEvents.flatMap((event) =>
+		(event.results ?? [])
+			.filter((result) => result.tool === 'factory_task')
+			.map((result) => result.result.status)
+	);
+	assert.ok(taskStates.includes('running'));
+	assert.ok(
+		taskStates.includes('returned'),
+		JSON.stringify(
+			workerEvents
+				.filter((event) => event.error || event.results)
+				.map((event) => ({
+					error: event.error,
+					tasks: event.results?.filter((result) => result.tool === 'factory_task')
+				}))
+		)
+	);
+	const childMenu = codexMenus.find((menu) => menu.request.includes('fixture-worker-child'));
+	assert.ok(childMenu);
+	assert.ok(
+		childMenu.tools.includes('factory_catalog') && childMenu.tools.includes('factory_batch')
+	);
+	for (const forbidden of [
+		'factory_action',
+		'factory_plan',
+		'blueprint_operation',
+		'server_control',
+		'bash',
+		'write',
+		'read'
+	])
+		assert.ok(!childMenu.tools.includes(forbidden), forbidden);
+	const workerHistory = await json(`${serverAssistantPath}?chat=${workerChat}&models=0`, {
+		cookie: cookies.owner
+	});
+	assert.equal(workerHistory.turns[0].state, 'done');
+	assert.match(
+		workerHistory.turns[0].results.find((result) => result.tool === 'factory_task').result.summary,
+		/performs no live factory reads/u
+	);
+	passed(
+		'delegated factory surveys retain separate contexts, read-only tool boundaries and real lifecycle activity'
+	);
 	const steerChat = (
 		await (await action(serverAssistantPath, cookies.owner, { operation: 'new-chat' })).json()
 	).id;

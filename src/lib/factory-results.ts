@@ -1,4 +1,5 @@
 import type { FactoryResult } from './assistant-results';
+import { factoryTaskSchema } from './assistant-results';
 
 type Data = Record<string, unknown>;
 export type ResultMetric = { label: string; value: string; fraction?: number };
@@ -1047,6 +1048,20 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 		lines: [],
 		empty: 'No matches.'
 	};
+	if (tool === 'factory_task') {
+		const task = factoryTaskSchema.safeParse(data);
+		if (task.success)
+			view.cards = [
+				{
+					title: task.data.label || 'Supply-chain survey',
+					badge: humanName(task.data.status),
+					tone: task.data.error ? 'warning' : 'muted',
+					metrics: [],
+					notes: [task.data.summary, task.data.error].filter((text): text is string => !!text)
+				}
+			];
+		return view;
+	}
 	if (tool === 'blueprint_operation') {
 		view.title = item.title;
 		if (data.operation === 'place_blueprint' || typeof data.ready === 'boolean') {

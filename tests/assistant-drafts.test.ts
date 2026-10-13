@@ -2,10 +2,43 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
 	assistantMilestone,
+	assistantTaskFinish,
+	assistantTaskStart,
 	assistantTimeline,
 	type FactoryResult,
+	factoryTaskSchema,
 	savedBlueprintDrafts
 } from '../src/lib/assistant-results';
+
+test('survey activity follows actual tool lifecycle and preserves public returned evidence', () => {
+	assert.equal(assistantTaskStart('call', { agent: 'unknown', prompt: 'Anything' }), null);
+	const task = assistantTaskStart('call', {
+		agent: 'factory_surveyor',
+		prompt: 'Survey glass\nForce player, nauvis'
+	});
+	assert.ok(task);
+	assert.equal(factoryTaskSchema.parse(task.result).status, 'running');
+	assistantTaskFinish(task, [
+		{ type: 'text', text: 'Measured 120 glass/min at tick 42.' },
+		{ type: 'reasoning', text: 'Private' }
+	]);
+	assert.deepEqual(factoryTaskSchema.parse(task.result), {
+		id: 'call',
+		agent: 'factory_surveyor',
+		label: 'Survey glass',
+		status: 'returned',
+		summary: 'Measured 120 glass/min at tick 42.'
+	});
+	const interrupted = assistantTaskStart('other', {
+		agent: 'factory_surveyor',
+		prompt: 'Survey sand'
+	});
+	assert.ok(interrupted);
+	assistantTaskFinish(interrupted, undefined, 'Parent ended; completion unconfirmed.', true);
+	assert.equal(factoryTaskSchema.parse(interrupted.result).status, 'interrupted');
+	assistantTaskFinish(interrupted, undefined, 'Player left');
+	assert.equal(factoryTaskSchema.parse(interrupted.result).status, 'failed');
+});
 
 test('interrupted runs retain each saved design, including hidden drafts, without replay duplicates', () => {
 	const draft = (id: string, label: string): FactoryResult => ({

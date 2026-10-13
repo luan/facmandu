@@ -29,6 +29,68 @@ export const factoryResultSchema = z.object({
 });
 export type FactoryResult = z.infer<typeof factoryResultSchema>;
 
+export const factoryTaskSchema = z.object({
+	id: z.string(),
+	agent: z.literal('factory_surveyor'),
+	label: z.string(),
+	status: z.enum(['running', 'returned', 'failed', 'interrupted']),
+	summary: z.string().optional(),
+	error: z.string().optional()
+});
+export function assistantTaskStart(id: string, input: unknown): FactoryResult | null {
+	const task = z
+		.object({ agent: z.literal('factory_surveyor'), prompt: z.string() })
+		.safeParse(input);
+	return task.success
+		? {
+				kind: 'factory-result',
+				tool: 'factory_task',
+				title: 'Factory survey',
+				display: false,
+				result: {
+					id,
+					agent: task.data.agent,
+					label: (task.data.prompt.split('\n')[0] ?? '').slice(0, 240),
+					status: 'running'
+				}
+			}
+		: null;
+}
+export function assistantTaskFinish(
+	item: FactoryResult,
+	output: unknown,
+	error?: string,
+	interrupted = false
+) {
+	const task = factoryTaskSchema.safeParse(item.result);
+	if (item.tool !== 'factory_task' || !task.success) return;
+	const blocks: unknown[] = Array.isArray(output)
+		? output
+		: output && typeof output === 'object' && 'content' in output && Array.isArray(output.content)
+			? output.content
+			: [];
+	const text =
+		typeof output === 'string'
+			? output
+			: blocks
+					.flatMap((block) =>
+						block &&
+						typeof block === 'object' &&
+						'type' in block &&
+						block.type === 'text' &&
+						'text' in block &&
+						typeof block.text === 'string'
+							? [block.text]
+							: []
+					)
+					.join('\n');
+	item.result = {
+		...task.data,
+		status: interrupted ? 'interrupted' : error ? 'failed' : 'returned',
+		...(error ? { error: error.slice(0, 2000) } : { summary: text.slice(0, 2000) })
+	};
+}
+
 export function assistantMilestone(results: readonly FactoryResult[]) {
 	const value = results.findLast((result) => result.tool === 'report_progress')?.result;
 	return value &&
