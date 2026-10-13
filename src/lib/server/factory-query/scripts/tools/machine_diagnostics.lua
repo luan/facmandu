@@ -1,14 +1,16 @@
 -- One crafting machine's current state and its stored ingredients and products.
 local target = require("scripts.tools.target")
 local bounded = require("scripts.tools.bounded")
+local transport = require("scripts.tools.transport_diagnostics")
 
 local M = {}
 M.manifest = {
   inspect_machine = {
-    desc = "Inspect one built crafting machine at exact map coordinates: actual status, active state, recipe, progress, input/output inventories, fluids, native world pipe connection targets, modules, and electric connection. Stored ingredients are observations, not a throughput or bottleneck prediction. If ambiguous, use a returned unit_number.",
+    desc = "Inspect one built crafting machine at exact map coordinates: actual status, active state, recipe, progress, input/output inventories, fluids, native world pipe connection targets, modules, and electric connection. Includes up to eight attached inserters/loaders with native settings and sixteen-node belt traces by default; read these before separate surrounding-entity surveys. The scan covers the machine footprint plus three tiles, so remote custom inserters may be omitted. Stored ingredients are observations, not a throughput or bottleneck prediction. If ambiguous, use a returned unit_number.",
     tier = "2",
     params = {
       surface = "string! surface name or index", x = "number! map x", y = "number! map y",
+      connections = "boolean default true; false skips attached transport reads",
       name = "string entity prototype name to disambiguate", unit_number = "integer entity unit number to disambiguate",
     },
   },
@@ -36,6 +38,7 @@ local function status_name(value)
   return tostring(value)
 end
 local function inspect_machine(a)
+  if a.connections~=nil and type(a.connections)~='boolean' then error('connections must be boolean',0) end
   local entity, miss, surface, force = target.find(a)
   if not entity then return miss end
   if not CRAFTERS[entity.type] then
@@ -79,6 +82,34 @@ local function inspect_machine(a)
       end
     end
     row.fluid_ports={total=#ports,shown=math.min(#ports,32),truncated=#ports>32,connections=bounded.cut(ports,32),position_reference='World coordinates. pipe_position is the intended neighboring pipe center; connected_to is the actual connection, if any.'}
+  end
+  if a.connections~=false then
+    local b=entity.bounding_box
+    local area={{b.left_top.x-3,b.left_top.y-3},{b.right_bottom.x+3,b.right_bottom.y+3}}
+    local candidates=surface.find_entities_filtered{area=area,force=force,type={'inserter','loader','loader-1x1'},limit=64}
+    local attached={}
+    for _,e in ipairs(candidates) do
+      local input,output
+      if e.type=='inserter' then input=e.drop_target==entity;output=e.pickup_target==entity
+      else input=e.loader_container==entity and e.loader_type=='input';output=e.loader_container==entity and e.loader_type=='output' end
+      if input or output then attached[#attached+1]={entity=e,role=input and 'input' or 'output'} end
+    end
+    table.sort(attached,function(x,y) return x.entity.unit_number<y.entity.unit_number end)
+    local connections={}
+    for _,entry in ipairs(bounded.cut(attached,8)) do
+      local e=entry.entity
+      local ok,details=pcall(transport.functions.inspect_transport,{force=force.name,surface=surface.name,x=e.position.x,y=e.position.y,name=e.name,unit_number=e.unit_number,trace_limit=16,trace_direction=entry.role=='input' and 'upstream' or 'downstream'})
+      local connection={role=entry.role,transport=ok and details or nil,error=not ok and tostring(details):match('^[^\n]*') or nil}
+      if e.type=='inserter' then
+        local endpoint=entry.role=='input' and e.pickup_target or e.drop_target
+        if endpoint and endpoint.valid and (endpoint.type=='transport-belt' or endpoint.type=='underground-belt' or endpoint.type=='splitter' or endpoint.type=='loader' or endpoint.type=='loader-1x1') then
+          local traced,value=pcall(transport.functions.inspect_transport,{force=force.name,surface=surface.name,x=endpoint.position.x,y=endpoint.position.y,name=endpoint.name,unit_number=endpoint.unit_number,trace_limit=16,trace_direction=entry.role=='input' and 'upstream' or 'downstream'})
+          connection.belt=traced and value or nil;connection.belt_error=not traced and tostring(value):match('^[^\n]*') or nil
+        end
+      end
+      connections[#connections+1]=connection
+    end
+    row.connections={items=connections,total=#attached,shown=#connections,truncated=#candidates==64 or #attached>8,scan_area=area,note='Actual native targets, not proximity. Custom inserters outside this area are not scanned; belt traces show topology, not delivered rates.'}
   end
   return row
 end

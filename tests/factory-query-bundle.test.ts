@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { lauxlib, lua, lualib, to_luastring } from 'fengari';
 import { factoryBundle, factoryCommand } from '../src/lib/server/factory-query-bundle';
@@ -206,4 +207,46 @@ test('science snapshots discover modded packs, sum qualities and surfaces, and k
  `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
+
+test('machine snapshots include actual attached loaders and their upstream belt paths', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const root = resolve('src/lib/server/factory-query');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ package.path=${JSON.stringify(`${root}/?.lua;`)}..package.path
+ defines={inventory={crafter_input=1},entity_status={working=1}}
+ script={active_mods={base='2.0.0'}}
+ prototypes={entity={plant={},loader={},belt={}},item={},fluid={}}
+ local force={name='player',is_chunk_charted=function() return true end}
+ local inv={valid=true,get_contents=function() return {} end}
+ local plant={valid=true,name='plant',type='assembling-machine',force=force,unit_number=1,position={x=.5,y=.5},bounding_box={left_top={x=-1,y=-1},right_bottom={x=2,y=2}},status=1,active=true,crafting_progress=0,crafting_speed=1,energy=100,get_recipe=function() return {name='glass',ingredients={},products={}} end,is_crafting=function() return true end,is_connected_to_electric_network=function() return true end,get_inventory=function() return inv end,get_output_inventory=function() return inv end,get_module_inventory=function() return inv end,get_fluid_contents=function() return {} end}
+ local belt={valid=true,name='belt',type='transport-belt',force=force,unit_number=3,position={x=.5,y=-3.5},direction=8,belt_neighbours={inputs={},outputs={}}}
+ local loader={valid=true,name='loader',type='loader-1x1',force=force,unit_number=2,position={x=.5,y=-2.5},direction=8,status=1,loader_type='input',loader_container=plant,prototype={belt_speed=.03125},bounding_box={left_top={x=0,y=-3},right_bottom={x=1,y=-2}},belt_neighbours={inputs={belt},outputs={}},get_wire_connectors=function() return {} end,get_item_count=function() return 2 end,get_max_transport_line_index=function() return 2 end,get_transport_line=function() return {get_item_count=function() return 1 end,get_contents=function() return {{name='sand',count=1}} end} end}
+ local scans=0
+ local surface={valid=true,name='nauvis',find_entities_filtered=function(q)
+  assert(q.force==force or q.force=='player')
+  if q.area then scans=scans+1;return {loader} end
+  return q.position.y<0 and {loader} or {plant}
+ end}
+ game={tick=99,forces={player=force},surfaces={nauvis=surface},create_inventory=function()
+  return {[1]={set_stack=function() end,create_blueprint=function() return {[1]=loader} end,get_blueprint_entities=function() return {{type='input',filters={{index=1,name='sand'}}}} end},valid=true,destroy=function() end}
+ end}
+ local inspect=require('scripts.tools.machine_diagnostics').functions.inspect_machine
+ local result=inspect{force='player',surface='nauvis',x=.5,y=.5}
+ assert(result.connections.total==1 and result.connections.items[1].role=='input')
+ local transport=result.connections.items[1].transport
+ assert(transport.loader_container.unit_number==1 and transport.loader_type=='input')
+ assert(transport.blueprint_settings.filters[1].name=='sand')
+ assert(#transport.belt_trace.nodes==2 and transport.belt_trace.nodes[2].unit_number==3 and transport.belt_trace.direction=='upstream')
+ local simple=inspect{force='player',surface='nauvis',x=.5,y=.5,connections=false}
+ assert(simple.connections==nil and scans==1)
+ loader.loader_container={};assert(inspect{force='player',surface='nauvis',x=.5,y=.5}.connections.total==0,'Proximity is not a machine connection')
+ assert(not pcall(inspect,{force='enemy',surface='nauvis',x=.5,y=.5}))
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+	lua.lua_close(state);
 });

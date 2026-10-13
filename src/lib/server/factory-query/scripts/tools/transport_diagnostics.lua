@@ -4,16 +4,16 @@ local bounded = require('scripts.tools.bounded')
 local M = {}
 M.manifest = {
  inspect_transport = {
-  desc = 'Inspect one built belt, inserter, collector, combinator, chest, pipe, tank or pump at exact coordinates: status, direction, item counts/contents, individual belt line counts, inserter pickup/drop targets, collector/combinator/inserter native blueprint_settings (relative pickup/drop vectors, filters and control behavior), wire connections and the first fluid storage’s connections. Optional item accepts an item or fluid name; item counts use normal quality and fluid counts use native stored amounts. Belt counts are a snapshot, not measured throughput; sample delivered items over game ticks to verify a full belt. Fluid segment amounts are shared network stock, not independent stock at every pipe. Read-only; ghosts are not built entities.',
+  desc = 'Inspect one built belt, loader, inserter, collector, combinator, chest, pipe, tank or pump at exact coordinates: status, direction, item counts/contents, individual belt line counts, inserter pickup/drop targets, collector/combinator/inserter native blueprint_settings (relative pickup/drop vectors, filters and control behavior), wire connections and the first fluid storage’s connections. Optional item accepts an item or fluid name; item counts use normal quality and fluid counts use native stored amounts. Belt counts are a snapshot, not measured throughput; sample delivered items over game ticks to verify a full belt. Fluid segment amounts are shared network stock, not independent stock at every pipe. Read-only; ghosts are not built entities.',
   params = {surface='string! surface name or index',x='number! map x',y='number! map y',name='string entity prototype name',unit_number='integer unit number to disambiguate',item='string exact item or fluid prototype name to count',trace_limit='integer 1..256: trace built belts, underground pairs and splitter branches at one tick; stops at force/chart boundaries. Topology is not throughput or lane/filter reachability',trace_direction='string downstream (default) for output paths, or upstream to verify actual supply paths; node edges use outputs or inputs respectively'}
  }
 }
-local supported={['asteroid-collector']=true,['constant-combinator']=true,['decider-combinator']=true,['transport-belt']=true,['underground-belt']=true,splitter=true,inserter=true,container=true,['logistic-container']=true,pipe=true,['pipe-to-ground']=true,['storage-tank']=true,pump=true}
+local supported={['asteroid-collector']=true,['constant-combinator']=true,['decider-combinator']=true,['transport-belt']=true,['underground-belt']=true,splitter=true,loader=true,['loader-1x1']=true,inserter=true,container=true,['logistic-container']=true,pipe=true,['pipe-to-ground']=true,['storage-tank']=true,pump=true}
 local function reference(e)
  if e and e.valid then return {name=e.name,unit_number=e.unit_number,position=e.position} end
 end
 local function is_belt(e)
- return e.type=='transport-belt' or e.type=='underground-belt' or e.type=='splitter'
+ return e.type=='transport-belt' or e.type=='underground-belt' or e.type=='splitter' or e.type=='loader' or e.type=='loader-1x1'
 end
 local function trace_belts(start,surface,force,limit,direction)
  local edge=direction=='upstream' and 'inputs' or 'outputs'
@@ -23,6 +23,7 @@ local function trace_belts(start,surface,force,limit,direction)
  while cursor<=#entities do
   local e=entities[cursor]
   local row=reference(e);row.direction=e.direction;row[edge]={}
+  if e.type=='loader' or e.type=='loader-1x1' then row.loader_type=e.loader_type;row.container=reference(e.loader_container) end
   if e.type=='splitter' then row.filter=e.splitter_filter;row.input_priority=e.splitter_input_priority;row.output_priority=e.splitter_output_priority end
   local outputs={}
   for _,next in pairs(e.belt_neighbours[edge]) do outputs[#outputs+1]=next end
@@ -67,7 +68,7 @@ local function inspect(a)
   if prototypes.fluid[a.item] then row.item={name=a.item,kind='fluid',count=e.get_fluid_count(a.item)}
   else row.item={name=a.item,quality='normal',count=e.get_item_count{name=a.item,quality='normal'}} end
  end
- if e.type=='inserter' or e.type=='asteroid-collector' or e.type=='constant-combinator' or e.type=='decider-combinator' then
+ if e.type=='loader' or e.type=='loader-1x1' or e.type=='inserter' or e.type=='asteroid-collector' or e.type=='constant-combinator' or e.type=='decider-combinator' then
   local inventory=game.create_inventory(1)
   local ok,settings=pcall(function()
    local stack=inventory[1];stack.set_stack{name='blueprint'}
@@ -77,7 +78,7 @@ local function inspect(a)
     if entity==e then
      local native=entities[index]
      local result={}
-     for _,key in ipairs({'filters','use_filters','filter_mode','override_stack_size','control_behavior','pickup_position','drop_position','chunk-filter'}) do result[key]=native[key] end
+     for _,key in ipairs({'type','filters','use_filters','filter_mode','override_stack_size','control_behavior','pickup_position','drop_position','chunk-filter'}) do result[key]=native[key] end
      for _,key in ipairs({'pickup_position','drop_position'}) do local v=result[key];if v then result[key]={x=v.x or v[1],y=v.y or v[2]} end end
      return result
     end
@@ -106,7 +107,8 @@ local function inspect(a)
   row.connected_to_power_source=e.is_connected_to_electric_network();row.energy_j=e.energy
  elseif e.type=='asteroid-collector' or e.type=='constant-combinator' or e.type=='decider-combinator' then
   -- Native blueprint_settings above carry their complete circuit configuration.
- elseif e.type=='transport-belt' or e.type=='underground-belt' or e.type=='splitter' then
+ elseif is_belt(e) then
+  if e.type=='loader' or e.type=='loader-1x1' then row.loader_type=e.loader_type;row.loader_container=reference(e.loader_container) end
   row.total_items=e.get_item_count()
   row.belt_items_per_second=e.prototype.belt_speed*480
   row.lane_items_per_second=row.belt_items_per_second/2
