@@ -42,6 +42,32 @@ export function panelDesign(value: string) {
 	return undefined;
 }
 
+export function panelBlueprints(
+	value: string,
+	chat: { id: string; title: string; gameForce: string | null },
+	force: string
+) {
+	return results(value).flatMap((entry) => {
+		if (!entry.display) return [];
+		const design = blueprintArtifactSchema.safeParse(entry.result);
+		if (
+			!design.success ||
+			design.data.blueprint.length > 65536 ||
+			(design.data.force ?? chat.gameForce) !== force
+		)
+			return [];
+		return [
+			{
+				chatId: chat.id,
+				// Web chat history stays private; only its force-attested design is shared.
+				title: gameText(chat.gameForce ? chat.title : design.data.label, 200),
+				label: gameText(design.data.label, 200),
+				blueprint: design.data.blueprint
+			}
+		];
+	});
+}
+
 export function panelActivity(value: string, progress?: string, feedback?: string) {
 	const rows = results(value)
 		.slice(-14)

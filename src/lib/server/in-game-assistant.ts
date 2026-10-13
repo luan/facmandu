@@ -4,7 +4,13 @@ import { join } from 'node:path';
 import { and, desc, eq } from 'drizzle-orm';
 import { assistantMilestone } from '$lib/assistant-results';
 import { gamePanelText, gameReply, gameText, parseGameChat, parseGameUi } from '$lib/game-chat';
-import { panelActivity, panelDesign, panelDrone, panelUpdates } from '$lib/toby-panel';
+import {
+	panelActivity,
+	panelBlueprints,
+	panelDesign,
+	panelDrone,
+	panelUpdates
+} from '$lib/toby-panel';
 import { routeAmbientChat } from './ambient-chat';
 import { touchChat } from './assistant-chats';
 import { db } from './db';
@@ -43,6 +49,8 @@ type Session = {
 	routing: Set<string>;
 	uiRecent: number[];
 	panels: Map<string, string>;
+	blueprints: Map<string, Set<string>>;
+	bookSupport?: boolean;
 	players: Map<string, number>;
 };
 const sessions = new Map<string, Session>();
@@ -164,7 +172,52 @@ async function syncPanel(
 	const design = turnsWithActivity
 		.map((entry) => panelDesign(entry.results))
 		.find((entry) => entry);
+	const sentBlueprints = session.blueprints.get(author.force) ?? new Set<string>();
+	session.blueprints.set(author.force, sentBlueprints);
+	const blueprintEntries: (ReturnType<typeof panelBlueprints>[number] & { id: string })[] = [];
+	let blueprintBytes = 0;
+	if (session.bookSupport !== false) {
+		// Backfill recent turns; native books retain acknowledged designs after
+		// they leave this window. Older history remains available in the web chat.
+		const archive = await db
+			.select({
+				id: serverAssistantTurn.id,
+				results: serverAssistantTurn.results,
+				chatId: assistantChat.id,
+				title: assistantChat.title,
+				gameForce: assistantChat.gameForce
+			})
+			.from(serverAssistantTurn)
+			.innerJoin(assistantChat, eq(serverAssistantTurn.chatId, assistantChat.id))
+			.where(
+				and(
+					eq(serverAssistantTurn.serverId, server.id),
+					eq(serverAssistantTurn.userId, session.config.ownerId)
+				)
+			)
+			.orderBy(desc(serverAssistantTurn.createdAt))
+			.limit(32);
+		const queued = new Set<string>();
+		for (const entry of archive) {
+			const active = serverAssistantActivity.get(entry.id);
+			for (const blueprint of panelBlueprints(
+				active ? JSON.stringify(active.results) : entry.results,
+				{ id: entry.chatId, title: entry.title, gameForce: entry.gameForce },
+				author.force
+			)) {
+				const id = createHash('sha256').update(blueprint.blueprint).digest('hex');
+				if (sentBlueprints.has(id) || queued.has(id)) continue;
+				const bytes = Buffer.byteLength(blueprint.blueprint);
+				if (blueprintEntries.length === 8 || blueprintBytes + bytes > 98304) continue;
+				queued.add(id);
+				blueprintBytes += bytes;
+				blueprintEntries.push({ ...blueprint, id });
+			}
+		}
+	}
 	const state = {
+		force: author.force,
+		blueprints: blueprintEntries,
 		current: current?.id,
 		status: gameText(
 			[
@@ -201,10 +254,31 @@ async function syncPanel(
 	const encoded = JSON.stringify(JSON.stringify(state));
 	// Keep the legacy click handler while installed clients still have the text launcher.
 	// Remove this replacement once the minimum supported mod has its native icon.
-	await rconScript(
+	const response = await rconScript(
 		server,
-		`/silent-command local p=game.get_player(${JSON.stringify(player)}); local i=remote.interfaces['facmandu-assistant']; if p and p.connected and i and i.update_player then local b=p.gui.top['facmandu-toby-open']; if b and b.type=='button' and helpers.is_valid_sprite_path('entity/toby-drone') then local index=b.get_index_in_parent(); b.destroy(); local icon=p.gui.top.add{type='sprite-button',name='facmandu-toby-open',sprite='entity/toby-drone',style='slot_button',tooltip='Open Toby · Ctrl+Shift+T'}; if index~=icon.get_index_in_parent() then p.gui.top.swap_children(index,icon.get_index_in_parent()) end end; remote.call('facmandu-assistant','update_player',p.index,helpers.json_to_table(${encoded})) end`
+		`/silent-command local p=game.get_player(${JSON.stringify(player)}); local i=remote.interfaces['facmandu-assistant']; if p and p.connected and p.force.name==${JSON.stringify(author.force)} and i and i.update_player then local b=p.gui.top['facmandu-toby-open']; if b and b.type=='button' and helpers.is_valid_sprite_path('entity/toby-drone') then local index=b.get_index_in_parent(); b.destroy(); local icon=p.gui.top.add{type='sprite-button',name='facmandu-toby-open',sprite='entity/toby-drone',style='slot_button',tooltip='Open Toby · Ctrl+Shift+T'}; if index~=icon.get_index_in_parent() then p.gui.top.swap_children(index,icon.get_index_in_parent()) end end; local data=helpers.json_to_table(${encoded}); if not i.export_book then data.blueprints=nil end; local accepted=remote.call('facmandu-assistant','update_player',p.index,data); rcon.print(helpers.table_to_json({bookSupport=not not i.export_book,blueprints=type(accepted)=='table' and accepted.blueprints or {}})) end`
 	);
+	try {
+		const acknowledgement: unknown = JSON.parse(response);
+		if (
+			acknowledgement &&
+			typeof acknowledgement === 'object' &&
+			'bookSupport' in acknowledgement &&
+			typeof acknowledgement.bookSupport === 'boolean'
+		)
+			session.bookSupport = acknowledgement.bookSupport;
+		if (
+			acknowledgement &&
+			typeof acknowledgement === 'object' &&
+			'blueprints' in acknowledgement &&
+			Array.isArray(acknowledgement.blueprints)
+		)
+			for (const id of acknowledgement.blueprints)
+				if (typeof id === 'string' && blueprintEntries.some((entry) => entry.id === id))
+					sentBlueprints.add(id);
+	} catch {
+		/* Older mods return no receipt; never discard an unacknowledged design. */
+	}
 }
 async function receiveUi(
 	server: ManagedServer,
@@ -647,6 +721,7 @@ async function scanServers() {
 			routing: new Set(),
 			uiRecent: [],
 			panels: new Map(),
+			blueprints: new Map(),
 			players: new Map()
 		};
 		sessions.set(server.id, session);

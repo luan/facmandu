@@ -364,6 +364,7 @@ export type BlueprintRequest = z.infer<typeof blueprintRequestSchema>;
 export const blueprintArtifactSchema = z
 	.object({
 		kind: z.literal('blueprint'),
+		force: z.string().optional(),
 		designId: z
 			.string()
 			.regex(/^[a-f0-9]{64}$/)

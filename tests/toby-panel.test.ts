@@ -1,6 +1,12 @@
 // @ts-expect-error Bun supplies this built-in at runtime; the project uses Node type declarations.
 import { describe, expect, test } from 'bun:test';
-import { panelActivity, panelDesign, panelDrone, panelUpdates } from '../src/lib/toby-panel';
+import {
+	panelActivity,
+	panelBlueprints,
+	panelDesign,
+	panelDrone,
+	panelUpdates
+} from '../src/lib/toby-panel';
 
 const draft = {
 	kind: 'factory-result',
@@ -17,6 +23,44 @@ const draft = {
 	}
 };
 describe('Toby native harness', () => {
+	test('books retain independent final modules without publishing inspections or drafts', () => {
+		const first = { ...draft, display: true };
+		const second = { ...first, result: { ...draft.result, label: 'Sand mine', blueprint: '0def' } };
+		const inspection = {
+			kind: 'factory-result',
+			title: 'Factory',
+			display: true,
+			result: { kind: 'factory-view', surface: 'nauvis', blueprint: '0ghi' }
+		};
+		expect(
+			panelBlueprints(
+				JSON.stringify([first, draft, inspection, second]),
+				{ id: 'chat', title: 'More glass', gameForce: 'player' },
+				'player'
+			)
+		).toEqual([
+			{ chatId: 'chat', title: 'More glass', label: 'Glass line', blueprint: '0abc' },
+			{ chatId: 'chat', title: 'More glass', label: 'Sand mine', blueprint: '0def' }
+		]);
+	});
+	test('only force-attested web designs are shared, without the private chat title', () => {
+		const design = { ...draft, display: true, result: { ...draft.result, force: 'player' } };
+		const chat = { id: 'web', title: 'Private conversation', gameForce: null };
+		expect(panelBlueprints(JSON.stringify([design]), chat, 'player')).toEqual([
+			{ chatId: 'web', title: 'Glass line', label: 'Glass line', blueprint: '0abc' }
+		]);
+		expect(panelBlueprints(JSON.stringify([design]), chat, 'other')).toEqual([]);
+		expect(panelBlueprints(JSON.stringify([{ ...draft, display: true }]), chat, 'player')).toEqual(
+			[]
+		);
+		expect(
+			panelBlueprints(
+				JSON.stringify([{ ...design, result: { ...design.result, blueprint: '0'.repeat(65537) } }]),
+				chat,
+				'player'
+			)
+		).toEqual([]);
+	});
 	test('working drafts appear before final display and retain validation warnings', () => {
 		expect(panelDesign(JSON.stringify([draft]))).toMatchObject({
 			label: 'Glass line',

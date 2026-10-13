@@ -602,7 +602,7 @@ local function blueprint(request)
    end
   end
   -- Planned endpoints do not prove curved-belt routing or connections to the existing factory.
-  return {kind='blueprint',label=request.label,blueprint=stack.export_stack(),entities=#preview>0 and preview or nil,tiles=#tiles>0 and tiles or nil,warnings=#warnings>0 and warnings or nil,cost=cost,inserter_transfers=#transfers>0 and transfers or nil}
+  return {kind='blueprint',force=force.name,label=request.label,blueprint=stack.export_stack(),entities=#preview>0 and preview or nil,tiles=#tiles>0 and tiles or nil,warnings=#warnings>0 and warnings or nil,cost=cost,inserter_transfers=#transfers>0 and transfers or nil}
  end
  local surface=game.surfaces[request.surface]
  if not surface then error('Unknown surface',0) end

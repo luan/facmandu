@@ -2984,7 +2984,7 @@ done
 				buffer = buffer.subarray(length + 4);
 				if (type === 3) reply(id, 2, '');
 				else if (command.includes('facmandu-ready')) reply(id, 0, 'facmandu-ready');
-				else if (command.includes('rcon.print(helpers.table_to_json')) {
+				else if (command.includes('rcon.print(helpers.table_to_json({name=p.name')) {
 					const player = /game\.get_player\("([^"]+)"\)/u.exec(command)?.[1];
 					assert.ok(player, command);
 					reply(
@@ -3039,10 +3039,18 @@ done
 					assert.ok(encoded, command);
 					const data = JSON.parse(JSON.parse(encoded));
 					const player = /game\.get_player\("([^"]+)"\)/u.exec(command)?.[1];
+					assert.ok(command.includes(`p.force.name==${JSON.stringify(data.force)}`));
 					panelUpdates.push({ player, data });
 					panelWaiters.get(player)?.resolve(data);
 					panelWaiters.delete(player);
-					reply(id, 0, '');
+					reply(
+						id,
+						0,
+						JSON.stringify({
+							bookSupport: true,
+							blueprints: data.blueprints.map((entry) => entry.id)
+						})
+					);
 				} else throw new Error(`Unexpected in-game RCON command: ${command}`);
 			}
 		});
@@ -3338,6 +3346,12 @@ done
 					{ kind: 'factory-result', title: 'Blueprint', display: true, result: panelDesign },
 					{
 						kind: 'factory-result',
+						title: 'Sand mine',
+						display: true,
+						result: { ...panelDesign, label: 'Sand mine', blueprint: '0mine' }
+					},
+					{
+						kind: 'factory-result',
 						title: 'Intermediate draft',
 						display: false,
 						result: { ...panelDesign, blueprint: '0draft' }
@@ -3353,6 +3367,20 @@ done
 		assert.equal(selectedState.blueprint, '0draft');
 		assert.equal(selectedState.designStage, 'Working draft');
 		assert.equal(selectedState.design, 'Glass');
+		assert.deepEqual(
+			selectedState.blueprints.map((entry) => ({
+				id: entry.id,
+				chatId: entry.chatId,
+				label: entry.label,
+				blueprint: entry.blueprint
+			})),
+			['0eJw=', '0mine'].map((blueprint, index) => ({
+				id: createHash('sha256').update(blueprint).digest('hex'),
+				chatId: newPanel.current,
+				label: index ? 'Sand mine' : 'Glass',
+				blueprint
+			}))
+		);
 		assert.deepEqual(selectedState.materials, panelDesign.cost);
 		assert.equal(selectedState.running, false);
 		assert.deepEqual(
@@ -3363,7 +3391,7 @@ done
 		assert.match(selectedState.messages[1].text, /Iron nearby/u);
 		assert.deepEqual(
 			selectedState.activity.map((entry) => entry.text),
-			['Blueprint', 'Intermediate draft']
+			['Blueprint', 'Sand mine', 'Intermediate draft']
 		);
 		const snapshotDesign = {
 			kind: 'factory-view',
@@ -3398,6 +3426,11 @@ done
 		assert.equal(snapshotState.blueprint, snapshotDesign.blueprint);
 		assert.equal(snapshotState.design, 'Existing factory · nauvis');
 		assert.deepEqual(snapshotState.materials, snapshotDesign.cost);
+		assert.deepEqual(
+			snapshotState.blueprints,
+			[],
+			'Acknowledged designs are not resent; inspections never enter the books'
+		);
 
 		assert.ok(
 			panelUpdates.every(
