@@ -439,7 +439,7 @@
 {/snippet}
 <Sheet.Root bind:open>
  <Sheet.Trigger class={buttonVariants({ variant: 'secondary', size: 'sm' })}><MessageSquareIcon class="size-4" />Toby</Sheet.Trigger>
- <Sheet.Content class="!w-full !max-w-none !gap-0 overflow-hidden flex flex-col">
+ <Sheet.Content class="!w-full !max-w-none !gap-0 overflow-clip flex flex-col">
   <Sheet.Header class="shrink-0 !px-5 !py-4">
    <div class="flex items-center gap-3 pr-6">
     <Sheet.Title class="flex shrink-0 items-center gap-2"><MessageSquareIcon class="size-5" />Toby</Sheet.Title>
