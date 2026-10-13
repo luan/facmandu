@@ -147,7 +147,9 @@ end
 ---@param fake_load boolean?
 local function run_on_load(fake_load)
     if not fake_load then
-        if "2.1.18" ~= storage.planner.version then
+        -- Pre-planner Toby saves reach on_load before configuration migration.
+        -- Only that later callback may initialize persistent storage.
+        if not storage.planner or "2.1.18" ~= storage.planner.version then
             return  -- if the mod version changed, this needs to just run during migration
         end
 
