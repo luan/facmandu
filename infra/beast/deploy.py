@@ -82,6 +82,21 @@ def switch(target):
     temporary.replace(ROOT / "current")
 
 
+def retain_client_assets(previous, destination):
+    # Open tabs still import chunks named by the previous release. Keep only
+    # public immutable assets; current files always win and private state stays out.
+    old = previous / 'build/client/_app/immutable'
+    new = destination / 'build/client/_app/immutable'
+    if not old.is_dir():
+        return
+    for source in old.rglob('*'):
+        if source.is_file():
+            target = new / source.relative_to(old)
+            if not target.exists():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+
+
 def health(revision):
     # The exact running revision and DB connectivity must agree after restart.
     for _ in range(45):
@@ -178,6 +193,12 @@ def deploy(revision):
     previous = current.resolve() if current.is_symlink() else SOURCE
     if not previous.exists():
         raise RuntimeError("Rollback source is missing")
+    retain_client_assets(previous, destination)
+    # Seed assets from earlier successful releases too, including tabs opened
+    # before asset retention was introduced. Release directories are retained.
+    for release in releases.iterdir():
+        if SHA.fullmatch(release.name) and (release / '.ready').is_file():
+            retain_client_assets(release, destination)
     # Source rollback preserves additive schema and every current save/cache/chat.
     (ROOT / "previous.json").write_text(json.dumps({"path": str(previous),
           "dropin": previous_dropin.decode() if previous_dropin else None}))

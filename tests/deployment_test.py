@@ -13,6 +13,25 @@ spec.loader.exec_module(deploy)
 
 
 class DeploymentTests(unittest.TestCase):
+    def test_open_tabs_retain_old_chunks_without_overwriting_current_assets_or_copying_private_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            previous = Path(directory) / 'previous'
+            destination = Path(directory) / 'next'
+            old = previous / 'build/client/_app/immutable/nodes'
+            new = destination / 'build/client/_app/immutable/nodes'
+            old.mkdir(parents=True)
+            new.mkdir(parents=True)
+            (old / 'old.hash.js').write_text('old chunk')
+            (old / 'shared.hash.js').write_text('previous')
+            (new / 'shared.hash.js').write_text('current')
+            (previous / '.env').write_text('private')
+            deploy.retain_client_assets(previous, destination)
+            self.assertEqual((new / 'old.hash.js').read_text(), 'old chunk')
+            self.assertEqual((new / 'shared.hash.js').read_text(), 'current')
+            self.assertFalse((destination / '.env').exists())
+            deploy.retain_client_assets(previous, destination)
+            deploy.retain_client_assets(Path(directory) / 'missing', destination)
+
     def test_cold_login_retries_timeout_but_rejects_invalid_page(self):
         revision = "a" * 40
         calls = []
