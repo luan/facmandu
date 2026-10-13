@@ -66,6 +66,8 @@ local function build_production_bar(player)
     label_factory.style.padding = {-1, 8}
     flow_factory.add{type="button", caption="Input supply", style="toby_planner_button_frame_tool",
         tags={mod="toby-planner", on_gui_click="edit_supply"}, mouse_button_filter={"left"}}
+    flow_factory.add{type="button", caption="Share", style="toby_planner_button_frame_tool",
+        tags={mod="toby-planner", on_gui_click="share_plan"}, mouse_button_filter={"left"}}
 
     local label_invalid = flow_factory.add{type="label", caption={"toby-planner.invalid"}, style="bold_red_label"}
     label_invalid.style.top_margin = 4
@@ -108,6 +110,23 @@ local listeners = {}  ---@type ListenerDefinitions
 
 listeners.gui = {
     on_gui_click = {
+        {
+            name = "share_plan",
+            handler = function(player)
+                if lib.context.get(player, "Factory") then lib.gui.open_dialog(player, {dialog="share_plan"}) end
+            end
+        },
+        {
+            name = "ask_toby_plan",
+            handler = function(player)
+                local factory = lib.context.get(player, "Factory")
+                if not factory then return end
+                local id = factory.id
+                lib.gui.close_dialog(player, "cancel")
+                if main_dialog.is_in_focus(player) then main_dialog.toggle(player) end
+                remote.call("facmandu-assistant", "attach_plan", player.index, id)
+            end
+        },
         {
             name = "refresh_production",
             timeout = 20,
@@ -180,6 +199,20 @@ listeners.global = {
         ---@cast metadata RefreshProductionMetadata
         local player = game.get_player(metadata.player_index)  ---@as LuaPlayer
         refresh_production(player, nil, nil)
+    end
+}
+
+listeners.dialog = {
+    dialog="share_plan", metadata=function() return {caption="Share plan", show_submit_button=false} end,
+    open=function(player, modal_data)
+        local factory = lib.context.get(player, "Factory")
+        local content = modal_data.modal_elements.content_frame
+        content.add{type="label", caption="Share this reference with Toby or another player on your force in this game."}
+        local field = content.add{type="textfield", text="toby://plan/" .. player.force.index .. "/" .. factory.id}
+        field.style.width=520
+        field.focus();field.select_all()
+        content.add{type="button", caption="Ask Toby about this plan", style="toby_planner_button_green",
+            tags={mod="toby-planner", on_gui_click="ask_toby_plan"}}
     end
 }
 

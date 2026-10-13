@@ -7,6 +7,7 @@ local events=require('events').scope('toby')
 local PREFIX='facmandu-toby-'
 local drone=require('drone')
 local references=require('references')
+local books=require('planner.books')
 local function drone_status(player,refs)
  local state=drone.read(player.force.name,player.name)
  refs.drone_status.caption=state.available and ('Toby · '..state.display) or 'Waiting for your character'
@@ -37,68 +38,88 @@ end
 local function panel(player)
  local existing=player.gui.screen[PREFIX..'panel']
  if existing then return storage.gui[player.index] end
- local height=math.floor(math.max(460,math.min(780,player.display_resolution.height/player.display_scale-120)))
+ local width=math.floor(math.max(480,math.min(1120,player.display_resolution.width/player.display_scale-80)))
+ local height=math.floor(math.max(460,math.min(820,player.display_resolution.height/player.display_scale-120)))
+ local sidebar_width=width<700 and 160 or 250
+ local content_width=width-sidebar_width-74
+ local text_width=content_width-22
  local frame=player.gui.screen.add{type='frame',name=PREFIX..'panel',direction='vertical'}
- frame.style.width=480
- frame.location={x=16,y=64}
- local title=frame.add{type='flow',direction='horizontal'}
- label(title,'Toby',100,'frame_title').ignored_by_interaction=true
- local handle=title.add{type='empty-widget',style='draggable_space_header'}
- handle.style.horizontally_stretchable=true;handle.style.height=24
- handle.drag_target=frame
- title.add{type='sprite-button',name=PREFIX..'close',sprite='utility/close',style='frame_action_button',tooltip='Close · Your draft is kept'}
- local body=frame.add{type='frame',style='inside_shallow_frame',direction='vertical'}
- body.style.horizontally_stretchable=true
- local navigation=body.add{type='flow',direction='horizontal'}
- navigation.add{type='button',name=PREFIX..'planning',caption='Planning',style='toby_planner_button_frame_tool',tooltip='Open production planning · Works without AI'}
- local chats=navigation.add{type='drop-down',name=PREFIX..'chats',items={'New conversation'},selected_index=1}
- chats.style.horizontally_stretchable=true
- navigation.add{type='button',name=PREFIX..'new',caption='New chat',tooltip='Start a separate conversation; existing runs keep working'}
- local status=body.add{type='label',caption='Waiting for Facmandu'}
- status.style.width=432;status.style.single_line=false
- status.style.font_color={r=0.75,g=0.75,b=0.75}
+ frame.style.width=width;frame.location={x=16,y=64}
+ local title=frame.add{type='flow',direction='horizontal',style='frame_header_flow'}
+ title.drag_target=frame
+ title.add{type='sprite',sprite='toby-launcher'}.style.size=24
+ label(title,'Toby',70,'toby_planner_label_frame_title').ignored_by_interaction=true
+ local handle=title.add{type='empty-widget',style='toby_flib_titlebar_drag_handle',ignored_by_interaction=true}
+ handle.style.horizontally_stretchable=true;handle.drag_target=frame
+ title.add{type='button',name=PREFIX..'planning',caption='Planning',style='toby_planner_button_frame_tool',tooltip='Open production planning · Works without AI'}
+ title.add{type='sprite-button',name=PREFIX..'close',sprite='utility/close',style='toby_planner_button_frame',tooltip='Close · Your draft is kept'}
+ local layout=frame.add{type='flow',direction='horizontal'}
+ layout.style.horizontal_spacing=12
+ local sidebar=layout.add{type='frame',style='inside_deep_frame',direction='vertical'}
+ sidebar.style.width=sidebar_width;sidebar.style.height=height-64
+ local menu=sidebar.add{type='flow',direction='horizontal'}
+ label(menu,'Chats',sidebar_width-110,'frame_title')
+ menu.add{type='button',name=PREFIX..'new',caption='New',style='toby_planner_button_frame_tool',tooltip='Start a conversation; other tasks keep working'}
+ local chats=sidebar.add{type='drop-down',name=PREFIX..'chats',items={'New conversation'},selected_index=1,visible=false}
+ local task_scroll=sidebar.add{type='scroll-pane',direction='vertical',horizontal_scroll_policy='never'}
+ task_scroll.style.horizontally_stretchable=true;task_scroll.style.vertically_stretchable=true
+ local tasks=task_scroll.add{type='flow',direction='vertical'}
+ tasks.style.width=sidebar_width-24;tasks.style.vertical_spacing=8
+ label(tasks,'No agent conversations yet. Planning and saved books work without AI.',sidebar_width-24)
+ local scope=label(sidebar,'Shared with '..player.force.name,sidebar_width-24)
+ scope.style.font_color={r=.75,g=.75,b=.75}
+ local body=layout.add{type='flow',direction='vertical'}
+ body.style.width=content_width
+ local status_frame=body.add{type='frame',style='inside_deep_frame',direction='vertical'}
+ status_frame.style.horizontally_stretchable=true
+ local status=label(status_frame,'Manual planning ready · Agent not connected',text_width)
+ status.style.font_color={r=.75,g=.75,b=.75}
  local tabs=body.add{type='tabbed-pane',name=PREFIX..'tabs'}
  tabs.style.horizontally_stretchable=true
- local refs={frame=frame,chats=chats,status=status,tabs=tabs}
+ local refs={frame=frame,chats=chats,status=status,tabs=tabs,tasks=tasks,
+  content_width=text_width,sidebar_width=sidebar_width-24,task_cards={}}
  for _,entry in ipairs{{'conversation','Chat'},{'activity','Activity'},{'design','Design'}} do
   local tab=tabs.add{type='tab',caption=entry[2]}
   local content=tabs.add{type='scroll-pane',name=PREFIX..entry[1],direction='vertical',horizontal_scroll_policy='never'}
-  content.style.width=432;content.style.height=height-240
+  content.style.width=content_width;content.style.height=height-260
   local rows=content.add{type='flow',direction='vertical'}
-  rows.style.vertical_spacing=12;rows.style.width=410
-  tabs.add_tab(tab,content)
-  refs[entry[1]]=rows
+  rows.style.vertical_spacing=12;rows.style.width=text_width
+  tabs.add_tab(tab,content);refs[entry[1]]=rows
   if entry[1]=='conversation' then refs.history=content end
  end
  local drone_tab=tabs.add{type='tab',caption='Drone'}
  local drone_content=tabs.add{type='flow',direction='vertical'}
- drone_content.style.width=432;drone_content.style.height=height-240
- refs.drone_status=label(drone_content,'',410,'heading_2_label')
+ drone_content.style.width=content_width;drone_content.style.height=height-260
+ refs.drone_status=label(drone_content,'',text_width,'heading_2_label')
  drone_content.add{type='sprite',sprite='entity/toby-drone'}.style.size=64
- refs.drone_work=label(drone_content,'Ready',410)
- refs.drone_details=label(drone_content,'',410)
- label(drone_content,'Nearby ghosts are built with your items.',410)
- refs.drone_inventory=drone_content.add{type='button',name=PREFIX..'drone-inventory',caption='Inventory'}
+ refs.drone_work=label(drone_content,'Ready',text_width)
+ refs.drone_details=label(drone_content,'',text_width)
+ label(drone_content,'Nearby ghosts are built with your items.',text_width)
+ refs.drone_inventory=drone_content.add{type='button',name=PREFIX..'drone-inventory',caption='Inventory',style='toby_planner_button_frame_tool'}
  local drone_actions=drone_content.add{type='flow',direction='horizontal'}
- refs.drone_follow=drone_actions.add{type='button',name=PREFIX..'drone-follow',caption='Follow me'}
- refs.drone_stay=drone_actions.add{type='button',name=PREFIX..'drone-stay',caption='Stay here'}
-
+ refs.drone_follow=drone_actions.add{type='button',name=PREFIX..'drone-follow',caption='Follow me',style='toby_planner_button_frame_tool'}
+ refs.drone_stay=drone_actions.add{type='button',name=PREFIX..'drone-stay',caption='Stay here',style='toby_planner_button_frame_tool'}
  tabs.add_tab(drone_tab,drone_content)
+ local book_tab=tabs.add{type='tab',caption='Books'}
+ local book_content=tabs.add{type='scroll-pane',direction='vertical',horizontal_scroll_policy='never'}
+ book_content.style.width=content_width;book_content.style.height=height-260
+ refs.books=book_content.add{type='flow',direction='vertical'}
+ refs.books.style.width=text_width
+ tabs.add_tab(book_tab,book_content)
  tabs.selected_tab_index=storage.tabs[player.index] or 1
  drone_status(player,refs)
- local composer=frame.add{type='textfield',name=PREFIX..'message',text=storage.drafts[player.index] or '',tooltip='Enter: send or steer · Ctrl+Shift+Enter: open blueprint'}
- composer.style.width=456;composer.style.height=36
- local actions=frame.add{type='flow',direction='horizontal'}
- actions.style.width=456
+ local composer=body.add{type='textfield',name=PREFIX..'message',text=storage.drafts[player.index] or '',tooltip='Enter: send or steer · Ctrl+Shift+Enter: open blueprint'}
+ composer.style.width=content_width;composer.style.height=36
+ local actions=body.add{type='flow',direction='horizontal'}
+ actions.style.width=content_width
  local context=actions.add{type='label',caption=player.surface.name}
- context.style.font_color={r=0.75,g=0.75,b=0.75}
- actions.add{type='empty-widget'}.style.horizontally_stretchable=true
- local stop=actions.add{type='button',name=PREFIX..'stop',caption='Stop',visible=false}
- local send=actions.add{type='button',name=PREFIX..'send',caption='Send',style='confirm_button',tooltip='Send a message to Toby · Enter'}
+ context.style.font_color={r=.75,g=.75,b=.75}
+ actions.add{type='empty-widget',style='toby_flib_horizontal_pusher'}
+ local stop=actions.add{type='button',name=PREFIX..'stop',caption='Stop',visible=false,style='toby_planner_button_frame_tool'}
+ local send=actions.add{type='button',name=PREFIX..'send',caption='Send',style='toby_planner_button_green',tooltip='Send a message to Toby · Enter'}
  refs.message=composer;refs.stop=stop;refs.send=send;refs.context=context
  storage.gui[player.index]=refs
- player.opened=frame
- composer.focus()
+ player.opened=frame;composer.focus()
  return refs
 end
 local function selected(player)
@@ -106,6 +127,46 @@ local function selected(player)
  local refs=storage.gui[player.index]
  local index=refs and refs.frame.valid and refs.chats.selected_index
  return state and state.chats and state.chats[index or 0] and state.chats[index].id
+end
+local function render_books(player,refs)
+ local version=storage.book_versions[player.force.index] or 0
+ if refs.book_version==version and refs.book_force==player.force.index then return end
+ refs.book_version=version;refs.book_force=player.force.index
+ refs.books.clear()
+ label(refs.books,'Toby books · '..player.force.name,refs.content_width,'heading_2_label')
+ label(refs.books,'Saved in this game and shared with your force. Take a book, then drag it into Factorio’s Game blueprints tab. Mods cannot create library records directly.',refs.content_width)
+ local actions=refs.books.add{type='flow',direction='horizontal'}
+ actions.add{type='button',name=PREFIX..'take-book',caption='Take Toby book',style='toby_planner_button_green'}
+ actions.add{type='button',name=PREFIX..'update-book',caption='Update held book',style='toby_planner_button_frame_tool',tooltip='Append current Toby designs to the book in your cursor. Existing entries and your edits are preserved.'}
+ local entries=books.list(player.force)
+ if #entries==0 then label(refs.books,'No saved designs yet. Designs received from Toby will remain here when AI is unavailable.',refs.content_width) end
+ for _,entry in ipairs(entries) do
+  local row=refs.books.add{type='frame',style='inside_deep_frame',direction='vertical'}
+  row.style.width=refs.content_width
+  label(row,entry.title,refs.content_width-20,'heading_2_label')
+  label(row,entry.design,refs.content_width-20)
+  row.add{type='button',caption='Take blueprint',style='toby_planner_button_frame_tool',tags={toby_book_entry=entry.id}}
+ end
+end
+local function render_tasks(refs,state)
+ local signature=helpers.table_to_json{chats=state.chats,current=state.current,running=state.running,status=state.status}
+ if signature==refs.task_signature then return end
+ refs.tasks.clear();refs.task_cards={}
+ for i,chat in ipairs(state.chats) do
+  local card=refs.tasks.add{type='frame',style='inside_shallow_frame',direction='vertical'}
+  card.style.width=refs.sidebar_width
+  local button=card.add{type='button',caption=chat.title,style='toby_planner_button_frame_tool',tags={toby_chat_index=i}}
+  button.style.width=refs.sidebar_width-20;button.toggled=chat.id==state.current
+  local running=chat.state=='running' or (chat.id==state.current and state.running==true)
+  local status=chat.status or (chat.id==state.current and state.status) or 'Ready'
+  local status_label=label(card,status,refs.sidebar_width-20)
+  local marker=label(card,running and 'Working' or (chat.state=='done' and 'Done' or chat.state=='error' and 'Needs attention' or 'Ready'),refs.sidebar_width-20)
+  marker.style.font_color=chat.state=='error' and {r=1,g=.4,b=.3} or running and {r=1,g=.8,b=.45} or {r=.75,g=.75,b=.75}
+  if chat.author then label(card,chat.author,refs.sidebar_width-20) end
+  refs.task_cards[#refs.task_cards+1]={running=running,marker=marker,status=status_label}
+ end
+ if #state.chats==0 then label(refs.tasks,'No agent conversations yet. Planning and saved books work without AI.',refs.sidebar_width) end
+ refs.task_signature=signature
 end
 local function update(player_index,state)
  local player=game.get_player(player_index)
@@ -137,13 +198,20 @@ local function update(player_index,state)
  local items={}
  for _,chat in ipairs(state.chats) do
   if type(chat.id)~='string' or #chat.id>100 or type(chat.title)~='string' or #chat.title>200 then error('Invalid chat',0) end
+  if chat.state and chat.state~='idle' and chat.state~='running' and chat.state~='done' and chat.state~='error' then error('Invalid chat state',0) end
+  if chat.status and (type(chat.status)~='string' or #chat.status>500) then error('Invalid chat status',0) end
+  if chat.author and (type(chat.author)~='string' or #chat.author>200) then error('Invalid chat author',0) end
   items[#items+1]=chat.title
  end
  if state.drone then drone.activity(player,state.drone) end
+ state.forceIndex=player.force.index
  storage.players[player.index]=state
+ books.remember(player,state)
  button(player)
  local refs=storage.gui[player.index]
  if not refs or not refs.frame.valid then return end
+ render_tasks(refs,state)
+ if refs.tabs.selected_tab_index==5 then render_books(player,refs) end
  refs.status.caption=state.status
  refs.context.caption=player.surface.name
  refs.stop.visible=state.running==true
@@ -163,7 +231,7 @@ local function update(player_index,state)
    if not row then
     row=refs.conversation.add{type='flow',direction='vertical'}
     row.style.vertical_spacing=4
-    label(row,'',410,'heading_2_label');label(row,'',410)
+    label(row,'',refs.content_width,'heading_2_label');label(row,'',refs.content_width)
    end
    local author=row.children[1]
    author.caption=message.role=='user' and (player.name~='' and player.name or 'You') or 'Toby'
@@ -175,7 +243,7 @@ local function update(player_index,state)
    end
   end
   for i=#refs.conversation.children,#messages+1,-1 do refs.conversation.children[i].destroy() end
-  if #messages==0 then label(refs.conversation,'What shall we build?',410,'heading_2_label') end
+  if #messages==0 then label(refs.conversation,'What shall we build?',refs.content_width,'heading_2_label') end
   if not refs.message_signature or refs.conversation_chat~=state.current then refs.history.scroll_to_bottom() end
   refs.message_signature=message_signature;refs.conversation_chat=state.current
  end
@@ -184,7 +252,7 @@ local function update(player_index,state)
   if refs.activity.children[1] and refs.activity.children[1].type~='frame' then refs.activity.clear() end
   for i,entry in ipairs(state.activity or {}) do
    local card=refs.activity.children[i]
-   if not card then card=refs.activity.add{type='frame',style='inside_shallow_frame',direction='vertical'};card.style.width=410;label(card,'',390) end
+   if not card then card=refs.activity.add{type='frame',style='inside_shallow_frame',direction='vertical'};card.style.width=refs.content_width;label(card,'',refs.content_width-20) end
    if card.children[1].caption~=entry.text then
     card.children[1].caption=entry.text
     if card.children[2] then card.children[2].destroy() end
@@ -192,34 +260,36 @@ local function update(player_index,state)
    end
   end
   for i=#refs.activity.children,#(state.activity or {})+1,-1 do refs.activity.children[i].destroy() end
-  if #(state.activity or {})==0 then label(refs.activity,state.running and state.status or 'No tools used in this turn.',410) end
+  if #(state.activity or {})==0 then label(refs.activity,state.running and state.status or 'No tools used in this turn.',refs.content_width) end
   refs.activity_signature=activity_signature
  end
  local design_signature=helpers.table_to_json{blueprint=state.blueprint,design=state.design,stage=state.designStage,warnings=state.designWarnings,materials=state.materials,current=state.current,running=state.running}
  if refs.tabs.selected_tab_index==3 and refs.design_signature~=design_signature then
   refs.design.clear()
   if state.blueprint then
-   label(refs.design,state.designStage or 'Design',410,'heading_2_label')
-   label(refs.design,state.design or 'Latest blueprint',410)
+   label(refs.design,state.designStage or 'Design',refs.content_width,'heading_2_label')
+   label(refs.design,state.design or 'Latest blueprint',refs.content_width)
    for _,warning in ipairs(state.designWarnings or {}) do
-    local row=label(refs.design,warning,410);row.style.font_color={r=1,g=0.75,b=0.3}
+    local row=label(refs.design,warning,refs.content_width);row.style.font_color={r=1,g=0.75,b=0.3}
    end
    local actions=refs.design.add{type='flow',direction='horizontal'}
    actions.add{type='button',name=PREFIX..'inspect-blueprint',caption='Inspect blueprint',tooltip='Open Factorio’s blueprint editor · Ctrl+Shift+Enter'}
    actions.add{type='button',name=PREFIX..'blueprint',caption='Take blueprint',style='confirm_button',tooltip='Put the design in your cursor to place ghosts.'}
    if #(state.materials or {})>0 then
-    label(refs.design,'Materials · Alt-click to inspect',410,'heading_2_label')
+    label(refs.design,'Materials · Alt-click to inspect',refs.content_width,'heading_2_label')
     local materials=refs.design.add{type='table',column_count=8}
     for _,item in ipairs(state.materials) do references.add(materials,'item',item.name,item.count) end
    end
-  else label(refs.design,state.running and 'Design in progress. Validated drafts appear here as they are created.' or 'No design created in this chat.',410) end
+  else label(refs.design,state.running and 'Design in progress. Validated drafts appear here as they are created.' or 'No design created in this chat.',refs.content_width) end
   refs.design_signature=design_signature
  end
  drone_status(player,refs)
 end
 local function open(player)
+ if main_dialog and main_dialog.is_in_focus(player) then main_dialog.toggle(player) end
  local refs=panel(player)
  refs.frame.visible=true
+ render_books(player,refs)
  player.opened=refs.frame
  local state=storage.players[player.index]
  if state then local old=storage.players[player.index];storage.players[player.index]=nil;update(player.index,old) end
@@ -227,10 +297,12 @@ local function open(player)
 end
 events.on_init(function()
  storage.players={};storage.drafts={};storage.tabs={};storage.gui={};storage.sequence=0
+ books.init()
  drone.init()
  for _,player in pairs(game.players) do button(player) end
 end)
 events.on_configuration_changed(function()
+ books.init()
  drone.init()
  storage.players=storage.players or {};storage.drafts=storage.drafts or {};storage.tabs=storage.tabs or {};storage.gui=storage.gui or {}
  for _,player in pairs(game.players) do
@@ -296,8 +368,24 @@ events.on_event(defines.events.on_gui_click,function(event)
   return
  end
  local element=event.element
- if not element.valid then return end
+ if not element or not element.valid then return end
  local player=game.get_player(event.player_index)
+ if element.tags and element.tags.toby_chat_index then
+  local refs=storage.gui[player.index]
+  refs.chats.selected_index=element.tags.toby_chat_index
+  emit(player,'select',nil,selected(player))
+  return
+ end
+ if element.tags and element.tags.toby_book_entry then
+  for _,entry in ipairs(books.list(player.force)) do
+   if entry.id==element.tags.toby_book_entry then
+    if not player.clear_cursor() then player.print('Clear inventory space before taking the blueprint.');return end
+    if player.cursor_stack.import_stack(entry.blueprint)~=0 then player.print('Could not import this blueprint.');return end
+    storage.gui[player.index].frame.destroy();return
+   end
+  end
+  return
+ end
  if references.click(player,element) then return end
  local name=element.name
  local refs=storage.gui[player.index]
@@ -305,6 +393,9 @@ events.on_event(defines.events.on_gui_click,function(event)
  elseif name==PREFIX..'close' then refs.frame.destroy()
  elseif name==PREFIX..'send' then
   send(player)
+ elseif name==PREFIX..'take-book' or name==PREFIX..'update-book' then
+  local ok,message=pcall(books.take,player,name==PREFIX..'update-book')
+  if not ok then player.print(message) else refs.frame.destroy() end
  elseif name==PREFIX..'new' then emit(player,'new')
  elseif name==PREFIX..'stop' then emit(player,'stop',nil,selected(player))
  elseif name==PREFIX..'drone-follow' or name==PREFIX..'drone-stay' then
@@ -323,6 +414,14 @@ events.on_event(defines.events.on_built_entity,drone.built)
 events.on_nth_tick(5,function(event)
  if event.tick%10==0 then drone.tick() end
  drone.animate()
+ if event.tick%15==0 then
+  local dots=string.rep('·',math.floor(event.tick/15)%4)
+  for _,refs in pairs(storage.gui or {}) do
+   if refs.frame.valid and refs.frame.visible then
+    for _,card in ipairs(refs.task_cards or {}) do if card.running and card.marker.valid then card.marker.caption='Working '..dots end end
+   end
+  end
+ end
  if event.tick%60~=0 then return end
  for index,refs in pairs(storage.gui or {}) do
   if refs.frame.valid then local player=game.get_player(index);if player then drone_status(player,refs) end end
@@ -344,7 +443,40 @@ events.on_event(defines.events.on_gui_selected_tab_changed,function(event)
   if state then update(event.player_index,state) end
  end
 end)
-remote.add_interface('facmandu-assistant',{update_player=update,open_player=function(index) local player=game.get_player(index);if not player then error('Player not found',0) end open(player);return true end})
+remote.add_interface('facmandu-assistant',{
+ attach_plan=function(index,id)
+  local player=game.get_player(index)
+  if not player then error('Player not found',0) end
+  local plan=remote.call('facmandu-toby-planner','read_plan',player.force.name,player.name,id)
+  open(player)
+  local refs=storage.gui[index]
+  local text=refs.message.text
+  if #text>0 then text=text..'\n' end
+  text=text..'Plan: '..plan.reference
+  if #text>6000 then player.print('Your draft is full. Copy the plan reference: '..plan.reference);return plan.reference end
+  refs.message.text=text;storage.drafts[index]=text
+  refs.message.focus()
+  return plan.reference
+ end,
+ export_book=function(force_name,player_name)
+  local player=game.get_player(player_name)
+  if not player or player.force.name~=force_name then error('Choose a player on this force',0) end
+  return books.export(player.force)
+ end,
+ take_book=function(force_name,player_name,update)
+  local player=game.get_player(player_name)
+  if not player or player.force.name~=force_name then error('Choose a player on this force',0) end
+  return books.take(player,update==true)
+ end,
+ update_player=update,open_player=function(index) local player=game.get_player(index);if not player then error('Player not found',0) end open(player);return true end})
 events.on_event(defines.events.on_gui_closed,function(event)
  if event.element and event.element.valid and event.element.name==PREFIX..'panel' then event.element.destroy() end
 end)
+
+events.on_event(defines.events.on_player_changed_force,function(event)
+ local player=game.get_player(event.player_index)
+ storage.players[player.index]=nil
+ local refs=storage.gui[player.index]
+ if refs and refs.frame.valid then refs.frame.destroy() end
+end)
+events.on_event(defines.events.on_forces_merged,function(event) books.merge(event.source_index,event.destination) end)

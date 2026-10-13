@@ -190,6 +190,9 @@ function modal_dialog.enter(player, metadata, dialog_open, early_abort)
     ui_state.modal_data = metadata.modal_data or {}
     ui_state.modal_data.modal_elements = {}
     ui_state.modal_data.confirmed_dialog = false
+    local factory = lib.context.get(player, "Factory")
+    ui_state.modal_data.shared_factory = factory
+    ui_state.modal_data.shared_revision = factory and (factory.revision or 0)
 
     -- Create interface_dimmer first so the layering works out correctly
     if main_dialog.is_in_focus(player) then

@@ -809,6 +809,7 @@ function solver.update(player, factory)
 
         solve_floor(factory.top_floor.id)
         update_factory(factory_data, result_map)
+        factory.revision = (factory.revision or 0) + 1
     end
 end
 
@@ -821,6 +822,8 @@ listeners.global = {
         ---@cast metadata UpdateSolverMetadata
         local player = game.get_player(metadata.player_index)  ---@as LuaPlayer
         local factory = OBJECT_INDEX[metadata.factory_id]
+        if not player or not factory or not factory.parent
+            or factory.parent.parent ~= lib.globals.player_table(player).realm then return end
         solver.update(player, factory)
 
         -- Scheduled updates run without user interaction, so the interface needs a refresh

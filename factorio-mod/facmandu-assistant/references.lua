@@ -11,6 +11,13 @@ function M.add(parent,kind,name,count)
  return button
 end
 function M.text(parent,text)
+ local plans={}
+ for force,id in text:gmatch('toby://plan/(%d+)/(%d+)') do
+  if not plans[id] then
+   plans[id]=true
+   parent.add{type='button',caption='Open plan '..id,style='toby_planner_button_frame_tool',tags={toby_plan=tonumber(id),toby_force=tonumber(force)}}
+  end
+ end
  local seen={};local entries={}
  for kind,name in text:gmatch('%[([%a]+)=([%w_%-]+)%]') do
   local key=kind..'/'..name
@@ -22,6 +29,12 @@ function M.text(parent,text)
 end
 function M.click(player,element)
  local tag=element.tags or {}
+ if tag.toby_plan then
+  if player.force.index~=tag.toby_force then player.print('This reference belongs to another force.');return true end
+  local ok,message=pcall(remote.call,'facmandu-toby-planner','open_plan',player.force.name,player.name,tag.toby_plan)
+  if not ok then player.print(message) end
+  return true
+ end
  if not tag.toby_reference then return false end
  local prototype=M.prototype(tag.toby_reference,tag.name)
  if prototype then

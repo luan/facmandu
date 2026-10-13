@@ -6,7 +6,7 @@ The agent harness will use Factory Planner's UI components and interaction patte
 
 ## Source and current boundary
 
-`planner/` starts from the installed Factory Planner 2.1.18 distribution, verified as 184 matching files before adaptation. Toby 0.0.6 loads and packages the fork. Imports, GUI and prototype names, remote interfaces, asset paths, lifecycle registration and planner storage are namespaced for coexistence. The native simplex engine now supports exact or maximum input supply and a nominated output to maximize.
+`planner/` starts from the installed Factory Planner 2.1.18 distribution, verified as 184 matching files before adaptation. Toby 0.0.7 loads and packages the fork. Imports, GUI and prototype names, remote interfaces, asset paths, lifecycle registration and planner storage are namespaced for coexistence. The native simplex engine now supports exact or maximum input supply and a nominated output to maximize.
 
 - Upstream: https://github.com/ClaudeMetz/FactoryPlanner
 - Release: `v2.1.18`, commit `f4cc3fea9fd6badd1b073214bc7d0ba7a0723461`.
@@ -69,7 +69,7 @@ Keep existing external Factory Planner and Helmod plans intact. Offer explicit i
 
 Expose a capability query plus bounded operations to list accessible plans, read a plan, calculate a temporary proposal, create a saved plan, and apply an edit. Reuse the same validation and calculation functions as manual controls. Agent calculation must not select or modify a player's active factory as a hidden side effect.
 
-Every saved plan has an owner, force, sharing permissions, and revision. Agent edits require the expected revision and are checked against the current player's connection, force, and existing action permissions. A stale proposal returns a conflict instead of overwriting manual work. Standalone manual planning needs no agent permission or account.
+Every saved plan belongs to one force workspace and has a revision. Same-force players share plans; selection and preferences remain player-specific. Agent edits require the expected revision and are checked against the current player's connection, force, and existing action permissions. A stale proposal returns a conflict instead of overwriting manual work. Standalone manual planning needs no agent permission or account.
 
 The wire schema carries prototype identity, selected recipes and machines, effects, constraints, and solver status. Return unmet targets, unused inputs, external imports, surplus, and line counts. Use stable plan and line IDs rather than UI positions. Keep truncated reads explicit and reject oversized mutations before changing a plan.
 
@@ -92,8 +92,16 @@ Required behavioral checks:
 
 ## Integration ownership
 
-Coordinate runtime activation, packaging, agent tools, and the harness rewrite with the existing Toby development task. This task owns the planner subtree, lifecycle integration, packaging and native UI integration. The existing Toby task owns host agent tools, force-safe sharing, routing, benchmarks and deployment. Runtime activation, supply constraints, the embedded API, icon launcher and navigation between Planning and Agent are implemented. The full agent workspace rewrite, shared blueprint books, plan revision checks and large-modpack performance acceptance remain follow-up work.
+Coordinate runtime activation, packaging, agent tools, and the harness rewrite with the existing Toby development task. This task owns the planner subtree, lifecycle integration, packaging and native UI integration. The existing Toby task owns host agent tools, force-safe sharing, routing, benchmarks and deployment. Runtime activation, supply constraints, the embedded API, icon launcher and navigation between Planning and Agent are implemented. The agent workspace now uses a chat/task sidebar and Factory Planner frame/button styles. Force workspaces, shared books, shareable references, read/list/create APIs, retry-safe creation and revision-checked input edits are implemented. Large-modpack performance acceptance and broader machine-line constraints remain follow-up work.
 
 ## Verified development behavior
 
 On Factorio 2.1.21 in an isolated profile, without an external planner or AI service, the native API returned 300 iron plates/min from a 300 iron ore/min cap and exactly ten stone furnaces for a machine-count goal. A saved plan retained its input constraint and maximization goal after native save/reload. Adding the external Factory Planner 2.1.18 to that profile also loaded successfully without losing the embedded plan. Native rendering showed the planning window, actual prototype icons, input control and Agent navigation. These small-world checks do not establish worst-case performance on the large multiplayer modpack.
+
+Native follow-up QA verified old per-player plan migration, rejection after switching force, preservation through force merge, shared plan reading, input edits, stale-revision rejection, and creation retries returning the same plan ID. The native harness rendered task cards, transcript, prototype references, icon launcher, and a draft containing a plan reference. Native retry tests returned the same saved plan and rejected changed inputs under the same request key. Taking a nested Toby book and updating it preserved user-edited root and project labels while appending current designs. Book export imported successfully into Factorio. These tests use a disposable profile and do not restart a live multiplayer server.
+
+Plan references use `toby://plan/<forceIndex>/<planId>` within the current game. **Share** presents copyable text and **Ask Toby** adds it to the existing draft without sending. The host must recheck the actual requesting player’s current force and action permissions before every operation. Saved plan creation accepts an optional tool-call request key: retrying identical inputs returns the same result; changed inputs under the same key are rejected. `read_plan` returns full native recipe/machine/module/beacon settings and predicted balances without changing selection. Agent input edits require the latest revision.
+
+The force-owned **Books** workspace is distinct from Factorio’s native **Game blueprints** shelf. `game.blueprints` and book-record contents are read-only collections with no record creation/import API. A player must initially drag a taken book into that shelf. Updating a held book appends a snapshot rather than replacing user-edited entries. Each force keeps up to32 conversation designs; native book exports are bounded to2MB decoded data. Force merges preserve all entries even above the ordinary creation cap.
+
+The reusable native QA fixture is `tests/fixtures/toby-planner-qa`. Enable it only in a disposable profile with a copied vanilla save containing a player; run a30-tick native benchmark. It intentionally researches all technologies, creates plans, changes forces and merges a test force. Never enable it on a live server or an original save.

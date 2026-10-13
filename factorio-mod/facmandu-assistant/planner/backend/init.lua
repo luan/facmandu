@@ -65,11 +65,35 @@ end
 ---@alias TranslationTables table<string, flib.TranslatedDictionary>
 
 ---@param player LuaPlayer
+local function force_realm(player)
+    local realms = storage.planner.realms
+    local index = player.force.index
+    if not realms[index] then realms[index] = Realm.init() end
+    return realms[index]
+end
+
+-- Preserve every legacy player realm when introducing force ownership.
+local function migrate_realms()
+    storage.planner.realms = storage.planner.realms or {}
+    for index, state in pairs(storage.planner.players) do
+        local player = game.get_player(index)
+        if player then
+            local realm = storage.planner.realms[player.force.index]
+            if not realm then
+                realm = state.realm or Realm.init()
+                storage.planner.realms[player.force.index] = realm
+            elseif state.realm and state.realm ~= realm then realm:merge(state.realm) end
+            state.realm = realm
+        end
+    end
+end
+
+---@param player LuaPlayer
 local function player_init(player)
     storage.planner.players[player.index] = {}  ---@diagnostic disable-line: missing-fields
     local player_table = storage.planner.players[player.index]
 
-    player_table.realm = Realm.init()
+    player_table.realm = force_realm(player)
     lib.context.init(player_table)
     lib.context.set(player, player_table.realm.first)
 
@@ -115,10 +139,9 @@ end
 
 local function generate_object_index()
     OBJECT_INDEX = {}  ---@type table<ObjectID, Object>
-    for _, player_table in pairs(storage.planner.players) do
-        if not player_table.realm then return end  -- migration issue mitigation
-        player_table.realm:index()  -- recursively indexes all objects
-    end
+    for _, realm in pairs(storage.planner.realms or {}) do realm:index() end
+    -- Old saves need their index before configuration migration runs.
+    for _, state in pairs(storage.planner.players) do if state.realm then state.realm:index() end end
 end
 
 ---@param fake_load boolean?
@@ -154,6 +177,7 @@ local function global_init()
     end
 
     storage.planner.players = {}  -- Table containing all player-specific data
+    storage.planner.realms = {}  -- Force workspaces survive players leaving/removal.
     storage.planner.next_object_ID = 1  -- Counter used for assigning incrementing IDs to all objects
     storage.planner.nth_tick_events = {}  -- Save metadata about currently registered on_nth_tick events
 
@@ -195,6 +219,7 @@ local function handle_configuration_change()
 
     migrator.migrate_global(migrations)
     migrator.migrate_player_tables(migrations)
+    migrate_realms()
     generate_object_index()  -- rebuild this after objects have been migrated
 
     for index, player in pairs(game.players) do
@@ -243,6 +268,19 @@ end)
 -- ** EVENTS **
 local listeners = {}
 
+local function change_force(player)
+    local state = lib.globals.player_table(player)
+    if not state then return end
+    -- Destroy old dialogs before rebinding; they must not edit the previous force.
+    lib.gui.reset_player(player)
+    reset_ui_state(state)
+    state.clipboard = nil
+    state.realm = force_realm(player)
+    lib.context.init(state)
+    lib.context.set(player, state.realm.first)
+    lib.gui.toggle_mod_gui(player)
+end
+
 listeners.player = {
     on_player_dictionaries_ready = (function(player, _)
         local player_table = lib.globals.player_table(player)
@@ -276,18 +314,23 @@ listeners.game = {
     end),
     on_forces_merged = (function(event)
         integrator.forget_force(event.source_index)
-
-        -- Players brought along keep factories built against the force they left
-        local running_tick = game.tick + 1  ---@type MapTick?
-        for _, player in pairs(event.destination.players) do
-            local realm = lib.globals.player_table(player).realm
-            running_tick = realm:refresh_lines(player, running_tick)
+        local realms = storage.planner.realms
+        local destination = realms[event.destination.index]
+        local source = realms[event.source_index]
+        if source then
+            if destination then destination:merge(source)
+            else realms[event.destination.index] = source end
+            realms[event.source_index] = nil
         end
+        for _, player in pairs(event.destination.players) do
+            change_force(player)
+        end
+        local player = event.destination.players[1]
+        if player then force_realm(player):refresh_lines(player, game.tick + 1) end
     end),
     on_player_changed_force = (function(event)
         local player = game.get_player(event.player_index)  ---@cast player -nil
-        local realm = lib.globals.player_table(player).realm
-        realm:refresh_lines(player, (game.tick + 1))
+        change_force(player)
     end),
 
     on_tick = lib.translator.on_tick

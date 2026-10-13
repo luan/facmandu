@@ -1,6 +1,6 @@
 # [WIP] Toby
 
-Work in progress, version **0.0.6**. Requires Factorio **2.1.20 or later**. Production planning works without AI or a Facmandu connection. AI chat requires a Facmandu-managed server. Installing the mod alone does not connect an AI model.
+Work in progress, version **0.0.7**. Requires Factorio **2.1.20 or later**. Production planning works without AI or a Facmandu connection. AI chat requires a Facmandu-managed server. Installing the mod alone does not connect an AI model.
 
 Click the **Toby icon** above the game view or use its game shortcut, or press **Ctrl+Shift+T**, to open the side panel. **New chat** starts a separate conversation without stopping an existing run. **Chat** shows recent messages, **Activity** shows completed tool outcomes, errors and current work. **Design** shows the latest validated working draft or final blueprint, with warnings and construction costs. Inspections are labeled separately. Tab scroll positions survive progress updates. Status, elapsed time and tool results update while Toby works. Switch conversations while a run continues, or use **Steer** to add instructions. Press **Enter** to send or steer. Closing the panel keeps your typed draft. Shortcuts are configurable in Factorio’s Controls settings.
 
@@ -19,3 +19,7 @@ Factory Planner and Helmod plans can be read through their native APIs. Temporar
 Referenced items, fluids, recipes and entities have native icon buttons below messages. Click or **Alt-click** them to open Factoriopedia; technology buttons open Research. Materials use the same controls.
 
 Toby has an original industrial drone body with seven animated screen states. Floating speech reports public work progress near your companion, at most once every ten seconds; it never exposes private model reasoning. **Drone** shows the current activity, location and number of ghosts built.
+
+Plans are shared with your Factorio force; selections and preferences remain personal. Use **Share** in the planner to copy a `toby://plan/<force>/<id>` reference or attach it to Toby’s draft. Toby can create saved plans and read these references when its host tools are connected. Plan edits carry a revision so an old proposal cannot overwrite newer work.
+
+The agent workspace uses a chat sidebar with actual task status and a larger conversation pane. **Books** keeps each conversation’s latest design in the save, shared with your force. **Take Toby book** creates an organized book; **Update held book** appends current designs while preserving existing entries and edits. Drag the resulting book into Factorio’s **Game blueprints** shelf yourself: the mod API cannot create library records.

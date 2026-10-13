@@ -35,6 +35,45 @@ local function unlocked_machine(force,line,machine,items)
  for _,item in pairs(prototype.items_to_place_this or {}) do if items[item.name] then return true end end
  return false
 end
+local function reference(player, factory)
+ return 'toby://plan/'..player.force.index..'/'..factory.id
+end
+local function actor(force_name,player_name)
+ local player=game.get_player(label(player_name))
+ if not player or player.force.name~=force_name then error('Choose a player on this force',0) end
+ local state=lib.globals.player_table(player)
+ if not state then error('Planner player is unavailable',0) end
+ return player,state
+end
+local function find_plan(force_name,player_name,id)
+ local player,state=actor(force_name,player_name)
+ local factory=type(id)=='number' and OBJECT_INDEX[id]
+ if not factory or factory.class~='Factory' or not factory.parent or factory.parent.parent~=state.realm then
+  error('Plan is missing or belongs to another force',0)
+ end
+ return player,factory
+end
+local function read_plan(force_name,player_name,id)
+ local player,factory=find_plan(force_name,player_name,id)
+ local count=0
+ local function bounded(floor)
+  for line in floor:iterator() do
+   count=count+1
+   if count>256 then error('Plan exceeds the agent read limit of 256 rows',0) end
+   if line.class=='Floor' then bounded(line) end
+  end
+ end
+ bounded(factory.top_floor)
+ local packed=factory:pack(true)
+ packed.blueprint_strings=nil
+ local result={planId=factory.id,name=factory.name,reference=reference(player,factory),revision=factory.revision or 0,
+  force=player.force.name,forceIndex=player.force.index,district=factory.parent.name,location=factory.parent.location_proto.name,
+  status=factory.top_floor.solver_error or 'solved',valid=factory.valid,products=rates(factory:as_list()),
+  ingredients=rates(factory.top_floor.ingredients),byproducts=rates(factory.top_floor.byproducts),factory=packed}
+ -- Bound wire reads; large manual plans remain editable in the native planner.
+ if #helpers.table_to_json(result)>262144 then error('Plan is too large for an agent read',0) end
+ return result
+end
 local function calculate(force_name,player_name,surface_name,products,recipes,inputs,maximize,plan_name)
  local player=game.get_player(label(player_name))
  if not player or player.force.name~=force_name then error('Choose a player on the asking force',0) end
@@ -135,6 +174,8 @@ local function calculate(force_name,player_name,surface_name,products,recipes,in
  if ok and plan_name then
   state.realm:insert(district)
   result.planId=factory.id
+  result.reference=reference(player,factory)
+  result.revision=factory.revision or 0
   lib.gui.run_refresh(player,'all')
   return result
  end
@@ -144,22 +185,66 @@ local function calculate(force_name,player_name,surface_name,products,recipes,in
  return result
 end
 local function open_plan(force_name,player_name,id)
-  local player=game.get_player(label(player_name))
-  if not player or player.force.name~=force_name then error('Choose a player on this force',0) end
-  local state=lib.globals.player_table(player)
-  local factory=type(id)=='number' and OBJECT_INDEX[id]
-  if not state or not factory or factory.class~='Factory' or not factory.parent or factory.parent.parent~=state.realm then error('Plan is missing or belongs to another player',0) end
+  local player,factory=find_plan(force_name,player_name,id)
   lib.context.set(player,factory)
   lib.gui.run_refresh(player,'all')
   if not main_dialog.is_in_focus(player) then main_dialog.toggle(player) end
   return true
 end
 remote.add_interface('facmandu-toby-planner',{
+ read_plan=read_plan,
+ list_plans=function(force,player_name)
+  local player,state=actor(force,player_name)
+  local plans={}
+  for district in state.realm:iterator() do
+   for factory in district:iterator() do
+    if #plans==50 then return {plans=plans,truncated=true} end
+    plans[#plans+1]={planId=factory.id,name=factory.name,district=district.name,reference=reference(player,factory),revision=factory.revision or 0}
+   end
+  end
+  return {plans=plans,truncated=false}
+ end,
+ set_inputs=function(force,player_name,id,expected_revision,inputs,maximize)
+  local player,factory=find_plan(force,player_name,id)
+  if type(expected_revision)~='number' or expected_revision~=(factory.revision or 0) then error('Plan revision conflict; read the current plan before editing',0) end
+  if type(inputs)~='table' or #inputs>32 then error('Expected up to 32 input constraints',0) end
+  if #inputs>0 then list(inputs,32) end
+  local limits={}
+  for _,input in ipairs(inputs) do
+   if type(input)~='table' or type(input.perMinute)~='number' then error('Invalid input supply',0) end
+   limits[#limits+1]={name=input.name,type=input.type,amount=input.perMinute/60,mode=input.mode}
+  end
+  if not factory:set_constraints(limits,maximize) then error('Invalid planner constraints',0) end
+  solver.update(player,factory)
+  lib.gui.run_refresh(player,'all')
+  return read_plan(force,player_name,id)
+ end,
  solve=function(force,player,surface,products,recipes,inputs,maximize)
   return calculate(force,player,surface,products,recipes,inputs,maximize)
  end,
- create_plan=function(force,player,surface,name,products,recipes,inputs,maximize)
-  return calculate(force,player,surface,products,recipes,inputs,maximize,label(name))
+ create_plan=function(force,player_name,surface,name,products,recipes,inputs,maximize,request_key)
+  local player,state=actor(force,player_name)
+  local fingerprint
+  if request_key~=nil then
+   label(request_key)
+   fingerprint=helpers.table_to_json({surface=surface,name=name,products=products,recipes=recipes,inputs=inputs,maximize=maximize})
+   local requests=state.realm.creation_requests or {}
+   local saved=requests[request_key]
+   if saved then
+    if saved.fingerprint~=fingerprint then error('Plan request key was reused with different inputs',0) end
+    local _,factory=find_plan(force,player_name,saved.result.planId)
+    local result=lib.flib.deep_copy(saved.result)
+    result.reference=reference(player,factory)
+    result.force=player.force.name;result.player=player.name
+    return result
+   end
+  end
+  local result=calculate(force,player_name,surface,products,recipes,inputs,maximize,label(name))
+  if request_key then
+   state.realm.creation_requests=state.realm.creation_requests or {}
+   state.realm.creation_requests[request_key]={fingerprint=fingerprint,result=lib.flib.deep_copy(result)}
+  end
+  return result
  end,
  open_plan=open_plan,
  edit_inputs=function(force,player_name,id)

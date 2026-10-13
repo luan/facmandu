@@ -1,0 +1,8 @@
+{
+	"name": "toby-planner-qa",
+	"version": "0.0.2",
+	"title": "Toby planner QA",
+	"author": "Luan",
+	"factorio_version": "2.1",
+	"dependencies": ["facmandu-assistant >= 0.0.7"]
+}

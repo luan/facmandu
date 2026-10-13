@@ -313,15 +313,19 @@ function _context.validate(player)
     -- Using existance in OBJECT_INDEX is valid here as this is only called after a reload,
     -- which implies that only objects that are still in used have been re-indexed.
 
-    if not OBJECT_INDEX[cache.district] then cache.district = nil end
+    local function alive(id)
+        local object = id and OBJECT_INDEX[id]
+        return object and is_alive(player, object)
+    end
+    if not alive(cache.district) then cache.district = nil end
 
     for district_id, factory_cache in pairs(cache.factories) do
-        if not OBJECT_INDEX[district_id] then cache.factories[district_id] = nil end
+        if not alive(district_id) then cache.factories[district_id] = nil end
 
-        if not OBJECT_INDEX[factory_cache.factory] then factory_cache.factory = nil end
+        if not alive(factory_cache.factory) then factory_cache.factory = nil end
 
         for factory_id, floor_id in pairs(factory_cache.floors) do
-            if not (OBJECT_INDEX[factory_id] and OBJECT_INDEX[floor_id]) then
+            if not (alive(factory_id) and alive(floor_id)) then
                 factory_cache.floors[factory_id] = nil
             end
         end
@@ -332,7 +336,7 @@ function _context.validate(player)
     local cleaned_stack, position = {}, 0  ---@type HistoryEntry[], integer
     for index, entry in ipairs(history.stack) do
         local previous = cleaned_stack[#cleaned_stack]
-        if OBJECT_INDEX[entry.object_id] and not (previous
+        if alive(entry.object_id) and not (previous
                 and previous.object_id == entry.object_id
                 and previous.districts_view == entry.districts_view) then
             cleaned_stack[#cleaned_stack + 1] = entry
@@ -342,7 +346,7 @@ function _context.validate(player)
     end
     history.stack, history.position = cleaned_stack, position
 
-    if not (context.object_id and OBJECT_INDEX[context.object_id]) then
+    if not alive(context.object_id) then
         _context.set(player, player_table.realm.first)
     end
 end

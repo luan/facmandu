@@ -146,6 +146,19 @@ function _gui.run_refresh(player, trigger)
         trigger = trigger
     }  ---@type RefreshGUIElementEventData
     GLOBAL_HANDLERS["run_gui_refresh"](event_data)
+    if trigger == "all" or trigger == "factory" or trigger == "production"
+        or trigger == "factory_list" or trigger == "districts_box" then
+        local realm = lib.globals.player_table(player).realm
+        for _, peer in pairs(player.force.players) do
+            local state = lib.globals.player_table(peer)
+            if peer.index ~= player.index and state and state.realm == realm then
+                lib.context.validate(peer)
+                -- Dispatch directly so peers do not recursively refresh each other.
+                GLOBAL_HANDLERS["run_gui_refresh"]({name="refresh_gui_element", tick=game.tick,
+                    player_index=peer.index, trigger="all"})
+            end
+        end
+    end
 end
 
 

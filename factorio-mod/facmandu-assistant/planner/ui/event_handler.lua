@@ -186,7 +186,7 @@ end
 
 ---@param event GUIEventData
 local function handle_gui_event(event)
-    if not event.element then return end
+    if not event.element or not event.element.valid then return end
 
     -- GUI events always have an associated player
     local player = game.get_player(event.player_index)  ---@cast player -nil
@@ -202,6 +202,15 @@ local function handle_gui_event(event)
     end
 
     if tags.mod ~= "toby-planner" then return end  -- now proceed only with own events
+    lib.context.validate(player)
+    local modal = lib.globals.modal_data(player)
+    if modal and modal.shared_factory and (modal.shared_factory ~= lib.context.get(player, "Factory")
+        or modal.shared_revision ~= (modal.shared_factory.revision or 0)) then
+        lib.gui.close_dialog(player, "cancel")
+        player.print("This plan changed while you were editing. Open the dialog again to use the current plan.")
+        lib.gui.run_refresh(player, "all")
+        return
+    end
 
     local input_action = nil  ---@type GUIAction?
     if event.input_name then  -- custom input event on an action button
@@ -468,6 +477,13 @@ end)
 GLOBAL_HANDLERS["close_modal_dialog"] = (function(player, action, skip_opened)
     local modal_dialog_type = lib.globals.ui_state(player).modal_dialog_type
     if modal_dialog_type == nil then return end
+    local modal = lib.globals.modal_data(player)
+    if action == "submit" and modal.shared_factory
+        and (modal.shared_factory ~= lib.context.get(player, "Factory")
+            or modal.shared_revision ~= (modal.shared_factory.revision or 0)) then
+        action = "cancel"
+        player.print("This plan changed while you were editing. Your stale changes were not applied.")
+    end
 
     local listener = dialog_event_cache[modal_dialog_type]
     modal_dialog.exit(player, action, skip_opened, listener.close)

@@ -49,6 +49,22 @@ function Realm:move(district, relative_object, direction)
     self:_insert(district, relative_object, direction)
 end
 
+-- Move districts without deleting factories or their blueprint inventories.
+function Realm:merge(source)
+    if source == self then return end
+    self.creation_requests = self.creation_requests or {}
+    for key, request in pairs(source.creation_requests or {}) do
+        -- Tool call keys are globally unique; reject a collision instead of replaying another plan.
+        if self.creation_requests[key] then self.creation_requests[key].fingerprint = "conflicting merged request"
+        else self.creation_requests[key] = request end
+    end
+    while source.first do
+        local district = source.first
+        source:_remove(district)
+        self:insert(district)
+    end
+end
+
 
 ---@param filter ObjectFilter
 ---@param pivot District?
