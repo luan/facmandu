@@ -648,9 +648,11 @@ test('ordinary construction tiles round-trip and obey native placement and site 
 		to_luastring(`
  local force={name='player',recipes={{enabled=true,products={{type='item',name='landfill'}}}},logistic_networks={}}
  local charted=true;local allowed=true;local occupied=false;local built=false;local renamed=false;local created=0
+ local matching_ghost=nil
  force.is_chunk_charted=function() return charted end
  local surface={name='nauvis',is_chunk_generated=function() return true end}
  surface.get_tile=function() return {name=built and 'landfill' or 'water',has_tile_ghost=function() return occupied end} end
+ surface.find_entities_filtered=function() return matching_ghost and {matching_ghost} or {} end
  surface.can_place_entity=function(check)
   assert(check.name=='tile-ghost' and check.inner_name=='landfill' and check.force==force and check.forced==false)
   return allowed
@@ -678,6 +680,15 @@ test('ordinary construction tiles round-trip and obey native placement and site 
  allowed=false;assert(not blueprint(request).ready);allowed=true
  charted=false;assert(not blueprint(request).ready);charted=true
  occupied=true;assert(not blueprint(request).ready);occupied=false
+ occupied=true;matching_ghost={force=force,ghost_name='landfill',position={x=0.5,y=0.5}}
+ local reused=blueprint(request);assert(reused.ready and reused.tiles_pending==0 and reused.cost[1].count==1)
+ request.operation='place';request.expectedTick=100;request.expectedDesign='site'
+ local replay=blueprint(request);assert(replay.complete and replay.placed_tiles==0 and created==0)
+ request.operation='inspect'
+ matching_ghost.force={name='other'};assert(not blueprint(request).ready)
+ matching_ghost.force=force;matching_ghost.ghost_name='concrete';assert(not blueprint(request).ready)
+ matching_ghost.ghost_name='landfill';matching_ghost.position.x=1.5;assert(not blueprint(request).ready)
+ matching_ghost=nil;occupied=false
  built=true;assert(#blueprint(request).cost==0);built=false
  request.operation='place';request.expectedTick=100;request.expectedDesign='site'
  allowed=false;assert(not pcall(blueprint,request) and created==0);allowed=true

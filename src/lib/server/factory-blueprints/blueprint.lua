@@ -706,7 +706,14 @@ local function blueprint(request)
   else
    if not surface.is_chunk_generated{x=math.floor(position.x/32),y=math.floor(position.y/32)} or not force.is_chunk_charted(surface,{x=math.floor(position.x/32),y=math.floor(position.y/32)}) then
     blocked[#blocked+1]={name=tile.name,position=position,reason='Outside explored, generated terrain'}
-   elseif existing.has_tile_ghost() or not surface.can_place_entity{name='tile-ghost',inner_name=tile.name,position=position,force=force,build_check_type=defines.build_check_type.manual,forced=false} then
+   elseif existing.has_tile_ghost() then
+    -- Reuse this force's exact request; it still needs real construction items.
+    local matching=false
+    for _,ghost in ipairs(surface.find_entities_filtered{area={{position.x,position.y},{position.x+1,position.y+1}},type='tile-ghost'}) do
+     if ghost.force==force and ghost.ghost_name==tile.name and math.floor(ghost.position.x)==position.x and math.floor(ghost.position.y)==position.y then matching=true;break end
+    end
+    if not matching then blocked[#blocked+1]={name=tile.name,position=position,reason='Conflicting tile construction ghost'} end
+   elseif not surface.can_place_entity{name='tile-ghost',inner_name=tile.name,position=position,force=force,build_check_type=defines.build_check_type.manual,forced=false} then
     blocked[#blocked+1]={name=tile.name,position=position,reason='Tile cannot be placed here or already has a construction ghost'}
    else pending_tiles[#pending_tiles+1]={name=tile.name,position=position} end
   end
