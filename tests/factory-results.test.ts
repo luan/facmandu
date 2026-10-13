@@ -683,3 +683,21 @@ test('only the latest blueprint is inline even when a revision changes its label
 		details: [first, alternative]
 	});
 });
+
+test('repeated science snapshots stay inspectable while distinct forces and windows remain inline', () => {
+	const snapshot = (force: string, window: string, tick: number) => ({
+		kind: 'factory-result' as const,
+		tool: 'science_summary',
+		title: 'Science',
+		display: true,
+		result: { force, window, observed_at_tick: tick }
+	});
+	const first = snapshot('player', 'one_minute', 1),
+		other = snapshot('friends', 'one_minute', 2),
+		hour = snapshot('player', 'one_hour', 3),
+		latest = snapshot('player', 'one_minute', 4);
+	assert.deepEqual(assistantResultGroups([first, other, hour, latest]), {
+		primary: [other, hour, latest],
+		details: [first]
+	});
+});

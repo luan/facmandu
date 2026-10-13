@@ -1488,9 +1488,19 @@ export function assistantResultGroups(results: readonly FactoryResult[]) {
 	const layout = results.findLastIndex(
 		(item) => layoutTools.includes(item.tool ?? '') && item.display === true
 	);
+	const scienceKey = (item: FactoryResult) => {
+		const snapshot = record(item.result);
+		return JSON.stringify([snapshot.force, snapshot.window]);
+	};
+	const sciences = new Map<string, number>();
+	results.forEach((item, index) => {
+		if (item.tool === 'science_summary' && item.display === true)
+			sciences.set(scienceKey(item), index);
+	});
 	const visible = (item: FactoryResult, index: number) =>
 		(item.display === true &&
 			(item.tool !== 'production_plan' || index === plan) &&
+			(item.tool !== 'science_summary' || index === sciences.get(scienceKey(item))) &&
 			(!layoutTools.includes(item.tool ?? '') || index === layout)) ||
 		(index === review && review > installation) ||
 		item.tool === 'create_server_from_list' ||

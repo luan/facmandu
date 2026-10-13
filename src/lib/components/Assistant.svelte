@@ -210,7 +210,7 @@
    if (!selectedChat || chat === selectedChat) {
    loading = false;
    clearTimeout(pollTimer);
-   if (open && !busy && (gamePlayer || chats.some(conversation => conversation.state === 'running') || turns.some(turn => turn.state === 'running') || (activePrompt && refreshError))) pollTimer = setTimeout(() => void refresh(), 1500);
+   if (open && !busy && (serverId || gamePlayer || chats.some(conversation => conversation.state === 'running') || turns.some(turn => turn.state === 'running') || (activePrompt && refreshError))) pollTimer = setTimeout(() => void refresh(), !gamePlayer && !chats.some(conversation => conversation.state === 'running') ? 5000 : 1500);
    }
   }
  }
