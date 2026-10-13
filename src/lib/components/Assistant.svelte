@@ -167,7 +167,8 @@
    if (resetModel || !model || (data.models && !models.some(item => item.id === model))) model = models.some(item => item.id === data.model) ? data.model : models[0]?.id ?? '';
    if (resetModel || !effort) effort = data.effort;
    if (turns.at(-1)?.answer === error || (activePrompt && turns.at(-1)?.prompt === activePrompt && turns.at(-1)?.state === 'done')) error = '';
-   if (activePrompt && turns.at(-1)?.prompt === activePrompt && turns.at(-1)?.state !== 'running') { text = ''; activePrompt = ''; activeMods = []; activeResults = []; }
+   // After a detached stream, persisted activity owns both text and tool updates.
+   if (!busy && activePrompt && turns.at(-1)?.prompt === activePrompt) { text = ''; activePrompt = ''; activeMods = []; activeResults = []; }
    refreshError = '';
    return true;
   } catch {
@@ -238,7 +239,14 @@
    }
    if (responseError) throw new Error(responseError);
    return answer;
-  } catch (cause) { const message = requestController.signal.aborted ? 'Stopped' : cause instanceof SyntaxError ? 'The response was interrupted. Retry.' : cause instanceof Error ? cause.message : 'Request failed'; if (ownsView()) error = message; throw new Error(message); }
+  } catch (cause) {
+   // A lost browser stream does not cancel a persisted server turn. Refresh resumes its activity.
+   if (serverId && accepted && !responseError && !requestController.signal.aborted) {
+    if (ownsView()) { error = ''; progress = 'Reconnecting…'; }
+    return answer;
+   }
+   const message = requestController.signal.aborted ? 'Stopped' : cause instanceof SyntaxError ? 'The response was interrupted. Retry.' : cause instanceof Error ? cause.message : 'Request failed'; if (ownsView()) error = message; throw new Error(message);
+  }
   finally { runningViews.delete(requestChat); if (ownsView()) { busy = false; controller = undefined; progress = ''; feedback = ''; if (!accepted) { text = ''; activePrompt = ''; activeMods = []; activeResults = []; } await refresh(); if (!serverId && plans[0]?.applied && plans[0].id !== previousPlanId) await invalidate('app:modlist'); } }
  }
  async function apply(id: string) {
