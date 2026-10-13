@@ -4,6 +4,7 @@ local machines=require('scripts.tools.machine_diagnostics').functions
 local power=require('scripts.tools.power_diagnostics').functions
 local production=require('scripts.tools.production').functions
 local buses=require('scripts.tools.bus_discovery').functions
+local planning=require('scripts.tools.planning').functions
 local force_lookup=require('scripts.tools.force_lookup')
 local surface_lookup=require('scripts.tools.surface_lookup')
 local M={}
@@ -33,6 +34,23 @@ local function read(a)
  end
  if prototypes.item[a.product] then section('rate',production.item_rate,{force=force.name,surface=surface.name,item=a.product,window='one_minute'}) end
  local candidates=found.entities
+ if #candidates==0 then
+  -- A real but unused mod prototype can share the player's everyday item name.
+  -- Expose actual alternatives; never silently change which product was requested.
+  local recipes=planning.planning_recipes{force=force.name,product=a.product}
+  result.recipes=recipes
+  if recipes.total==0 then
+   result.product_resolution_required=true
+   result.note='This exact prototype has no shown producers or crafting recipes. Inspect its alternative products before claiming the requested item is absent; the rate belongs only to this exact prototype.'
+   local alternatives={}
+   for index,name in ipairs(recipes.suggestions or {}) do
+    if index>6 then break end
+    local other=locate.find_entities{force=force.name,surface=surface.name,product=name,ghost=false,limit=1}
+    alternatives[#alternatives+1]={product=name,producers=other.total,truncated=other.truncated,example=(other.entities or {})[1]}
+   end
+   result.alternatives=alternatives
+  end
+ end
  table.sort(candidates,function(x,y)
   if a.x then
    local dx=(x.x-a.x)^2+(x.y-a.y)^2;local dy=(y.x-a.x)^2+(y.y-a.y)^2

@@ -333,9 +333,11 @@ test('production surveys preserve useful independent readings and never guess an
  game={tick=100,forces={player=force},surfaces={nauvis=surface}}
  prototypes={item={glass={}},fluid={}}
  local unknown=false;local no_producers=false;local reads=0
+ package.loaded['scripts.tools.planning']={functions={planning_recipes=function() return {total=0,recipes={},suggestions={'real-glass'}} end}}
  package.loaded['scripts.tools.locate']={functions={find_entities=function(a)
   assert(a.force=='player' and a.surface=='nauvis')
   if a.product then
+   if a.product=='real-glass' then return {found=true,total=23,truncated=false,entities={{name='real-furnace',x=1,y=1}}} end
    if unknown then return {found=false,reason='Unknown product',suggestions={'glass'}} end
    return {found=true,entities=no_producers and {} or {{name='furnace',unit_number=2,x=20,y=20},{name='furnace',unit_number=1,x=10,y=10}},truncated=true,omitted=9}
   end
@@ -362,6 +364,7 @@ test('production surveys preserve useful independent readings and never guess an
  assert(not result.found and result.suggestions[1]=='glass' and reads==before and not result.machine)
  unknown=false;no_producers=true;result=survey(args)
  assert(result.found and result.rate.produced_per_min==50 and not result.selected and reads==before)
+ assert(result.product=='glass' and result.product_resolution_required and result.alternatives[1].product=='real-glass' and result.alternatives[1].producers==23)
  surface.platform={force={name='enemy'}};assert(not pcall(survey,args))
  assert(not pcall(survey,{force='enemy',surface='nauvis',product='glass'}))
  `)
