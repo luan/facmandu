@@ -15,22 +15,76 @@ function books.remember(player, state)
     books.init()
     local entries = books.list(player.force)
     local accepted, pending, changed = {}, 0, false
-    local function remember(id, chat_id, title, design, blueprint)
+    local function remember(id, chat_id, title, design, blueprint, design_id, revision_of)
+        local matched, matched_record, parent, parent_record, child
         for _, entry in ipairs(entries) do
             if entry.id == id then
-                -- A saved artifact ID is immutable; do not replace a different design.
-                return entry.blueprint == blueprint
+                if entry.blueprint ~= blueprint then return false end
+                matched, matched_record = entry, entry
+            end
+            local records = {entry}
+            for _, record in ipairs(entry.lineage or {}) do records[#records + 1] = record end
+            for _, record in ipairs(records) do
+                if record ~= entry and record.id == id then matched, matched_record = entry, record end
+                if revision_of and record.designId == revision_of then parent, parent_record = entry, record end
+                if design_id and record.revisionOf == design_id then child = entry end
             end
         end
-        -- Retain saved entries at the limit; raise after profiling save size.
-        if #entries >= 32 then return false end
-        entries[#entries + 1] = {id=id, chatId=chat_id, title=title, design=design,
-            blueprint=blueprint, tick=game.tick}
+        for _, entry in pairs{matched=matched, parent=parent, child=child} do
+            if (entry.chatId or entry.id) ~= chat_id then return false end
+        end
+        if matched_record then
+            if matched_record.designId and design_id and matched_record.designId ~= design_id then return false end
+            if matched_record.revisionOf and revision_of and matched_record.revisionOf ~= revision_of then return false end
+            design_id = design_id or matched_record.designId
+            revision_of = revision_of or matched_record.revisionOf
+        end
+        -- A new branch cannot replace a revision that has already been superseded.
+        if parent and parent_record ~= parent and not matched and not child then return false end
+        if child and parent == child and parent_record == parent then return false end
+
+        local target = child or matched or parent
+        local latest = not child and (not matched or matched_record == matched)
+        if not target and #entries >= 32 then return false end
+        local lineage = {}
+        local function retain(record)
+            for _, existing in ipairs(lineage) do if existing.id == record.id then return end end
+            lineage[#lineage + 1] = {id=record.id, designId=record.designId, revisionOf=record.revisionOf}
+        end
+        for _, record in ipairs(target and target.lineage or {}) do retain(record) end
+        if target and latest and target.id ~= id then retain(target) end
+        if not latest then retain{id=id, designId=design_id, revisionOf=revision_of} end
+        for _, older in pairs{parent=parent, matched=matched} do
+            if older ~= target then
+                retain(older)
+                for _, record in ipairs(older.lineage or {}) do retain(record) end
+            end
+        end
+        -- Keep replay ancestry bounded; raise after profiling long-lived save size.
+        if #lineage > 64 then return false end
+        if not target then
+            target = {}
+            entries[#entries + 1] = target
+        end
+        if latest then
+            target.id, target.chatId, target.title, target.design = id, chat_id, title, design
+            target.blueprint, target.tick = blueprint, game.tick
+            target.designId, target.revisionOf = design_id, revision_of
+        end
+        for _, record in ipairs(lineage) do
+            if record.id == id then record.designId, record.revisionOf = design_id, revision_of end
+        end
+        target.lineage = lineage
+        for index = #entries, 1, -1 do
+            local entry = entries[index]
+            if entry ~= target and (entry == parent or entry == matched) then table.remove(entries, index) end
+        end
         changed = true
         return true
     end
     for _, artifact in ipairs(state.blueprints or {}) do
-        if remember(artifact.id, artifact.chatId, artifact.title, artifact.label, artifact.blueprint) then
+        if remember(artifact.id, artifact.chatId, artifact.title, artifact.label, artifact.blueprint,
+                artifact.designId, artifact.revisionOf) then
             accepted[#accepted + 1] = artifact.id
         else pending = pending + 1 end
     end
@@ -125,9 +179,33 @@ end
 function books.merge(source, destination)
     books.init()
     local entries = books.list(destination)
+    local function contains(entry, id)
+        if entry.id == id then return true end
+        for _, record in ipairs(entry.lineage or {}) do if record.id == id then return true end end
+        return false
+    end
+    local function retain_ancestry(current, older)
+        current.lineage = current.lineage or {}
+        local records = {older}
+        for _, record in ipairs(older.lineage or {}) do records[#records + 1] = record end
+        for _, record in ipairs(records) do
+            if not contains(current, record.id) then
+                current.lineage[#current.lineage + 1] = {id=record.id, designId=record.designId, revisionOf=record.revisionOf}
+            end
+        end
+    end
     for _, entry in ipairs(storage.books[source] or {}) do
         local found = false
-        for _, other in ipairs(entries) do if other.id == entry.id then found = true; break end end
+        for _, other in ipairs(entries) do
+            if contains(other, entry.id) then retain_ancestry(other, entry);found = true;break end
+        end
+        if not found then
+            for index = #entries, 1, -1 do
+                if contains(entry, entries[index].id) then
+                    retain_ancestry(entry, entries[index]);table.remove(entries, index)
+                end
+            end
+        end
         if not found then entries[#entries + 1] = entry end
     end
     storage.books[destination.index] = entries

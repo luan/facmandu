@@ -1,6 +1,6 @@
 -- Disposable native QA only: researches technologies and merges test forces.
 -- Never enable this fixture on a live server or an original save.
-script.on_init(function()
+local function prepare()
  local player=game.get_player(1)
  assert(player,'QA requires a retained player in this disposable save')
  player.force.research_all_technologies()
@@ -21,10 +21,12 @@ script.on_init(function()
  remote.call('facmandu-assistant','open_player',player.index)
  assert(player.gui.screen['facmandu-toby-panel'])
  log('TOBY_PLANNER_NATIVE_OK '..helpers.table_to_json{inputOutput=result.products,machineCount=fixed.lines[1].machines})
-end)
+end
 local checked=false
 local merged_id
 script.on_nth_tick(5,function()
+ -- Newly added fixture mods initialize before an existing planner's migration.
+ if not storage.planId then prepare();return end
  if storage.qa_done then
   if not checked then
    checked=true
@@ -41,7 +43,9 @@ script.on_nth_tick(5,function()
    end
    local book=remote.call('facmandu-assistant','export_book','player',player.name)
    local decoded=helpers.json_to_table(helpers.decode_string(book:sub(2)))
-   assert(decoded.blueprint_book.blueprints[1].blueprint_book.label=='Iron supply')
+   local project
+   for _,entry in ipairs(decoded.blueprint_book.blueprints) do if entry.blueprint_book.label=='Iron supply' then project=entry.blueprint_book;break end end
+   assert(project,'Retained Iron supply project is missing')
    log('TOBY_PLAN_AND_BOOK_RELOAD_OK')
   end
   return
@@ -128,17 +132,50 @@ script.on_nth_tick(5,function()
     chats={{id='qa-running',title='Iron supply',state='running',status='Routing supply belts',author=player.name},{id='qa-done',title='Green circuits',state='done',status='Blueprint ready',author=player.name},{id='qa-error',title='Oil refining',state='error',status='Needs an unlocked recipe',author=player.name}},
     messages={{role='user',text='Build from '..plan.reference},{role='assistant',text='The shared plan can produce 240 plates/min. I am connecting the supply.'}},
     activity={{text='Read shared factory plan'},{text='Validated iron supply cap'}},blueprint=blueprint,design='Iron smelting',designStage='Validated draft',
-    force='player',blueprints={{id=string.rep('a',64),chatId='qa-running',title='Iron supply',label='Supply belts',blueprint=blueprint},{id=string.rep('b',64),chatId='qa-running',title='Iron supply',label='Smelters',blueprint=second}}})
+    force='player',blueprints={{id=string.rep('a',64),designId=string.rep('1',64),chatId='qa-running',title='Iron supply',label='Supply belts',blueprint=blueprint},{id=string.rep('b',64),designId=string.rep('2',64),chatId='qa-running',title='Iron supply',label='Smelters',blueprint=second}}})
    local exported=remote.call('facmandu-assistant','export_book','player',player.name)
    local decoded=helpers.json_to_table(helpers.decode_string(exported:sub(2)))
-   assert(decoded.blueprint_book.blueprints[1].blueprint_book.label=='Iron supply')
-   local designs=decoded.blueprint_book.blueprints[1].blueprint_book.blueprints
+   local project
+   for _,entry in ipairs(decoded.blueprint_book.blueprints) do if entry.blueprint_book.label=='Iron supply' then project=entry.blueprint_book;break end end
+   assert(project,'Retained Iron supply project is missing')
+   local designs=project.blueprints
    assert(#designs==2 and designs[1].blueprint.label=='Supply belts' and designs[2].blueprint.label=='Smelters')
    log('TOBY_MULTI_DESIGN_BOOK_OK')
+   local function deliver(rows)
+    return remote.call('facmandu-assistant','update_player',player.index,{status='Ready',answer='',force='player',
+     current='qa-running',chats={{id='qa-running',title='Iron supply'}},blueprints=rows})
+   end
+   local function revision(id,design,parent,label,chat)
+    return {id=string.rep(id,64),designId=string.rep(design,64),revisionOf=parent and string.rep(parent,64),
+     chatId=chat or 'qa-running',title='Iron supply',label=label,blueprint=blueprint}
+   end
+   assert(#deliver{revision('d','4','3','Latest supply'),revision('c','3','1','Earlier supply')}.blueprints==2)
+   assert(#deliver{revision('a','1',nil,'Supply belts'),revision('c','3','1','Earlier supply')}.blueprints==2)
+   local revised=remote.call('facmandu-assistant','export_book','player',player.name)
+   local revision_data=helpers.json_to_table(helpers.decode_string(revised:sub(2)))
+   local found_latest,found_module=0,0
+   for _,entry in ipairs(revision_data.blueprint_book.blueprints) do
+    if entry.blueprint_book.label=='Iron supply' then
+     assert(#entry.blueprint_book.blueprints==2,'Revision duplicated the saved module')
+     for _,item in ipairs(entry.blueprint_book.blueprints) do
+      if item.blueprint.label=='Latest supply' then found_latest=found_latest+1 end
+      if item.blueprint.label=='Smelters' then found_module=found_module+1 end
+     end
+    end
+   end
+   assert(found_latest==1 and found_module==1)
+   assert(#deliver{revision('e','5','4','Wrong chat','other-chat')}.blueprints==0)
+   assert(revised==remote.call('facmandu-assistant','export_book','player',player.name))
+   local malformed=revision('e','5','4','Invalid ancestry');malformed.revisionOf='invalid'
+   assert(not pcall(deliver,{malformed}))
+   deliver({})
+   exported=revised
+   log('TOBY_BOOK_REVISION_LINEAGE_OK')
    inventory=game.create_inventory(1);assert(inventory[1].import_stack(exported)==0);inventory.destroy()
    player.set_controller{type=defines.controllers.god}
    assert(remote.call('facmandu-assistant','take_book','player',player.name,false))
    local held=helpers.json_to_table(helpers.decode_string(player.cursor_stack.export_stack():sub(2)))
+   local held_count=#held.blueprint_book.blueprints
    held.blueprint_book.label='User renamed book'
    held.blueprint_book.blueprints[1].blueprint_book.label='My edited project'
    assert(player.cursor_stack.import_stack('0'..helpers.encode_string(helpers.table_to_json(held)))==0)
@@ -146,7 +183,7 @@ script.on_nth_tick(5,function()
    local updated=helpers.json_to_table(helpers.decode_string(player.cursor_stack.export_stack():sub(2)))
    assert(updated.blueprint_book.label=='User renamed book')
    assert(updated.blueprint_book.blueprints[1].blueprint_book.label=='My edited project')
-   assert(#updated.blueprint_book.blueprints==2)
+   assert(#updated.blueprint_book.blueprints==held_count+1)
    remote.call('facmandu-assistant','attach_plan' ,player.index,storage.planId)
    assert(player.gui.screen['facmandu-toby-panel'])
    storage.qa_done=true

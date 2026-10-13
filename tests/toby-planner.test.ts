@@ -89,3 +89,66 @@ test('native planner solver respects supply, recycling balances, output goals an
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 });
+
+test('native books replace a revision and retain independent modules across replay order', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const source = readFileSync('factorio-mod/facmandu-assistant/planner/books.lua', 'utf8');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ package.preload['books']=function() ${source} end
+ storage={};game={tick=1}
+ local books=require('books')
+ local player={force={index=1}}
+ local function artifact(id,design,parent,chat)
+  return {id=id,designId=design,revisionOf=parent,chatId=chat or 'chat',title='Project',label=id,blueprint='0'..id}
+ end
+ local function deliver(rows)
+  return books.remember(player,{blueprints=rows})
+ end
+ local a=artifact('a','A');local b=artifact('b','B','A');local c=artifact('c','C','B')
+ for _,order in ipairs{{a,b,c},{c,b,a},{a,c,b},{b,a,c},{b,c,a},{c,a,b}} do
+  storage={}
+  for _,row in ipairs(order) do assert(#deliver{row}.blueprints==1) end
+  assert(#books.list(player.force)==1 and books.list(player.force)[1].id=='c')
+  assert(#deliver{a,b,c}.blueprints==3)
+  assert(#books.list(player.force)==1 and books.list(player.force)[1].id=='c')
+  local module=artifact('module','M');assert(#deliver{module}.blueprints==1)
+  assert(#books.list(player.force)==2)
+  assert(#deliver{artifact('foreign','F','C','other-chat')}.blueprints==0)
+  assert(#books.list(player.force)==2 and books.list(player.force)[1].id=='c')
+  assert(#deliver{artifact('branch','D','A')}.blueprints==0)
+  assert(#deliver{{id='c',designId='C',revisionOf='B',chatId='chat',title='Project',label='c',blueprint='0different'}}.blueprints==0)
+ end
+ storage={}
+ deliver{artifact('legacy',nil)}
+ deliver{artifact('legacy','L')}
+ deliver{artifact('new','N','L')}
+ assert(#books.list(player.force)==1 and books.list(player.force)[1].id=='new')
+ -- Metadata-free retries from an older host must keep the learned ancestry.
+ assert(#deliver{artifact('legacy',nil)}.blueprints==1)
+ assert(books.list(player.force)[1].id=='new')
+ storage={}
+ deliver{artifact('a',nil)};deliver{c,b};deliver{a}
+ assert(#books.list(player.force)==1 and books.list(player.force)[1].id=='c')
+ storage={}
+ for i=1,65 do assert(#deliver{artifact(tostring(i),'D'..i,i>1 and ('D'..(i-1)) or nil)}.blueprints==1) end
+ assert(#deliver{artifact('66','D66','D65')}.blueprints==0)
+ assert(#books.list(player.force)==1 and books.list(player.force)[1].id=='65')
+ for _,source_newer in ipairs{true,false} do
+  storage={};player.force.index=1
+  deliver(source_newer and {a,b,c} or {a})
+  player.force.index=2
+  deliver(source_newer and {a} or {a,b,c})
+  books.merge(1,player.force)
+  assert(#books.list(player.force)==1 and books.list(player.force)[1].id=='c')
+  assert(#deliver{a,b}.blueprints==2)
+  assert(#books.list(player.force)==1 and books.list(player.force)[1].id=='c')
+ end
+ `)
+	);
+	const error = status === lua.LUA_OK ? '' : lua.lua_tojsstring(state, -1);
+	lua.lua_close(state);
+	assert.equal(status, lua.LUA_OK, String(error));
+});

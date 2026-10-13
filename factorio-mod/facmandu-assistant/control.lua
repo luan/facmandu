@@ -161,7 +161,7 @@ local function render_books(player,refs)
  actions.add{type='button',name=PREFIX..'take-book',caption='Take Toby book',style='toby_planner_button_green'}
  actions.add{type='button',name=PREFIX..'update-book',caption='Update held book',style='toby_planner_button_frame_tool',tooltip='Append current Toby designs to the book in your cursor. Existing entries and your edits are preserved.'}
  local pending=storage.book_sync[player.force.index] or 0
- if pending>0 then label(refs.books,'Book sync incomplete: '..pending..' designs could not be saved. The save retains up to 32 designs; existing designs are preserved.',refs.content_width).style.font_color={r=1,g=.8,b=.45} end
+ if pending>0 then label(refs.books,'Book sync incomplete: '..pending..' designs or revisions could not be saved. The save retains up to 32 designs and 64 prior revisions per design; existing designs are preserved.',refs.content_width).style.font_color={r=1,g=.8,b=.45} end
  local entries=books.list(player.force)
  if #entries==0 then label(refs.books,'No saved designs yet. Designs received from Toby will remain here when AI is unavailable.',refs.content_width) end
  for _,entry in ipairs(entries) do
@@ -203,6 +203,11 @@ local function update(player_index,state)
   local bytes=0
   for _,artifact in ipairs(state.blueprints) do
    if type(artifact)~='table' or type(artifact.id)~='string' or #artifact.id~=64 or not artifact.id:match('^%x+$') then error('Invalid saved design ID',0) end
+   for _,field in ipairs{'designId','revisionOf'} do
+    local value=artifact[field]
+    if value~=nil and (type(value)~='string' or #value~=64 or not value:match('^[a-f0-9]+$')) then error('Invalid saved design '..field,0) end
+   end
+   if artifact.revisionOf and (not artifact.designId or artifact.revisionOf==artifact.designId) then error('Invalid saved design ancestry',0) end
    for field,limit in pairs{chatId=100,title=200,label=200} do if type(artifact[field])~='string' or #artifact[field]>limit then error('Invalid saved design '..field,0) end end
    if type(artifact.blueprint)~='string' or #artifact.blueprint>65536 or not artifact.blueprint:match('^0[%w+/=]+$') then error('Invalid saved blueprint',0) end
    bytes=bytes+#artifact.blueprint
