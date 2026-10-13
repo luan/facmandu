@@ -1,6 +1,7 @@
 import type { ConversationStreamChunk } from '@flue/runtime';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import {
+	assistantMilestone,
 	assistantModsSchema,
 	type FactoryResult,
 	factoryResultSchema
@@ -329,8 +330,7 @@ export async function finishServerTurn(
 		}
 	} catch (cause) {
 		const failure = controller.signal.aborted ? 'Response stopped.' : assistantErrorMessage(cause);
-		const checkpoint = results.findLast((result) => result.tool === 'report_progress');
-		const milestone = checkpoint && assistantToolFeedback('report_progress', checkpoint);
+		const milestone = assistantMilestone(results);
 		const answer = milestone ? `${failure}\n\nLast update: ${milestone}` : failure;
 		// The turn ID identifies the durable receipt; provider payloads stay out of logs.
 		console.error('Server assistant failed:', turn.id, failure);

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { and, desc, eq } from 'drizzle-orm';
+import { assistantMilestone } from '$lib/assistant-results';
 import { gamePanelText, gameReply, gameText, parseGameChat, parseGameUi } from '$lib/game-chat';
 import { panelActivity, panelDesign, panelDrone } from '$lib/toby-panel';
 import { routeAmbientChat } from './ambient-chat';
@@ -90,7 +91,11 @@ async function syncPanel(
 	const turnsWithActivity = turns.map((turn) => {
 		const activity = serverAssistantActivity.get(turn.id);
 		return activity
-			? { ...turn, answer: activity.answer, results: JSON.stringify(activity.results) }
+			? {
+					...turn,
+					answer: activity.answer || assistantMilestone(activity.results),
+					results: JSON.stringify(activity.results)
+				}
 			: turn;
 	});
 	const turn = turnsWithActivity[0];

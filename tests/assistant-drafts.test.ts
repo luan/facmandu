@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { type FactoryResult, savedBlueprintDrafts } from '../src/lib/assistant-results';
+import {
+	assistantMilestone,
+	type FactoryResult,
+	savedBlueprintDrafts
+} from '../src/lib/assistant-results';
 
 test('interrupted runs retain each saved design, including hidden drafts, without replay duplicates', () => {
 	const draft = (id: string, label: string): FactoryResult => ({
@@ -29,4 +33,28 @@ test('interrupted runs retain each saved design, including hidden drafts, withou
 		['Connected science upgrades', 'Collector draft']
 	);
 	assert.deepEqual(savedBlueprintDrafts([error]), []);
+});
+
+test('the latest public milestone stays available while later inspection tools finish', () => {
+	const update = (message: string): FactoryResult => ({
+		kind: 'factory-result',
+		tool: 'report_progress',
+		title: 'Toby',
+		result: { message }
+	});
+	const inspection: FactoryResult = {
+		kind: 'factory-result',
+		tool: 'factory_lookup',
+		title: 'Inspection',
+		result: { message: 'This is tool data, not a milestone' }
+	};
+	assert.equal(
+		assistantMilestone([
+			update('Measured science rates.'),
+			update('Quartz supply is the bottleneck.'),
+			inspection
+		]),
+		'Quartz supply is the bottleneck.'
+	);
+	assert.equal(assistantMilestone([inspection]), '');
 });

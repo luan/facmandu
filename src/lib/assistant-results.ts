@@ -29,6 +29,16 @@ export const factoryResultSchema = z.object({
 });
 export type FactoryResult = z.infer<typeof factoryResultSchema>;
 
+export function assistantMilestone(results: readonly FactoryResult[]) {
+	const value = results.findLast((result) => result.tool === 'report_progress')?.result;
+	return value &&
+		typeof value === 'object' &&
+		'message' in value &&
+		typeof value.message === 'string'
+		? value.message
+		: '';
+}
+
 // A failed multi-product run must not hide earlier drafts behind the last small revision.
 export function savedBlueprintDrafts(results: readonly FactoryResult[]) {
 	const drafts = new Map<string, z.infer<typeof blueprintArtifactSchema>>();

@@ -8,7 +8,7 @@
  import { assistantResultGroups } from '$lib/factory-results';
  import FactoryResultView from '$lib/components/FactoryResult.svelte';
  import BlueprintResult from '$lib/components/BlueprintResult.svelte';
- import { savedBlueprintDrafts, serverAssistantPlanSchema, type FactoryResult, type AssistantMod } from '$lib/assistant-results';
+ import { assistantMilestone, savedBlueprintDrafts, serverAssistantPlanSchema, type FactoryResult, type AssistantMod } from '$lib/assistant-results';
  import { modThumbnailUrl } from '$lib/utils';
  import ModPreviewSheet from '../../routes/(app)/modlists/[id]/ModPreviewSheet.svelte';
  import AssistantMessage from '$lib/components/AssistantMessage.svelte';
@@ -438,8 +438,10 @@
     {/each}
     {#if visiblePrompt}
      {@const resultGroups = assistantResultGroups(visibleResults)}
+     {@const milestone = assistantMilestone(visibleResults)}
      <section class="space-y-4" aria-label="Current response">
       <div class="flex justify-end"><p class="max-w-[90%] whitespace-pre-wrap break-words border border-border bg-white/5 px-4 py-3 text-sm leading-relaxed">{visiblePrompt}</p></div>
+      {#if milestone && milestone !== visibleText}<div class="border-l-2 border-primary/50 pl-3 text-sm" aria-label="Latest update"><AssistantMessage text={milestone} /></div>{/if}
       {#if visibleText}<div class="pr-2"><AssistantMessage text={visibleText} /></div>{/if}
       {@render modCards(visibleMods)}
       {#each resultGroups.primary as item}<FactoryResultView {item} {serverId} />{/each}
