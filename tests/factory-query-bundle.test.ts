@@ -320,3 +320,52 @@ test('mining snapshots read charted reserves and actual output without invoking 
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 	lua.lua_close(state);
 });
+
+test('production surveys preserve useful independent readings and never guess an unknown product', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ package.path=${JSON.stringify(`${resolve('src/lib/server/factory-query')}/?.lua;`)}..package.path
+ local force={name='player'}
+ local surface={valid=true,name='nauvis'}
+ game={tick=100,forces={player=force},surfaces={nauvis=surface}}
+ prototypes={item={glass={}},fluid={}}
+ local unknown=false;local no_producers=false;local reads=0
+ package.loaded['scripts.tools.locate']={functions={find_entities=function(a)
+  assert(a.force=='player' and a.surface=='nauvis')
+  if a.product then
+   if unknown then return {found=false,reason='Unknown product',suggestions={'glass'}} end
+   return {found=true,entities=no_producers and {} or {{name='furnace',unit_number=2,x=20,y=20},{name='furnace',unit_number=1,x=10,y=10}},truncated=true,omitted=9}
+  end
+  return {found=true,entities={{name='chest',contents={items={{name='sand',count=100}}}}},truncated=false}
+ end}}
+ package.loaded['scripts.tools.machine_diagnostics']={functions={inspect_machine=function(a)
+  reads=reads+1;return {found=true,unit_number=a.unit_number,status='working',connections={items={{role='input'}}}}
+ end}}
+ package.loaded['scripts.tools.power_diagnostics']={functions={inspect_power_network=function() error('Power read failed',0) end}}
+ package.loaded['scripts.tools.production']={functions={item_rate=function() return {found=true,produced_per_min=50,consumed_per_min=60} end}}
+ package.loaded['scripts.tools.bus_discovery']={functions={find_buses=function() return {total=0,truncated=true,candidates={}} end}}
+ local survey=require('scripts.tools.production_survey').functions.survey_production
+ local args={force='player',surface='nauvis',product='glass'}
+ local result=survey(args)
+ assert(result.tick==100 and result.machine.status=='working' and result.rate.produced_per_min==50)
+ assert(result.selected.unit_number==1 and result.producers.truncated and result.producers.omitted==9)
+ assert(result.nearby.entities[1].contents.items[1].count==100)
+ assert(result.buses.truncated and result.errors[1].section=='power' and not result.power)
+ args.x=19;args.y=19;assert(survey(args).selected.unit_number==2)
+ for _,a in ipairs({{x=1},{y=1},{x=0/0,y=1},{x=math.huge,y=1}}) do
+  a.force='player';a.surface='nauvis';a.product='glass';assert(not pcall(survey,a))
+ end
+ local before=reads;unknown=true;result=survey(args)
+ assert(not result.found and result.suggestions[1]=='glass' and reads==before and not result.machine)
+ unknown=false;no_producers=true;result=survey(args)
+ assert(result.found and result.rate.produced_per_min==50 and not result.selected and reads==before)
+ surface.platform={force={name='enemy'}};assert(not pcall(survey,args))
+ assert(not pcall(survey,{force='enemy',surface='nauvis',product='glass'}))
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+	lua.lua_close(state);
+});
