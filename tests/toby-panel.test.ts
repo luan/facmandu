@@ -23,6 +23,21 @@ const draft = {
 	}
 };
 describe('Toby native harness', () => {
+	test('books forward validated revision ancestry for native replacement', () => {
+		const revisionOf = 'a'.repeat(64);
+		const chat = { id: 'chat', title: 'More glass', gameForce: 'player' };
+		const design = { ...draft, display: true, result: { ...draft.result, revisionOf } };
+		expect(panelBlueprints(JSON.stringify([design]), chat, 'player')[0]?.revisionOf).toBe(
+			revisionOf
+		);
+		expect(
+			panelBlueprints(
+				JSON.stringify([{ ...design, result: { ...design.result, revisionOf: 'invalid' } }]),
+				chat,
+				'player'
+			)
+		).toEqual([]);
+	});
 	test('books retain independent final modules without publishing inspections or drafts', () => {
 		const first = { ...draft, display: true };
 		const second = { ...first, result: { ...draft.result, label: 'Sand mine', blueprint: '0def' } };

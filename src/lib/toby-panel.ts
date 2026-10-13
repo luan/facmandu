@@ -62,7 +62,8 @@ export function panelBlueprints(
 				// Web chat history stays private; only its force-attested design is shared.
 				title: gameText(chat.gameForce ? chat.title : design.data.label, 200),
 				label: gameText(design.data.label, 200),
-				blueprint: design.data.blueprint
+				blueprint: design.data.blueprint,
+				...(design.data.revisionOf ? { revisionOf: design.data.revisionOf } : {})
 			}
 		];
 	});

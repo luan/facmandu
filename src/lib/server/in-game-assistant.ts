@@ -198,7 +198,9 @@ async function syncPanel(
 			.orderBy(desc(serverAssistantTurn.createdAt))
 			.limit(32);
 		const queued = new Set<string>();
-		for (const entry of archive) {
+		// Deliver ancestors before revisions so the save-owned book can replace
+		// earlier entries without changing independent modules or held books.
+		for (const entry of archive.toReversed()) {
 			const active = serverAssistantActivity.get(entry.id);
 			for (const blueprint of panelBlueprints(
 				active ? JSON.stringify(active.results) : entry.results,
