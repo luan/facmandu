@@ -138,15 +138,22 @@ local function route(a)
   end
   if not accessible then return {found=false,surface=surface.name,visited=0,note='The destination is surrounded by existing transport. Inspect its upstream feed or plan the necessary connection edits; routing does not replace those belts.'} end
  end
- local heap,best,parents,nodes={},{},{},{}
+ local heap,best={},{}
  local function enqueue(x,y,d,tunnel,g,parent,jump)
   local id=key(x,y,d,tunnel)
   if best[id] and best[id]<=g then return end
+  -- Direction states may revisit a tile, but a physical route cannot. Keep
+  -- immutable parents so improving another state cannot rewrite this path.
+  local ancestor=parent
+  while ancestor do
+   if ancestor.x==x and ancestor.y==y then return end
+   ancestor=ancestor.parent
+  end
   local h=math.abs(x-a.target_x)+math.abs(y-a.target_y)
   -- Favor progress over exhaustive shortest-path search within the tick budget.
   -- A route may use more undergrounds; native safety checks still apply to every edge.
-  local node={x=x,y=y,d=d,tunnel=tunnel,g=g,h=h,f=g+h*1.2,id=id}
-  best[id]=g;nodes[id]=node;parents[id]={id=parent,jump=jump};push(heap,node)
+  local node={x=x,y=y,d=d,tunnel=tunnel,g=g,h=h,f=g+h*1.2,id=id,parent=parent,jump=jump}
+  best[id]=g;push(heap,node)
  end
  enqueue(a.x,a.y,start_entity and start_entity.direction or nil,false,0)
  local visited=0
@@ -158,16 +165,16 @@ local function route(a)
    if not node.tunnel and node.h<span and (not closest or node.h<closest.h or (node.h==closest.h and node.g<closest.g)) then closest=node end
    if node.x==a.target_x and node.y==a.target_y then
     local path={};local current=node
-    while current do table.insert(path,1,current);current=parents[current.id].id and nodes[parents[current.id].id] or nil end
+    while current do table.insert(path,1,current);current=current.parent end
     local entities,positions={},{}
     for i,p in ipairs(path) do
      local position=p.x..':'..p.y
      if positions[position] then return {found=false,surface=surface.name,visited=visited,note='The bounded route would overlap itself. Choose a charted waypoint to separate its approaches.'} end
      positions[position]=true
      if not (i==1 and start_entity) and not (i==#path and end_entity) then
-      local next_edge=path[i+1] and parents[path[i+1].id]
+      local next_edge=path[i+1]
       local jump_in=next_edge and next_edge.jump
-      local jump_out=parents[p.id].jump
+      local jump_out=p.jump
       local d=jump_in and jump_in.d or (path[i+1] and path[i+1].d or p.d)
       entities[#entities+1]={name=(jump_in or jump_out) and a.underground or a.belt,position={x=p.x,y=p.y},direction=d,type=jump_in and 'input' or jump_out and 'output' or nil}
      end
@@ -186,7 +193,7 @@ local function route(a)
      local target_ok=(at_end and end_entity and known(x,y) and (step.d+8)%16~=end_entity.direction) or fits(a.belt,x,y,step.d)
      -- Prefer readable straight runs over equally short zigzags.
      local turn=node.d~=nil and node.d~=step.d and 0.25 or 0
-     if source_ok and target_ok then enqueue(x,y,step.d,false,node.g+1+turn,node.id) end
+     if source_ok and target_ok then enqueue(x,y,step.d,false,node.g+1+turn,node) end
      if underground and not node.tunnel and node.d==step.d and not (node.x==a.x and node.y==a.y and start_entity) and fits(a.underground,node.x,node.y,step.d) then
       local length=math.min(underground.max_underground_distance,32)
       for n=2,length do
@@ -194,7 +201,7 @@ local function route(a)
        -- Keep section joins on surface belts. A following section must not
        -- replace an underground exit when the shared endpoint is combined.
        local at_destination=tx==a.target_x and ty==a.target_y
-       if not at_destination and fits(a.underground,tx,ty,step.d) and tunnel_clear(node.x,node.y,n,step) then enqueue(tx,ty,step.d,true,node.g+n+2,node.id,{d=step.d}) end
+       if not at_destination and fits(a.underground,tx,ty,step.d) and tunnel_clear(node.x,node.y,n,step) then enqueue(tx,ty,step.d,true,node.g+n+2,node,{d=step.d}) end
       end
      end
     end

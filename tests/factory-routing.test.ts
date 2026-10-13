@@ -100,6 +100,23 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
   assert(e.position.x~=10.5 or e.position.y~=0.5)
   assert(e.position.x<4 or e.position.x>=7 or e.position.y< -1 or e.position.y>=2,'Route intersects the unplaced machine')
  end
+ -- A direction-aware search used to find a self-crossing path and reject the
+ -- whole connection instead of finding the clear alternative in this corridor.
+ world={};blocked={};chart={}
+ existing(0.5,0.5);existing(6.5,5.5)
+ local random=3
+ for x=-3,9 do for y=-3,8 do
+  random=(random*48271.0)%2147483647
+  if random%17<7 and not(x==0 and y==0) and not(x==6 and y==5) then blocked[key(x+0.5,y+0.5)]=true end
+ end end
+ local corridor=route{force='player',surface='nauvis',belt='belt',underground='underground',x=0.5,y=0.5,target_x=6.5,target_y=5.5,margin=3}
+ assert(corridor.found,corridor.note)
+ local unique={}
+ for _,entity in ipairs(corridor.entities) do
+  local tile=key(entity.position.x,entity.position.y)
+  assert(not unique[tile] and not blocked[tile],'The route overlaps itself or a building')
+  unique[tile]=true
+ end
  planned_args.obstacles[2].position.x=0/0
  assert(not pcall(route,planned_args))
  `)
