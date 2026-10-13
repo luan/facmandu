@@ -337,7 +337,11 @@ local function edit_snapshot(e)
  local recipe=''
  if e.type=='assembling-machine' or e.type=='furnace' or e.type=='rocket-silo' then local r=e.get_recipe();recipe=r and r.name or '' end
  if ghost and (e.ghost_type=='assembling-machine' or e.ghost_type=='furnace' or e.ghost_type=='rocket-silo') then local r=e.get_recipe();recipe=r and r.name or '' end
- return {unitNumber=e.unit_number,name=ghost and e.ghost_name or e.name,position=e.position,direction=e.direction,ghost=ghost,recipe=recipe,deconstructing=e.to_be_deconstructed()}
+ local prototype=ghost and e.ghost_prototype or prototypes.entity[e.name]
+ local upgrade,quality
+ if not ghost then upgrade,quality=e.get_upgrade_target() end
+ local paired=not ghost and e.type=='underground-belt' and e.underground_belt_neighbour or nil
+ return {unitNumber=e.unit_number,name=ghost and e.ghost_name or e.name,position=e.position,direction=e.direction,ghost=ghost,recipe=recipe,deconstructing=e.to_be_deconstructed(),nextUpgrade=not ghost and prototype.next_upgrade and prototype.next_upgrade.name or '',upgradingTo=upgrade and upgrade.name or '',upgradeQuality=quality and quality.name or '',pairedUnderground=paired and {unitNumber=paired.unit_number,name=paired.name,position=paired.position} or nil}
 end
 
 local function wire_action(request)
@@ -370,16 +374,36 @@ end
 local function entity_edits(request)
  local entities={}
  local snapshots={}
+ local unlocked
  for _,t in ipairs(request.targets or request.edits) do
   local e=edit_entity(request,t)
   local snapshot=edit_snapshot(e)
   if request.operation=='entities_edit' then
    if request.expectedTick>game.tick or game.tick-request.expectedTick>3600 then fail('Entity inspection expired; inspect again') end
    for _,key in ipairs({'direction','ghost','recipe','deconstructing'}) do if snapshot[key]~=t[key] then fail('Entity state changed; inspect again') end end
+   if snapshot.upgradingTo~=(t.upgradingTo or '') or snapshot.upgradeQuality~=(t.upgradeQuality or '') then fail('Upgrade order changed; inspect again') end
    if t.kind=='cancel_ghost' and not snapshot.ghost then fail('Only construction ghosts may be cancelled') end
    if t.kind~='cancel_ghost' and snapshot.ghost then fail('This operation requires a built entity') end
    if not snapshot.ghost then
     if not stationary_factory_entity(e) then fail('Select stationary player-built factory entities') end
+   end
+   if t.kind=='upgrade' then
+    if snapshot.nextUpgrade=='' or t.to~=snapshot.nextUpgrade then fail('Choose the inspected native nextUpgrade target') end
+    if snapshot.deconstructing or snapshot.upgradingTo~='' then fail('Cancel the existing removal or upgrade order before changing it') end
+    if snapshot.pairedUnderground then
+     local included=false
+     for _,other in ipairs(request.edits) do if other.kind=='upgrade' and other.unitNumber==snapshot.pairedUnderground.unitNumber then included=true end end
+     if not included then fail('Inspect and include both underground ends in the upgrade batch') end
+    end
+    if not unlocked then
+     unlocked={}
+     for _,recipe in pairs(game.forces[request.force].recipes) do
+      if recipe.enabled then for _,product in pairs(recipe.products) do if product.type=='item' then unlocked[product.name]=true end end end
+     end
+    end
+    local available=false
+    for _,item in pairs(prototypes.entity[t.to].items_to_place_this or {}) do if unlocked[item.name] then available=true end end
+    if not available then fail('The next upgrade construction item is not unlocked') end
    end
   end
   entities[#entities+1]=e;snapshots[#snapshots+1]=snapshot
@@ -393,6 +417,11 @@ local function entity_edits(request)
    if t.kind=='cancel_ghost' then if not e.destroy{raise_destroy=true} then fail('Factorio refused ghost cancellation') end
    elseif t.kind=='deconstruct' then if not e.order_deconstruction(request.force,player) then fail('Factorio refused deconstruction') end
    elseif t.kind=='cancel_deconstruction' then e.cancel_deconstruction(request.force,player);if e.to_be_deconstructed() then fail('Deconstruction remains marked') end
+   elseif t.kind=='upgrade' then
+    if not e.order_upgrade{force=request.force,player=player,target={name=t.to,quality=e.quality}} then fail('Factorio refused the upgrade order') end
+    local target,quality=e.get_upgrade_target()
+    if not target or target.name~=t.to or not quality or quality.name~=e.quality.name then fail('Upgrade order did not preserve its target and quality') end
+   elseif t.kind=='cancel_upgrade' then e.cancel_upgrade(request.force,player);if e.to_be_upgraded() then fail('Upgrade remains marked') end
    else
     for step=1,3 do if e.direction==t.to then break end;if not e.rotatable or not e.rotate{by_player=player} then break end end
     if e.direction~=t.to then
@@ -402,7 +431,7 @@ local function entity_edits(request)
     end
    end
   end)
-  local state=t.kind=='rotate' and 'rotated' or t.kind=='deconstruct' and 'marked' or 'cancelled'
+  local state=t.kind=='rotate' and 'rotated' or t.kind=='deconstruct' and 'marked' or t.kind=='upgrade' and 'upgrade_queued' or 'cancelled'
   outcomes[#outcomes+1]={name=t.name,unitNumber=t.unitNumber,state=ok and state or 'refused',error=not ok and tostring(message) or nil}
  end
  return {operation=request.operation,tick=game.tick,outcomes=outcomes}

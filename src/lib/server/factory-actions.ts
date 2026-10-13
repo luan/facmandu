@@ -61,7 +61,13 @@ const editSnapshot = z.object({
 	direction: z.number().int().min(0).max(15),
 	ghost: z.boolean(),
 	recipe: z.string(),
-	deconstructing: z.boolean()
+	deconstructing: z.boolean(),
+	nextUpgrade: z.string().default(''),
+	upgradingTo: z.string().default(''),
+	upgradeQuality: z.string().default(''),
+	pairedUnderground: z
+		.object({ unitNumber: entity.shape.unitNumber, name, position: entity.shape.position })
+		.optional()
 });
 const editTargets = z
 	.array(editSnapshot.pick({ unitNumber: true, name: true, position: true }))
@@ -71,6 +77,8 @@ const edits = z
 	.array(
 		z.discriminatedUnion('kind', [
 			editSnapshot.extend({ kind: z.literal('rotate'), to: direction }),
+			editSnapshot.extend({ kind: z.literal('upgrade'), to: name }),
+			editSnapshot.extend({ kind: z.literal('cancel_upgrade') }),
 			editSnapshot.extend({ kind: z.literal('deconstruct') }),
 			editSnapshot.extend({ kind: z.literal('cancel_deconstruction') }),
 			editSnapshot.extend({ kind: z.literal('cancel_ghost') })
@@ -202,7 +210,7 @@ export const factoryActionInspectManifest = {
 	wire_inspect:
 		'Inspect an exact pair of same-force stationary entities or ghosts and native wire connector IDs. Returns connection state, ghost identities and tick for wire_connect. Does not create connectors or change wiring.',
 	entities_inspect:
-		'Inspect up to 16 exact built entities or construction ghosts by unitNumber, prototype name and position. Returns tick and snapshots for entities_edit.',
+		'Inspect up to 16 exact built entities or construction ghosts by unitNumber, prototype name and position. Returns tick and snapshots for entities_edit, including nextUpgrade and the currently queued upgradingTo target.',
 	entity_inspect:
 		'Inspect one stationary player-built factory entity by unitNumber, force, surface and exact position. Returns direction and tick for rotation preconditions, plus pickup/drop positions for inserters.',
 	ghost_inspect:
@@ -224,7 +232,7 @@ export const factoryActionManifest = {
 	task_update:
 		'Update a shared force task using id, title, description, status and completed. Copy expected title, description, status and completed from a fresh task_list read; concurrent edits are rejected. Private player tasks are inaccessible.',
 	entities_edit:
-		'Edit up to 16 exact freshly inspected targets: rotate with native game rotation, mark built entities for normal robot deconstruction, cancel deconstruction, or cancel construction ghosts. Supply force, surface, expectedTick and edits copied from entities_inspect snapshots plus kind (and to for rotate). Rechecks every target before any write. Deconstruction queues robot work and retains normal material recovery; it never destroys a built entity or grants items. Return outcomes are per-target; verify completion before reconnecting a replacement.',
+		'Edit up to 16 exact freshly inspected targets: rotate, upgrade, cancel_upgrade, deconstruct, cancel_deconstruction, or cancel_ghost. Copy entities_inspect snapshots and expectedTick. For upgrade, set to=nextUpgrade: native robots consume real items and preserve the existing entity until replacement, with its existing quality. Missing stock does not require demolition. Only unlocked native next upgrades are accepted; inspect and include both pairedUnderground ends together. Rechecks every target before any write. Deconstruction queues normal robot removal and material recovery; use upgrade for tier changes. Outcomes are per-target; an upgrade_queued result is not a completed upgrade.',
 	entity_rotate:
 		'Rotate one stationary player-built factory entity to cardinal direction 0, 4, 8 or 12 using native rotation. Supply exact entity_inspect target, expectedDirection and expectedTick. Inspect again afterward to verify orientation and inserter pickup/drop. Native rotation enforces game constraints; cannot rotate ghosts or vehicles.',
 	ghost_cancel:
@@ -453,7 +461,7 @@ async function execute(
 						z.object({
 							name,
 							unitNumber: entity.shape.unitNumber,
-							state: z.enum(['rotated', 'marked', 'cancelled', 'refused']),
+							state: z.enum(['rotated', 'marked', 'upgrade_queued', 'cancelled', 'refused']),
 							error: z.string().optional()
 						})
 					)

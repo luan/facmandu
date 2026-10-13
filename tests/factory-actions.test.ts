@@ -374,3 +374,45 @@ test('platform requester inspection preserves manual sections and rejects change
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 });
+
+test('native upgrade orders preserve entities and quality, reject locked tiers and retain changed orders', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`${readFileSync('src/lib/server/factory-actions/action.lua', 'utf8')}
+ local quality={name='normal'}
+ local next_proto={name='fast-belt',type='transport-belt',items_to_place_this={{name='fast-belt'}}}
+ prototypes={entity={belt={type='transport-belt',items_to_place_this={{name='belt'}},next_upgrade=next_proto},['fast-belt']=next_proto}}
+ local force={name='player',recipes={fast={enabled=true,products={{type='item',name='fast-belt'}}}}}
+ local queued,queued_quality,orders=nil,nil,0
+ local e={valid=true,name='belt',type='transport-belt',force=force,unit_number=12,position={x=.5,y=.5},direction=4,quality=quality}
+ e.to_be_deconstructed=function() return false end
+ e.get_upgrade_target=function() return queued,queued_quality end
+ e.to_be_upgraded=function() return queued~=nil end
+ e.order_deconstruction=function() error('Upgrades must not demolish the original') end
+ e.destroy=function() error('Upgrades must not destroy the original') end
+ e.order_upgrade=function(q) assert(q.force=='player' and q.target.name=='fast-belt' and q.target.quality==quality);orders=orders+1;queued=next_proto;queued_quality=quality;return true end
+ e.cancel_upgrade=function(f) assert(f=='player');queued=nil;queued_quality=nil;return true end
+ game={tick=120,forces={player=force},surfaces={nauvis={find_entities_filtered=function(q) assert(q.force=='player');return {e} end}}}
+ local query={operation='entities_inspect',force='player',surface='nauvis',targets={{unitNumber=12,name='belt',position=e.position}}}
+ local snapshot=action(query).entities[1]
+ assert(snapshot.nextUpgrade=='fast-belt' and snapshot.upgradingTo=='')
+ snapshot.kind='upgrade';snapshot.to='invented'
+ local edit={operation='entities_edit',force='player',surface='nauvis',expectedTick=120,edits={snapshot}}
+ assert(not pcall(action,edit) and orders==0)
+ snapshot.to='fast-belt';force.recipes.fast.enabled=false
+ assert(not pcall(action,edit) and orders==0,'Locked tiers must not be queued')
+ force.recipes.fast.enabled=true
+ assert(action(edit).outcomes[1].state=='upgrade_queued' and orders==1 and e.valid and e.name=='belt')
+ assert(not pcall(action,edit) and orders==1,'A stale snapshot must not overwrite an existing order')
+ local cancel=action(query).entities[1];cancel.kind='cancel_upgrade'
+ edit.edits={cancel};queued_quality={name='rare'}
+ assert(not pcall(action,edit) and queued~=nil,'Changed target quality must remain intact')
+ queued_quality=quality
+ assert(action(edit).outcomes[1].state=='cancelled' and not e.to_be_upgraded() and e.name=='belt')
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+	lua.lua_close(state);
+});
