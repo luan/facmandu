@@ -6,7 +6,7 @@
  import { factoryViewSchema, factoryPreviewPendingSchema } from '$lib/factory-images';
  import { blueprintArtifactSchema } from '$lib/blueprints';
  import { assistantResultGroups } from '$lib/factory-results';
- import { assistantToolFeedback } from '$lib/assistant-events';
+ import { assistantElapsed, assistantToolFeedback } from '$lib/assistant-events';
  import FactoryResultView from '$lib/components/FactoryResult.svelte';
  import LazyDetails from '$lib/components/LazyDetails.svelte';
  import BlueprintResult from '$lib/components/BlueprintResult.svelte';
@@ -16,6 +16,7 @@
  import AssistantMessage from '$lib/components/AssistantMessage.svelte';
  import { onDestroy, onMount, tick, untrack } from 'svelte';
  import { invalidate } from '$app/navigation';
+ import { page } from '$app/state';
  import { RefreshCwIcon, MessageSquareIcon, CheckIcon, LoaderCircleIcon, PackageIcon, PlusIcon, XIcon, ChevronRightIcon, MicIcon, MicOffIcon, PhoneOffIcon, AlertTriangleIcon, SearchIcon, ArrowDownIcon } from '@lucide/svelte';
  import { Button, buttonVariants } from '$lib/components/ui/button';
  import * as Sheet from '$lib/components/ui/sheet';
@@ -25,6 +26,16 @@
  let chats = $state<{ id: string; title: string; updatedAt: string; compactedAt: string | null; state?: 'running' | 'done' | 'error' | null; progress?: string; gameForce?: string | null }[]>([]);
  let chatSearch = $state('');
  const drafts = new Map<string, string>();
+ function draftKey(id: string) { return `toby:draft:${page.data.user?.id ?? 'anonymous'}:${endpoint}:${id}`; }
+ function readDraft(id: string) {
+  if (drafts.has(id)) return drafts.get(id) ?? '';
+  try { return sessionStorage.getItem(draftKey(id))?.slice(0, 6000) ?? ''; } catch { return ''; }
+ }
+ function saveDraft(id: string, value: string) {
+  drafts.set(id, value);
+  try { if (value) sessionStorage.setItem(draftKey(id), value); else sessionStorage.removeItem(draftKey(id)); } catch { /* Keep the in-memory draft when browser storage is unavailable. */ }
+ }
+ $effect(() => { if (chat) saveDraft(chat, prompt); });
  const visibleChats = $derived(chats.filter(item => item.title.toLowerCase().includes(chatSearch.trim().toLowerCase())));
  let hasMore = $state(false);
  let olderLoading = $state(false);
@@ -33,12 +44,13 @@
 
  async function selectChat(id: string) {
   if (loading) return;
-  if (chat) drafts.set(chat, prompt);
+  if (chat) saveDraft(chat, prompt);
   voice.stop();
   // Detach the view without cancelling the persisted run in the previous chat.
   const running = runningViews.get(id);
   controller = running?.controller; busy = !!running; steeringBusy = false; feedback = running?.feedback ?? ''; progress = running?.progress ?? '';
-  chat = id; contextUsage = null; turns = []; plans = []; combineablePlanIds = []; selectedMods = []; selectedTurn = ''; prompt = drafts.get(id) ?? ''; error = ''; refreshError = ''; text = ''; activePrompt = ''; activeMods = []; activeResults = []; loading = true;
+  startedAt = running?.startedAt;
+  chat = id; contextUsage = null; turns = []; plans = []; combineablePlanIds = []; selectedMods = []; selectedTurn = ''; prompt = readDraft(id); error = ''; refreshError = ''; text = ''; activePrompt = ''; activeMods = []; activeResults = []; loading = true;
   if (running) { activePrompt = running.prompt; text = running.text; activeResults = running.results; activeMods = running.mods; contextUsage = running.contextUsage; }
   await refresh(true, true);
  }
@@ -70,7 +82,7 @@
  $effect(() => { listId; serverId; if (!open) voice.stop(); return () => voice.stop(); });
  let gamePlayer = $state<string | null>(null);
  let open = $state(false); let sidebar = $state<'history' | null>(null); let prompt = $state(''); let busy = $state(false); let progress = $state(''); let feedback = $state(''); let text = $state(''); let error = $state(''); let refreshError = $state('');
- let turns = $state<{ id: string; prompt: string; answer: string; state: string; progress?: string; feedback?: string; mods: AssistantMod[]; results?: FactoryResult[]; plans?: ModlistPlan[] }[]>([]);
+ let turns = $state<{ id: string; prompt: string; answer: string; state: string; createdAt?: string; progress?: string; feedback?: string; mods: AssistantMod[]; results?: FactoryResult[]; plans?: ModlistPlan[] }[]>([]);
   const runningTurn = $derived(turns.findLast(turn => turn.state === 'running'));
   const inProgress = $derived(busy || !!runningTurn);
  let selectedDrafts = $state<Record<string, number>>({});
@@ -120,8 +132,17 @@
  let selectedMods = $state<string[]>([]);
  let selectedTurn = $state('');
  let controller = $state<AbortController>();
- const runningViews = new Map<string, { controller: AbortController; prompt: string; text: string; progress: string; feedback: string; results: FactoryResult[]; mods: AssistantMod[]; contextUsage: AssistantContextUsage | null }>();
+ const runningViews = new Map<string, { controller: AbortController; startedAt: number; prompt: string; text: string; progress: string; feedback: string; results: FactoryResult[]; mods: AssistantMod[]; contextUsage: AssistantContextUsage | null }>();
+ let startedAt = $state<number>();
+ let clock = $state(Date.now());
  let activePrompt = $state('');
+ const responseStarted = $derived(activePrompt ? startedAt : runningTurn?.createdAt ? Date.parse(runningTurn.createdAt) : undefined);
+ $effect(() => {
+  if (!open || !inProgress) return;
+  clock = Date.now();
+  const timer = setInterval(() => clock = Date.now(), 1000);
+  return () => clearInterval(timer);
+ });
  let activeMods = $state<AssistantMod[]>([]);
   const visiblePrompt = $derived(activePrompt || runningTurn?.prompt || '');
   const visibleText = $derived(activePrompt ? text : runningTurn?.answer || '');
@@ -191,6 +212,7 @@
    const data = await response.json();
    if (!response.ok) throw new Error(data.message);
    if (selectedChat && chat !== selectedChat) return false;
+   if (!chat) prompt = readDraft(data.chat.id);
    chat = data.chat.id; gamePlayer = data.chat.gamePlayer ?? null; chats = data.chats; hasMore = data.hasMore; compacted = Boolean(data.chat.compactedAt); contextUsage = data.chat.contextUsage ?? null; turns = data.turns;
    if (!busy) { progress = runningTurn?.progress ?? ''; feedback = runningTurn?.feedback ?? ''; }
    plans = data.plans; combineablePlanIds = data.combineablePlanIds ?? [];
@@ -240,7 +262,7 @@
    finally { if (chat === requestChat) steeringBusy = false; }
    return;
   }
-  const message = prompt; const requestChat = chat; prompt = ''; drafts.delete(chat);
+  const message = prompt; const requestChat = chat; prompt = ''; saveDraft(chat, '');
   try { await ask(message); } catch { if (chat === requestChat && !prompt) prompt = message; }
  }
  async function ask(message: string): Promise<string> {
@@ -248,9 +270,10 @@
   followOutput = true; busy = true; error = ''; text = ''; activeMods = []; activeResults = []; progress = 'Reading request…'; feedback = ''; controller = new AbortController();
   const previousPlanId = plans[0]?.id;
   activePrompt = message;
+  startedAt = Date.now();
   const requestController = controller;
   const requestChat = chat;
-  const view = { controller: requestController, prompt: message, text: '', progress, feedback: '', results: activeResults, mods: activeMods, contextUsage };
+  const view = { controller: requestController, startedAt, prompt: message, text: '', progress, feedback: '', results: activeResults, mods: activeMods, contextUsage };
   runningViews.set(requestChat, view);
   const ownsView = () => chat === requestChat && controller === requestController;
   let answer = '';
@@ -437,7 +460,11 @@
      {@const resultGroups = assistantResultGroups(turn.results ?? [])}
      <section class="space-y-4" aria-label="Conversation turn">
       <div class="flex justify-end"><p class="max-w-[90%] whitespace-pre-wrap break-words border border-border bg-white/5 px-4 py-3 text-sm leading-relaxed">{turn.prompt}</p></div>
-      {@render responseTimeline(resultGroups.details)}
+      {#if resultGroups.details.length}
+       {@const steps = resultGroups.details.filter(item => item.tool !== 'report_progress')}
+       {@const failures = steps.filter(toolFailed).length}
+       <LazyDetails class="text-sm text-muted-foreground" summaryClass="flex cursor-pointer list-none items-center gap-2 py-1 text-xs [&::-webkit-details-marker]:hidden">{#snippet summary()}<ChevronRightIcon class="size-3 shrink-0" /><span>Activity · {steps.length} {steps.length === 1 ? 'step' : 'steps'}{failures ? ` · ${failures} failed` : ''}</span>{/snippet}<div class="mt-2">{@render responseTimeline(resultGroups.details)}</div></LazyDetails>
+      {/if}
       {#if turn.state === 'error'}
        {@const drafts = savedBlueprintDrafts(turn.results ?? [])}
        {@const saved = drafts[selectedDrafts[turn.id] ?? drafts.length - 1]}
@@ -492,6 +519,7 @@
      {@const resultGroups = assistantResultGroups(visibleResults)}
      <section class="space-y-4" aria-label="Current response">
       <div class="flex justify-end"><p class="max-w-[90%] whitespace-pre-wrap break-words border border-border bg-white/5 px-4 py-3 text-sm leading-relaxed">{visiblePrompt}</p></div>
+      <div class="flex items-center gap-2 text-xs text-muted-foreground"><LoaderCircleIcon class="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" /><span>{responseStarted !== undefined && Number.isFinite(responseStarted) ? assistantElapsed('Working', responseStarted, clock) : 'Toby is working'}</span>{#if visibleResults.length}<span>· {visibleResults.filter(item => item.tool !== 'report_progress').length} steps</span>{/if}</div>
       {@render responseTimeline(resultGroups.details)}
       {#if visibleText}<div class="pr-2"><AssistantMessage text={visibleText} {serverId} /></div>{/if}
       {@render modCards(visibleMods)}
