@@ -128,7 +128,6 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 	const target = { serverId: server.id };
 	if (input.get('operation') === 'new-chat') return json(await newChat(userId, target));
 	const chat = await resolveChat(userId, target, String(input.get('chat') ?? '') || null);
-	if (chat.gamePlayer) error(403, 'Reply to this conversation in game or start a new web chat');
 	const operation = input.get('operation');
 	const key = chat.id;
 	if (operation === 'cancel') {
@@ -140,13 +139,19 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 		if (!prompt || prompt.length > 6000) error(400, 'Enter a question of up to 6,000 characters');
 		let accepted: boolean;
 		try {
-			accepted = await steerServerTurn(chat.id, prompt, genID('steer'));
+			accepted = await steerServerTurn(
+				chat.id,
+				prompt,
+				genID('steer'),
+				chat.gamePlayer ? { webAuthor: locals.user.username } : undefined
+			);
 		} catch {
 			error(409, 'Could not deliver this update. Wait for the response or try again.');
 		}
 		if (!accepted) error(409, 'The response has finished; send a new message');
 		return json({ steered: true });
 	}
+	if (chat.gamePlayer) error(403, 'Reply to this conversation in game or start a new web chat');
 	if (operation === 'apply-modlist') {
 		if (running.has(key)) error(409, 'Finish the current response first');
 		const saved = await db

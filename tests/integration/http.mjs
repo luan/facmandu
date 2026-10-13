@@ -386,6 +386,10 @@ const fixture = createServer(async (request, response) => {
 				assistantToolOutputs.push({ callId: item.call_id, output: item.output });
 			codexMenus.push({
 				request: currentRequest,
+				requests: body.input
+					.filter((item) => item.role === 'user')
+					.map((item) => JSON.stringify(item))
+					.join('\n'),
 				// Responses can anchor newly loaded tools in the input transcript.
 				// Observe both forms so this checks the model's complete tool menu.
 				tools: [
@@ -3248,6 +3252,11 @@ done
 			'running'
 		);
 		const steeringAck = nextGameReply('FranksPeer');
+		await action(`${serverPath}/assistant`, cookies.owner, {
+			chat: frankChat.id,
+			operation: 'steer',
+			prompt: 'fixture-game-web-owner-update: keep it on belts'
+		});
 		await appendFile(
 			gameLog,
 			uiLine('FranksPeer', 'send', 1, {
@@ -3259,6 +3268,18 @@ done
 		const steeredReply = nextGameReply('Frank');
 		gameSteeringRelease.resolve();
 		assert.match(await steeredReply, /Steered to copper/);
+		const webSteered = await json(`${serverPath}/assistant?chat=${frankChat.id}&models=0`, {
+			cookie: cookies.owner
+		});
+		assert.match(
+			webSteered.turns[0].prompt,
+			/Follow-up: Web owner owner: fixture-game-web-owner-update/u
+		);
+		const webUpdate = codexMenus.findLast((menu) =>
+			menu.requests.includes('fixture-game-web-owner-update')
+		);
+		assert.match(webUpdate.requests, /server owner.*owner.*via the web harness/u);
+		assert.ok(!webUpdate.tools.includes('server_control'));
 		assert.match(
 			codexMenus.findLast((menu) => menu.request.includes('fixture-game-steering-update')).request,
 			/FranksPeer/u

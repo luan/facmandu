@@ -37,13 +37,14 @@ export const serverAssistantActivity = state.__facmanduServerAssistantActivity;
 type Steering = {
 	ready: ReturnType<
 		typeof Promise.withResolvers<
-			((prompt: string, key: string, gamePlayer?: string) => Promise<string>) | null
+			((prompt: string, key: string, source?: SteeringSource) => Promise<string>) | null
 		>
 	>;
 	receipts: Map<string, Promise<string | null>>;
 	closed: boolean;
 	done: ReturnType<typeof Promise.withResolvers<void>>;
 };
+type SteeringSource = string | { webAuthor: string };
 const steering = new WeakMap<AbortController, Steering>();
 export function serverAssistantController() {
 	const controller = new AbortController();
@@ -59,7 +60,7 @@ export async function steerServerTurn(
 	chatId: string,
 	prompt: string,
 	key: string,
-	gamePlayer?: string
+	source?: SteeringSource
 ) {
 	const controller = serverAssistantRequests.get(chatId);
 	const current = controller && steering.get(controller);
@@ -76,7 +77,7 @@ export async function steerServerTurn(
 		receipt = current.ready.promise.then((dispatch) => {
 			if (!dispatch) return null;
 			if (controller.signal.aborted) throw new Error('The response has stopped');
-			return dispatch(prompt, key, gamePlayer);
+			return dispatch(prompt, key, source);
 		});
 		current.receipts.set(key, receipt);
 	}
@@ -224,8 +225,9 @@ export async function finishServerTurn(
 				abort();
 				throw new Error('Stopped');
 			}
-			current?.ready.resolve(async (prompt, key, gamePlayer) => {
-				const nextActor = gamePlayer ?? actor;
+			current?.ready.resolve(async (prompt, key, source) => {
+				const nextActor = typeof source === 'string' ? source : actor;
+				const webAuthor = typeof source === 'object' ? source.webAuthor : undefined;
 				const latestGame = nextActor
 					? await requireGamePlayer(
 							await requireServer(turn.userId, turn.serverId),
@@ -238,7 +240,7 @@ export async function finishServerTurn(
 					message: {
 						kind: 'signal',
 						type: 'facmandu-request',
-						body: `${latestGame ? `This message is from the connected in-game player: ${JSON.stringify(latestGame.player)}. Answer in at most three short chat messages.\n` : ''}The user is steering the current request: ${prompt}`,
+						body: `${latestGame ? `${webAuthor ? `This update is from server owner ${JSON.stringify(webAuthor)} via the web harness. Retain the in-game force and permission checks for` : 'This message is from the connected in-game player:'} ${JSON.stringify(latestGame.player)}. Answer in at most three short chat messages.\n` : ''}The user is steering the current request: ${prompt}`,
 						attributes: {
 							groups: '[]',
 							requestId: turn.id,
@@ -253,7 +255,7 @@ export async function finishServerTurn(
 				await db
 					.update(turnTable)
 					.set({
-						prompt: sql`${turnTable.prompt} || ${`\n\nFollow-up: ${latestGame ? `${latestGame.player.name}: ` : ''}${prompt}`}`
+						prompt: sql`${turnTable.prompt} || ${`\n\nFollow-up: ${webAuthor ? `Web owner ${webAuthor}: ` : latestGame ? `${latestGame.player.name}: ` : ''}${prompt}`}`
 					})
 					.where(eq(turnTable.id, turn.id));
 				return joined.submissionId;

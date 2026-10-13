@@ -558,10 +558,12 @@
   <form onsubmit={(event) => { event.preventDefault(); void send(); }} class="mx-auto w-full max-w-4xl shrink-0 border-t border-border p-4 space-y-3">
    {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
    {#if refreshError}<p role="status" class="text-sm text-muted-foreground">{refreshError} <button type="button" class="underline" onclick={() => void refresh()}>Retry</button></p>{/if}
-   {#if gamePlayer}<div class="flex items-center justify-between gap-3 text-sm text-muted-foreground"><span>In-game conversation with {gamePlayer}</span><Button variant="outline" size="sm" disabled={loading} onclick={createChat}>New web chat</Button></div>{:else}
+   {#if gamePlayer}<div class="flex items-center justify-between gap-3 text-sm text-muted-foreground"><span>{chats.find(item => item.id === chat)?.gameForce ? `Shared with force ${chats.find(item => item.id === chat)?.gameForce}` : `In-game conversation with ${gamePlayer}`}</span><Button variant="outline" size="sm" disabled={loading} onclick={createChat}>New web chat</Button></div>{/if}
+   {#if !gamePlayer || inProgress}
    {#if modelError}<p role="status" class="text-sm text-muted-foreground">{modelError}</p>{/if}
-   <Prompt bind:value={prompt} label="Message" placeholder={serverId ? "Ask about this server…" : "Ask about this list…"} maxLength={6000} busy={inProgress} allowSteering={!!serverId} {send} disabledReason={loading ? 'Loading conversation' : steeringBusy ? 'Sending steering' : ''} stop={inProgress ? stop : undefined}>
+   <Prompt bind:value={prompt} label="Message" placeholder={gamePlayer ? "Steer Toby’s current task…" : serverId ? "Ask about this server…" : "Ask about this list…"} maxLength={6000} busy={inProgress} allowSteering={!!serverId} {send} disabledReason={loading ? 'Loading conversation' : steeringBusy ? 'Sending steering' : ''} stop={inProgress ? stop : undefined}>
     {#snippet controls()}
+     {#if !gamePlayer}
      {#if voiceState.active || voiceState.connecting}
       <TooltipButton tooltip={voiceState.muted ? 'Unmute microphone' : 'Mute microphone'} variant="ghost" size="icon" disabled={voiceState.connecting} aria-pressed={voiceState.muted} onclick={() => voice.mute()}>{#if voiceState.muted}<MicOffIcon />{:else}<MicIcon />{/if}</TooltipButton>
       <TooltipButton tooltip="End voice" variant="ghost" size="icon" onclick={() => voice.stop()}><PhoneOffIcon /></TooltipButton>
@@ -570,6 +572,7 @@
      {/if}
      <label class="flex min-w-0 items-center gap-2 text-xs"><span class="sr-only">Assistant model</span><select aria-label="Assistant model" title={models.find(item => item.id === model)?.name} class="min-w-0 max-w-36 sm:max-w-56 border py-1.5 pl-2 pr-8 text-xs" bind:value={model} disabled={busy || !models.length}>{#each models as item}<option value={item.id}>{item.name}</option>{/each}</select></label>
      <label class="flex items-center gap-2 text-xs text-muted-foreground"><span>Effort</span><select aria-label="Thinking effort" class="border py-1.5 pl-2 pr-8 text-xs" bind:value={effort} disabled={busy || !effortChoices.length}>{#each effortChoices as level}<option value={level}>{models.find((item) => item.id === model)?.effortLabels?.[level] ?? ({ minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' } as Record<string, string>)[level] ?? level}</option>{/each}</select></label>
+     {/if}
     {/snippet}
    </Prompt>
    {/if}
