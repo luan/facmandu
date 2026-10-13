@@ -13,10 +13,11 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
  package.path=${JSON.stringify(`${root}/?.lua;`)}..package.path
  local force={name='player'}
  local world={};local chart={};local blocked={};local reads=0
+ local floor_mode=false;local floor_owner=force;local floor_supported=true;local floor_queued=false
  local belt={type='transport-belt',tile_width=1,tile_height=1,belt_speed=0.03125}
  local underground={type='underground-belt',tile_width=1,tile_height=1,belt_speed=0.03125,max_underground_distance=5}
  prototypes={entity={belt=belt,underground=underground,fast={type='underground-belt',tile_width=1,tile_height=1,belt_speed=0.0625}}}
- defines={build_check_type={manual=1}}
+ defines={build_check_type={manual=1,blueprint_ghost=2}}
  local function key(x,y) return x..':'..y end
  local function known(x,y) return not chart[key(math.floor(x/32),math.floor(y/32))] end
  force.is_chunk_charted=function(_,chunk) return not chart[key(chunk.x,chunk.y)] end
@@ -38,10 +39,15 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
   return rows
  end
  surface.can_place_entity=function(q)
-  assert(q.force==force and q.build_check_type==1 and q.forced==false)
+  assert(q.force==force and (q.build_check_type==1 or q.build_check_type==2) and q.forced==false)
+  if floor_mode then return q.build_check_type==2 and floor_supported and floor_queued and q.position.y==0.5 and q.position.x>=0.5 and q.position.x<=4.5 end
   assert(known(q.position.x,q.position.y),'Uncharted terrain was inspected')
   reads=reads+1
   return not blocked[key(q.position.x,q.position.y)]
+ end
+ surface.get_tile=function(p)
+  assert(known(p.x,p.y),'Uncharted tile ghosts were inspected')
+  return {get_tile_ghosts=function() return floor_mode and floor_queued and {{force=floor_owner}} or {} end}
  end
  surface.create_entity=function() error('Routing must not place entities') end
  game={tick=1,forces={player=force},surfaces={nauvis=surface}}
@@ -133,6 +139,19 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
  local lane_args={force='player',surface='nauvis',belt='belt',x=.5,y=.5,target_x=10.5,target_y=.5,target_lane='left',margin=3}
  bus.belt_shape='left';assert(not pcall(route,lane_args),'A corner cannot guarantee side loading')
  bus.belt_shape='straight';bus.belt_neighbours.inputs={};assert(not pcall(route,lane_args),'An empty belt could curve and change the destination lane')
+ world={};blocked={};chart={};floor_mode=true
+ local floor_args={force='player',surface='nauvis',belt='belt',x=.5,y=.5,target_x=4.5,target_y=.5,margin=1,obstacles={
+  {name='belt',position={x=.5,y=.5},direction=4},
+  {name='belt',position={x=4.5,y=.5},direction=4}
+ }}
+ assert(not route(floor_args).found,'Empty terrain cannot be routed without foundation')
+ floor_queued=true
+ local queued=route(floor_args)
+ assert(queued.found and queued.plannedStart and queued.plannedDestination and #queued.entities==3,'Queued same-force foundation must preserve planned belt endpoints')
+ floor_owner={name='enemy'}
+ assert(not route(floor_args).found,'Another force foundation cannot authorize a route')
+ floor_owner=force;floor_supported=false
+ assert(not route(floor_args).found,'Native blueprint checks still decide terrain support')
  planned_args.obstacles[2].position.x=0/0
  assert(not pcall(route,planned_args))
  `)

@@ -84,6 +84,17 @@ local function route(a)
   if charted[key]==nil then charted[key]=force.is_chunk_charted(surface,{x=cx,y=cy}) end
   return charted[key]
  end
+ local function placeable(name,x,y,d)
+  local check={name=name,position={x=x,y=y},direction=d,force=force,build_check_type=defines.build_check_type.manual,forced=false}
+  if surface.can_place_entity(check) then return true end
+  -- Blueprint checks honor queued foundation/landfill without supplying it.
+  -- Script-ghost checks permit unsupported terrain and must never be used here.
+  local ghosts=surface.get_tile(check.position).get_tile_ghosts()
+  if #ghosts==0 then return false end
+  for _,ghost in ipairs(ghosts) do if ghost.force~=force then return false end end
+  check.build_check_type=defines.build_check_type.blueprint_ghost
+  return surface.can_place_entity(check)
+ end
  local function endpoint(x,y)
   if not known(x,y) then error('Explore both route endpoints first',0) end
   local entity=surface.find_entity(a.belt,{x=x,y=y})
@@ -94,7 +105,7 @@ local function route(a)
    if native.type=='transport-belt' and other.position.x==x and other.position.y==y then return other end
   end
   local draft=planned[x..':'..y]
-  if draft and surface.can_place_entity{name=draft.name,position=draft.position,direction=draft.direction,force=force,build_check_type=defines.build_check_type.manual,forced=false} then return draft end
+  if draft and placeable(draft.name,x,y,draft.direction) then return draft end
  end
  local start_entity,end_entity=endpoint(a.x,a.y),endpoint(a.target_x,a.target_y)
  local entry_direction
@@ -119,7 +130,7 @@ local function route(a)
   if placements[key]==nil then
    -- Manual checks permit fast replacement of belts. Routing must retain them.
    local occupied=surface.find_entities_filtered{position={x=x,y=y},type={'transport-belt','underground-belt','splitter','loader','loader-1x1','entity-ghost'},limit=1}
-   placements[key]=not occupied_plan[math.floor(x)..':'..math.floor(y)] and #occupied==0 and surface.can_place_entity{name=name,position={x=x,y=y},direction=d,force=force,build_check_type=defines.build_check_type.manual,forced=false}
+   placements[key]=not occupied_plan[math.floor(x)..':'..math.floor(y)] and #occupied==0 and placeable(name,x,y,d)
   end
   return placements[key]
  end
