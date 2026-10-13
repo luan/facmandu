@@ -837,6 +837,12 @@ const fixture = createServer(async (request, response) => {
 				delete item.content;
 				delete item.role;
 			}
+			if (currentRequest.includes('fixture-missing-command') && item.type === 'message')
+				item.content[0].text = currentInput.some((input) =>
+					JSON.stringify(input).includes('answer-content-required')
+				)
+					? 'List connected players with:\n```\n/players\n```'
+					: 'The console command above is ready to run.';
 			if (currentRequest.includes('fixture-empty-answer') && item.type === 'message')
 				item.content[0].text = currentInput.some((input) =>
 					JSON.stringify(input).includes('answer-recovery')
@@ -2677,6 +2683,26 @@ done
 	assert.match(steeredHistory.turns[0].prompt, /Follow-up: fixture-web-steering-update/);
 	assert.match(steeredHistory.turns[0].answer, /Steered to copper/);
 	passed('mid-run web steering preserves follow-ups and finishes after the browser disconnects');
+	const commandReply = await request(serverAssistantPath, {
+		cookie: cookies.owner,
+		method: 'POST',
+		form: {
+			chat: steerChat,
+			prompt: 'What console command lists players? fixture-missing-command',
+			model: 'gpt-6-luna',
+			effort: 'medium'
+		}
+	});
+	assert.equal(commandReply.status, 200);
+	await commandReply.text();
+	const commandHistory = await json(`${serverAssistantPath}?chat=${steerChat}&models=0`, {
+		cookie: cookies.owner
+	});
+	assert.match(commandHistory.turns.at(-1).answer, /```\n\/players\n```/);
+	assert.equal(commandHistory.turns.at(-1).state, 'done');
+	passed(
+		'final command replies recover missing content instead of referencing a hidden earlier draft'
+	);
 	const tobyZip = await request('/api/toby-mod', { cookie: cookies.owner });
 	assert.equal(tobyZip.status, 200);
 	const tobyFiles = unzipSync(new Uint8Array(await tobyZip.arrayBuffer()));
@@ -3747,7 +3773,8 @@ done
 	assert.equal(savedFresh.turns.length, 1);
 	assert.equal(savedFresh.chat.title, 'fixture-fresh-chat');
 	assert.ok(savedFresh.chats.some((chat) => chat.id === originalChat));
-	const serverOriginal = (await json(serverAssistantPath, { cookie: cookies.owner })).chat.id;
+	const originalServerHistory = await json(serverAssistantPath, { cookie: cookies.owner });
+	const serverOriginal = originalServerHistory.chat.id;
 	const serverNew = await (
 		await action(serverAssistantPath, cookies.owner, { operation: 'new-chat' })
 	).json();
@@ -3759,7 +3786,7 @@ done
 	assert.equal(
 		(await json(`${serverAssistantPath}?chat=${serverOriginal}`, { cookie: cookies.owner })).turns
 			.length,
-		1
+		originalServerHistory.turns.length
 	);
 	assert.equal(
 		(await request(`${serverAssistantPath}?chat=${freshChat.id}`, { cookie: cookies.owner }))

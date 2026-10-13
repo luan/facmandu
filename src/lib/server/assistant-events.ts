@@ -1,4 +1,34 @@
+import type { AssistantMessageEventStream } from '@earendil-works/pi-ai';
 import type { ConversationStreamChunk } from '@flue/runtime';
+
+// Large blueprint arguments stream before Flue can emit a complete tool-input.
+export function assistantStreamProgress(
+	stream: AssistantMessageEventStream,
+	send: (progress: string) => void
+) {
+	const iterator = stream[Symbol.asyncIterator].bind(stream);
+	stream[Symbol.asyncIterator] = async function* () {
+		let previous = '';
+		for await (const event of { [Symbol.asyncIterator]: iterator }) {
+			let progress = '';
+			if (event.type === 'thinking_start') progress = 'Reasoning…';
+			if (event.type === 'text_start') progress = 'Responding…';
+			if (event.type === 'toolcall_start' || event.type === 'toolcall_delta') {
+				const block = event.partial.content[event.contentIndex];
+				if (block?.type === 'toolCall') {
+					const label = assistantToolProgress(block.name, block.arguments);
+					progress = `Preparing ${label.charAt(0).toLowerCase()}${label.slice(1)}`;
+				}
+			}
+			if (progress && progress !== previous) {
+				previous = progress;
+				send(progress);
+			}
+			yield event;
+		}
+	};
+	return stream;
+}
 
 export function assistantToolProgress(tool: string, input: unknown) {
 	const operation =

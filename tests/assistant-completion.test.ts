@@ -2,11 +2,25 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
 	completionRequest,
+	missingCommandContent,
 	missingFactoryCheck,
 	missingFactoryDesignAttempt,
 	needsContinuation,
 	unfinishedFactoryConnections
 } from '../src/lib/assistant-completion';
+
+test('a requested command cannot settle as a reference to a hidden earlier draft', () => {
+	const requests = ['Delete concrete ghosts.', 'What Lua command could I run?'];
+	assert.equal(missingCommandContent(requests, 'The console command above is ready to run.'), true);
+	assert.equal(missingCommandContent(requests, 'Run the previous command.'), true);
+	assert.equal(missingCommandContent(requests, 'Run this:\n```\n/players\n```'), false);
+	assert.equal(missingCommandContent(requests, 'The command above is `/players`.'), false);
+	assert.equal(missingCommandContent(requests, 'I could not verify a safe command.'), false);
+	assert.equal(
+		missingCommandContent(['Design a blueprint.'], 'The blueprint above is ready.'),
+		false
+	);
+});
 
 test('a resolved expansion must attempt a layout or factory action before declining it', () => {
 	const planned = [{ tool: 'plan_production', isError: false }];

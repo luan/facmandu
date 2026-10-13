@@ -1,5 +1,15 @@
 import { z } from 'zod';
 
+export function missingCommandContent(requests: readonly string[], answer: string) {
+	return (
+		requests.some((request) => /\b(?:command|script|code)\b/i.test(request)) &&
+		/\b(?:command|script|code)\b[^.\n]{0,80}\b(?:above|earlier|previous)\b|\b(?:above|earlier|previous)\b[^.\n]{0,80}\b(?:command|script|code)\b/i.test(
+			answer
+		) &&
+		!/(?:```[\s\S]+?```|`[^`\n]+`|\/c\s|\/silent-command\s)/u.test(answer)
+	);
+}
+
 const probability = z.number().min(0).max(1);
 const completionSchema = z.object({
 	answers: z.object({

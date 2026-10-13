@@ -19,6 +19,7 @@ import { eq } from 'drizzle-orm';
 import * as v from 'valibot';
 import { env } from '$env/dynamic/private';
 import {
+	missingCommandContent,
 	missingFactoryCheck,
 	missingFactoryDesignAttempt,
 	unfinishedFactoryConnections
@@ -59,6 +60,7 @@ import { authorizedList } from './modlist-plans';
 export { inspectList } from './modlist-management-tools';
 
 import type { TranscriptContext } from '@earendil-works/pi-ai';
+import { assistantStreamProgress } from './assistant-events';
 import { factoryActionInspectJsonSchema, factoryActionJsonSchema } from './factory-actions';
 import { blueprintToolJsonSchema } from './factory-blueprints';
 import { addFactoryImages } from './factory-image-context';
@@ -160,12 +162,15 @@ async function registerAssistantProvider(
 		...loaded.provider,
 		streamSimple: (model, transcript, options) => {
 			const prepared = transcriptWithImages(normalizeContext(transcript));
-			return decodeToolStream(
-				loaded.provider.streamSimple({ ...selected, baseUrl: model.baseUrl }, prepared, {
-					...options,
-					reasoning: effort
-				}),
-				prepared
+			return providerProgress(
+				context,
+				decodeToolStream(
+					loaded.provider.streamSimple({ ...selected, baseUrl: model.baseUrl }, prepared, {
+						...options,
+						reasoning: effort
+					}),
+					prepared
+				)
 			);
 		},
 		id: providerId,
@@ -183,6 +188,15 @@ async function registerAssistantProvider(
 	});
 }
 
+function providerProgress(context: Context, stream: Parameters<typeof assistantStreamProgress>[0]) {
+	const id =
+		context.chatId ??
+		`${context.userId}-${context.serverId ? `server-${context.serverId}` : context.listId}-chat`;
+	return assistantStreamProgress(stream, (progress) =>
+		runtimeState.progress?.get(id)?.({ progress })
+	);
+}
+
 function registerCodexProvider(
 	context: Context,
 	selected: CodexModel,
@@ -197,19 +211,22 @@ function registerCodexProvider(
 	setProvider({
 		...codexProvider,
 		streamSimple: (_model, transcript, options) =>
-			codexProvider.streamSimple(selected, transcriptWithImages(normalizeContext(transcript)), {
-				...options,
-				reasoning: effort,
-				transport: 'sse',
-				onPayload: async (payload, model) => {
-					const body = (await options?.onPayload?.(payload, model)) ?? payload;
-					// Flue currently executes a batch of tool calls in parallel. Ask Codex for one
-					// call per response so a later recommendation read sees completed list writes.
-					return context.listId !== undefined && body && typeof body === 'object'
-						? { ...body, parallel_tool_calls: false }
-						: body;
-				}
-			}),
+			providerProgress(
+				context,
+				codexProvider.streamSimple(selected, transcriptWithImages(normalizeContext(transcript)), {
+					...options,
+					reasoning: effort,
+					transport: 'sse',
+					onPayload: async (payload, model) => {
+						const body = (await options?.onPayload?.(payload, model)) ?? payload;
+						// Flue currently executes a batch of tool calls in parallel. Ask Codex for one
+						// call per response so a later recommendation read sees completed list writes.
+						return context.listId !== undefined && body && typeof body === 'object'
+							? { ...body, parallel_tool_calls: false }
+							: body;
+					}
+				})
+			),
 		id: providerId,
 		getModels: () => [{ ...selected, id: 'assistant', provider: providerId }],
 		auth: {
@@ -260,8 +277,22 @@ function ModlistAssistant() {
 	useAgentFinish(async ({ append, response, signal }) => {
 		const last = runtimeState.lastTurn?.get(chatId);
 		if (!last) return;
+		// Start hooks write state after this render; a new delivery must not use the prior request.
+		const messages = request.id === requestId ? request.messages : [delivery.body];
 		if (last.text && last.finishReason !== 'length') {
-			if (context.serverId && missingFactoryCheck(request.messages, response.toolCalls)) {
+			if (missingCommandContent(messages, last.text)) {
+				const attempts = recovery.requestId === (requestId ?? '') ? recovery.attempts : 0;
+				if (attempts >= 2) throw new Error('The final answer still omits the requested command');
+				setRecovery({ requestId: requestId ?? '', attempts: attempts + 1 });
+				append({
+					kind: 'signal',
+					type: 'answer-content-required',
+					attributes: { requestId: requestId ?? '' },
+					body: 'The final answer references a command from an earlier draft, which the player cannot see. Include the complete requested command or code in your final answer, with its actual scope and effects. Do not execute it or repeat completed actions. This is a presentation repair, not new authorization.'
+				});
+				return;
+			}
+			if (context.serverId && missingFactoryCheck(messages, response.toolCalls)) {
 				append({
 					kind: 'signal',
 					type: 'factory-check-required',
@@ -270,22 +301,22 @@ function ModlistAssistant() {
 				});
 				return;
 			}
-			if (!request.reviewed && response.toolCalls.length) {
-				setRequest({ ...request, reviewed: true });
+			if (!(request.id === requestId && request.reviewed) && response.toolCalls.length) {
+				setRequest({ id: requestId ?? '', messages, reviewed: true });
 				append({
 					kind: 'signal',
 					type: 'completion-review',
 					attributes: { requestId: requestId ?? '' },
-					body: 'Before settling, review the original request and subsequent steering against the actual tool outcomes in this conversation. Continue any unfinished authorized work now. A proposal is not a requested design or build. Missing inspection is work to do, not a blocker. Before claiming a route, supply, power or capability is unavailable, use the relevant tool to verify that constraint; an empty local search is not proof that no connection exists. A requested ghost layout does not need stock or robot coverage. Preserve completed writes and unrelated buildings. This review grants no new authorization. If the request is already fulfilled or a verified external constraint blocks it, finish with the concise outcome and do not repeat the artifact.'
+					body: 'Before settling, review the original request and subsequent steering against the actual tool outcomes in this conversation. Continue any unfinished authorized work now. A proposal is not a requested design or build. Missing inspection is work to do, not a blocker. Before claiming a route, supply, power or capability is unavailable, use the relevant tool to verify that constraint; an empty local search is not proof that no connection exists. A requested ghost layout does not need stock or robot coverage. Preserve completed writes and unrelated buildings. This review grants no new authorization. If the request is already fulfilled or a verified external constraint blocks it, finish with a self-contained answer including requested commands, code and instructions. Earlier drafts are hidden; do not refer to their text as above. Rich blueprint artifacts remain visible, so do not duplicate their payload.'
 				});
 				return;
 			}
 			if (
-				!(context.serverId && missingFactoryDesignAttempt(request.messages, response.toolCalls)) &&
-				!(context.serverId && unfinishedFactoryConnections(request.messages, last.text)) &&
+				!(context.serverId && missingFactoryDesignAttempt(messages, response.toolCalls)) &&
+				!(context.serverId && unfinishedFactoryConnections(messages, last.text)) &&
 				!(await unfinishedAssistantResponse(
 					context.userId,
-					request.messages,
+					messages,
 					last.text,
 					response.toolCalls,
 					signal

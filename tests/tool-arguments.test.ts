@@ -7,6 +7,7 @@ import {
 	type ToolCall
 } from '@earendil-works/pi-ai';
 import { z } from 'zod';
+import { assistantStreamProgress } from '../src/lib/server/assistant-events';
 import { decodeToolArguments, decodeToolStream } from '../src/lib/server/tool-arguments';
 
 const input = z.strictObject({
@@ -63,14 +64,26 @@ test('provider stream records and final message receive the same decoded tool ar
 		}
 	};
 	const source = createAssistantMessageEventStream();
-	const stream = decodeToolStream(
-		source,
-		normalizeContext({
-			messages: [],
-			tools: [{ name: 'batch', description: '', parameters: schema }]
-		})
+	const progress: string[] = [];
+	const stream = assistantStreamProgress(
+		decodeToolStream(
+			source,
+			normalizeContext({
+				messages: [],
+				tools: [{ name: 'batch', description: '', parameters: schema }]
+			})
+		),
+		(value) => progress.push(value)
 	);
 	source.push({ type: 'start', partial: message });
+	source.push({ type: 'thinking_start', contentIndex: 0, partial: message });
+	source.push({ type: 'toolcall_start', contentIndex: 0, partial: message });
+	source.push({
+		type: 'toolcall_delta',
+		contentIndex: 0,
+		partial: message,
+		delta: 'private arguments'
+	});
 	source.push({ type: 'toolcall_end', contentIndex: 0, toolCall, partial: message });
 	source.push({ type: 'done', reason: 'toolUse', message });
 	for await (const event of stream)
@@ -78,6 +91,7 @@ test('provider stream records and final message receive the same decoded tool ar
 			assert.deepEqual(input.parse(event.toolCall.arguments).queries, [query]);
 	assert.deepEqual((await stream.result()).content, [toolCall]);
 	assert.equal((await stream.result()).usage.totalTokens, 2);
+	assert.deepEqual(progress, ['Reasoning…', 'Preparing batch…']);
 
 	const failed = createAssistantMessageEventStream();
 	const wrapped = decodeToolStream(failed, normalizeContext({ messages: [] }));
