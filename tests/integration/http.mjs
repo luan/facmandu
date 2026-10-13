@@ -24,6 +24,10 @@ import {
 } from '../../src/lib/mod-settings.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const tobyInfo = JSON.parse(
+	await readFile(join(root, 'factorio-mod/facmandu-assistant/info.json'), 'utf8')
+);
+const tobyPrefix = `${tobyInfo.name}_${tobyInfo.version}`;
 const directory = await mkdtemp(join(tmpdir(), 'facmandu-integration-'));
 const database = join(directory, 'app.db');
 const cache = join(directory, 'cache');
@@ -2711,18 +2715,14 @@ done
 	assert.equal(tobyZip.status, 200);
 	const tobyFiles = unzipSync(new Uint8Array(await tobyZip.arrayBuffer()));
 	assert.equal(
-		JSON.parse(Buffer.from(tobyFiles['facmandu-assistant_0.0.4/info.json']).toString()).title,
+		JSON.parse(Buffer.from(tobyFiles[`${tobyPrefix}/info.json`]).toString()).title,
 		'[WIP] Toby'
 	);
-	assert.ok(
-		Buffer.from(tobyFiles['facmandu-assistant_0.0.4/control.lua'])
-			.toString()
-			.includes('FACMANDU_UI')
-	);
+	assert.ok(Buffer.from(tobyFiles[`${tobyPrefix}/control.lua`]).toString().includes('FACMANDU_UI'));
 	assert.equal((await request('/api/toby-mod')).status, 401);
 	for (const file of ['drone.lua', 'drone-prototypes.lua', 'drone-visuals.lua', 'references.lua']) {
 		assert.equal(
-			Buffer.from(tobyFiles[`facmandu-assistant_0.0.4/${file}`]).toString(),
+			Buffer.from(tobyFiles[`${tobyPrefix}/${file}`]).toString(),
 			await readFile(join(root, 'factorio-mod/facmandu-assistant', file), 'utf8')
 		);
 	}
@@ -2738,7 +2738,7 @@ done
 		'icon'
 	]) {
 		assert.deepEqual(
-			Buffer.from(tobyFiles[`facmandu-assistant_0.0.4/graphics/${name}.png`]),
+			Buffer.from(tobyFiles[`${tobyPrefix}/graphics/${name}.png`]),
 			await readFile(join(root, 'assets/toby-drone/sprites', `${name}.png`))
 		);
 	}
@@ -2759,14 +2759,14 @@ done
 	);
 	await action(`${secondPath}?/manage`, cookies.owner, { operation: 'installToby' });
 	assert.deepEqual(
-		unzipSync(await readFile(join(machineDirs[1], 'mods/facmandu-assistant_0.0.4.zip'))),
+		unzipSync(await readFile(join(machineDirs[1], `mods/${tobyPrefix}.zip`))),
 		tobyFiles
 	);
 	assert.deepEqual(
 		(await readState(1, 'mods/mod-list.json')).mods.find(
 			(mod) => mod.name === 'facmandu-assistant'
 		),
-		{ name: 'facmandu-assistant', version: '0.0.4', enabled: true }
+		{ name: 'facmandu-assistant', version: tobyInfo.version, enabled: true }
 	);
 	assert.deepEqual(
 		await readFile(join(machineDirs[1], 'saves/context-world.zip')),
