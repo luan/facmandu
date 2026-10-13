@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ManagedServer } from './db/schema';
+import { factoryBundle, luaString } from './factory-query-bundle';
 import { ServerError } from './server-files';
 import { serverStatus } from './server-process';
 import { rconScript } from './server-rcon';
@@ -10,49 +11,7 @@ const sources = import.meta.glob<string>('./factory-query/scripts/**/*.lua', {
 	eager: true
 });
 
-function luaString(value: string) {
-	let delimiter = '=';
-	while (value.includes(`]${delimiter}]`)) delimiter += '=';
-	return `[${delimiter}[${value}]${delimiter}]`;
-}
-
-// Each command owns its modules and registry. Nothing is installed in the save,
-// and third-party remote interfaces cannot add callable tools. Documented planner
-// reads use an explicit adapter; the native remote object is never caller-controlled.
-// Sources use line comments only; multiline strings require Lua-aware compaction.
-const bundle = `local native_remote = remote
-local registry = {}
-local remote = { interfaces = {} }
-function remote.add_interface(name, functions) registry[name] = functions; remote.interfaces[name] = functions end
-function remote.call(name, method, ...) return registry[name][method](...) end
-local require
-local modules = {
-${Object.entries(sources)
-	.map(
-		([path, source]) =>
-			`[ ${luaString(
-				path
-					.replace('./factory-query/', '')
-					.replace(/\.lua$/u, '')
-					.replaceAll('/', '.')
-			)} ] = function()\n${source
-				.split('\n')
-				.filter((line) => line.trim() && !line.trimStart().startsWith('--'))
-				.map((line) => line.trim())
-				.join('\n')}\nend`
-	)
-	.join(',\n')}
-}
-local loaded = {}
-require = function(name)
-  if not loaded[name] then loaded[name] = assert(modules[name], "Unknown query module")() end
-  return loaded[name]
-end
-require("scripts.tools.engine").register(native_remote)
-local functions = registry["ai-agent-bridge-tools"]
-`;
-
-export function factoryCommand(request: Record<string, unknown>) {
+export function factoryCommand(request: Record<string, unknown>, owners?: string[]) {
 	const encoded = JSON.stringify(request);
 	const routing = request.op === 'call' && request.tool === 'route_belt';
 	if (Buffer.byteLength(encoded) > (routing ? 128000 : 8192))
@@ -60,7 +19,7 @@ export function factoryCommand(request: Record<string, unknown>) {
 	// Route geometry goes directly into a saved draft, rather than model context.
 	const replyLimit = routing ? 131072 : 65536;
 	return `/silent-command local ok, result = pcall(function()
-${bundle}
+${factoryBundle(sources, owners)}
 local request = helpers.json_to_table(${luaString(encoded)})
 if request.op == "catalog" then return functions.agent_tools_v1() end
 local function lookup(query)
@@ -94,10 +53,59 @@ const replySchema = z.discriminatedUnion('ok', [
 	z.object({ ok: z.literal(true), result: z.json() }),
 	z.object({ ok: z.literal(false), error: z.string() })
 ]);
+// These contracts depend only on reviewed sources, not mutable world state or
+// installed-mod availability. A new app release creates a fresh cache.
+const manifests = new Map<
+	string,
+	Promise<{
+		catalog: z.infer<ReturnType<typeof z.json>>;
+		tools: z.infer<typeof catalogSchema>['tools'];
+	}>
+>();
+const catalogSchema = z.object({
+	v: z.number(),
+	tools: z.record(z.string(), z.object({ module: z.string().optional() }).passthrough())
+});
+
 export async function factoryQuery(server: ManagedServer, request: Record<string, unknown>) {
 	if (!(await serverStatus(server)).running)
 		throw new ServerError(409, 'Start this server to query the factory');
-	const raw = await rconScript(server, factoryCommand(request));
+	let manifest = manifests.get(server.id);
+	if (!manifest) {
+		manifest = execute(server, { op: 'catalog' }).then((value) => ({
+			catalog: value,
+			tools: catalogSchema.parse(value).tools
+		}));
+		manifests.set(server.id, manifest);
+		manifest.catch(() => {
+			if (manifests.get(server.id) === manifest) manifests.delete(server.id);
+		});
+	}
+	const contract = await manifest;
+	if (request.op === 'catalog') return contract.catalog;
+	const queries = request.op === 'batch' ? request.queries : [request];
+	const owners = Array.isArray(queries)
+		? queries.map((query: unknown) => {
+				if (
+					!query ||
+					typeof query !== 'object' ||
+					!('tool' in query) ||
+					typeof query.tool !== 'string'
+				)
+					return undefined;
+				return contract.tools[query.tool]?.module;
+			})
+		: [];
+	// Unknown or unattributed tools still go through full native validation.
+	const selected =
+		owners.length && owners.every((name): name is string => !!name)
+			? [...new Set(owners)]
+			: undefined;
+	return execute(server, request, selected);
+}
+
+async function execute(server: ManagedServer, request: Record<string, unknown>, owners?: string[]) {
+	const raw = await rconScript(server, factoryCommand(request, owners));
 	const parsed = replySchema.safeParse(
 		(() => {
 			try {

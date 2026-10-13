@@ -11,42 +11,18 @@
 -- `manifest` and a `functions` table keyed by the same names; adding a tool
 -- means adding a module here, never editing this file's body.
 
--- One local per module, then the list. A require() straight into a table
--- constructor is a trap: in the last slot it expands to every value require
--- returns, which is more than one on some Lua versions.
-local basics           = require("scripts.tools.basics")
-local surfaces         = require("scripts.tools.surfaces")
-local production       = require("scripts.tools.production")
-local production_since = require("scripts.tools.production_since")
-local research         = require("scripts.tools.research")
-local tech_status      = require("scripts.tools.tech_status")
-local logistics        = require("scripts.tools.logistics")
-local entity_count     = require("scripts.tools.entity_count")
-local environment      = require("scripts.tools.environment")
-local rockets          = require("scripts.tools.rockets")
-local game_time        = require("scripts.tools.game_time")
-local resources        = require("scripts.tools.resources")
-local locate           = require("scripts.tools.locate")
-local kills            = require("scripts.tools.kills")
-local built            = require("scripts.tools.built")
-local fluid_rate       = require("scripts.tools.fluid_rate")
-local trains           = require("scripts.tools.trains")
-local machine_diagnostics = require("scripts.tools.machine_diagnostics")
-local transport_diagnostics = require("scripts.tools.transport_diagnostics")
-local power_diagnostics = require("scripts.tools.power_diagnostics")
-local train_diagnostics = require("scripts.tools.train_diagnostics")
-local logistic_requests = require("scripts.tools.logistic_requests")
-local planning         = require("scripts.tools.planning")
-local transport_route  = require("scripts.tools.transport_route")
-local bus_discovery    = require("scripts.tools.bus_discovery")
-local sweep            = require("scripts.sweep.tool")
-
+-- Keep source ownership beside the native contracts so the service can send only
+-- the modules needed for a lookup; implementations and scope checks stay native.
 local MODULES = {
-  basics, surfaces, production, production_since,
-  research, tech_status, logistics, entity_count, environment, rockets, game_time,
-  locate, kills, built, fluid_rate, trains,
-  machine_diagnostics, transport_diagnostics, power_diagnostics, train_diagnostics, logistic_requests,
-  planning, transport_route, bus_discovery, resources, sweep,
+  "scripts.tools.basics", "scripts.tools.surfaces", "scripts.tools.production",
+  "scripts.tools.production_since", "scripts.tools.research", "scripts.tools.tech_status",
+  "scripts.tools.logistics", "scripts.tools.entity_count", "scripts.tools.environment",
+  "scripts.tools.rockets", "scripts.tools.game_time", "scripts.tools.locate",
+  "scripts.tools.kills", "scripts.tools.built", "scripts.tools.fluid_rate", "scripts.tools.trains",
+  "scripts.tools.machine_diagnostics", "scripts.tools.transport_diagnostics",
+  "scripts.tools.power_diagnostics", "scripts.tools.train_diagnostics",
+  "scripts.tools.logistic_requests", "scripts.tools.planning", "scripts.tools.transport_route",
+  "scripts.tools.bus_discovery", "scripts.tools.resources", "scripts.sweep.tool",
 }
 
 local INTERFACE = "ai-agent-bridge-tools"
@@ -54,7 +30,8 @@ local INTERFACE = "ai-agent-bridge-tools"
 local MANIFEST = {}
 local FUNCTIONS = {}
 
-for _, module in ipairs(MODULES) do
+for _, module_name in ipairs(MODULES) do
+  local module = require(module_name)
   for name, entry in pairs(module.manifest) do
     local fn = module.functions[name]
     -- A manifest entry with no function would advertise a tool that always
@@ -67,6 +44,7 @@ for _, module in ipairs(MODULES) do
     entry.params.force = name == "list_forces"
       and "string optional asking force, defaults to player"
       or "string! exact force name returned by list_forces"
+    entry.module = module_name
     MANIFEST[name] = entry
     FUNCTIONS[name] = fn
   end
@@ -81,6 +59,7 @@ function M.register(native_remote)
   local provider = planners.provider(native_remote)
   for name, entry in pairs(provider.manifest) do
     entry.params.force = "string! exact asking force name"
+    entry.module = "scripts.tools.mod_planners"
     MANIFEST[name] = entry
     FUNCTIONS[name] = provider.functions[name]
   end
