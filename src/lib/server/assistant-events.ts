@@ -31,6 +31,23 @@ export function assistantStreamProgress(
 }
 
 export function assistantToolProgress(tool: string, input: unknown) {
+	if (tool === 'report_progress') return 'Updating you…';
+	if (tool === 'factory_batch') {
+		const queries = object(input)?.queries;
+		const names = Array.isArray(queries)
+			? [
+					...new Set(
+						queries.flatMap((query: unknown) => {
+							const name = object(query)?.tool;
+							return typeof name === 'string' ? [name.replaceAll('_', ' ')] : [];
+						})
+					)
+				]
+			: [];
+		return names.length
+			? `Inspecting factory: ${names.slice(0, 3).join(', ')}${names.length > 3 ? ', …' : '…'}`
+			: 'Inspecting factory…';
+	}
 	const name =
 		input &&
 		typeof input === 'object' &&
@@ -121,7 +138,7 @@ export function assistantToolFeedback(tool: string, output: unknown) {
 	}
 	if (tool === 'server_status' && typeof value.running === 'boolean')
 		return `Server checked: ${value.running ? 'running' : 'stopped'}.`;
-	return typeof wrapper?.title === 'string' ? `${wrapper.title}: result received.` : '';
+	return '';
 }
 
 export function assistantElapsed(progress: string, started: number, now: number) {

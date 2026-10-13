@@ -49,12 +49,7 @@ export function panelActivity(value: string, progress?: string, feedback?: strin
 			const detail = assistantToolFeedback(result.tool ?? '', result);
 			const error = factoryError(result.result);
 			return {
-				text: gameText(
-					[result.title, error ?? (detail === `${result.title}: result received.` ? '' : detail)]
-						.filter(Boolean)
-						.join('\n'),
-					700
-				)
+				text: gameText([result.title, error ?? detail].filter(Boolean).join('\n'), 700)
 			};
 		});
 	if (progress || feedback)
