@@ -494,8 +494,10 @@ local function blueprint(request)
    local kind=prototypes.entity[e.name].type
    if kind=='transport-belt' or kind=='underground-belt' then belts[e.position.x..':'..e.position.y]=i end
   end
+  local path_nodes={}
   local function planned_path(start)
    local seen,index,length={},start,0
+   path_nodes[start]=seen
    while true do
     local e=entities[index];local p=prototypes.entity[e.name];local heading=headings[e.direction]
     local ending={terminal_entity=index,length=length+1,position=e.position}
@@ -528,6 +530,68 @@ local function blueprint(request)
     local path=transfer.planned_belt_path
     if path.status=='opposed' or path.status=='underground_exit' then
      warn('Inserter '..transfer.inserter..' planned belt path cannot feed entity '..path.next_entity..' from entity '..path.terminal_entity..' ('..path.status..'). Correct this join before placement.')
+    end
+   end
+  end
+  local needed,automatic={},{}
+  for _,transfer in ipairs(transfers) do
+   local target=transfer.drop_entity and entities[transfer.drop_entity]
+   local recipe=target and target.recipe and prototypes.recipe[target.recipe]
+   if recipe then for _,ingredient in ipairs(recipe.ingredients) do if ingredient.type=='item' then needed[ingredient.name]=true end end end
+   local source=transfer.pickup_entity and entities[transfer.pickup_entity]
+   local p=source and prototypes.entity[source.name]
+   if p and p.type=='furnace' and path_nodes[transfer.drop_entity] then
+    for category in pairs(p.crafting_categories or {}) do automatic[category]=automatic[category] or {} end
+   end
+  end
+  -- Automatic furnaces do not encode a recipe in a native blueprint. Index
+  -- their compatible unlocked products instead of inventing that setting.
+  if next(automatic) then
+   for _,recipe in pairs(force.recipes) do
+    if recipe.enabled then
+     for _,category in pairs(recipe.categories or {}) do
+      local products=automatic[category]
+      if products then for _,product in ipairs(recipe.products) do if product.type=='item' and needed[product.name] then products[product.name]=true end end end
+     end
+    end
+   end
+  end
+  local producers={}
+  for _,transfer in ipairs(transfers) do
+   local source=transfer.pickup_entity and entities[transfer.pickup_entity]
+   local recipe=source and source.recipe and prototypes.recipe[source.recipe]
+   if recipe and path_nodes[transfer.drop_entity] then
+    for _,product in ipairs(recipe.products) do
+     if product.type=='item' then
+      producers[product.name]=producers[product.name] or {}
+      producers[product.name][transfer.drop_entity]=true
+     end
+    end
+   elseif source and path_nodes[transfer.drop_entity] and prototypes.entity[source.name].type=='furnace' then
+    for category in pairs(prototypes.entity[source.name].crafting_categories or {}) do
+     for item in pairs(automatic[category] or {}) do
+      producers[item]=producers[item] or {};producers[item][transfer.drop_entity]=true
+     end
+    end
+   end
+  end
+  -- These are missing draft links, not proof that an existing-world feed is
+  -- absent. Keep diagnostics bounded; larger checks need a native tick-budget fixture.
+  local input_warnings=0
+  for _,transfer in ipairs(transfers) do
+   local target=transfer.drop_entity and entities[transfer.drop_entity]
+   local recipe=target and target.recipe and prototypes.recipe[target.recipe]
+   if input_warnings<16 and recipe and transfer.pickup_entity and belts[entities[transfer.pickup_entity].position.x..':'..entities[transfer.pickup_entity].position.y] then
+    for _,ingredient in ipairs(recipe.ingredients) do
+     local sources=ingredient.type=='item' and producers[ingredient.name]
+     if sources and input_warnings<16 then
+      local reachable=false
+      for start in pairs(sources) do if path_nodes[start][transfer.pickup_entity] then reachable=true;break end end
+      if not reachable then
+       warn('No planned '..ingredient.name..' producer reaches inserter '..transfer.inserter..' pickup belt '..transfer.pickup_entity..'. Connect a producer outlet upstream of this pickup, or verify its existing-world supply before placement.')
+       input_warnings=input_warnings+1
+      end
+     end
     end
    end
   end

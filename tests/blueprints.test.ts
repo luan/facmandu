@@ -360,6 +360,37 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
   local isolated=blueprint{operation='create',force='player',label='External',entities={entity('inserter',2.5,2.5,0)}}
   assert(not isolated.inserter_transfers[1].pickup_entity and not isolated.inserter_transfers[1].drop_entity)
  end
+ prototypes.entity.small=prototype('assembling-machine',1)
+ prototypes.entity.small.crafting_categories={crafting=true}
+ prototypes.recipe={
+  producer={products={{type='item',name='sand'}},ingredients={{type='item',name='stone'}}},
+  consumer={products={{type='item',name='glass'}},ingredients={{type='item',name='sand'}}}
+ }
+ for name,recipe in pairs(prototypes.recipe) do game.forces.player.recipes[name]={enabled=true,categories={'crafting'},products=recipe.products,ingredients=recipe.ingredients} end
+ local feed={
+  {name='small',position={x=.5,y=.5},direction=0,recipe='producer'},
+  {name='inserter',position={x=.5,y=1.5},direction=0},
+  {name='small',position={x=-2.5,y=4.5},direction=0,recipe='consumer'},
+  {name='inserter',position={x=-2.5,y=3.5},direction=0}
+ }
+ for x=-2.5,3.5 do feed[#feed+1]={name='belt',position={x=x,y=2.5},direction=4} end
+ local gap=blueprint{operation='create',force='player',label='Upstream consumer gap',entities=feed}
+ local found=false
+ for _,warning in ipairs(gap.warnings or {}) do if warning:match('No planned sand producer reaches inserter 4') then found=true end end
+ assert(found,'A consumer upstream of every producer needs a draft feed warning')
+ prototypes.entity.automatic=prototype('furnace',1);prototypes.entity.automatic.crafting_categories={crafting=true}
+ feed[1].name='automatic';feed[1].recipe=nil
+ local automatic_gap=blueprint{operation='create',force='player',label='Automatic furnace feed',entities=feed}
+ found=false
+ for _,warning in ipairs(automatic_gap.warnings or {}) do if warning:match('No planned sand producer reaches inserter 4') then found=true end end
+ assert(found,'Native automatic recipes must participate without an encoded recipe setting')
+ feed[1].position.x=-3.5;feed[2].position.x=-3.5
+ feed[#feed+1]={name='belt',position={x=-3.5,y=2.5},direction=4}
+ local connected=blueprint{operation='create',force='player',label='Connected producer',entities=feed}
+ for _,warning in ipairs(connected.warnings or {}) do assert(not warning:match('No planned sand producer'),'The corrected source feeds the consumer') end
+ table.remove(feed,2);table.remove(feed,1)
+ local external_feed=blueprint{operation='create',force='player',label='Existing supply',entities=feed}
+ for _,warning in ipairs(external_feed.warnings or {}) do assert(not warning:match('No planned sand producer'),'Existing-world inputs need no invented producer') end
  omit_vectors=true
  for _,vectors in ipairs({
   {0,{x=0,y=-1},{x=0,y=1.2}},
