@@ -127,6 +127,7 @@ export async function factoryBlueprint(
 	input: unknown,
 	player?: { name: string; requireAdmin: boolean }
 ) {
+	let revisionOf: string | undefined;
 	if (
 		typeof input === 'object' &&
 		input !== null &&
@@ -138,7 +139,8 @@ export async function factoryBlueprint(
 			? await readBlueprintDraft(server.directory, request.designId, request.force)
 			: blueprintDesignSchema.parse({ force: request.force, label: request.label });
 		const design = await runBlueprintProgram(request.program, { ...base, label: request.label });
-		return factoryBlueprint(server, { ...design, operation: 'create' }, player);
+		revisionOf = request.designId;
+		input = { ...design, operation: 'create' };
 	}
 	const schema =
 		typeof input === 'object' && input !== null && !Array.isArray(input)
@@ -162,6 +164,7 @@ export async function factoryBlueprint(
 		const reference = parsed.data;
 		const saved = await readBlueprintDraft(server.directory, reference.designId, reference.force);
 		if (reference.operation === 'create') {
+			revisionOf = reference.designId;
 			const parts = await Promise.all(
 				reference.parts.map(async (part) => ({
 					design: await readBlueprintDraft(server.directory, part.designId, reference.force),
@@ -219,7 +222,11 @@ export async function factoryBlueprint(
 			.object({ kind: z.literal('blueprint') })
 			.passthrough()
 			.parse(reply.data.result);
-		return { ...artifact, designId };
+		return {
+			...artifact,
+			designId,
+			...(revisionOf && revisionOf !== designId ? { revisionOf } : {})
+		};
 	}
 	return reply.data.result;
 }

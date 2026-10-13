@@ -1488,6 +1488,21 @@ export function assistantResultGroups(results: readonly FactoryResult[]) {
 	const layout = results.findLastIndex(
 		(item) => layoutTools.includes(item.tool ?? '') && item.display === true
 	);
+	const designKey = (item: FactoryResult) => {
+		const design = record(item.result);
+		return design.kind === 'blueprint' && /^[a-f0-9]{64}$/.test(string(design.designId))
+			? string(design.designId)
+			: '';
+	};
+	const designs = new Map<string, number>();
+	const superseded = new Set<string>();
+	results.forEach((item, index) => {
+		const id = designKey(item);
+		if (!id || item.display !== true) return;
+		designs.set(id, index);
+		const previous = string(record(item.result).revisionOf);
+		if (previous !== id && /^[a-f0-9]{64}$/.test(previous)) superseded.add(previous);
+	});
 	const scienceKey = (item: FactoryResult) => {
 		const snapshot = record(item.result);
 		return JSON.stringify([snapshot.force, snapshot.window]);
@@ -1501,7 +1516,10 @@ export function assistantResultGroups(results: readonly FactoryResult[]) {
 		(item.display === true &&
 			(item.tool !== 'production_plan' || index === plan) &&
 			(item.tool !== 'science_summary' || index === sciences.get(scienceKey(item))) &&
-			(!layoutTools.includes(item.tool ?? '') || index === layout)) ||
+			(!layoutTools.includes(item.tool ?? '') ||
+				(designKey(item)
+					? index === designs.get(designKey(item)) && !superseded.has(designKey(item))
+					: index === layout))) ||
 		(index === review && review > installation) ||
 		item.tool === 'create_server_from_list' ||
 		item.tool === 'retry_server_setup';

@@ -365,6 +365,10 @@ export const blueprintArtifactSchema = z
 	.object({
 		kind: z.literal('blueprint'),
 		force: z.string().optional(),
+		revisionOf: z
+			.string()
+			.regex(/^[a-f0-9]{64}$/)
+			.optional(),
 		designId: z
 			.string()
 			.regex(/^[a-f0-9]{64}$/)

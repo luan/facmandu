@@ -667,7 +667,7 @@ test('only the latest displayed factory inspection is inline and all captures re
 	);
 });
 
-test('only the latest blueprint is inline even when a revision changes its label', () => {
+test('legacy blueprints without saved identities retain the compact latest-export view', () => {
 	const design = (label: string, blueprint: string) => ({
 		kind: 'factory-result' as const,
 		tool: 'blueprint_operation',
@@ -682,6 +682,28 @@ test('only the latest blueprint is inline even when a revision changes its label
 		primary: [revision],
 		details: [first, alternative]
 	});
+});
+
+test('independent saved designs stay available while explicit revisions and repeated renders fold', () => {
+	const design = (id: string, revisionOf?: string, display = true) => ({
+		kind: 'factory-result' as const,
+		tool: 'blueprint_operation',
+		title: 'Blueprint',
+		display,
+		result: { kind: 'blueprint', designId: id.repeat(64), revisionOf: revisionOf?.repeat(64) }
+	});
+	const glass = design('a'),
+		science = design('b'),
+		revisedGlass = design('c', 'a');
+	const render = { ...revisedGlass, tool: 'render_blueprint' };
+	const unfinishedScience = design('d', 'b', false);
+	assert.deepEqual(
+		assistantResultGroups([glass, science, revisedGlass, render, unfinishedScience]),
+		{
+			primary: [science, render],
+			details: [glass, revisedGlass, unfinishedScience]
+		}
+	);
 });
 
 test('repeated science snapshots stay inspectable while distinct forces and windows remain inline', () => {
