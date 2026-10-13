@@ -1,4 +1,26 @@
 import type { ConversationStreamChunk } from '@flue/runtime';
+
+export function assistantToolProgress(tool: string, input: unknown) {
+	const operation =
+		input &&
+		typeof input === 'object' &&
+		'operation' in input &&
+		typeof input.operation === 'string'
+			? input.operation.replaceAll('_', ' ')
+			: '';
+	if (tool === 'blueprint_operation') return `Blueprint${operation ? `: ${operation}` : ''}…`;
+	if (tool === 'factory_action') return `Factory action${operation ? `: ${operation}` : ''}…`;
+	if (tool.startsWith('factory_')) return `Inspecting factory${operation ? `: ${operation}` : ''}…`;
+	if (tool === 'plan_production') return 'Calculating production…';
+	if (tool === 'render_blueprint') return 'Rendering blueprint…';
+	if (tool === 'sandbox_blueprint') return 'Testing blueprint…';
+	return `${tool.replaceAll('_', ' ')}…`;
+}
+
+export function assistantElapsed(progress: string, started: number, now: number) {
+	const seconds = Math.max(0, Math.floor((now - started) / 1000));
+	return `${progress} · ${Math.floor(seconds / 60)}m ${seconds % 60}s elapsed`;
+}
 // Flue replays the conversation stream. Forward only this submission's messages and tools.
 export function submissionEvents(id: string, accept: (chunk: ConversationStreamChunk) => void) {
 	const messages = new Set<string>();

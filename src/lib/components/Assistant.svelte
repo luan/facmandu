@@ -63,7 +63,7 @@
  $effect(() => { listId; serverId; if (!open) voice.stop(); return () => voice.stop(); });
  let gamePlayer = $state<string | null>(null);
  let open = $state(false); let sidebar = $state<'history' | 'activity' | null>(null); let prompt = $state(''); let busy = $state(false); let progress = $state(''); let text = $state(''); let error = $state(''); let refreshError = $state('');
- let turns = $state<{ id: string; prompt: string; answer: string; state: string; mods: AssistantMod[]; results?: FactoryResult[]; plans?: ModlistPlan[] }[]>([]);
+ let turns = $state<{ id: string; prompt: string; answer: string; state: string; progress?: string; mods: AssistantMod[]; results?: FactoryResult[]; plans?: ModlistPlan[] }[]>([]);
   const inProgress = $derived(busy || turns.some(turn => turn.state === 'running'));
  function layoutLabel(item: FactoryResult) {
   if (!item.display) return null;
@@ -154,6 +154,7 @@
    if (!response.ok) throw new Error(data.message);
    if (selectedChat && chat !== selectedChat) return false;
    chat = data.chat.id; gamePlayer = data.chat.gamePlayer ?? null; chats = data.chats; hasMore = data.hasMore; compacted = Boolean(data.chat.compactedAt); contextUsage = data.chat.contextUsage ?? null; turns = data.turns;
+   if (!busy) progress = turns.findLast(turn => turn.state === 'running')?.progress ?? '';
    plans = data.plans; combineablePlanIds = data.combineablePlanIds ?? [];
    if (data.models) { models = data.models; modelError = data.modelError; modelCatalogLoaded = true; }
    if (resetModel || !model || (data.models && !models.some(item => item.id === model))) model = models.some(item => item.id === data.model) ? data.model : models[0]?.id ?? '';

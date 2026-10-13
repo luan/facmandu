@@ -43,8 +43,7 @@ local function panel(player)
  local navigation=body.add{type='flow',direction='horizontal'}
  local chats=navigation.add{type='drop-down',name=PREFIX..'chats',items={'New conversation'},selected_index=1}
  chats.style.horizontally_stretchable=true
- local new=navigation.add{type='button',name=PREFIX..'new',caption='+',tooltip='New conversation'}
- new.style.minimal_width=32;new.style.maximal_width=32
+ navigation.add{type='button',name=PREFIX..'new',caption='New chat',tooltip='Start a separate conversation; existing runs keep working'}
  local status=body.add{type='label',caption='Waiting for Facmandu'}
  status.style.width=432;status.style.single_line=false
  status.style.font_color={r=0.75,g=0.75,b=0.75}

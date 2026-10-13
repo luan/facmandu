@@ -6,7 +6,13 @@ import {
 	factoryResultSchema
 } from '$lib/assistant-results';
 import { assistantErrorMessage } from './assistant-error';
-import { assistantFinalText, assistantText, submissionEvents } from './assistant-events';
+import {
+	assistantElapsed,
+	assistantFinalText,
+	assistantText,
+	assistantToolProgress,
+	submissionEvents
+} from './assistant-events';
 import { db } from './db';
 import { assistantChat, serverAssistantTurn as turnTable } from './db/schema';
 import { requireGamePlayer } from './game-player';
@@ -16,9 +22,15 @@ import { requireServer } from './servers';
 
 const state = globalThis as typeof globalThis & {
 	__facmanduServerAssistantRequests?: Map<string, AbortController>;
+	__facmanduServerAssistantActivity?: Map<
+		string,
+		{ answer: string; progress: string; results: FactoryResult[] }
+	>;
 };
 state.__facmanduServerAssistantRequests ??= new Map();
+state.__facmanduServerAssistantActivity ??= new Map();
 export const serverAssistantRequests = state.__facmanduServerAssistantRequests;
+export const serverAssistantActivity = state.__facmanduServerAssistantActivity;
 type Steering = {
 	ready: ReturnType<
 		typeof Promise.withResolvers<((prompt: string, key: string) => Promise<string>) | null>
@@ -70,30 +82,41 @@ export async function finishServerTurn(
 	const current = steering.get(controller);
 	let progress = 'Thinking…';
 	let notifying = false;
+	let lastNotification = Date.now();
+	const activity = { answer: '', progress, results: [] as FactoryResult[] };
+	serverAssistantActivity.set(turn.id, activity);
 	const send = (event: object) => {
 		if ('progress' in event && typeof event.progress === 'string') progress = event.progress;
-		sendEvent(event);
+		activity.progress = assistantElapsed(progress, turn.createdAt.getTime(), Date.now());
+		if ('answer' in event && typeof event.answer === 'string') activity.answer = event.answer;
+		if ('delta' in event && typeof event.delta === 'string') activity.answer += event.delta;
+		if ('results' in event) {
+			const parsed = factoryResultSchema.array().safeParse(event.results);
+			if (parsed.success) activity.results = parsed.data;
+		}
+		sendEvent({ ...event, progress: activity.progress });
 	};
 	// Report liveness without spending model tokens or interrupting its work.
 	const heartbeat = setInterval(() => {
-		if (controller.signal.aborted || current?.closed || notifying) return;
-		const minutes = Math.max(1, Math.floor((Date.now() - turn.createdAt.getTime()) / 60_000));
-		const update = `${progress} · ${minutes} min elapsed`;
-		sendEvent({ progress: update });
-		if (notifyProgress) {
+		if (controller.signal.aborted || current?.closed) return;
+		send({});
+		// Force chat stays quiet between minute updates; the panels refresh independently.
+		if (notifyProgress && !notifying && Date.now() - lastNotification >= 60_000) {
+			lastNotification = Date.now();
 			notifying = true;
-			void notifyProgress(update)
+			void notifyProgress(activity.progress)
 				.catch(() => {})
 				.finally(() => {
 					notifying = false;
 				});
 		}
-	}, 60_000);
+	}, 10_000);
 	heartbeat.unref();
 	const results: FactoryResult[] = [];
 	const toolNames = new Map<string, string>();
 	const stopWatching = watchCompaction(turn.chatId ?? keyOf(turn.userId, turn.serverId), send);
 	try {
+		send({ progress: 'Reading request…' });
 		const chat = turn.chatId
 			? await db.select().from(assistantChat).where(eq(assistantChat.id, turn.chatId)).get()
 			: null;
@@ -150,6 +173,7 @@ export async function finishServerTurn(
 			turn.effort ?? undefined,
 			turn.chatId ?? undefined
 		);
+		send({ progress: 'Thinking…' });
 		const abort = () => {
 			void handle.abort().catch(() => {});
 		};
@@ -211,6 +235,8 @@ export async function finishServerTurn(
 				if (chunk.type === 'message-started' || chunk.type === 'tool-input') send({ answer: '' });
 				if (chunk.type === 'message-delta' && chunk.kind === 'text')
 					send({ delta: chunk.delta, progress: 'Responding…' });
+				if (chunk.type === 'message-delta' && chunk.kind === 'reasoning')
+					send({ progress: 'Reasoning…' });
 				if (chunk.type === 'tool-input') toolNames.set(chunk.toolCallId, chunk.toolName);
 				if (chunk.type === 'tool-output-error') {
 					const tool = toolNames.get(chunk.toolCallId) ?? 'Tool';
@@ -227,16 +253,7 @@ export async function finishServerTurn(
 				}
 				if (chunk.type === 'tool-input')
 					send({
-						progress:
-							chunk.toolName === 'factory_action'
-								? 'Updating factory…'
-								: chunk.toolName === 'plan_production'
-									? 'Calculating production…'
-									: chunk.toolName === 'create_factory_watch'
-										? 'Creating watch…'
-										: chunk.toolName.startsWith('factory_')
-											? 'Reading factory…'
-											: 'Working…'
+						progress: assistantToolProgress(chunk.toolName, chunk.input)
 					});
 				if (chunk.type === 'data-part' && chunk.name === 'factory-result') {
 					const parsed = factoryResultSchema.safeParse(chunk.data);
@@ -315,9 +332,10 @@ export async function finishServerTurn(
 			current.ready.resolve(null);
 			current.done.resolve();
 		}
-		await stopWatching();
 		clearInterval(heartbeat);
+		serverAssistantActivity.delete(turn.id);
 		const key = turn.chatId ?? keyOf(turn.userId, turn.serverId);
 		if (serverAssistantRequests.get(key) === controller) serverAssistantRequests.delete(key);
+		await stopWatching();
 	}
 }

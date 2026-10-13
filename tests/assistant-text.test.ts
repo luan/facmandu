@@ -1,7 +1,27 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { ConversationStreamChunk } from '@flue/runtime';
-import { assistantFinalText, assistantText } from '../src/lib/server/assistant-events';
+import {
+	assistantElapsed,
+	assistantFinalText,
+	assistantText,
+	assistantToolProgress
+} from '../src/lib/server/assistant-events';
+
+test('progress names the actual tool operation and elapsed time without exposing its inputs', () => {
+	assert.equal(
+		assistantToolProgress('blueprint_operation', { operation: 'export', blueprint: 'private' }),
+		'Blueprint: export…'
+	);
+	assert.equal(
+		assistantToolProgress('factory_query', { operation: 'inspect_transport' }),
+		'Inspecting factory: inspect transport…'
+	);
+	assert.equal(assistantToolProgress('sandbox_blueprint', null), 'Testing blueprint…');
+	assert.equal(assistantToolProgress('factory_action', { operation: 42 }), 'Factory action…');
+	assert.equal(assistantElapsed('Reasoning…', 1000, 86000), 'Reasoning… · 1m 25s elapsed');
+	assert.equal(assistantElapsed('Thinking…', 1000, 500), 'Thinking… · 0m 0s elapsed');
+});
 
 test('tool progress and reasoning stay out of the persisted final answer', () => {
 	const base = {

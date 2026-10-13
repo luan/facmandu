@@ -38,6 +38,11 @@ test('Toby panel sends native player requests and preserves typed drafts across 
  local frame=player.gui.screen['facmandu-toby-panel']
  local refs=storage.gui[1]
  assert(refs.chats.selected_index==1 and refs.frame.location.x==16)
+ local function find(element,name)
+  if element.name==name then return element end
+  for _,child in ipairs(element.children) do local found=find(child,name);if found then return found end end
+ end
+ assert(find(frame,'facmandu-toby-new').caption=='New chat')
  storage.gui[1].message.text='More glass'
  handlers[6]({player_index=1,element=storage.gui[1].message})
  handlers.migrate();frame=player.gui.screen['facmandu-toby-panel']
@@ -45,6 +50,9 @@ test('Toby panel sends native player requests and preserves typed drafts across 
  interface.update_player(1,{status='Working',running=true,answer='First answer',current='one',chats={{id='one',title='Glass'},{id='two',title='Science'}}})
  assert(storage.gui[1].message.text=='More glass')
  assert(storage.gui[1].send.caption=='Steer' and storage.gui[1].stop.visible)
+ handlers[3]({player_index=1,element=find(frame,'facmandu-toby-new')})
+ assert(last.operation=='new' and last.player=='Alice')
+ assert(storage.gui[1].message.text=='More glass')
  handlers[8]({player_index=1,element=storage.gui[1].message})
  assert(last.player=='Alice' and last.operation=='send' and last.prompt=='More glass' and last.chat=='one')
  assert(storage.gui[1].message.text=='')

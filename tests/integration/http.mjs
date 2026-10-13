@@ -389,11 +389,14 @@ const fixture = createServer(async (request, response) => {
 					!JSON.stringify(body.input).includes('fixture-plan'),
 					'New chat must not inherit another conversation'
 				);
-			if (currentRequest.includes('fixture-web-steering-start')) {
+			const hasLiveToolResult = currentInput.some(
+				(item) => item.type === 'function_call_output' && item.call_id === 'call_live_status'
+			);
+			if (currentRequest.includes('fixture-web-steering-start') && hasLiveToolResult) {
 				webSteeringStarted.resolve();
 				await webSteeringRelease.promise;
 			}
-			if (currentRequest.includes('fixture-game-steering-start')) {
+			if (currentRequest.includes('fixture-game-steering-start') && hasLiveToolResult) {
 				gameSteeringStarted.resolve();
 				await gameSteeringRelease.promise;
 			}
@@ -819,6 +822,21 @@ const fixture = createServer(async (request, response) => {
 																										}
 																									]
 																								});
+			if (
+				!hasLiveToolResult &&
+				(currentRequest.includes('fixture-web-steering-start') ||
+					currentRequest.includes('fixture-game-steering-start'))
+			) {
+				Object.assign(item, {
+					type: 'function_call',
+					id: 'fc_live_status',
+					call_id: 'call_live_status',
+					name: 'server_status',
+					arguments: '{}'
+				});
+				delete item.content;
+				delete item.role;
+			}
 			if (currentRequest.includes('fixture-empty-answer') && item.type === 'message')
 				item.content[0].text = currentInput.some((input) =>
 					JSON.stringify(input).includes('answer-recovery')
@@ -2628,6 +2646,12 @@ done
 		}
 	});
 	await webSteeringStarted.promise;
+	const liveWeb = await json(`${serverAssistantPath}?chat=${steerChat}&models=0`, {
+		cookie: cookies.owner
+	});
+	assert.equal(liveWeb.turns[0].state, 'running');
+	assert.match(liveWeb.turns[0].progress, /Thinking… · \d+m \d+s elapsed/);
+	assert.equal(liveWeb.turns[0].results[0].tool, 'server_status');
 	await action(
 		serverAssistantPath,
 		cookies.stranger,
@@ -2657,18 +2681,18 @@ done
 	assert.equal(tobyZip.status, 200);
 	const tobyFiles = unzipSync(new Uint8Array(await tobyZip.arrayBuffer()));
 	assert.equal(
-		JSON.parse(Buffer.from(tobyFiles['facmandu-assistant_0.0.1/info.json']).toString()).title,
+		JSON.parse(Buffer.from(tobyFiles['facmandu-assistant_0.0.2/info.json']).toString()).title,
 		'[WIP] Toby'
 	);
 	assert.ok(
-		Buffer.from(tobyFiles['facmandu-assistant_0.0.1/control.lua'])
+		Buffer.from(tobyFiles['facmandu-assistant_0.0.2/control.lua'])
 			.toString()
 			.includes('FACMANDU_UI')
 	);
 	assert.equal((await request('/api/toby-mod')).status, 401);
 	for (const file of ['drone.lua', 'drone-prototypes.lua']) {
 		assert.equal(
-			Buffer.from(tobyFiles[`facmandu-assistant_0.0.1/${file}`]).toString(),
+			Buffer.from(tobyFiles[`facmandu-assistant_0.0.2/${file}`]).toString(),
 			await readFile(join(root, 'factorio-mod/facmandu-assistant', file), 'utf8')
 		);
 	}
@@ -2689,14 +2713,14 @@ done
 	);
 	await action(`${secondPath}?/manage`, cookies.owner, { operation: 'installToby' });
 	assert.deepEqual(
-		unzipSync(await readFile(join(machineDirs[1], 'mods/facmandu-assistant_0.0.1.zip'))),
+		unzipSync(await readFile(join(machineDirs[1], 'mods/facmandu-assistant_0.0.2.zip'))),
 		tobyFiles
 	);
 	assert.deepEqual(
 		(await readState(1, 'mods/mod-list.json')).mods.find(
 			(mod) => mod.name === 'facmandu-assistant'
 		),
-		{ name: 'facmandu-assistant', version: '0.0.1', enabled: true }
+		{ name: 'facmandu-assistant', version: '0.0.2', enabled: true }
 	);
 	assert.deepEqual(
 		await readFile(join(machineDirs[1], 'saves/context-world.zip')),
@@ -3052,6 +3076,33 @@ done
 		assert.equal(gameReplies.length, 5);
 		await appendFile(gameLog, '106.000 [CHAT] Frank: @ fixture-game-steering-start\n');
 		await gameSteeringStarted.promise;
+		const liveGame = await json(`${serverPath}/assistant?models=0`, { cookie: cookies.owner });
+		const frankChat = liveGame.chats.find((chat) => chat.gamePlayer === 'Frank');
+		assert.ok(frankChat);
+		const liveGameTurn = await json(`${serverPath}/assistant?chat=${frankChat.id}&models=0`, {
+			cookie: cookies.owner
+		});
+		assert.match(liveGameTurn.turns[0].progress, /Thinking… · \d+m \d+s elapsed/);
+		assert.equal(liveGameTurn.turns[0].results[0].tool, 'server_status');
+		const livePanel = nextPanelUpdate('Frank');
+		await appendFile(gameLog, uiLine('Frank', 'refresh', 1));
+		const livePanelState = await livePanel;
+		assert.equal(livePanelState.running, true);
+		assert.match(livePanelState.status, /Thinking… · \d+m \d+s elapsed/);
+		assert.equal(livePanelState.activity[0].text, 'Server');
+		const freshDuringRun = nextPanelUpdate('Frank');
+		await appendFile(gameLog, uiLine('Frank', 'new', 2));
+		const freshPanel = await freshDuringRun;
+		assert.notEqual(freshPanel.current, frankChat.id);
+		assert.equal(freshPanel.running, false);
+		assert.equal(
+			(
+				await json(`${serverPath}/assistant?chat=${frankChat.id}&models=0`, {
+					cookie: cookies.owner
+				})
+			).turns[0].state,
+			'running'
+		);
 		const steeringAck = nextGameReply('Frank');
 		await appendFile(
 			gameLog,

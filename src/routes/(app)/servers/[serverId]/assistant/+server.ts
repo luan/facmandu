@@ -14,6 +14,7 @@ import { genID } from '$lib/server/db/ids';
 import { serverAssistantTurn as turnTable } from '$lib/server/db/schema';
 import {
 	finishServerTurn,
+	serverAssistantActivity,
 	serverAssistantController,
 	serverAssistantRequests,
 	steerServerTurn
@@ -91,12 +92,16 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
 				.slice(0, 30)
 				.reverse()
 				.map((turn) => {
-					const results = z.array(factoryResultSchema).parse(JSON.parse(turn.results));
+					const activity = serverAssistantActivity.get(turn.id);
+					const results =
+						activity?.results ?? z.array(factoryResultSchema).parse(JSON.parse(turn.results));
 					const cards = assistantModsSchema.safeParse(
 						results.find((item) => item.tool === 'mod_cards')?.result
 					);
 					return {
 						...turn,
+						answer: activity?.answer ?? turn.answer,
+						progress: activity?.progress,
 						mods: cards.success ? cards.data.mods : [],
 						results: results.filter((item) => item.tool !== 'mod_cards')
 					};

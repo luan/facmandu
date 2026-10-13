@@ -13,6 +13,7 @@ import { assistantChat, type ManagedServer, managedServer, serverAssistantTurn }
 import { requireGamePlayer } from './game-player';
 import {
 	finishServerTurn,
+	serverAssistantActivity,
 	serverAssistantController,
 	serverAssistantRequests,
 	steerServerTurn
@@ -88,10 +89,17 @@ async function syncPanel(
 				.orderBy(desc(serverAssistantTurn.createdAt))
 				.limit(8)
 		: [];
-	const turn = turns[0];
+	const turnsWithActivity = turns.map((turn) => {
+		const activity = serverAssistantActivity.get(turn.id);
+		return activity
+			? { ...turn, answer: activity.answer, results: JSON.stringify(activity.results) }
+			: turn;
+	});
+	const turn = turnsWithActivity[0];
+	const activity = turn && serverAssistantActivity.get(turn.id);
 	const messages: { role: 'user' | 'assistant'; text: string }[] = [];
 	let available = 12000;
-	for (const entry of turns) {
+	for (const entry of turnsWithActivity) {
 		const answer = gamePanelText(entry.answer, Math.min(6000, available));
 		available -= Buffer.byteLength(answer);
 		const prompt = gamePanelText(entry.prompt, Math.min(2000, available));
@@ -100,13 +108,17 @@ async function syncPanel(
 		if (prompt) messages.unshift({ role: 'user', text: prompt });
 		if (!available) break;
 	}
-	const design = turns.map((entry) => panelDesign(entry.results)).find((entry) => entry);
+	const design = turnsWithActivity
+		.map((entry) => panelDesign(entry.results))
+		.find((entry) => entry);
 	const state = {
 		current: current?.id,
 		status:
 			(!sourceChat || sourceChat === current?.id
 				? progress && gameText(progress, 500)
-				: undefined) ?? (turn?.state === 'running' ? 'Working…' : 'Ready'),
+				: undefined) ??
+			activity?.progress ??
+			(turn?.state === 'running' ? 'Working…' : 'Ready'),
 		answer: gamePanelText(turn?.answer ?? '', 6000),
 		running: turn?.state === 'running',
 		messages,
@@ -250,8 +262,9 @@ async function answer(
 	await requireGamePlayer(server, ownerId, message.player);
 	if (sessions.get(server.id) !== session) return;
 	if (/^(?:new|new chat|start fresh)$/iu.test(message.prompt)) {
-		await chatFor(server, ownerId, message.player, true);
-		await reply(server, message.player, 'Started a new chat.');
+		const chat = await chatFor(server, ownerId, message.player, true);
+		await syncPanel(server, session, message.player, chat.id);
+		await reply(server, message.player, 'Started a new chat.', chat.id);
 		return;
 	}
 	const chat = message.chatId
@@ -276,6 +289,8 @@ async function answer(
 	}
 	const id = `game-${createHash('sha256').update(`${server.id}:${line.id}:${line.text}`).digest('hex')}`;
 	const controller = serverAssistantController();
+	let panelTimer: ReturnType<typeof setInterval> | undefined;
+	let panelUpdating = false;
 	session.controllers.add(controller);
 	serverAssistantRequests.set(chat.id, controller);
 	ready(chat.id);
@@ -314,6 +329,17 @@ async function answer(
 		await syncPanel(server, session, message.player, undefined, 'Working…', chat.id).catch(
 			() => {}
 		);
+		// The mod reads snapshots, not the model stream. Refresh only during this run.
+		panelTimer = setInterval(() => {
+			if (panelUpdating || controller.signal.aborted || sessions.get(server.id) !== session) return;
+			panelUpdating = true;
+			void syncPanel(server, session, message.player)
+				.catch(() => {})
+				.finally(() => {
+					panelUpdating = false;
+				});
+		}, 5000);
+		panelTimer.unref();
 		await finishServerTurn(
 			turn,
 			controller,
@@ -335,6 +361,7 @@ async function answer(
 			.get();
 		if (completed) await reply(server, message.player, completed.answer, chat.id);
 	} finally {
+		clearInterval(panelTimer);
 		session.controllers.delete(controller);
 		if (serverAssistantRequests.get(chat.id) === controller)
 			serverAssistantRequests.delete(chat.id);
@@ -434,6 +461,10 @@ function admit(server: ManagedServer, session: Session, line: LogLine, message: 
 	deliver(server, session, line, message);
 }
 function deliver(server: ManagedServer, session: Session, line: LogLine, message: GameMessage) {
+	if (/^(?:new|new chat|start fresh)$/iu.test(message.prompt)) {
+		launch(server, session, line, { ...message, fresh: true, chatId: undefined });
+		return;
+	}
 	const pending = !message.fresh ? session.pending.get(message.player) : undefined;
 	if (/^(?:stop|cancel|stop response)$/iu.test(message.prompt)) {
 		void (async () => {

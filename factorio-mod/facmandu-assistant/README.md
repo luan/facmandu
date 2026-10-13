@@ -1,8 +1,8 @@
 # [WIP] Toby
 
-Work in progress, version **0.0.1**. Requires Factorio **2.1** and a Facmandu-managed server for AI chat. Installing the mod alone does not connect an AI model.
+Work in progress, version **0.0.2**. Requires Factorio **2.1** and a Facmandu-managed server for AI chat. Installing the mod alone does not connect an AI model.
 
-Click **Toby** above the game view, or press **Ctrl+Shift+T**, to open the side panel. **Chat** shows recent messages, **Activity** shows the selected run's tool activity, and **Design** holds its latest blueprint. Switch conversations while a run continues, or use **Steer** to add instructions. Press **Enter** to send or steer. Closing the panel keeps your typed draft. Shortcuts are configurable in Factorio’s Controls settings.
+Click **Toby** above the game view, or press **Ctrl+Shift+T**, to open the side panel. **New chat** starts a separate conversation without stopping an existing run. **Chat** shows recent messages, **Activity** shows the selected run's tool activity, and **Design** holds its latest blueprint. Status, elapsed time and tool results update while Toby works. Switch conversations while a run continues, or use **Steer** to add instructions. Press **Enter** to send or steer. Closing the panel keeps your typed draft. Shortcuts are configurable in Factorio’s Controls settings.
 
 **Open blueprint** uses Factorio's blueprint editor. Press **Ctrl+Shift+Enter** from the message input, or **Ctrl+Shift+B** from the game view, to open it with the keyboard. **Place ghosts** puts the design in your cursor and closes the panel so you can place it. Both preserve your held item through Factorio's clear-cursor operation and refuse when the item cannot be returned to your inventory. Neither supplies construction materials.
 
