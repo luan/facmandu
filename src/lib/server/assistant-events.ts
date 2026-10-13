@@ -160,6 +160,10 @@ export function submissionEvents(id: string, accept: (chunk: ConversationStreamC
 }
 
 // Tool-call preambles are progress, not part of the final player-facing answer.
+export function assistantPreamble(previous: string | undefined, chunk: ConversationStreamChunk) {
+	return chunk.type === 'tool-input' && previous?.trim() ? previous.trim() : undefined;
+}
+
 export function assistantText(previous: string | undefined, chunk: ConversationStreamChunk) {
 	if (chunk.type === 'message-started' || chunk.type === 'tool-input') return '';
 	if (chunk.type === 'message-delta' && chunk.kind === 'text')

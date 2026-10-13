@@ -2489,6 +2489,17 @@ done
 			turn.results.some((item) => item.tool === expectedTool),
 			JSON.stringify(turn.results)
 		);
+		if (expectedTool === 'server_saves') {
+			const updates = turn.results.filter((item) => item.tool === 'report_progress');
+			assert.deepEqual(
+				updates.map((item) => item.result.message),
+				['Let me inspect the save files.']
+			);
+			assert.ok(
+				turn.results.indexOf(updates[0]) <
+					turn.results.findIndex((item) => item.tool === expectedTool)
+			);
+		}
 		const menu = codexMenus.find((item) => item.request.includes(prompt));
 		assert.ok(menu.tools.includes(expectedTool));
 		assert.ok(!menu.tools.includes('list_factory_watches'));

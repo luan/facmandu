@@ -4,6 +4,7 @@ import type { ConversationStreamChunk } from '@flue/runtime';
 import {
 	assistantElapsed,
 	assistantFinalText,
+	assistantPreamble,
 	assistantText,
 	assistantToolFeedback,
 	assistantToolProgress
@@ -130,4 +131,43 @@ test('tool feedback distinguishes proposed drafts, placement faults and actual q
 		'No valid belt route found in the searched area.'
 	);
 	assert.equal(assistantToolFeedback('blueprint_operation', { entities: 700 }), '');
+});
+
+test('public tool-call preambles remain separate from final text and private reasoning', () => {
+	const base = {
+		conversationId: 'conversation',
+		messageId: 'response',
+		position: { batch: 1, index: 0 }
+	};
+	const call: ConversationStreamChunk = {
+		...base,
+		type: 'tool-input',
+		toolCallId: 'call',
+		toolName: 'factory_lookup',
+		input: {}
+	};
+	let text = assistantText(undefined, {
+		...base,
+		type: 'message-started',
+		submissionId: 'request'
+	});
+	text = assistantText(text, {
+		...base,
+		type: 'message-delta',
+		kind: 'reasoning',
+		delta: 'Private reasoning'
+	});
+	assert.equal(assistantPreamble(text, call), undefined);
+	text = assistantText(text, {
+		...base,
+		type: 'message-delta',
+		kind: 'text',
+		delta: 'I found the sand bottleneck; I will connect a new crusher.'
+	});
+	assert.equal(
+		assistantPreamble(text, call),
+		'I found the sand bottleneck; I will connect a new crusher.'
+	);
+	assert.equal(assistantText(text, call), '');
+	assert.equal(assistantPreamble(text, { ...base, type: 'message-completed' }), undefined);
 });

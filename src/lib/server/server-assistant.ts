@@ -10,6 +10,7 @@ import { assistantErrorMessage } from './assistant-error';
 import {
 	assistantElapsed,
 	assistantFinalText,
+	assistantPreamble,
 	assistantText,
 	assistantToolFeedback,
 	assistantToolProgress,
@@ -235,6 +236,20 @@ export async function finishServerTurn(
 			});
 			let answer: string | undefined;
 			const accept = (chunk: ConversationStreamChunk) => {
+				const preamble = assistantPreamble(answer, chunk);
+				if (preamble) {
+					results.push({
+						kind: 'factory-result',
+						tool: 'report_progress',
+						title: 'Toby',
+						result: { message: preamble },
+						display: false
+					});
+					send({
+						results: results.filter((item) => item.tool !== 'mod_cards'),
+						feedback: preamble
+					});
+				}
 				answer = assistantText(answer, chunk);
 				if (chunk.type === 'message-started' || chunk.type === 'tool-input') send({ answer: '' });
 				if (chunk.type === 'message-delta' && chunk.kind === 'text')
