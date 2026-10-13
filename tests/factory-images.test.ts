@@ -104,8 +104,14 @@ test('a pending snapshot becomes model-visible when its original image finishes 
 	);
 });
 test('pending blueprint previews retain only a validated image reference until rendering finishes', () => {
-	const artifact = { kind: 'factory-image', label: 'Draft', image: { id, pending: true } };
-	assert.equal(factoryImageArtifactSchema.safeParse(artifact).success, true);
+	const artifact = {
+		kind: 'factory-image',
+		label: 'Draft',
+		image: { id, pending: true },
+		blueprint: encode(layout),
+		source: 'https://www.factoriocodex.com/blueprints/295/recipe-details/19325'
+	};
+	assert.deepEqual(factoryImageArtifactSchema.parse(artifact), artifact);
 	assert.equal(
 		factoryImageArtifactSchema.safeParse({
 			...artifact,
@@ -117,6 +123,8 @@ test('pending blueprint previews retain only a validated image reference until r
 		factoryImageArtifactSchema.safeParse({ ...artifact, image: { id, pending: false } }).success,
 		false
 	);
+	for (const fields of [{ blueprint: 'invented string' }, { source: 'javascript:alert(1)' }])
+		assert.equal(factoryImageArtifactSchema.safeParse({ ...artifact, ...fields }).success, false);
 });
 test('blueprint title changes reuse the same rendered layout', () => {
 	assert.deepEqual(

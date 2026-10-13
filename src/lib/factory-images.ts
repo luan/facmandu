@@ -53,5 +53,11 @@ export const factoryImageUrl = (
 export const factoryImageArtifactSchema = z.object({
 	kind: z.literal('factory-image'),
 	label: z.string(),
-	image: factoryImageSchema.or(factoryImagePendingSchema)
+	image: factoryImageSchema.or(factoryImagePendingSchema),
+	blueprint: z
+		.string()
+		.regex(/^0[A-Za-z0-9+/=]+$/)
+		.max(1024 * 1024)
+		.optional(),
+	source: z.string().url().startsWith('https://').optional()
 });

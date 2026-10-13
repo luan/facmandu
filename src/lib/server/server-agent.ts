@@ -291,7 +291,7 @@ export function serverAssistantTools(initialContext: {
 	useTool({
 		name: 'search_blueprints',
 		description:
-			'Search shared designs by query on Factorio School, or by exact inputs/outputs on Factorio Codex to retrieve production modules inside books. Choose a query OR input/output names. Codex rates are community theoretical maxima, not measurements or verified compatibility. Verify version, mods, recipes and layout against the live game before constructing. Use fetch_blueprint to retrieve a result.',
+			'Search shared designs by query on Factorio School, or by exact inputs/outputs on Factorio Codex to retrieve production modules inside books. Choose a query OR input/output names. For a Factorio Codex plastic search use outputs=["plastic-bar"] without query; optionally filter known inputs. Codex rates are community theoretical maxima, not measurements or verified compatibility. Verify version, mods, recipes and layout against the live game before constructing. Use fetch_blueprint to retrieve a result.',
 		input: v.pipe(
 			v.object({
 				query: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(300))),
@@ -482,7 +482,7 @@ export function serverAssistantTools(initialContext: {
 		useTool({
 			name: 'render_blueprint',
 			description:
-				'Render an existing native blueprint with this server’s installed mod sprites. Supply blueprint OR a community blueprint url with optional book path; use url to avoid copying encoded strings between tools. Works while hosting is stopped and never changes the world. The same image is attached to your model context and displayed in the harness. Do not invent encoded strings. Rendering does not validate recipes, progression or throughput.',
+				'Render an existing native blueprint with this server’s installed mod sprites. Supply blueprint OR a community blueprint url with optional book path; use url to avoid copying encoded strings between tools. Works while hosting is stopped and never changes the world. A ready image is attached to your model context and displayed in the harness. A cold render returns pending and finishes in the harness automatically; do not call again to poll or wait, and do not make another render a condition of answering. Source blueprint copy controls appear beside the preview. Do not invent encoded strings. Rendering does not validate recipes, progression or throughput.',
 			input: v.pipe(
 				v.object({
 					blueprint: v.optional(v.pipe(v.string(), v.minLength(2), v.maxLength(256000))),
@@ -516,16 +516,20 @@ export function serverAssistantTools(initialContext: {
 					if (!(cause instanceof FactoryImagePending)) throw cause;
 					image = { id: cause.imageId, pending: true };
 				}
-				return result(
-					'render_blueprint',
-					data.label,
-					{
-						kind: 'factory-image',
-						label: data.label,
-						image
-					},
-					true
+				const preview = { kind: 'factory-image', label: data.label, image };
+				writeArtifact(
+					result(
+						'render_blueprint',
+						data.label,
+						{
+							...preview,
+							blueprint: encoded,
+							...(source ? { source: source.source } : {})
+						},
+						true
+					).output
 				);
+				return { output: preview };
 			}
 		});
 		useTool({
