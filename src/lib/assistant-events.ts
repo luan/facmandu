@@ -180,6 +180,27 @@ export function assistantToolFeedback(tool: string, output: unknown) {
 		const failed = value.results.filter((row: unknown) => object(row)?.ok === false).length;
 		return `Completed ${value.results.length} factory queries${failed ? `; ${failed} failed` : ''}.`;
 	}
+	if (tool === 'find_entities' && typeof value.total === 'number')
+		return `Found ${value.total} matching entities${typeof value.surface === 'string' ? ` on ${value.surface}` : ''}${value.truncated ? ' in a partial scan' : ''}${typeof value.shown === 'number' && value.shown < value.total ? `; showing ${value.shown}` : ''}.`;
+	if (tool === 'find_resource_patches' && typeof value.total_patches === 'number')
+		return `Found ${value.total_patches} resource ${value.total_patches === 1 ? 'patch' : 'patches'} in charted terrain${value.truncated ? ' (partial scan)' : ''}.`;
+	if (
+		tool === 'planning_recipes' &&
+		typeof value.enabled_total === 'number' &&
+		typeof value.product === 'string'
+	)
+		return `${value.enabled_total} unlocked recipes for ${value.product.replaceAll('_', ' ').replaceAll('-', ' ')}${value.truncated ? '; catalog is partial' : ''}.`;
+	if (['inspect_machine', 'inspect_transport'].includes(tool)) {
+		if (value.found === false) return 'Target not found; refresh its location.';
+		if (typeof value.name === 'string' && typeof value.status === 'string')
+			return `${value.name.replaceAll('_', ' ').replaceAll('-', ' ')}: ${value.status.replaceAll('_', ' ')}.`;
+	}
+	if (
+		tool === 'science_summary' &&
+		Array.isArray(value.sciences) &&
+		typeof object(value.research)?.active === 'boolean'
+	)
+		return `Read ${value.sciences.length} science production rates${value.truncated ? ' (partial snapshot)' : ''}; research ${object(value.research)?.active ? 'active' : 'idle'}. Rates do not prove delivery.`;
 	if (tool === 'server_status' && typeof value.running === 'boolean')
 		return `Server checked: ${value.running ? 'running' : 'stopped'}.`;
 	return '';

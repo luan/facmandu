@@ -231,3 +231,50 @@ test('placement feedback reports foundation tiles even when no entity ghosts wer
 		'Placed 2 of 3 entity ghosts and 6 of 8 tile ghosts. Real items are required to build them.'
 	);
 });
+
+test('factory summaries preserve partial evidence and distinguish machine status from delivery', () => {
+	assert.equal(
+		assistantToolFeedback('find_entities', {
+			result: { total: 0, shown: 0, surface: 'nauvis', truncated: true }
+		}),
+		'Found 0 matching entities on nauvis in a partial scan.'
+	);
+	assert.equal(
+		assistantToolFeedback('find_entities', {
+			result: { total: 80, shown: 12, surface: 'nauvis', truncated: false }
+		}),
+		'Found 80 matching entities on nauvis; showing 12.'
+	);
+	assert.equal(
+		assistantToolFeedback('inspect_machine', {
+			result: { found: true, name: 'chemical-plant', status: 'no_ingredients' }
+		}),
+		'chemical plant: no ingredients.'
+	);
+	assert.equal(
+		assistantToolFeedback('inspect_transport', { result: { found: false } }),
+		'Target not found; refresh its location.'
+	);
+	assert.equal(
+		assistantToolFeedback('science_summary', {
+			result: {
+				sciences: [{ item: 'space-science-pack' }],
+				research: { active: false },
+				truncated: true
+			}
+		}),
+		'Read 1 science production rates (partial snapshot); research idle. Rates do not prove delivery.'
+	);
+	assert.equal(
+		assistantToolFeedback('planning_recipes', {
+			result: { product: 'kr-glass', enabled_total: 2, truncated: true }
+		}),
+		'2 unlocked recipes for kr glass; catalog is partial.'
+	);
+	assert.equal(
+		assistantToolFeedback('find_resource_patches', {
+			result: { total_patches: 1, truncated: true }
+		}),
+		'Found 1 resource patch in charted terrain (partial scan).'
+	);
+});
