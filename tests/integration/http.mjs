@@ -2711,19 +2711,35 @@ done
 	assert.equal(tobyZip.status, 200);
 	const tobyFiles = unzipSync(new Uint8Array(await tobyZip.arrayBuffer()));
 	assert.equal(
-		JSON.parse(Buffer.from(tobyFiles['facmandu-assistant_0.0.2/info.json']).toString()).title,
+		JSON.parse(Buffer.from(tobyFiles['facmandu-assistant_0.0.3/info.json']).toString()).title,
 		'[WIP] Toby'
 	);
 	assert.ok(
-		Buffer.from(tobyFiles['facmandu-assistant_0.0.2/control.lua'])
+		Buffer.from(tobyFiles['facmandu-assistant_0.0.3/control.lua'])
 			.toString()
 			.includes('FACMANDU_UI')
 	);
 	assert.equal((await request('/api/toby-mod')).status, 401);
-	for (const file of ['drone.lua', 'drone-prototypes.lua']) {
+	for (const file of ['drone.lua', 'drone-prototypes.lua', 'drone-visuals.lua', 'references.lua']) {
 		assert.equal(
-			Buffer.from(tobyFiles[`facmandu-assistant_0.0.2/${file}`]).toString(),
+			Buffer.from(tobyFiles[`facmandu-assistant_0.0.3/${file}`]).toString(),
 			await readFile(join(root, 'factorio-mod/facmandu-assistant', file), 'utf8')
+		);
+	}
+	for (const name of [
+		'idle',
+		'inspecting',
+		'thinking',
+		'working',
+		'speaking',
+		'success',
+		'error',
+		'shadow',
+		'icon'
+	]) {
+		assert.deepEqual(
+			Buffer.from(tobyFiles[`facmandu-assistant_0.0.3/graphics/${name}.png`]),
+			await readFile(join(root, 'assets/toby-drone/sprites', `${name}.png`))
 		);
 	}
 	passed('Toby mod download packages the exact native UI contract and requires authentication');
@@ -2743,14 +2759,14 @@ done
 	);
 	await action(`${secondPath}?/manage`, cookies.owner, { operation: 'installToby' });
 	assert.deepEqual(
-		unzipSync(await readFile(join(machineDirs[1], 'mods/facmandu-assistant_0.0.2.zip'))),
+		unzipSync(await readFile(join(machineDirs[1], 'mods/facmandu-assistant_0.0.3.zip'))),
 		tobyFiles
 	);
 	assert.deepEqual(
 		(await readState(1, 'mods/mod-list.json')).mods.find(
 			(mod) => mod.name === 'facmandu-assistant'
 		),
-		{ name: 'facmandu-assistant', version: '0.0.2', enabled: true }
+		{ name: 'facmandu-assistant', version: '0.0.3', enabled: true }
 	);
 	assert.deepEqual(
 		await readFile(join(machineDirs[1], 'saves/context-world.zip')),
@@ -3119,7 +3135,8 @@ done
 		const livePanelState = await livePanel;
 		assert.equal(livePanelState.running, true);
 		assert.match(livePanelState.status, /Thinking… · \d+m \d+s elapsed/);
-		assert.equal(livePanelState.activity[0].text, 'Server');
+		assert.equal(livePanelState.activity[0].text, 'Server\nServer checked: stopped.');
+		assert.equal(livePanelState.drone.phase, 'thinking');
 		const freshDuringRun = nextPanelUpdate('Frank');
 		await appendFile(gameLog, uiLine('Frank', 'new', 2));
 		const freshPanel = await freshDuringRun;
@@ -3192,7 +3209,8 @@ done
 		await appendFile(gameLog, uiLine('PanelUser', 'select', 4, { chat: newPanel.current }));
 		const selectedState = await selectedPanel;
 		assert.equal(selectedState.current, newPanel.current);
-		assert.equal(selectedState.blueprint, panelDesign.blueprint);
+		assert.equal(selectedState.blueprint, '0draft');
+		assert.equal(selectedState.designStage, 'Working draft');
 		assert.equal(selectedState.design, 'Glass');
 		assert.deepEqual(selectedState.materials, panelDesign.cost);
 		assert.equal(selectedState.running, false);

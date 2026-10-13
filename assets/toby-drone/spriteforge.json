@@ -1,56 +1,35 @@
 {
-  "collection": "Toby",
-  "size": [
-    128,
-    128
-  ],
-  "pixels_per_unit": 64,
-  "palette": {
-    "default": [
-      "101411",
-      "20271f",
-      "30382b",
-      "434637",
-      "57563e",
-      "6b623f",
-      "827346",
-      "9e8852",
-      "bb9f67",
-      "d0b97d",
-      "d2cbb3",
-      "47574e",
-      "61726b",
-      "88a18c",
-      "4a9868",
-      "9bdfb1"
-    ]
-  },
-  "directions": [
-    "south"
-  ],
-  "frames": [
-    1
-  ],
-  "fps": 8,
-  "pivot": [
-    0,
-    0,
-    0
-  ],
-  "anchor": [
-    0.5,
-    0.62
-  ],
-  "shear": [
-    0,
-    0.65
-  ],
-  "light": [
-    -0.4,
-    -0.5,
-    1
-  ],
-  "outline": null,
-  "shading": "preserve",
-  "tileable": false
+	"collection": "Toby",
+	"size": [128, 128],
+	"pixels_per_unit": 64,
+	"palette": {
+		"default": [
+			"101411",
+			"20271f",
+			"30382b",
+			"434637",
+			"57563e",
+			"6b623f",
+			"827346",
+			"9e8852",
+			"bb9f67",
+			"d0b97d",
+			"d2cbb3",
+			"47574e",
+			"61726b",
+			"88a18c",
+			"4a9868",
+			"9bdfb1"
+		]
+	},
+	"directions": ["south"],
+	"frames": [1],
+	"fps": 8,
+	"pivot": [0, 0, 0],
+	"anchor": [0.5, 0.62],
+	"shear": [0, 0.65],
+	"light": [-0.4, -0.5, 1],
+	"outline": null,
+	"shading": "preserve",
+	"tileable": false
 }

@@ -2,10 +2,8 @@ import { createHash } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { and, desc, eq } from 'drizzle-orm';
-import { factoryResultSchema } from '$lib/assistant-results';
-import { blueprintArtifactSchema } from '$lib/blueprints';
-import { factoryPreviewPendingSchema, factoryViewSchema } from '$lib/factory-images';
 import { gamePanelText, gameReply, gameText, parseGameChat, parseGameUi } from '$lib/game-chat';
+import { panelActivity, panelDesign, panelDrone } from '$lib/toby-panel';
 import { routeAmbientChat } from './ambient-chat';
 import { db } from './db';
 import { genID } from './db/ids';
@@ -113,20 +111,31 @@ async function syncPanel(
 		.find((entry) => entry);
 	const state = {
 		current: current?.id,
-		status: [
-			(!sourceChat || sourceChat === current?.id
-				? progress && gameText(progress, 500)
-				: undefined) ??
-				activity?.progress ??
-				(turn?.state === 'running' ? 'Working…' : 'Ready'),
-			activity?.feedback
-		]
-			.filter(Boolean)
-			.join(' '),
+		status: gameText(
+			[
+				(!sourceChat || sourceChat === current?.id
+					? progress && gameText(progress, 500)
+					: undefined) ??
+					activity?.progress ??
+					(turn?.state === 'running' ? 'Working…' : 'Ready'),
+				activity?.feedback
+			]
+				.filter(Boolean)
+				.join(' '),
+			500
+		),
 		answer: gamePanelText(turn?.answer ?? '', 6000),
 		running: turn?.state === 'running',
 		messages,
-		activity: panelActivity(turn?.results ?? '[]'),
+		activity: panelActivity(turn?.results ?? '[]', activity?.progress, activity?.feedback),
+		drone: panelDrone(
+			turn?.state === 'running',
+			activity?.progress ?? 'Thinking…',
+			activity?.feedback ?? '',
+			turn?.state === 'error'
+		),
+		designStage: design?.stage,
+		designWarnings: design?.warnings.slice(0, 8).map((warning) => gameText(warning, 400)),
 		blueprint: design?.blueprint,
 		design: design && gameText(design.label, 200),
 		materials: design?.cost.slice(0, 32).map((item) => ({ ...item, count: Math.ceil(item.count) })),
@@ -138,49 +147,6 @@ async function syncPanel(
 		server,
 		`/silent-command local p=game.get_player(${JSON.stringify(player)}); local i=remote.interfaces['facmandu-assistant']; if p and p.connected and i and i.update_player then remote.call('facmandu-assistant','update_player',p.index,helpers.json_to_table(${encoded})) end`
 	);
-}
-function panelDesign(
-	results: string
-): { blueprint: string; label: string; cost: { name: string; count: number }[] } | undefined {
-	try {
-		const data: unknown = JSON.parse(results);
-		if (!Array.isArray(data)) return;
-		for (const entry of data.toReversed()) {
-			const result = factoryResultSchema.safeParse(entry);
-			if (!result.success || !result.data.display) continue;
-			const blueprint = blueprintArtifactSchema.safeParse(result.data.result);
-			if (blueprint.success && blueprint.data.blueprint.length <= 65536)
-				return {
-					blueprint: blueprint.data.blueprint,
-					label: blueprint.data.label,
-					cost: blueprint.data.cost
-				};
-			const snapshot = factoryViewSchema
-				.or(factoryPreviewPendingSchema)
-				.safeParse(result.data.result);
-			if (snapshot.success && snapshot.data.blueprint && snapshot.data.blueprint.length <= 65536)
-				return {
-					blueprint: snapshot.data.blueprint,
-					label: `Existing factory · ${snapshot.data.surface}`,
-					cost: snapshot.data.cost ?? []
-				};
-		}
-	} catch {
-		/* A damaged historic result must not prevent chat updates. */
-	}
-	return undefined;
-}
-function panelActivity(results: string): { text: string }[] {
-	try {
-		const data: unknown = JSON.parse(results);
-		if (!Array.isArray(data)) return [];
-		return data.slice(-16).flatMap((entry) => {
-			const result = factoryResultSchema.safeParse(entry);
-			return result.success ? [{ text: gameText(result.data.title, 400) }] : [];
-		});
-	} catch {
-		return [];
-	}
 }
 async function receiveUi(
 	server: ManagedServer,

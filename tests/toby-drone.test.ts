@@ -6,19 +6,22 @@ import { lauxlib, lua, lualib, to_luastring } from 'fengari';
 test('Toby owns a separate drone, rejects foreign/stale commands and preserves cargo on departure', () => {
 	const state = lauxlib.luaL_newstate();
 	lualib.luaL_openlibs(state);
+	const visuals = readFileSync('factorio-mod/facmandu-assistant/drone-visuals.lua', 'utf8');
 	const source = readFileSync('factorio-mod/facmandu-assistant/drone.lua', 'utf8');
 	const status = lauxlib.luaL_dostring(
 		state,
 		to_luastring(`
+ package.preload['drone-visuals']=function() ${visuals} end
+ rendering={draw_animation=function(spec) spec.valid=true;spec.destroy=function() spec.valid=false end;return spec end}
  storage={};defines={inventory={spider_trunk=1}};local api
  local force={name='player',technologies={},recipes={},is_chunk_charted=function(_,chunk) return chunk[1]>=0 end}
  local surface={name='nauvis',find_entities_filtered=function() return {} end}
  local alice={name='alice',index=1,force=force,connected=true,character={},physical_surface=surface,physical_position={x=0,y=0},get_main_inventory=function() return nil end}
  local bob={name='bob',index=2,force=force,connected=true,character={},physical_surface=surface,physical_position={x=0,y=0},get_main_inventory=function() return nil end}
- game={players={},forces={force},get_player=function(id) if id==1 or id=='alice' then return alice elseif id==2 or id=='bob' then return bob end end}
+ game={tick=0,players={},forces={force},get_player=function(id) if id==1 or id=='alice' then return alice elseif id==2 or id=='bob' then return bob end end}
  remote={add_interface=function(name,interface) assert(name=='facmandu-toby-drone');api=interface end}
  local inventory={get_contents=function() return {{name='transport-belt',quality='normal',count=10}} end}
- local entity={stop_spider=function() end,valid=true,name='toby-drone',force=force,unit_number=4,surface=surface,position={x=0,y=0},grid={available_in_batteries=1000},get_inventory=function() return inventory end}
+ local entity={stop_spider=function() end,valid=true,name='toby-drone',force=force,unit_number=4,surface=surface,torso_orientation=0,position={x=0,y=0},grid={available_in_batteries=1000},get_inventory=function() return inventory end}
  local module=(function() ${source} end)()
  module.init();module.built{entity=entity,player_index=1}
  local snapshot=api.read('player','alice')
@@ -55,10 +58,13 @@ test('Toby owns a separate drone, rejects foreign/stale commands and preserves c
 test('automatic Toby constructs without equipment and conserves real materials on failed revival', () => {
 	const state = lauxlib.luaL_newstate();
 	lualib.luaL_openlibs(state);
+	const visuals = readFileSync('factorio-mod/facmandu-assistant/drone-visuals.lua', 'utf8');
 	const source = readFileSync('factorio-mod/facmandu-assistant/drone.lua', 'utf8');
 	const status = lauxlib.luaL_dostring(
 		state,
 		to_luastring(`
+ package.preload['drone-visuals']=function() ${visuals} end
+ rendering={draw_animation=function(spec) spec.valid=true;spec.destroy=function() spec.valid=false end;return spec end}
  storage={};defines={inventory={spider_trunk=1,chest=2}};local api
  local function stack(count)
   local data={count=count,name='transport-belt',quality={name='normal'}}
@@ -77,7 +83,7 @@ test('automatic Toby constructs without equipment and conserves real materials o
  local ghost={valid=true,type='entity-ghost',ghost_name='transport-belt',ghost_prototype={items_to_place_this={{name='transport-belt',count=1}}},quality={name='normal'},position={x=1.5,y=0.5},force=force}
  ghost.revive=function() if not allow then return nil end;ghost.valid=false;built=built+1;return {} end
  local surface={name='nauvis'};ghost.surface=surface
- local entity={stop_spider=function() end,valid=true,name='toby-drone',force=force,unit_number=4,surface=surface,position={x=1,y=0},get_inventory=function() return cargo end}
+ local entity={stop_spider=function() end,valid=true,name='toby-drone',force=force,unit_number=4,surface=surface,torso_orientation=0,position={x=1,y=0},get_inventory=function() return cargo end}
  surface.find_non_colliding_position=function() return entity.position end
  surface.create_entity=function(input) assert(input.name=='toby-drone' and input.force==force);spawned=spawned+1;return entity end
  surface.find_entities_filtered=function(input)

@@ -1,4 +1,5 @@
 local M={}
+local visuals=require('drone-visuals')
 local NAME='toby-drone'
 local function player_for(force,name)
  local player=game.get_player(name)
@@ -47,7 +48,7 @@ function M.read(force,name)
  local cargo={}
  for _,item in ipairs(contents) do cargo[#cargo+1]={name=item.name,quality=item.quality,count=item.count} end
  table.sort(cargo,function(a,b) return a.name..a.quality<b.name..b.quality end)
- return {player=player.name,force=force,available=true,unitNumber=e.unit_number,surface=e.surface.name,position={x=e.position.x,y=e.position.y},mode=state.mode,revision=state.revision,destination=e.autopilot_destination,built=state.built or 0,working=state.job and state.job.valid and state.job.ghost_name or nil,cargo=cargo}
+ return {player=player.name,force=force,available=true,unitNumber=e.unit_number,surface=e.surface.name,position={x=e.position.x,y=e.position.y},mode=state.mode,revision=state.revision,destination=e.autopilot_destination,built=state.built or 0,working=state.job and state.job.valid and state.job.ghost_name or nil,cargo=cargo,display=state.display or 'idle',activity=state.activity}
 end
 function M.command(force,name,operation,expected,position)
  local player=player_for(force,name)
@@ -166,6 +167,7 @@ function M.tick()
   local player=game.get_player(index)
   if not e.valid or not player or e.force~=player.force then
    if e.valid then e.follow_target=nil;e.autopilot_destination=nil end
+   visuals.clear(state)
    storage.drones[index]=nil
   elseif not player.connected or not player.character then
    state.job=nil;e.follow_target=nil;e.autopilot_destination=nil;e.stop_spider()
@@ -182,5 +184,12 @@ function M.tick()
  end
  for _,player in pairs(game.players) do ensure(player) end
 end
+function M.animate()
+ for index,state in pairs(storage.drones or {}) do
+  local player=game.get_player(index)
+  if player then visuals.update(player,state) end
+ end
+end
+M.activity=visuals.activity
 remote.add_interface('facmandu-toby-drone',{read=M.read,command=M.command})
 return M

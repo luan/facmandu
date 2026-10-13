@@ -1,8 +1,8 @@
 {
-  "passed": true,
-  "state_cells": 896,
-  "shadow_cells": 16,
-  "margin_px": 2,
-  "all_front_states_animate": true,
-  "live_game_integration": "not tested by asset build"
+	"passed": true,
+	"state_cells": 896,
+	"shadow_cells": 16,
+	"margin_px": 2,
+	"all_front_states_animate": true,
+	"live_game_integration": "not tested by asset build"
 }

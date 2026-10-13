@@ -6,16 +6,19 @@ import { lauxlib, lua, lualib, to_luastring } from 'fengari';
 test('Toby panel sends native player requests and preserves typed drafts across progress updates', () => {
 	const state = lauxlib.luaL_newstate();
 	lualib.luaL_openlibs(state);
+	const references = readFileSync('factorio-mod/facmandu-assistant/references.lua', 'utf8');
 	const source = readFileSync('factorio-mod/facmandu-assistant/control.lua', 'utf8');
 	const script = `
+ package.preload.references=function() ${references} end
+ prototypes={item={},fluid={},recipe={},entity={},technology={}}
  local handlers={};local interface;local last
- package.preload.drone=function() return {init=function() end,built=function() end,tick=function() end,read=function() return {available=false} end} end
+ package.preload.drone=function() return {init=function() end,built=function() end,tick=function() end,animate=function() end,read=function() return {available=false} end} end
  storage={};defines={events={on_player_created=1,on_player_joined_game=2,on_gui_click=3,on_gui_selection_state_changed=4,on_gui_closed=5,on_gui_text_changed=6,on_gui_selected_tab_changed=7,on_gui_confirmed=8,on_built_entity=9}}
  script={on_init=function(fn) handlers.init=fn end,on_configuration_changed=function(fn) handlers.migrate=fn end,on_event=function(event,fn) handlers[event]=fn end,on_nth_tick=function() end}
  remote={add_interface=function(name,api) assert(name=='facmandu-assistant');interface=api end}
  helpers={table_to_json=function(data) last=data;return '{}' end};log=function() end
  local function gui(parent,name)
-  local element={name=name or '',valid=true,style={},children={}}
+  local element={type='flow',parent=parent,tags={},name=name or '',valid=true,style={},children={}}
   element.add=function(spec)
    local child=gui(element,spec.name);element.children[#element.children+1]=child;for key,value in pairs(spec) do if key~="style" then child[key]=value end end
    if spec.name then element[spec.name]=child end
@@ -25,7 +28,7 @@ test('Toby panel sends native player requests and preserves typed drafts across 
   element.focus=function() end
   element.clear=function() element.children={} end
   element.scroll_to_bottom=function() end
-  element.destroy=function() element.valid=false;if parent then parent[element.name]=nil end end
+  element.destroy=function() element.valid=false;if parent then parent[element.name]=nil;for i,child in ipairs(parent.children) do if child==element then table.remove(parent.children,i);break end end end end
   return element
  end
  local cleared=false;local imported;local full=true

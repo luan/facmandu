@@ -1,8 +1,11 @@
 local PREFIX='facmandu-toby-'
 local drone=require('drone')
+local references=require('references')
 local function drone_status(player,refs)
  local state=drone.read(player.force.name,player.name)
- refs.drone_status.caption=state.available and ('Toby · '..state.mode..' · '..state.surface..' · '..(state.built or 0)..' built') or 'Toby appears when you join with a character.'
+ refs.drone_status.caption=state.available and ('Toby · '..state.display) or 'Waiting for your character'
+ refs.drone_work.caption=state.activity and state.activity.message or 'Ready'
+ refs.drone_details.caption=state.available and (state.mode..' · '..state.surface..' ['..math.floor(state.position.x)..', '..math.floor(state.position.y)..']\n'..(state.built or 0)..' ghosts built') or ''
  refs.drone_follow.enabled=state.available;refs.drone_stay.enabled=state.available;refs.drone_inventory.enabled=state.available
 end
 local function bounded_text(value,limit)
@@ -64,7 +67,10 @@ local function panel(player)
  local drone_content=tabs.add{type='flow',direction='vertical'}
  drone_content.style.width=432;drone_content.style.height=height-240
  refs.drone_status=label(drone_content,'',410,'heading_2_label')
- label(drone_content,'Toby follows you and builds nearby ghosts using your items or nearby provider/storage chests. No equipment, robots or fuel needed.',410)
+ drone_content.add{type='sprite',sprite='entity/toby-drone'}.style.size=64
+ refs.drone_work=label(drone_content,'Ready',410)
+ refs.drone_details=label(drone_content,'',410)
+ label(drone_content,'Nearby ghosts are built with your items.',410)
  refs.drone_inventory=drone_content.add{type='button',name=PREFIX..'drone-inventory',caption='Inventory'}
  local drone_actions=drone_content.add{type='flow',direction='horizontal'}
  refs.drone_follow=drone_actions.add{type='button',name=PREFIX..'drone-follow',caption='Follow me'}
@@ -100,6 +106,11 @@ local function update(player_index,state)
  if type(state)~='table' or type(state.status)~='string' or #state.status>500 or type(state.answer)~='string' or #state.answer>6000 then error('Invalid panel update',0) end
  if type(state.chats)~='table' or #state.chats>8 then error('Expected up to eight chats',0) end
  if state.blueprint and (type(state.blueprint)~='string' or #state.blueprint>65536 or not state.blueprint:match('^0[%w+/=]+$')) then error('Invalid blueprint',0) end
+ if state.designStage and (type(state.designStage)~='string' or #state.designStage>40) then error('Invalid design stage',0) end
+ if state.designWarnings then
+  if type(state.designWarnings)~='table' or #state.designWarnings>8 then error('Invalid design warnings',0) end
+  for _,warning in ipairs(state.designWarnings) do if type(warning)~='string' or #warning>400 then error('Invalid design warning',0) end end
+ end
  if state.design and (type(state.design)~='string' or #state.design>200) then error('Invalid design title',0) end
  if state.materials and (type(state.materials)~='table' or #state.materials>32) then error('Invalid construction materials',0) end
  for _,item in ipairs(state.materials or {}) do
@@ -121,12 +132,13 @@ local function update(player_index,state)
   if type(chat.id)~='string' or #chat.id>100 or type(chat.title)~='string' or #chat.title>200 then error('Invalid chat',0) end
   items[#items+1]=chat.title
  end
+ if state.drone then drone.activity(player,state.drone) end
  local previous=storage.players[player.index]
  storage.players[player.index]=state
  button(player)
  local refs=storage.gui[player.index]
  if not refs or not refs.frame.valid then return end
- refs.status.caption=bounded_text(state.status,140)
+ refs.status.caption=state.status
  refs.context.caption=player.surface.name
  refs.stop.visible=state.running==true
  refs.send.caption=state.running and 'Steer' or 'Send'
@@ -135,39 +147,62 @@ local function update(player_index,state)
  for i,chat in ipairs(state.chats) do if chat.id==state.current then refs.chats.selected_index=i;break end end
  -- Progress updates never recreate a transcript the player is reading.
  if not previous or helpers.table_to_json(previous.messages or {})~=helpers.table_to_json(state.messages or {}) or previous.answer~=state.answer or previous.current~=state.current then
-  local position=refs.history.vertical_scroll_position
-  refs.conversation.clear()
+  if not previous or previous.current~=state.current then refs.conversation.clear() end
   local messages=state.messages or (#state.answer>0 and {{role='assistant',text=state.answer}} or {})
-  if #messages==0 then label(refs.conversation,'What shall we build?',410,'heading_2_label') end
-  for _,message in ipairs(messages) do
-   local row=refs.conversation.add{type='flow',direction='vertical'}
-   row.style.vertical_spacing=4
-   local author=label(row,message.role=='user' and player.name or 'Toby',410,'heading_2_label')
+  if refs.conversation.children[1] and refs.conversation.children[1].type~='flow' then refs.conversation.clear() end
+  for i,message in ipairs(messages) do
+   local row=refs.conversation.children[i]
+   if not row then
+    row=refs.conversation.add{type='flow',direction='vertical'}
+    row.style.vertical_spacing=4
+    label(row,'',410,'heading_2_label');label(row,'',410)
+   end
+   local author=row.children[1]
+   author.caption=message.role=='user' and (player.name~='' and player.name or 'You') or 'Toby'
    author.style.font_color=message.role=='user' and {r=0.75,g=0.75,b=0.75} or {r=1,g=0.8,b=0.45}
-   label(row,message.text,410)
-  end
-  if not previous or previous.current~=state.current then refs.history.scroll_to_bottom()
-  else refs.history.vertical_scroll_position=position end
- end
- refs.activity.clear()
- if #(state.activity or {})==0 then label(refs.activity,'Tool activity will appear here.',410) end
- for _,entry in ipairs(state.activity or {}) do label(refs.activity,entry.text,410) end
- refs.design.clear()
- if state.blueprint then
-  label(refs.design,state.design or 'Latest blueprint',410,'heading_2_label')
-  label(refs.design,'Blueprint design',410)
-  local actions=refs.design.add{type='flow',direction='vertical'}
-  actions.add{type='button',name=PREFIX..'inspect-blueprint',caption='Open blueprint',tooltip='Inspect in Factorio’s blueprint editor · Ctrl+Shift+Enter from the message input'}
-  actions.add{type='button',name=PREFIX..'blueprint',caption='Place ghosts',style='confirm_button',tooltip='Put the design in your cursor. Construction uses your ordinary items.'}
-  if #(state.materials or {})>0 then
-   label(refs.design,'Construction materials',410,'heading_2_label')
-   local materials=refs.design.add{type='table',column_count=2}
-   for _,item in ipairs(state.materials) do
-    label(materials,prototypes.item[item.name] and '[item='..item.name..'] '..item.name or item.name,330)
-    label(materials,tostring(item.count),70)
+   if row.children[2].caption~=message.text then
+    row.children[2].caption=message.text
+    if row.children[3] then row.children[3].destroy() end
+    references.text(row,message.text)
    end
   end
- else label(refs.design,'No blueprint in this conversation yet.',410) end
+  for i=#refs.conversation.children,#messages+1,-1 do refs.conversation.children[i].destroy() end
+  if #messages==0 then label(refs.conversation,'What shall we build?',410,'heading_2_label') end
+  if not previous or previous.current~=state.current then refs.history.scroll_to_bottom() end
+ end
+ if not previous or helpers.table_to_json(previous.activity or {})~=helpers.table_to_json(state.activity or {}) or previous.current~=state.current then
+  if refs.activity.children[1] and refs.activity.children[1].type~='frame' then refs.activity.clear() end
+  for i,entry in ipairs(state.activity or {}) do
+   local card=refs.activity.children[i]
+   if not card then card=refs.activity.add{type='frame',style='inside_shallow_frame',direction='vertical'};label(card,'',390) end
+   if card.children[1].caption~=entry.text then
+    card.children[1].caption=entry.text
+    if card.children[2] then card.children[2].destroy() end
+    references.text(card,entry.text)
+   end
+  end
+  for i=#refs.activity.children,#(state.activity or {})+1,-1 do refs.activity.children[i].destroy() end
+  if #(state.activity or {})==0 then label(refs.activity,state.running and state.status or 'No tools used in this turn.',410) end
+ end
+ if not previous or previous.blueprint~=state.blueprint or previous.design~=state.design or previous.designStage~=state.designStage or helpers.table_to_json(previous.designWarnings or {})~=helpers.table_to_json(state.designWarnings or {}) or previous.current~=state.current then
+  refs.design.clear()
+  if state.blueprint then
+   label(refs.design,state.designStage or 'Design',410,'heading_2_label')
+   label(refs.design,state.design or 'Latest blueprint',410)
+   for _,warning in ipairs(state.designWarnings or {}) do
+    local row=label(refs.design,warning,410);row.style.font_color={r=1,g=0.75,b=0.3}
+   end
+   local actions=refs.design.add{type='flow',direction='horizontal'}
+   actions.add{type='button',name=PREFIX..'inspect-blueprint',caption='Inspect blueprint',tooltip='Open Factorio’s blueprint editor · Ctrl+Shift+Enter'}
+   actions.add{type='button',name=PREFIX..'blueprint',caption='Take blueprint',style='confirm_button',tooltip='Put the design in your cursor to place ghosts.'}
+   if #(state.materials or {})>0 then
+    label(refs.design,'Materials · Alt-click to inspect',410,'heading_2_label')
+    local materials=refs.design.add{type='table',column_count=8}
+    for _,item in ipairs(state.materials) do references.add(materials,'item',item.name,item.count) end
+   end
+  else label(refs.design,state.running and 'Design in progress. Validated drafts appear here as they are created.' or 'No design created in this chat.',410) end
+ end
+ drone_status(player,refs)
 end
 local function open(player)
  panel(player)
@@ -235,6 +270,7 @@ script.on_event(defines.events.on_gui_click,function(event)
  local element=event.element
  if not element.valid then return end
  local player=game.get_player(event.player_index)
+ if references.click(player,element) then return end
  local name=element.name
  local refs=storage.gui[player.index]
  if name==PREFIX..'open' then open(player)
@@ -256,8 +292,9 @@ script.on_event(defines.events.on_gui_click,function(event)
  end
 end)
 script.on_event(defines.events.on_built_entity,drone.built)
-script.on_nth_tick(10,function(event)
- drone.tick()
+script.on_nth_tick(5,function(event)
+ if event.tick%10==0 then drone.tick() end
+ drone.animate()
  if event.tick%60~=0 then return end
  for index,refs in pairs(storage.gui or {}) do
   if refs.frame.valid then local player=game.get_player(index);if player then drone_status(player,refs) end end
