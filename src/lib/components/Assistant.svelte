@@ -441,7 +441,7 @@
      {@const milestone = assistantMilestone(visibleResults)}
      <section class="space-y-4" aria-label="Current response">
       <div class="flex justify-end"><p class="max-w-[90%] whitespace-pre-wrap break-words border border-border bg-white/5 px-4 py-3 text-sm leading-relaxed">{visiblePrompt}</p></div>
-      {#if milestone && milestone !== visibleText}<div class="border-l-2 border-primary/50 pl-3 text-sm" aria-label="Latest update"><AssistantMessage text={milestone} /></div>{/if}
+      {#if milestone && milestone !== visibleText}<section class="border-l-2 border-primary/50 pl-3 text-sm" aria-label="Latest update"><AssistantMessage text={milestone} /></section>{/if}
       {#if visibleText}<div class="pr-2"><AssistantMessage text={visibleText} /></div>{/if}
       {@render modCards(visibleMods)}
       {#each resultGroups.primary as item}<FactoryResultView {item} {serverId} />{/each}
