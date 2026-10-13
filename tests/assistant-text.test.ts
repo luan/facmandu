@@ -264,6 +264,30 @@ test('factory summaries preserve partial evidence and distinguish machine status
 		'Target not found; refresh its location.'
 	);
 	assert.equal(
+		assistantToolFeedback('factory_batch', {
+			results: [
+				{ tool: 'inspect_machine', ok: false, result: { name: 'furnace', status: 'working' } },
+				{
+					tool: 'inspect_machine',
+					ok: true,
+					result: { name: 'chemical-plant', status: 'no_ingredients' }
+				},
+				{
+					tool: 'item_rate',
+					ok: true,
+					result: { item: 'space-science-pack', surface: 'platform-1', produced_per_min: 0 }
+				},
+				{ tool: 'item_rate', ok: true, result: { item: 'iron-plate', produced_per_min: 60 } },
+				{ tool: 'factory_batch', ok: true, result: { results: [] } }
+			]
+		}),
+		'chemical plant: no ingredients. space science pack: 0/min produced on platform-1. 1 query failed.'
+	);
+	assert.equal(
+		assistantToolFeedback('item_rate', { item: 'iron-plate', produced_per_min: Infinity }),
+		''
+	);
+	assert.equal(
 		assistantToolFeedback('science_summary', {
 			result: {
 				sciences: [{ item: 'space-science-pack' }],

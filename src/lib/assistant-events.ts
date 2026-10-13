@@ -103,7 +103,7 @@ function object(value: unknown): Record<string, unknown> | undefined {
 
 // Completed tool facts stay visible while the next model call is thinking.
 // Describe evidence, never infer construction or throughput from an exported draft.
-export function assistantToolFeedback(tool: string, output: unknown) {
+export function assistantToolFeedback(tool: string, output: unknown): string {
 	const wrapper = object(output);
 	const value = object(wrapper?.result) ?? wrapper;
 	if (!value) return '';
@@ -199,7 +199,33 @@ export function assistantToolFeedback(tool: string, output: unknown) {
 	}
 	if (tool === 'factory_batch' && Array.isArray(value.results)) {
 		const failed = value.results.filter((row: unknown) => object(row)?.ok === false).length;
+		const facts = [
+			...new Set(
+				value.results.flatMap((row: unknown) => {
+					const query = object(row);
+					if (
+						query?.ok !== true ||
+						typeof query.tool !== 'string' ||
+						query.tool === 'factory_batch'
+					)
+						return [];
+					const fact = assistantToolFeedback(query.tool, query.result);
+					return fact ? [fact] : [];
+				})
+			)
+		].slice(0, 2);
+		if (facts.length)
+			return `${facts.join(' ')}${failed ? ` ${failed} ${failed === 1 ? 'query' : 'queries'} failed.` : ''}`;
 		return `Completed ${value.results.length} factory queries${failed ? `; ${failed} failed` : ''}.`;
+	}
+	if (tool === 'item_rate' || tool === 'fluid_rate') {
+		const product = value.item ?? value.fluid;
+		if (
+			typeof product === 'string' &&
+			typeof value.produced_per_min === 'number' &&
+			Number.isFinite(value.produced_per_min)
+		)
+			return `${product.replaceAll('_', ' ').replaceAll('-', ' ')}: ${Number(value.produced_per_min.toFixed(2))}/min produced${typeof value.surface === 'string' ? ` on ${value.surface}` : ''}.`;
 	}
 	if (tool === 'find_entities' && typeof value.total === 'number')
 		return `Found ${value.total} matching entities${typeof value.surface === 'string' ? ` on ${value.surface}` : ''}${value.truncated ? ' in a partial scan' : ''}${typeof value.shown === 'number' && value.shown < value.total ? `; showing ${value.shown}` : ''}.`;
