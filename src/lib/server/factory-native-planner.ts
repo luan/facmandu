@@ -29,7 +29,7 @@ export async function savedFactoryPlan(
  if not p or p.force.name~=a.force then error('Choose a player on this force',0) end
  if a.actor and (p.name~=a.actor.name or not p.connected) then error('Player permission changed; request again',0) end
  local interface='facmandu-toby-planner'
- local methods={create='create_plan',list='list_plans',read='read_plan',set_inputs='set_inputs',set_products='set_products',edit_line='edit_line',nest_line='nest_line'}
+ local methods={create='create_plan',list='list_plans',read='read_plan',set_inputs='set_inputs',set_products='set_products',edit_line='edit_line',nest_line='nest_line',edit_block='edit_block',add_line='add_line',move_line='move_line',remove_line='remove_line'}
  local method=methods[a.operation]
  if not remote.interfaces[interface] or not remote.interfaces[interface][method] then error('Toby planning does not support '..a.operation..' on this server; update the server mod',0) end
  local id
@@ -43,10 +43,17 @@ export async function savedFactoryPlan(
  for _,rows in ipairs{a.products or {},a.inputs or {}} do for _,row in ipairs(rows) do if row.temperature~=nil then configured=true end end end
  if a.maximize and a.maximize.temperature~=nil then configured=true end
  if configured and not remote.interfaces[interface].edit_line then error('Configured lines and fluid temperatures require updated Toby planning on the server',0) end
+ local extended=a.products and #a.products==0 or a.maximize and a.maximize.type=='entity'
+ for _,rows in ipairs{a.products or {},a.inputs or {}} do for _,row in ipairs(rows) do if row.type=='entity' or row.beltCount~=nil then extended=true end end end
+ if extended and not remote.interfaces[interface].edit_block then error('Input-led plans, belt supplies and power require updated Toby planning on the server',0) end
  if a.operation=='create' then return remote.call(interface,method,a.force,a.player,a.surface,a.name,a.products,a.recipes,a.inputs,a.maximize,a.requestKey) end
  if a.operation=='set_products' then return remote.call(interface,method,a.force,a.player,id,a.expectedRevision,a.products) end
  if a.operation=='edit_line' then return remote.call(interface,method,a.force,a.player,id,a.expectedRevision,a.lineId,a.patch) end
  if a.operation=='nest_line' then return remote.call(interface,method,a.force,a.player,id,a.expectedRevision,a.lineId) end
+ if a.operation=='edit_block' then return remote.call(interface,method,a.force,a.player,id,a.expectedRevision,a.floorId,a.settings) end
+ if a.operation=='add_line' then return remote.call(interface,method,a.force,a.player,id,a.expectedRevision,a.floorId,a.recipe) end
+ if a.operation=='move_line' then return remote.call(interface,method,a.force,a.player,id,a.expectedRevision,a.lineId,a.floorId,a.afterLineId) end
+ if a.operation=='remove_line' then return remote.call(interface,method,a.force,a.player,id,a.expectedRevision,a.lineId) end
  if a.operation=='set_inputs' then return remote.call(interface,method,a.force,a.player,id,a.expectedRevision,a.inputs,a.maximize) end
  return remote.call(interface,method,a.force,a.player,id)
  end)

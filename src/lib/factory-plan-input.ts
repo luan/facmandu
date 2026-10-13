@@ -13,7 +13,9 @@ const plannerProduct = {
 	type: v.picklist(['item', 'fluid']),
 	temperature: plannerTemperature
 };
+const plannerPower = { name: plannerName, type: v.literal('entity') };
 const plannerQuantity = v.pipe(v.number(), v.finite(), v.minValue(0), v.maxValue(1000000));
+const plannerWatts = v.pipe(v.number(), v.finite(), v.minValue(0), v.maxValue(1e12));
 const plannerModules = v.pipe(
 	v.array(
 		v.strictObject({
@@ -75,22 +77,41 @@ export const nativePlannerProducts = v.pipe(
 					(value) => value.temperature === undefined || value.type === 'fluid',
 					'Only fluids have temperatures'
 				)
-			)
+			),
+			v.strictObject({
+				...plannerPower,
+				watts: v.pipe(plannerWatts, v.minValue(Number.MIN_VALUE))
+			})
 		])
 	),
-	v.minLength(1),
 	v.maxLength(8)
 );
 export const nativePlannerInputs = v.pipe(
 	v.array(
 		v.pipe(
-			v.strictObject({
-				...plannerProduct,
-				perMinute: plannerQuantity,
-				mode: v.picklist(['exact', 'maximum'])
-			}),
+			v.union([
+				v.strictObject({
+					...plannerProduct,
+					perMinute: plannerQuantity,
+					mode: v.picklist(['exact', 'maximum'])
+				}),
+				v.strictObject({
+					name: plannerName,
+					type: v.literal('item'),
+					beltCount: plannerQuantity,
+					belt: plannerName,
+					beltStack: v.optional(v.pipe(plannerRate, v.integer())),
+					mode: v.picklist(['exact', 'maximum'])
+				}),
+				v.strictObject({
+					...plannerPower,
+					watts: plannerWatts,
+					mode: v.picklist(['exact', 'maximum'])
+				})
+			]),
 			v.check(
-				(value) => value.temperature === undefined || value.type === 'fluid',
+				(value) =>
+					!('temperature' in value) || value.temperature === undefined || value.type === 'fluid',
 				'Only fluids have temperatures'
 			)
 		)
@@ -98,22 +119,19 @@ export const nativePlannerInputs = v.pipe(
 	v.maxLength(32)
 );
 export const nativePlannerMaximize = v.pipe(
-	v.strictObject(plannerProduct),
+	v.strictObject({ ...plannerProduct, type: v.picklist(['item', 'fluid', 'entity']) }),
 	v.check(
 		(value) => value.temperature === undefined || value.type === 'fluid',
 		'Only fluids have temperatures'
 	)
 );
+const plannerRecipe = v.strictObject({ name: plannerName, ...plannerLineFields });
 export const nativeFactoryPlanInput = v.strictObject({
 	force: plannerName,
 	player: plannerName,
 	surface: plannerName,
 	products: nativePlannerProducts,
-	recipes: v.pipe(
-		v.array(v.strictObject({ name: plannerName, ...plannerLineFields })),
-		v.minLength(1),
-		v.maxLength(24)
-	),
+	recipes: v.pipe(v.array(plannerRecipe), v.minLength(1), v.maxLength(24)),
 	inputs: v.optional(nativePlannerInputs),
 	maximize: v.optional(nativePlannerMaximize)
 });
@@ -130,6 +148,30 @@ const revision = v.pipe(
 );
 const lineId = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(Number.MAX_SAFE_INTEGER));
 const reference = v.pipe(v.string(), v.regex(/^toby:\/\/plan\/[1-9]\d{0,9}\/[1-9]\d{0,9}$/u));
+const blockProducts = v.pipe(
+	v.array(
+		v.pipe(
+			v.union([
+				v.strictObject({
+					...plannerProduct,
+					perMinute: plannerRate,
+					mode: v.optional(v.picklist(['exact', 'maximum']))
+				}),
+				v.strictObject({
+					...plannerPower,
+					watts: v.pipe(plannerWatts, v.minValue(Number.MIN_VALUE)),
+					mode: v.optional(v.picklist(['exact', 'maximum']))
+				})
+			]),
+			v.check(
+				(value) =>
+					!('temperature' in value) || value.temperature === undefined || value.type === 'fluid',
+				'Only fluids have temperatures'
+			)
+		)
+	),
+	v.maxLength(8)
+);
 export const savedFactoryPlanInput = v.variant('operation', [
 	v.strictObject({
 		operation: v.literal('create'),
@@ -163,6 +205,47 @@ export const savedFactoryPlanInput = v.variant('operation', [
 	}),
 	v.strictObject({
 		operation: v.literal('nest_line'),
+		...scope,
+		reference,
+		expectedRevision: revision,
+		lineId
+	}),
+	v.strictObject({
+		operation: v.literal('edit_block'),
+		...scope,
+		reference,
+		expectedRevision: revision,
+		floorId: lineId,
+		settings: v.union([
+			v.literal(false),
+			v.strictObject({
+				linked: v.boolean(),
+				mode: v.picklist(['output', 'input', 'machines']),
+				products: blockProducts,
+				inputs: nativePlannerInputs,
+				maximize: v.optional(nativePlannerMaximize)
+			})
+		])
+	}),
+	v.strictObject({
+		operation: v.literal('add_line'),
+		...scope,
+		reference,
+		expectedRevision: revision,
+		floorId: lineId,
+		recipe: plannerRecipe
+	}),
+	v.strictObject({
+		operation: v.literal('move_line'),
+		...scope,
+		reference,
+		expectedRevision: revision,
+		lineId,
+		floorId: lineId,
+		afterLineId: v.optional(lineId)
+	}),
+	v.strictObject({
+		operation: v.literal('remove_line'),
 		...scope,
 		reference,
 		expectedRevision: revision,

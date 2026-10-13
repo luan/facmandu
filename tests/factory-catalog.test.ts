@@ -446,6 +446,18 @@ test('native planning prefers Toby and refuses to silently drop unsupported cons
  assert(not pcall(tools.solve_factory_plan,args));assert(#calls==1)
  args.products={{name='iron-plate',type='item',perMinute=300}}
  assert(tools.solve_factory_plan(args).planner=='facmandu-factory-planner' and #calls==2)
+ args.products={}
+ assert(not pcall(tools.solve_factory_plan,args) and #calls==2)
+ args.products={{name='iron-plate',type='item',machineCount=8}}
+ args.inputs={{name='iron-ore',type='item',beltCount=1.5,belt='transport-belt',beltStack=1,mode='maximum'}}
+ args.maximize={name='iron-plate',type='item'}
+ native.interfaces['facmandu-toby-planner']={solve=true}
+ assert(not pcall(tools.solve_factory_plan,args) and #calls==2)
+ native.interfaces['facmandu-toby-planner'].edit_block=true
+ assert(tools.mod_integrations{force='player'}.mods.toby.planner.blocks)
+ assert(tools.solve_factory_plan(args).planner=='facmandu-toby-planner' and #calls==3)
+ args.inputs={{name='custom-electric-power',type='entity',watts=1000000,mode='maximum'}}
+ assert(tools.solve_factory_plan(args).planner=='facmandu-toby-planner' and #calls==4)
  `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
