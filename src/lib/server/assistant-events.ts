@@ -167,7 +167,11 @@ export function assistantToolFeedback(tool: string, output: unknown) {
 			return `Draft validated: ${entities} ${entities === 1 ? 'entity' : 'entities'}${warnings ? `; ${warnings} ${warnings === 1 ? 'warning' : 'warnings'}` : ''}.`;
 		}
 	}
-	if (tool === 'route_belt') {
+	if (tool === 'route_belts' && Array.isArray(value.results)) {
+		const completed = value.results.filter((row: unknown) => object(row)?.found === true).length;
+		return `Drafted ${completed} of ${value.results.length} belt connections. No construction placed.`;
+	}
+	if (tool === 'route_belt' || tool === 'belt_route') {
 		if (value.found === false) return 'No valid belt route found in the searched area.';
 		if (typeof entities === 'number')
 			return `Belt route drafted: ${entities} ${entities === 1 ? 'entity' : 'entities'}.`;

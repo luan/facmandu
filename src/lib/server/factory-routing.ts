@@ -39,6 +39,14 @@ export const beltRouteInput = v.object({
 		)
 	)
 });
+export const beltRoutesInput = v.object({
+	...v.omit(beltRouteInput, ['x', 'y', 'target_x', 'target_y', 'target_lane', 'label']).entries,
+	connections: v.pipe(
+		v.array(v.pick(beltRouteInput, ['x', 'y', 'target_x', 'target_y', 'target_lane', 'label'])),
+		v.minLength(1),
+		v.maxLength(8)
+	)
+});
 const position = z.object({ x: z.number().finite(), y: z.number().finite() });
 const endpoint = z.object({
 	name: z.string(),

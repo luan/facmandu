@@ -22,6 +22,7 @@ import {
 import type { FactoryImage } from '$lib/factory-images';
 import { useAssistantToolGroups } from './assistant-tool-groups';
 import { fetchPublicWeb, schoolBlueprint, searchBlueprints, webPageText } from './assistant-web';
+import { designBeltRoutes } from './belt-route-batch';
 import { factoryAction, factoryActionInspect } from './factory-actions';
 import { factoryBlueprint } from './factory-blueprints';
 import { FactoryImagePending, renderFactoryBlueprint } from './factory-images';
@@ -33,7 +34,7 @@ import {
 	prepareFactoryLookup,
 	rememberFactoryTargets
 } from './factory-query-targets';
-import { beltRouteInput, designBeltRoute } from './factory-routing';
+import { beltRouteInput, beltRoutesInput, designBeltRoute } from './factory-routing';
 import { captureFactoryView } from './factory-view';
 import {
 	createFactoryWatch,
@@ -556,7 +557,7 @@ export function serverAssistantTools(initialContext: {
 			}
 		});
 	}
-	if (groups.has('logistics') || groups.has('planning'))
+	if (groups.has('logistics') || groups.has('planning')) {
 		useTool({
 			name: 'route_belt',
 			description:
@@ -597,6 +598,49 @@ export function serverAssistantTools(initialContext: {
 				return result('belt_route', 'Belt connection', route);
 			}
 		});
+		useTool({
+			name: 'route_belts',
+			description:
+				'Draft up to eight supply/output belt connections in one call, using the same native routing checks as route_belt. Supply common force/surface/belt/underground/margin/avoid and connections=[{x,y,target_x,target_y,target_lane?,label?}]. Each completed path is automatically reserved before the next path, preventing routes from colliding with one another. Pass the accepted machine module in avoid. Results retain connection order and identify failed paths individually; repair only those. No entities, ghosts or items are placed. Combine saved designIds by their reported world positions before inspecting and placing the full layout. Prefer this for several known endpoints instead of separate model turns.',
+			input: beltRoutesInput,
+			async run({ data }) {
+				const routes = await designBeltRoutes(data, async (request) => {
+					const instance = await server();
+					if (context.gamePlayer)
+						request.force = (
+							await requireGamePlayer(
+								instance,
+								context.userId,
+								context.gamePlayer,
+								context.gameForce
+							)
+						).player.force;
+					const route = await designBeltRoute(instance, request);
+					if ('draft' in route)
+						writeArtifact({
+							...result('blueprint_operation', route.draft.label, route.draft).output,
+							display: false
+						});
+					return route;
+				});
+				return result('route_belts', 'Belt connections', {
+					placed: false,
+					results: routes.map((route) => {
+						if (!('draft' in route)) return route;
+						const { draft, ...facts } = route;
+						return {
+							...facts,
+							designId: draft.designId,
+							entities: draft.entities.length,
+							cost: draft.cost,
+							warnings: draft.warnings,
+							importValidated: true
+						};
+					})
+				});
+			}
+		});
+	}
 	if (groups.has('planning'))
 		useTool({
 			name: 'factory_plan',
@@ -939,7 +983,7 @@ For science or research-supply requests, start with science_summary and display=
 For requested blueprints or construction:
 1. Locate the player and requested factory. For a product expansion, resolve its exact product, then start with survey_production: it reads producers, a representative machine and its connections, nearby supplies, power, rates and matching bus lanes together. Publish its findings immediately and reuse them; do not repeat its component reads unless a specific truncation, failure or changed state matters. For coordinates, pass x/y to select a nearby producer. If no producer exists, inspect the requested site or player area and include the new supply chain. For an explicit location, inspect that area. Use one bounded find_entities call with details=true and limit=50 (omit entity filters to see local infrastructure and stored supplies). Read omitted entity types with targeted batches only when needed. Identify actual supply endpoints, stored items/fluids, output belt and power. For a bus expansion, read inspect_machine connections first: it already includes attached inserters/loaders, their settings and short native supply/output traces. Extend only the relevant truncated trace instead of rediscovering adjacent transport. Use find_buses with the exact product near the factory to get actual matching lanes and connection coordinates. Respect connection.laneApproaches: choose only an available left/right/both route approach; inspect_transport confirms direction, contents and surrounding connections. Use trace_limit for a bounded belt trace through native underground pairs and splitter branches instead of inspecting every belt separately. Set trace_direction=upstream on an ingredient belt to verify its actual supply path; alignment and empty existing belts do not establish a feed. Resolve its source or route a working supply into it. Respect truncation and force/chart boundaries; topology alone does not prove lane reachability or throughput. Use local find_entities carrying=<exact product> when the candidate scan cannot resolve the destination. A product search finds crafting machines, not stored supplies; inspect chests and tanks before claiming inputs are absent. Zero production flow does not mean a buffer is empty. Stored input buffers are valid supplies for a bounded module request; report their finite run time. A production expansion needs continuing inputs: reuse a proven supply line or include its missing upstream chain. For glass, this can require a charted stone patch, mining, sand crushing, smelting and a connected bus route. Use inspect_machine on a mining drill to read its actual resource target, charted coverage, power and output belt together; base mining speed and reserves are not delivered extraction rates. Existing product stock does not complete an expansion request. Infer the belt tier and a useful rate from live evidence. Default to belts and pipes when transport is unspecified; distance alone is not a reason to ask about trains. Use route_belt with target_lane for an intended bus lane to draft longer connections through native collision checks, rather than repeatedly surveying a corridor or asking the player to route it. Pass the saved module and earlier connection drafts in route_belt avoid so paths respect the planned layout before placement. Ask only for an unresolved destination or a constraint that changes safety or scope.
 2. When reusing a working line, constrain planning_recipes with its exact recipe and machine from inspect_machine; broaden only to compare alternatives. Call plan_production with the target rate and actual recipe/machine choices. Use compatible unlocked machines; construction stock helps choose between alternatives but does not block ghost design. Declare proven continuing supplies in external_inputs, and include missing upstream production. Use blueprint_operation catalog for the real machine dimensions, fluid ports and inserter offsets. Use each plan step’s build_count for whole machines; machines is a fractional capacity equivalent. Do not claim the full target rate from fewer machines. Do not substitute remembered recipes or hand-calculated machine counts.
-3. Follow requested logistics and layout constraints before placing any section: belts versus robots, readable lanes versus weaving, and configured inserter reach. Continue the requested work without asking the user to repeat authorization. Once recipe, capacity and connection facts are known, use blueprint_operation program to generate repeated structures and coordinated edits locally in one call. Keep and revise the saved draft instead of re-entering geometry. Create the compact machine, inserter and pole layout with display=false. Inspect that module at its intended world position before routing long belts: resolve collisions or choose a clear nearby site first. Keep the accepted module fixed while route_belt connects its supply and output, passing it in avoid. Inspect the complete combined layout again before placement. Resolve warnings about unreachable ingredient pickups: connect a planned producer upstream, or verify the omitted existing-world feed with native inspection. Render each completed upgrade once; keep working revisions in collapsed tool steps. Stop broad surveys. Structured geometry is sufficient to start designing; a pending sprite preview must not block this step.
+3. Follow requested logistics and layout constraints before placing any section: belts versus robots, readable lanes versus weaving, and configured inserter reach. Continue the requested work without asking the user to repeat authorization. Once recipe, capacity and connection facts are known, use blueprint_operation program to generate repeated structures and coordinated edits locally in one call. Keep and revise the saved draft instead of re-entering geometry. Create the compact machine, inserter and pole layout with display=false. Inspect that module at its intended world position before routing long belts: resolve collisions or choose a clear nearby site first. Keep the accepted module fixed. Use route_belts for several known supply/output endpoints in one call, passing the module in avoid; it automatically reserves earlier paths. Use route_belt for an individual repair. Inspect the complete combined layout again before placement. Resolve warnings about unreachable ingredient pickups: connect a planned producer upstream, or verify the omitted existing-world feed with native inspection. Render each completed upgrade once; keep working revisions in collapsed tool steps. Stop broad surveys. Structured geometry is sufficient to start designing; a pending sprite preview must not block this step.
 4. For a construction request, including short production expansion requests, inspect the full target layout, including power coverage and connection gaps, robot coverage and material stock. Repair power gaps before placing with its fresh expectedTick and expectedDesign. A blueprint request alone does not authorize placement. Ghosts reserve no items; normal game construction consumes real stock later. Missing stock or robot coverage is not a reason to stop an explicitly requested ghost build. Finish the connected design and report what remains unbuilt. Preserve unrelated existing buildings and their settings. An explicitly requested connected build includes necessary edits at its supply and bus connection points; use freshly inspected native rotation there. For tier changes, use entities_edit kind=upgrade with the inspected nextUpgrade; native robots retain the old entity until they have replacement items. Do not demolish working belt tiers to emulate an upgrade. Do not expand into unrelated demolition.
 5. Use blueprint_operation check with the saved designId and exact product after placement for construction, machine faults and product_outputs. For a later connection check, start with that saved build check: product_outputs identifies the real producer and its output inserter drop target at world coordinates. Trace those output belts rather than guessing coordinates or tracing ingredient feeds. A belt with no downstream belt can feed a machine through an inserter; do not call it a broken product output without checking its role. Terminal-belt occupancy is not throughput. Supply destination inventories in outputs and measure=true for automatic delivered-rate measurement in one call over 30 seconds. Do useful targeted inspection or repairs while construction/measurement progresses, rather than repeated broad surveys. Recheck only after a repair, observed construction progress or a new measurement window. Rendering or redisplaying the same design does not change the factory; do not repeat a build check for it. When missing stock prevents construction, finish the ghost layout and report the shortage instead of polling the unchanged build. When no isolated destination inventory exists, report throughput as unmeasured. For a routine expansion without an explicit delivered-rate target, finish once the added machines are powered and working and their continuing supply and bus join are verified. Reuse the inspected existing bus unless this build changed it; do not keep surveying distant consumers or polling force production to measure this addition. Verify other requested scope with batches. Deliver the importable connected design or full authorized ghost layout; a proposal is not completion. After authorized construction with a throughput target, diagnose and fix bottlenecks until the sustained measured rate meets it. A fixable belt merge, incorrect direction or missing connection is work to finish, not a reason to end the response. Missing materials delay normal construction, not ghost placement; finish the layout and report the shortage. Locked technology or an unresolved safe connection can block a build. Necessary supply connections, output routing and power are part of that build request. Machine counts, burst rates and collision-free placement do not prove throughput. Measure delivered rate from destination inventory deltas: (afterCount - beforeCount) * 3600 / (afterTick - beforeTick). Force production is a separate rate. Report incomplete ghosts and missing materials; never require another “do it” for work already requested.
 Use available_research for research that can start next and tech_status for prerequisites; current_research only describes an active task. Distinguish crafting triggers from lab research. Diagnose production bottlenecks from machine and supply evidence, not totals alone. Respect truncated scans, sample windows and available log history.
@@ -969,6 +1013,7 @@ const lookupGroups: Record<string, string> = {
 	logistics_summary: 'logistics',
 	planning_recipes: 'planning',
 	route_belt: 'logistics',
+	route_belts: 'logistics',
 	find_buses: 'logistics',
 	read_factory_plan: 'planning',
 	read_sandbox: 'planning',
