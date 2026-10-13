@@ -279,3 +279,44 @@ test('coordinate inspections select visible factory entities while explicit IDs 
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 	lua.lua_close(state);
 });
+
+test('mining snapshots read charted reserves and actual output without invoking crafting APIs', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ package.path=${JSON.stringify(`${resolve('src/lib/server/factory-query')}/?.lua;`)}..package.path
+ defines={entity_status={working=1},inventory={}}
+ local force={name='player',mining_drill_productivity_bonus=.1,is_chunk_charted=function(_,p) return p.x<2 end}
+ local stone={valid=true,name='stone',position={x=.5,y=.5},amount=100,prototype={resource_category='basic-solid',mineable_properties={mining_time=1,products={{name='stone',type='item',amount=1}}}}}
+ local hidden={valid=true,name='stone',position={x=64.5,y=.5},amount=999,prototype=stone.prototype}
+ local copper={valid=true,name='copper',position={x=1.5,y=.5},amount=200,prototype={resource_category='liquid'}}
+ local belt={valid=true,name='belt',type='transport-belt',force=force,unit_number=2,position={x=2.5,y=.5},direction=4,status=1,prototype={belt_speed=.03125},belt_neighbours={inputs={},outputs={}},get_item_count=function() return 1 end,get_max_transport_line_index=function() return 2 end,get_transport_line=function() return {get_item_count=function() return 0 end,get_contents=function() return {} end} end}
+ local drill={valid=true,name='drill',type='mining-drill',force=force,unit_number=1,position={x=.5,y=.5},prototype={mining_speed=.5,resource_categories={['basic-solid']=true}},status=1,active=true,energy=100,mining_area={{-2,-2},{3,3}},mining_target=stone,drop_position=belt.position,drop_target=belt,is_connected_to_electric_network=function() return true end,get_module_inventory=function() return nil end,get_fuel_inventory=function() return nil end}
+ local surface={valid=true,name='nauvis',find_entities_filtered=function(q)
+  if q.type=='resource' then assert(q.force=='neutral' and q.limit==2048 and q.area==drill.mining_area);return {stone,hidden,copper} end
+  assert(q.force=='player');return q.position.x==.5 and {drill} or {belt}
+ end}
+ prototypes={entity={drill=drill.prototype,belt=belt.prototype},item={},fluid={}}
+ game={tick=100,forces={player=force},surfaces={nauvis=surface}}
+ local inspect=require('scripts.tools.machine_diagnostics').functions.inspect_machine
+ local args={force='player',surface='nauvis',x=.5,y=.5}
+ local result=inspect(args)
+ assert(result.found and result.type=='mining-drill' and result.base_mining_speed==.5)
+ assert(result.mining_target.mining.products[1].name=='stone' and result.force_mining_productivity_bonus==.1)
+ assert(result.resources.scanned==3 and result.resources.charted_tiles==2 and not result.resources.truncated)
+ assert(result.resources.items[1].name=='copper' and not result.resources.items[1].compatible)
+ assert(result.resources.items[2].amount==100 and result.resources.items[2].compatible)
+ assert(result.drop_target.unit_number==2 and #result.output_transport.belt_trace.nodes==1)
+ args.connections=false;assert(not inspect(args).output_transport)
+ drill.mining_target=nil;drill.drop_target=nil;result=inspect(args)
+ assert(result.found and not result.mining_target and not result.drop_target and not result.output_transport)
+ drill.drop_target=belt;belt.force={name='enemy'};assert(not inspect(args).drop_target)
+ belt.force=force;belt.position.x=64.5;assert(not inspect(args).drop_target)
+ assert(not pcall(inspect,{force='enemy',surface='nauvis',x=.5,y=.5}))
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+	lua.lua_close(state);
+});

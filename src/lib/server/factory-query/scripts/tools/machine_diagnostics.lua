@@ -6,7 +6,7 @@ local transport = require("scripts.tools.transport_diagnostics")
 local M = {}
 M.manifest = {
   inspect_machine = {
-    desc = "Inspect one built crafting machine at exact map coordinates: actual status, active state, recipe, progress, input/output inventories, fluids, native world pipe connection targets, modules, and electric connection. Includes up to eight attached inserters/loaders with native settings and sixteen-node belt traces by default; read these before separate surrounding-entity surveys. The scan covers the machine footprint plus three tiles, so remote custom inserters may be omitted. Stored ingredients are observations, not a throughput or bottleneck prediction. If ambiguous, use a returned unit_number.",
+    desc = "Inspect one built crafting machine or mining drill at exact map coordinates: actual status, inputs/outputs, modules, power and native connections. Crafting machines include recipe, progress, fluids, pipe targets and up to eight attached inserters/loaders with sixteen-node belt traces. Drills include their real mining target, bounded charted resource coverage, native drop target and downstream belt trace. Read these before separate surrounding-entity surveys. The attached scan covers the footprint plus three tiles, so remote custom inserters may be omitted. Base mining speed does not include modules/effects; coverage and stored items do not prove delivered throughput. If ambiguous, use a returned unit_number.",
     tier = "2",
     params = {
       surface = "string! surface name or index", x = "number! map x", y = "number! map y",
@@ -41,9 +41,47 @@ local function inspect_machine(a)
   if a.connections~=nil and type(a.connections)~='boolean' then error('connections must be boolean',0) end
   local entity, miss, surface, force = target.find(a)
   if not entity then return miss end
+  if entity.type=='mining-drill' then
+    local mined=entity.mining_target
+    local p=mined and mined.valid and force.is_chunk_charted(surface,{x=math.floor(mined.position.x/32),y=math.floor(mined.position.y/32)}) and mined.prototype
+    local mining=p and p.mineable_properties
+    local row={found=true,force=force.name,surface=surface.name,name=entity.name,type=entity.type,
+      unit_number=entity.unit_number,x=entity.position.x,y=entity.position.y,
+      status=status_name(entity.status),active=entity.active,energy_j=bounded.round(entity.energy,0),
+      electric_network_id=entity.electric_network_id,connected_to_power_source=entity.is_connected_to_electric_network(),
+      modules=items(entity.get_module_inventory()),fuel=items(entity.get_fuel_inventory()),
+      mining_area=entity.mining_area,base_mining_speed=entity.prototype.mining_speed,
+      force_mining_productivity_bonus=force.mining_drill_productivity_bonus,
+      mining_target=p and {name=mined.name,position=mined.position,amount=mined.amount,
+        category=p.resource_category,mining=mining and {mining_time=mining.mining_time,products=mining.products,
+          required_fluid=mining.required_fluid,fluid_amount=mining.fluid_amount} or nil} or nil,
+      drop_position=entity.drop_position}
+    -- Coverage is bounded and charted; overlapping drills must not sum it as independent reserves.
+    local resources=surface.find_entities_filtered{area=entity.mining_area,type='resource',force='neutral',limit=2048}
+    local coverage={};local shown=0
+    for _,e in ipairs(resources) do
+      if force.is_chunk_charted(surface,{x=math.floor(e.position.x/32),y=math.floor(e.position.y/32)}) then
+        local entry=coverage[e.name] or {name=e.name,tiles=0,amount=0,compatible=entity.prototype.resource_categories[e.prototype.resource_category]~=nil}
+        entry.tiles=entry.tiles+1;entry.amount=entry.amount+e.amount;coverage[e.name]=entry;shown=shown+1
+      end
+    end
+    local rows={};for _,entry in pairs(coverage) do rows[#rows+1]=entry end
+    table.sort(rows,function(x,y) return x.name<y.name end)
+    row.resources={scanned=#resources,charted_tiles=shown,truncated=#resources==2048,items=rows,
+      note='Charted tiles within this drill area; neighboring drills can overlap these reserves. Base speed is not measured extraction.'}
+    local drop=entity.drop_target
+    if drop and drop.valid and drop.force==force and force.is_chunk_charted(surface,{x=math.floor(drop.position.x/32),y=math.floor(drop.position.y/32)}) then
+      row.drop_target={name=drop.name,unit_number=drop.unit_number,position=drop.position}
+      if a.connections~=false then
+        local ok,value=pcall(transport.functions.inspect_transport,{force=force.name,surface=surface.name,x=drop.position.x,y=drop.position.y,name=drop.name,unit_number=drop.unit_number,trace_limit=16})
+        row.output_transport=ok and value or nil;row.output_transport_error=not ok and tostring(value):match('^[^\n]*') or nil
+      end
+    end
+    return row
+  end
   if not CRAFTERS[entity.type] then
     return { found = false, force = force.name, surface = surface.name,
-      name = entity.name, reason = "entity is not a crafting machine" }
+      name = entity.name, reason = "entity is not a crafting machine or mining drill" }
   end
   local recipe = entity.get_recipe()
   local row = {
