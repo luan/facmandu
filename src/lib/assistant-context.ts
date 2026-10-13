@@ -10,10 +10,13 @@ export type AssistantContextUsage = {
 export function assistantContextLimit(
 	model: string,
 	window: number,
-	maxTokens: number
+	maxTokens: number,
+	workingWindow?: number
 ): AssistantContextUsage {
 	let reserve = Math.min(20_000, maxTokens > 0 ? maxTokens : 20_000);
 	if (window > 0 && reserve * 2 >= window) reserve = Math.max(1024, Math.floor(window / 3));
+	// Long factory runs need a small working set; durable drafts survive compaction.
+	if (workingWindow && window > workingWindow) reserve = Math.max(reserve, window - workingWindow);
 	return { model, tokens: null, window, reserve, compactionFailed: false, compacting: false };
 }
 

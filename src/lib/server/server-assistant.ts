@@ -328,11 +328,12 @@ export async function finishServerTurn(
 			controller.signal.removeEventListener('abort', abort);
 		}
 	} catch (cause) {
-		console.error(
-			'Server assistant failed:',
-			cause instanceof Error ? cause.message.split('\n')[0]?.slice(0, 200) : 'Unknown error'
-		);
-		const answer = controller.signal.aborted ? 'Response stopped.' : assistantErrorMessage(cause);
+		const failure = controller.signal.aborted ? 'Response stopped.' : assistantErrorMessage(cause);
+		const checkpoint = results.findLast((result) => result.tool === 'report_progress');
+		const milestone = checkpoint && assistantToolFeedback('report_progress', checkpoint);
+		const answer = milestone ? `${failure}\n\nLast update: ${milestone}` : failure;
+		// The turn ID identifies the durable receipt; provider payloads stay out of logs.
+		console.error('Server assistant failed:', turn.id, failure);
 		await db
 			.update(turnTable)
 			.set({ state: 'error', answer, results: JSON.stringify(results) })

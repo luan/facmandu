@@ -28,6 +28,22 @@ test('unknown failures never expose raw exception messages', () => {
 		assert.equal(assistantErrorMessage(cause), 'Could not finish this response. Try again.');
 });
 
+test('durability timeout identifies the harness limit rather than a game or provider failure', () => {
+	const message = assistantErrorMessage(
+		new AgentRunError({
+			outcome: 'failed',
+			submissionId: 'test',
+			cause: {
+				name: 'FlueError',
+				type: 'submission_timeout',
+				message: 'Submission exceeded the configured timeout.'
+			}
+		})
+	);
+	assert.match(message, /harness stopped this run at its time limit/u);
+	assert.match(message, /Saved drafts and completed actions are preserved/u);
+});
+
 test('wrapped provider overload explains recovery without exposing provider data', () => {
 	const message = assistantErrorMessage(
 		new AgentRunError({

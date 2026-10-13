@@ -8,7 +8,7 @@
  import { assistantResultGroups } from '$lib/factory-results';
  import FactoryResultView from '$lib/components/FactoryResult.svelte';
  import BlueprintResult from '$lib/components/BlueprintResult.svelte';
- import { serverAssistantPlanSchema, type FactoryResult, type AssistantMod } from '$lib/assistant-results';
+ import { savedBlueprintDrafts, serverAssistantPlanSchema, type FactoryResult, type AssistantMod } from '$lib/assistant-results';
  import { modThumbnailUrl } from '$lib/utils';
  import ModPreviewSheet from '../../routes/(app)/modlists/[id]/ModPreviewSheet.svelte';
  import AssistantMessage from '$lib/components/AssistantMessage.svelte';
@@ -67,13 +67,7 @@
  let turns = $state<{ id: string; prompt: string; answer: string; state: string; progress?: string; feedback?: string; mods: AssistantMod[]; results?: FactoryResult[]; plans?: ModlistPlan[] }[]>([]);
   const runningTurn = $derived(turns.findLast(turn => turn.state === 'running'));
   const inProgress = $derived(busy || !!runningTurn);
- function latestSavedDraft(results: FactoryResult[]) {
-  for (const item of results.toReversed()) {
-   const draft = blueprintArtifactSchema.safeParse(item.result);
-   if (draft.success) return draft.data;
-  }
-  return undefined;
- }
+ let selectedDrafts = $state<Record<string, number>>({});
  function layoutLabel(item: FactoryResult) {
   if (!item.display) return null;
   const design = blueprintArtifactSchema.safeParse(item.result);
@@ -393,9 +387,13 @@
      <section class="space-y-4" aria-label="Conversation turn">
       <div class="flex justify-end"><p class="max-w-[90%] whitespace-pre-wrap break-words border border-border bg-white/5 px-4 py-3 text-sm leading-relaxed">{turn.prompt}</p></div>
       {#if turn.state === 'error'}
-       {@const saved = latestSavedDraft(turn.results ?? [])}
+       {@const drafts = savedBlueprintDrafts(turn.results ?? [])}
+       {@const saved = drafts[selectedDrafts[turn.id] ?? drafts.length - 1]}
        <div class="flex flex-wrap items-center gap-3"><p class="text-sm text-destructive">{turn.answer || 'Could not finish this response.'}</p>{#if !gamePlayer}<Button variant="outline" size="sm" disabled={busy} onclick={() => { prompt = `Continue my interrupted request: ${turn.prompt}\nVerify completed changes before repeating any writes, and finish what remains.`; void send(); }}><RefreshCwIcon class="size-4" />Retry</Button>{/if}</div>
-      {#if saved}<BlueprintResult blueprint={saved} {serverId} unfinished />{/if}
+      {#if saved}
+       {#if drafts.length > 1}<label class="block text-sm text-muted-foreground">Saved drafts ({drafts.length})<select class="mt-2 w-full border border-border bg-background px-3 py-2 text-foreground" value={selectedDrafts[turn.id] ?? drafts.length - 1} onchange={(event) => { selectedDrafts[turn.id] = Number(event.currentTarget.value); }}>{#each drafts as draft, index}<option value={index}>{draft.label} · {draft.entities.length} entities</option>{/each}</select></label>{/if}
+       <BlueprintResult blueprint={saved} {serverId} unfinished />
+      {/if}
       {:else}<div class="pr-2"><AssistantMessage text={turn.answer} /></div>{/if}
       {@render modCards(turn.mods, turn.id)}
       {#if !serverId}

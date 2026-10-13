@@ -86,6 +86,7 @@ export function assistantToolFeedback(tool: string, output: unknown) {
 	const wrapper = object(output);
 	const value = object(wrapper?.result) ?? wrapper;
 	if (!value) return '';
+	if (tool === 'report_progress' && typeof value.message === 'string') return value.message;
 	if (typeof value.error === 'string') {
 		if (/overlap/i.test(value.error)) return 'Layout validation found overlapping entities.';
 		return `${tool.replaceAll('_', ' ')} failed; details are in Activity.`;

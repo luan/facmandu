@@ -24,6 +24,45 @@ import {
 	submissionEvents
 } from '../src/lib/server/assistant-events';
 
+test('zero durability deadline lets an active submission pass one hour without stopping', async () => {
+	const directory = await mkdtemp(join(tmpdir(), 'facmandu-deadline-'));
+	const provider = fauxProvider({ provider: 'deadline-test', models: [{ id: 'probe' }] });
+	provider.setResponses([
+		fauxAssistantMessage([fauxToolCall('advance_clock', {})]),
+		fauxAssistantMessage('Finished after the old deadline.')
+	]);
+	const originalNow = Date.now;
+	let offset = 0;
+	function DeadlineProbe() {
+		useModel('deadline-test/probe');
+		useTool({
+			name: 'advance_clock',
+			description: 'Advance the test clock.',
+			run: () => {
+				offset = 61 * 60 * 1000;
+				return { output: 'Clock advanced.' };
+			}
+		});
+		return 'Continue after the clock advances.';
+	}
+	DeadlineProbe.durability = { timeoutMs: 0 };
+	const runtime = await start({
+		agents: [DeadlineProbe],
+		providers: [provider.provider],
+		db: sqlite(join(directory, 'conversations.db'))
+	});
+	Date.now = () => originalNow() + offset;
+	try {
+		const handle = init(DeadlineProbe, { id: 'deadline' });
+		const receipt = await handle.dispatch('Finish this request.');
+		assert.equal((await handle.read(receipt)).text, 'Finished after the old deadline.');
+	} finally {
+		Date.now = originalNow;
+		await runtime.stop();
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
 test('finish continuations see committed hook state without another tool call', async () => {
 	const directory = await mkdtemp(join(tmpdir(), 'facmandu-completion-'));
 	const provider = fauxProvider({ provider: 'completion-test', models: [{ id: 'probe' }] });

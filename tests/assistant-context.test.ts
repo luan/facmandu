@@ -20,3 +20,10 @@ test('automatic compaction headroom follows the active model including small and
 	assert.equal(assistantContextLimit('unknown', 0, 0).window, 0);
 	assert.equal(assistantContextLimit('fresh', 128000, 8192).tokens, null);
 });
+
+test('factory working context compacts at 64k without changing the model window', () => {
+	const large = assistantContextLimit('sol', 500000, 32000, 64000);
+	assert.equal(large.window, 500000);
+	assert.equal(large.window - large.reserve, 64000);
+	assert.equal(assistantContextLimit('small', 12000, 8192, 64000).reserve, 4000);
+});

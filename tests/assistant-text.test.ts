@@ -85,6 +85,12 @@ test('partial layout progress counts rows and revisions without exposing entity 
 
 test('tool feedback distinguishes proposed drafts, placement faults and actual query results', () => {
 	assert.equal(
+		assistantToolFeedback('report_progress', {
+			result: { message: 'Blue science supply connected; checking green science next.' }
+		}),
+		'Blue science supply connected; checking green science next.'
+	);
+	assert.equal(
 		assistantToolFeedback('blueprint_operation', {
 			entities: 700,
 			importValidated: true,

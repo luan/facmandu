@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { blueprintArtifactSchema } from './blueprints';
 
 export const assistantModsSchema = z.object({
 	kind: z.literal('mods'),
@@ -27,6 +28,19 @@ export const factoryResultSchema = z.object({
 	result: z.unknown()
 });
 export type FactoryResult = z.infer<typeof factoryResultSchema>;
+
+// A failed multi-product run must not hide earlier drafts behind the last small revision.
+export function savedBlueprintDrafts(results: readonly FactoryResult[]) {
+	const drafts = new Map<string, z.infer<typeof blueprintArtifactSchema>>();
+	for (const result of results) {
+		const parsed = blueprintArtifactSchema.safeParse(result.result);
+		if (parsed.success) {
+			drafts.delete(parsed.data.designId ?? parsed.data.blueprint);
+			drafts.set(parsed.data.designId ?? parsed.data.blueprint, parsed.data);
+		}
+	}
+	return [...drafts.values()];
+}
 
 export const serverAssistantPlanSchema = z.object({
 	listId: z.string(),

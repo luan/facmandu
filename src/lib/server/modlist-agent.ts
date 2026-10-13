@@ -703,6 +703,8 @@ FacmanduAssistant.initialData = ModlistAssistant.initialData;
 // Flue registers agents by function identity; retain that identity through Vite reloads.
 runtimeState.agent ??= FacmanduAssistant;
 const registeredAgent = runtimeState.agent;
+// The runtime patch accepts zero for no deadline; user Stop and recovery limits remain active.
+registeredAgent.durability = { timeoutMs: 0 };
 export async function agentHandle(
 	userId: string,
 	target: string | { serverId: string; gamePlayer?: string },
@@ -716,7 +718,8 @@ export async function agentHandle(
 	const usage = assistantContextLimit(
 		details.id,
 		loaded.model.contextWindow,
-		loaded.model.maxTokens
+		loaded.model.maxTokens,
+		typeof target === 'string' ? undefined : 64_000
 	);
 	const context: Context =
 		typeof target === 'string'
