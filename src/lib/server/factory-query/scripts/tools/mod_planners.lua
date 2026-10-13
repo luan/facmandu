@@ -23,7 +23,7 @@ function M.provider(native_remote)
    helmod={version=mods.helmod,read=not not available('helmod_interface','get_models'),calculate=not not available('helmod_interface','get_recipe'),tool='read_factory_plan',recipeTool='helmod_recipe'},
    ['blueprint-sandboxes']={version=mods['blueprint-sandboxes'],read=not not available('facmandu-blueprint-sandboxes','read'),export=not not available('facmandu-blueprint-sandboxes','export'),tool='read_sandbox',exportTool='sandbox_blueprint',note='Read and export existing owned designs; no sandbox creation or editor control.'},
    TaskList={version=mods.TaskList,read=not not available('facmandu-task-list','read'),write=not not available('facmandu-task-list','update'),tool='task_list'},
-   toby={version=mods['facmandu-assistant'],read=not not available('facmandu-toby-drone','read'),write=not not available('facmandu-toby-drone','command'),tool='toby_drone',planner={solve=not not available('facmandu-toby-planner','solve'),read=not not available('facmandu-toby-planner','read_plan'),create=not not available('facmandu-toby-planner','create_plan'),solverTool='solve_factory_plan'},note='Built-in planning works without AI. Toby has its own automatic companion. No equipment or fuel is needed; construction consumes real materials.'}
+   toby={version=mods['facmandu-assistant'],read=not not available('facmandu-toby-drone','read'),write=not not available('facmandu-toby-drone','command'),tool='toby_drone',planner={solve=not not available('facmandu-toby-planner','solve'),read=not not available('facmandu-toby-planner','read_plan'),create=not not available('facmandu-toby-planner','create_plan'),edit=not not available('facmandu-toby-planner','edit_line'),products=not not available('facmandu-toby-planner','set_products'),nest=not not available('facmandu-toby-planner','nest_line'),solverTool='solve_factory_plan'},note='Built-in planning works without AI. Toby has its own automatic companion. No equipment or fuel is needed; construction consumes real materials.'}
   }}
  end
  local function read_sandbox(a)
@@ -38,6 +38,11 @@ function M.provider(native_remote)
  end
  local function solve_factory_plan(a)
   local force=force_lookup.require_force(a.force)
+  local configured=false
+  for _,row in ipairs(a.recipes or {}) do for key in pairs(row) do if key~='name' and key~='machine' then configured=true end end end
+  for _,rows in ipairs{a.products or {},a.inputs or {}} do for _,row in ipairs(rows) do if row.temperature~=nil then configured=true end end end
+  if a.maximize and a.maximize.temperature~=nil then configured=true end
+  if configured and not available('facmandu-toby-planner','edit_line') then error('Configured lines and fluid temperatures require updated Toby planning on the server',0) end
   if available('facmandu-toby-planner','solve') then
    return native_remote.call('facmandu-toby-planner','solve',force.name,a.player,a.surface,a.products,a.recipes,a.inputs,a.maximize)
   end

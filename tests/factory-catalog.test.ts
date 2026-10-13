@@ -435,6 +435,12 @@ test('native planning prefers Toby and refuses to silently drop unsupported cons
  local args={force='player',player='Alice',surface='nauvis',products={{name='iron-plate',type='item',machineCount=8}},recipes={{name='iron-plate'}},inputs={{name='iron-ore',type='item',perMinute=300,mode='maximum'}},maximize={name='iron-plate',type='item'}}
  assert(tools.mod_integrations{force='player'}.mods.toby.planner.solve)
  assert(tools.solve_factory_plan(args).planner=='facmandu-toby-planner')
+ args.recipes[1].modules={}
+ assert(not pcall(tools.solve_factory_plan,args) and #calls==1)
+ args.recipes[1].modules=nil
+ args.inputs[1].temperature=165
+ assert(not pcall(tools.solve_factory_plan,args) and #calls==1)
+ args.inputs[1].temperature=nil
  native.interfaces['facmandu-toby-planner']=nil
  assert(not pcall(tools.solve_factory_plan,args));args.inputs=nil;args.maximize=nil
  assert(not pcall(tools.solve_factory_plan,args));assert(#calls==1)

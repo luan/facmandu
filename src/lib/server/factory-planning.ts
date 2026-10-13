@@ -89,47 +89,8 @@ export const factoryPlanInput = v.object({
 	)
 });
 export type FactoryPlanInput = v.InferInput<typeof factoryPlanInput>;
-const plannerName = v.pipe(v.string(), v.minLength(1), v.maxLength(200));
-const plannerRate = v.pipe(
-	v.number(),
-	v.finite(),
-	v.minValue(Number.MIN_VALUE),
-	v.maxValue(1000000)
-);
-const plannerProduct = { name: plannerName, type: v.picklist(['item', 'fluid']) };
-export const nativePlannerInputs = v.pipe(
-	v.array(
-		v.object({
-			...plannerProduct,
-			perMinute: v.pipe(v.number(), v.finite(), v.minValue(0), v.maxValue(1000000)),
-			mode: v.picklist(['exact', 'maximum'])
-		})
-	),
-	v.maxLength(32)
-);
-export const nativePlannerMaximize = v.object(plannerProduct);
-export const nativeFactoryPlanInput = v.object({
-	force: plannerName,
-	player: plannerName,
-	surface: plannerName,
-	products: v.pipe(
-		v.array(
-			v.union([
-				v.strictObject({ ...plannerProduct, perMinute: plannerRate }),
-				v.strictObject({ ...plannerProduct, machineCount: plannerRate })
-			])
-		),
-		v.minLength(1),
-		v.maxLength(8)
-	),
-	recipes: v.pipe(
-		v.array(v.object({ name: plannerName, machine: v.optional(plannerName) })),
-		v.minLength(1),
-		v.maxLength(24)
-	),
-	inputs: v.optional(nativePlannerInputs),
-	maximize: v.optional(nativePlannerMaximize)
-});
+export { nativeFactoryPlanInput } from '$lib/factory-plan-input';
+
 type Product = z.infer<typeof material>;
 type Rate = { name: string; type: Product['type']; per_min: number };
 
