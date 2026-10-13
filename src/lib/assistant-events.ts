@@ -17,7 +17,7 @@ export function assistantStreamProgress(
 				const block = event.partial.content[event.contentIndex];
 				if (block?.type === 'toolCall') {
 					const label = assistantToolProgress(block.name, block.arguments);
-					progress = `Preparing ${label.charAt(0).toLowerCase()}${label.slice(1)}`;
+					progress = `Next: ${label}`;
 				}
 			}
 			if (progress && progress !== previous) {

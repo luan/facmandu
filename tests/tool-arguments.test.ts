@@ -91,7 +91,7 @@ test('provider stream records and final message receive the same decoded tool ar
 			assert.deepEqual(input.parse(event.toolCall.arguments).queries, [query]);
 	assert.deepEqual((await stream.result()).content, [toolCall]);
 	assert.equal((await stream.result()).usage.totalTokens, 2);
-	assert.deepEqual(progress, ['Reasoning…', 'Preparing batch…']);
+	assert.deepEqual(progress, ['Reasoning…', 'Next: Batch…']);
 
 	const failed = createAssistantMessageEventStream();
 	const wrapped = decodeToolStream(failed, normalizeContext({ messages: [] }));
