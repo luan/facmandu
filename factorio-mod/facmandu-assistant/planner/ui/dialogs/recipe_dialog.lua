@@ -375,7 +375,7 @@ local function apply_recipe_filter(player, search_term)
     local any_recipe_visible, added_scroll_pane_height = false, 0
     for _, group in ipairs(modal_data.modal_elements.groups) do
         local group_data = modal_data.recipe_groups[group.name]
-        local any_group_recipe_visible = false
+        local visible_recipe_count = 0
 
         for recipe_data, button in pairs(group.recipe_buttons) do
             local recipe_name = recipe_data.name
@@ -386,15 +386,16 @@ local function apply_recipe_filter(player, search_term)
             local visible = found and (disabled or recipe_enabled) and (hidden or not recipe_data.hidden) or false
 
             button.visible = visible
-            any_group_recipe_visible = any_group_recipe_visible or visible
+            if visible then visible_recipe_count = visible_recipe_count + 1 end
         end
 
-        group.frame.visible = any_group_recipe_visible
-        any_recipe_visible = any_recipe_visible or any_group_recipe_visible
+        group.frame.visible = visible_recipe_count > 0
+        any_recipe_visible = any_recipe_visible or group.frame.visible
 
-        local button_table_height = math.ceil(table_size(group.recipe_buttons) / MAGIC_NUMBERS.recipes_per_row) * 40
-        local additional_height = math.max(88, button_table_height + 24) + 4
-        added_scroll_pane_height = added_scroll_pane_height + additional_height
+        if group.frame.visible then
+            local button_table_height = math.ceil(visible_recipe_count / MAGIC_NUMBERS.recipes_per_row) * 40
+            added_scroll_pane_height = added_scroll_pane_height + math.max(88, button_table_height + 24) + 4
+        end
     end
 
     modal_data.modal_elements.warning_label.visible = not any_recipe_visible

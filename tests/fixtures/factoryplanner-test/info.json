@@ -1,0 +1,8 @@
+{
+	"name": "factoryplanner-test",
+	"version": "0.0.1",
+	"title": "Disposable Toby native performance QA",
+	"author": "Luan",
+	"factorio_version": "2.1",
+	"dependencies": ["facmandu-assistant >= 0.0.9"]
+}

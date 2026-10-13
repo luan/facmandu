@@ -15,56 +15,108 @@ local FactoryItem = require("planner.backend.data.FactoryItem")
 ---@field belt_stack integer
 ---@field selected_group_id integer?
 
--- This dialog works as the product picker currently, but could also work as an ingredient picker down the line
 -- ** ITEM PICKER **
+---@class PickerItemData
+---@field proto FPItemPrototype
+---@field translated_name string
+---@field unlocked boolean
+---@field existing boolean
+---@field visible boolean
+---@field button LuaGuiElement?
+
+---@class PickerGroupData
+---@field button LuaGuiElement
+---@field items PickerItemData[]
+---@field subgroup_elements table<string, LuaGuiElement>
+---@field subgroup_counts table<string, integer>
+---@field visible_rows integer
+---@field scroll_pane LuaGuiElement?
+---@field flow LuaGuiElement?
+
+---@param modal_data PickerDialogModalData
+---@param group PickerGroupData
+local function render_item_group(modal_data, group)
+    if not group.scroll_pane then
+        local scroll = modal_data.modal_elements.filter_frame.add{type="scroll-pane", style="shallow_scroll_pane"}
+        scroll.style.vertically_stretchable = true
+        local frame = scroll.add{type="frame", style="slot_button_deep_frame"}
+        frame.style.vertically_stretchable = true
+        group.scroll_pane = scroll
+        group.flow = frame.add{type="flow", direction="vertical"}
+        group.flow.style.vertical_spacing = 0
+        for _, data in ipairs(group.items) do
+            local proto = data.proto
+            local subgroup = proto.subgroup.name
+            local row = group.subgroup_elements[subgroup]
+            if not row then
+                row = group.flow.add{type="table", column_count=MAGIC_NUMBERS.items_per_row, style="filter_slot_table"}
+                row.style.horizontally_stretchable = true
+                group.subgroup_elements[subgroup] = row
+            end
+            local style, status_tooltip = "toby_flib_slot_button_default", nil
+            if data.existing then
+                style = "toby_flib_slot_button_blue"
+                status_tooltip = {"toby-planner.picker_already_selected_tt", {"toby-planner.pu_" .. modal_data.item_category, 1}}
+            elseif not data.unlocked then
+                style = "toby_flib_slot_button_red"
+                status_tooltip = {"toby-planner.picker_unresearched_tt"}
+            end
+            local name = proto.temperature and proto.base_name or proto.name
+            ---@class SelectPickerItemTags
+            ---@field item_id integer
+            ---@field category_id integer
+            ---@field enabled boolean
+            local tags = {mod="toby-planner", on_gui_click="select_picker_item", item_id=proto.id,
+                category_id=proto.category_id, enabled=not data.existing}
+            data.button = row.add{type="sprite-button", tags=tags, sprite=proto.sprite, style=style,
+                elem_tooltip=(proto.type ~= "entity") and {type=proto.type, name=name} or nil,
+                mouse_button_filter={"left"}}
+            data.button.tooltip = status_tooltip and {"", proto.tooltip or "", proto.tooltip and "\n\n" or "", status_tooltip} or proto.tooltip
+        end
+    end
+    for _, data in ipairs(group.items) do data.button.visible = data.visible end
+    for name, element in pairs(group.subgroup_elements) do element.visible = group.subgroup_counts[name] > 0 end
+end
+
 ---@param modal_data PickerDialogModalData
 ---@param new_group_id integer
 local function select_item_group(modal_data, new_group_id)
     modal_data.selected_group_id = new_group_id
-
-    for group_id, group_elements in pairs(modal_data.modal_elements.groups) do
-        local selected_group = (group_id == new_group_id)
-        group_elements.button.toggled = selected_group
-        group_elements.scroll_pane.visible = selected_group
+    local group = modal_data.modal_elements.groups[new_group_id]
+    render_item_group(modal_data, group)
+    for group_id, other in ipairs(modal_data.modal_elements.groups) do
+        local selected = group_id == new_group_id
+        other.button.toggled = selected
+        if other.scroll_pane then other.scroll_pane.visible = selected end
     end
+    modal_data.modal_elements.filter_frame.style.natural_height = group.visible_rows * 40 + 24
 end
 
 ---@param player LuaPlayer
 ---@param search_term string
 local function apply_item_filter(player, search_term)
     local modal_data = lib.globals.modal_data(player)  ---@as PickerDialogModalData
-    local modal_elements = modal_data.modal_elements
+    local elements = modal_data.modal_elements
     local show_unresearched = lib.globals.preferences(player).show_unresearched_items
-
-    -- Groups are indexed continuously, so using ipairs here is fine
-    local first_visible_group_id = nil
-    for group_id, group in ipairs(modal_elements.groups) do
-        local any_item_visible = false
-
-        for _, subgroup_table in pairs(group.subgroup_tables) do
-            for item_data, element in pairs(subgroup_table) do
-                local matches_search = (search_term == item_data.name)
-                    or (string.find(item_data.translated_name, search_term, 1, true) ~= nil)
-                local visible = matches_search and (show_unresearched or item_data.unlocked)
-
-                element.visible = visible
-                any_item_visible = any_item_visible or visible
-            end
+    local first_visible_group_id
+    for group_id, group in ipairs(elements.groups) do
+        local counts, visible_rows = {}, 0
+        for _, data in ipairs(group.items) do
+            local matches = search_term == data.proto.name or string.find(data.translated_name, search_term, 1, true) ~= nil
+            data.visible = matches and (show_unresearched or data.unlocked)
+            local subgroup = data.proto.subgroup.name
+            counts[subgroup] = (counts[subgroup] or 0) + (data.visible and 1 or 0)
         end
-
-        group.button.visible = any_item_visible
-        first_visible_group_id = first_visible_group_id or ((any_item_visible) and group_id or nil)
+        for _, count in pairs(counts) do visible_rows = visible_rows + math.ceil(count / MAGIC_NUMBERS.items_per_row) end
+        group.subgroup_counts, group.visible_rows = counts, visible_rows
+        group.button.visible = visible_rows > 0
+        if visible_rows > 0 then first_visible_group_id = first_visible_group_id or group_id end
     end
-
-    local any_result_found = (first_visible_group_id ~= nil)
-    modal_elements.warning_label.visible = not any_result_found
-    modal_elements.filter_frame.visible = any_result_found
-
-    if first_visible_group_id ~= nil then
-        local selected_group_id = modal_data.selected_group_id
-        local is_selected_group_visible = modal_elements.groups[selected_group_id].button.visible
-        local group_id_to_select = is_selected_group_visible and selected_group_id or first_visible_group_id
-        select_item_group(modal_data, group_id_to_select)
+    elements.warning_label.visible = first_visible_group_id == nil
+    elements.filter_frame.visible = first_visible_group_id ~= nil
+    if first_visible_group_id then
+        local selected = modal_data.selected_group_id
+        select_item_group(modal_data, elements.groups[selected].button.visible and selected or first_visible_group_id)
     end
 end
 
@@ -73,186 +125,61 @@ end
 local function add_item_picker(parent_flow, player)
     local player_table = lib.globals.player_table(player)
     local modal_data = player_table.ui_state.modal_data  ---@as PickerDialogModalData
-    local modal_elements = modal_data.modal_elements
+    local elements = modal_data.modal_elements
     local translations = player_table.translation_tables
-    -- Share prototype queries across items and custom recipes; buttons retain the results for this dialog
     local unlock_cache = {}  ---@type PrototypeUnlockCache
     local force = player.force  ---@as LuaForce
-
-    local label_warning = parent_flow.add{type="label", caption={"toby-planner.error_message", {"toby-planner.no_item_found"}}}
-    label_warning.style.font = "heading-2"
-    label_warning.style.margin = 12
-    label_warning.visible = false  -- There can't be a warning upon first opening of the dialog
-    modal_elements["warning_label"] = label_warning
-
-    -- Item picker (optimized for performance, so not everything is done in the obvious way)
-    local groups_per_row, items_per_row = MAGIC_NUMBERS.groups_per_row, MAGIC_NUMBERS.items_per_row
+    local warning = parent_flow.add{type="label", caption={"toby-planner.error_message", {"toby-planner.no_item_found"}}}
+    warning.style.font = "heading-2"
+    warning.style.margin = 12
+    warning.visible = false
+    elements.warning_label = warning
+    local groups_per_row = MAGIC_NUMBERS.groups_per_row
     local tabs_width = 71 * groups_per_row
-
-    -- Adjusted when this is actually supposed to scroll
-    local scroll_pane_groups = parent_flow.add{type="scroll-pane", style="toby_planner_scroll-pane_group_tabs",
-        horizontal_scroll_policy="never"}
-    scroll_pane_groups.style.width = tabs_width
-    scroll_pane_groups.style.maximal_height = MAGIC_NUMBERS.group_max_rows * 76
-
-    local table_item_groups = scroll_pane_groups.add{type="table", column_count=groups_per_row}
-    table_item_groups.style.width = tabs_width
-    table_item_groups.style.horizontal_spacing = 0
-    table_item_groups.style.vertical_spacing = 0
-
-    local frame_filters = parent_flow.add{type="frame", style="filter_frame"}
-    modal_elements["filter_frame"] = frame_filters
-
-    local group_id_cache, group_flow_cache, subgroup_table_cache = {}, {}, {}
-    modal_elements.groups = {}
-
-    local existing_products = {}
-    if not modal_data.create_factory then  -- check if this is for a new factory or not
+    local scroll = parent_flow.add{type="scroll-pane", style="toby_planner_scroll-pane_group_tabs", horizontal_scroll_policy="never"}
+    scroll.style.width = tabs_width
+    scroll.style.maximal_height = MAGIC_NUMBERS.group_max_rows * 76
+    local tabs = scroll.add{type="table", column_count=groups_per_row}
+    tabs.style.width = tabs_width
+    tabs.style.horizontal_spacing = 0
+    tabs.style.vertical_spacing = 0
+    elements.filter_frame = parent_flow.add{type="frame", style="filter_frame"}
+    local group_ids, existing = {}, {}
+    elements.groups = {}
+    if not modal_data.create_factory then
         local factory = lib.context.get(player, "Factory")  ---@as Factory
-        for product in factory:iterator() do
-            existing_products[product.proto.name] = true
-        end
+        for product in factory:iterator() do existing[product.proto.name] = true end
     end
-
-    local current_item_rows, max_item_rows = 0, 0
-    local current_items_in_table_count = 0
-    for _, item_proto in ipairs(SORTED_ITEMS) do
-        if not item_proto.hidden and not item_proto.ingredient_only then
-            local group_name = item_proto.group.name
-            local group_id = group_id_cache[group_name]
-            local flow_subgroups  ---@type LuaGuiElement
-            local subgroup_tables  ---@type table<string, table<SubgroupKey, LuaGuiElement>>
-
-            if group_id == nil then
-                local cache_count = table_size(group_id_cache) + 1
-                group_id_cache[group_name] = cache_count
-                group_id = cache_count
-
+    -- Index the catalog for search; construct native item buttons only for visited groups.
+    for _, proto in ipairs(SORTED_ITEMS) do
+        if not proto.hidden and not proto.ingredient_only then
+            local name = proto.group.name
+            local id = group_ids[name]
+            if not id then
+                id = #elements.groups + 1
+                group_ids[name] = id
                 ---@class SelectPickerItemGroupTags
                 ---@field group_id integer
-                local tags = {mod="toby-planner", on_gui_click="select_picker_item_group", group_id=group_id}
-                local button_group = table_item_groups.add{type="sprite-button", tags=tags,
-                    sprite=("item-group/" .. group_name), style="toby_planner_sprite-button_group_tab",
-                    tooltip=item_proto.group.localised_name, mouse_button_filter={"left"}}
-
-                -- This only exists when button_group also exists
-                local scroll_pane_subgroups = frame_filters.add{type="scroll-pane", style="shallow_scroll_pane"}
-                scroll_pane_subgroups.style.vertically_stretchable = true
-
-                local frame_subgroups = scroll_pane_subgroups.add{type="frame", style="slot_button_deep_frame"}
-                frame_subgroups.style.vertically_stretchable = true
-
-                -- This flow is only really needed to set the correct vertical spacing
-                flow_subgroups = frame_subgroups.add{type="flow", name="flow_group", direction="vertical"}
-                flow_subgroups.style.vertical_spacing = 0
-                group_flow_cache[group_id] = flow_subgroups
-
-                modal_elements.groups[group_id] = {
-                    button = button_group,
-                    frame = frame_subgroups,
-                    scroll_pane = scroll_pane_subgroups,
-                    subgroup_tables = {}
-                }
-                subgroup_tables = modal_elements.groups[group_id].subgroup_tables
-
-                -- Catch up on adding the last item flow's row count
-                current_item_rows = current_item_rows + math.ceil(current_items_in_table_count / items_per_row)
-                current_items_in_table_count = 0
-
-                max_item_rows = math.max(current_item_rows, max_item_rows)
-                current_item_rows = 0
-            else
-                flow_subgroups = group_flow_cache[group_id]
-                subgroup_tables = modal_elements.groups[group_id].subgroup_tables
+                local tags = {mod="toby-planner", on_gui_click="select_picker_item_group", group_id=id}
+                elements.groups[id] = {button=tabs.add{type="sprite-button", tags=tags, sprite="item-group/" .. name,
+                    style="toby_planner_sprite-button_group_tab", tooltip=proto.group.localised_name, mouse_button_filter={"left"}},
+                    items={}, subgroup_elements={}}
             end
-            ---@cast flow_subgroups -nil
-
-            local subgroup_name = item_proto.subgroup.name
-            local table_subgroup = subgroup_table_cache[subgroup_name]
-            local subgroup_table = nil
-
-            if table_subgroup == nil then
-                table_subgroup = flow_subgroups.add{type="table", column_count=items_per_row,
-                    style="filter_slot_table"}
-                table_subgroup.style.horizontally_stretchable = true
-                subgroup_table_cache[subgroup_name] = table_subgroup
-
-                subgroup_tables[subgroup_name] = {}
-                subgroup_table = subgroup_tables[subgroup_name]
-
-                current_item_rows = current_item_rows + math.ceil(current_items_in_table_count / items_per_row)
-                current_items_in_table_count = 0
-            else
-                subgroup_table = subgroup_tables[subgroup_name]
-            end
-
-            current_items_in_table_count = current_items_in_table_count + 1
-
-            local item_name = item_proto.name
-            local existing_product = existing_products[item_name]
-            local name = (item_proto.temperature) and item_proto.base_name or item_name
-            local elem_tooltip = (item_proto.type ~= "entity") and {type=item_proto.type, name=name} or nil
-            local unlocked = lib.availability.is_item_unlocked(force, item_proto, unlock_cache)
-            local button_style = "toby_flib_slot_button_default"
-            local status_tooltip = nil  ---@type LocalisedString?
-            if existing_product then
-                button_style = "toby_flib_slot_button_blue"
-                status_tooltip = {"toby-planner.picker_already_selected_tt", {"toby-planner.pu_" .. modal_data.item_category, 1}}
-            elseif not unlocked then
-                button_style = "toby_flib_slot_button_red"
-                status_tooltip = {"toby-planner.picker_unresearched_tt"}
-            end
-
-            local tooltip = item_proto.tooltip  ---@type LocalisedString?
-            if status_tooltip then
-                tooltip = {"", item_proto.tooltip or "", (item_proto.tooltip) and "\n\n" or "", status_tooltip}
-            end
-
-            ---@class SelectPickerItemTags
-            ---@field item_id integer
-            ---@field category_id integer
-            ---@field enabled boolean
-            local tags = {mod="toby-planner", on_gui_click="select_picker_item", item_id=item_proto.id,
-                category_id=item_proto.category_id, enabled=(existing_product == nil)}
-            local button_item = table_subgroup.add{type="sprite-button", tags=tags, sprite=item_proto.sprite,
-                style=button_style, elem_tooltip=elem_tooltip, mouse_button_filter={"left"}}
-            button_item.tooltip = tooltip
-
-            -- Figure out the translated name here so search doesn't have to repeat the work for every character
-            local translated_name = (translations) and translations[item_proto.type][item_name] or nil
-            translated_name = (translated_name) and helpers.multilingual_to_lower(translated_name) or item_name
-
-            ---@class SubgroupKey
-            ---@field name string
-            ---@field translated_name string
-            ---@field unlocked boolean
-            local subgroup_key = {name=item_name, translated_name=translated_name, unlocked=unlocked}
-            subgroup_table[subgroup_key] = button_item
+            local translated = translations and translations[proto.type][proto.name]
+            local items = elements.groups[id].items
+            items[#items + 1] = {proto=proto, translated_name=translated and helpers.multilingual_to_lower(translated) or proto.name,
+                unlocked=lib.availability.is_item_unlocked(force, proto, unlock_cache), existing=existing[proto.name] or false}
         end
     end
-
-    -- Catch up on addding the last item flow and groups row counts
-    current_item_rows = current_item_rows + math.ceil(current_items_in_table_count / items_per_row)
-    max_item_rows = math.max(current_item_rows, max_item_rows)
-    frame_filters.style.natural_height = max_item_rows * 40 + (2*12)
-
-    -- Narrow the tabs down when they scroll, so the scrollbar lines up
-    local group_rows = math.ceil(#modal_elements.groups / groups_per_row)
-    if group_rows > MAGIC_NUMBERS.group_max_rows then
-        local scrolling_width = items_per_row * 40 + 12
-        scroll_pane_groups.style = "toby_planner_scroll-pane_group_tabs_scrolling"
-        local scroll_pane_style = scroll_pane_groups.style  ---@as LuaStyle
-        scroll_pane_style.width = scrolling_width
-        scroll_pane_style.maximal_height = MAGIC_NUMBERS.group_max_rows * 76
-        table_item_groups.style.width = scrolling_width
+    if math.ceil(#elements.groups / groups_per_row) > MAGIC_NUMBERS.group_max_rows then
+        local width = MAGIC_NUMBERS.items_per_row * 40 + 12
+        scroll.style = "toby_planner_scroll-pane_group_tabs_scrolling"
+        scroll.style.width = width
+        scroll.style.maximal_height = MAGIC_NUMBERS.group_max_rows * 76
+        tabs.style.width = width
     end
-
-    -- Select the previously selected item group if possible
-    local group_to_select, previous_selection = 1, player_table.ui_state.last_selected_picker_group
-    if previous_selection ~= nil and modal_elements.groups[previous_selection] ~= nil then
-        group_to_select = previous_selection
-    end
-    select_item_group(modal_data, group_to_select)
+    local previous = player_table.ui_state.last_selected_picker_group
+    modal_data.selected_group_id = previous and elements.groups[previous] and previous or 1
 end
 
 
