@@ -91,6 +91,28 @@ test('provider blueprint contracts accept omitted defaults and preserve strict o
 		{ force: 'player', designId: 'a'.repeat(64), removedEntityIndices: [1] }
 	];
 	for (const args of drafts) assert.doesNotThrow(() => validate({ operation: 'create', args }));
+	assert.doesNotThrow(() =>
+		validate({
+			operation: 'program',
+			args: {
+				force: 'player',
+				label: 'Program',
+				program: 'return design',
+				designId: 'a'.repeat(64)
+			}
+		})
+	);
+	assert.throws(() =>
+		validate({
+			operation: 'program',
+			args: {
+				force: 'player',
+				label: 'Program',
+				program: 'return design',
+				operation: 'place'
+			}
+		})
+	);
 	assert.doesNotThrow(() => validate({ operation: 'inspect', args: target }));
 	assert.doesNotThrow(() =>
 		validate({

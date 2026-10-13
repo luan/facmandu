@@ -210,6 +210,19 @@ const designReference = z.strictObject({
 	designId: z.string().regex(/^[a-f0-9]{64}$/),
 	force: name
 });
+export const blueprintProgramSchema = z.strictObject({
+	operation: z.literal('program'),
+	force: name,
+	label: z.string().min(1).max(120),
+	designId: designReference.shape.designId.optional(),
+	program: z
+		.string()
+		.min(1)
+		.max(16000)
+		.describe(
+			'Lua layout program. Global design contains entities, tiles and wires from the optional saved draft. Use loops, math and table helpers; return design. No game, filesystem, network or process access. Output uses the same entity/settings schema and native import validation as create.'
+		)
+});
 const entityPatch = blueprintEntitySchema
 	.partial()
 	.extend({ direction: blueprintEntitySchema.shape.direction.removeDefault().optional() });
@@ -344,7 +357,8 @@ export function reviseBlueprintDesign(
 export const blueprintInputSchema = z.union([
 	blueprintRequestSchema,
 	blueprintReferenceSchema,
-	blueprintRowsSchema
+	blueprintRowsSchema,
+	blueprintProgramSchema
 ]);
 export type BlueprintRequest = z.infer<typeof blueprintRequestSchema>;
 export const blueprintArtifactSchema = z

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import {
 	type BlueprintRequest,
 	blueprintDesignSchema,
+	blueprintProgramSchema,
 	blueprintReferenceSchema,
 	blueprintRequestSchema,
 	blueprintRowsSchema,
@@ -13,6 +14,7 @@ import {
 	expandBlueprintRows,
 	reviseBlueprintDesign
 } from '$lib/blueprints';
+import { runBlueprintProgram } from './blueprint-program';
 import type { ManagedServer } from './db/schema';
 import source from './factory-blueprints/blueprint.lua?raw';
 import { ServerError } from './server-files';
@@ -24,7 +26,8 @@ import { rconScript } from './server-rcon';
 const variants = [
 	...blueprintRequestSchema.options,
 	...blueprintReferenceSchema.options,
-	blueprintRowsSchema
+	blueprintRowsSchema,
+	blueprintProgramSchema
 ].map((variant) => {
 	const { operation, ...fields } = variant.shape;
 	return z.strictObject({
@@ -38,7 +41,10 @@ const contract = z.toJSONSchema(z.union(variants), { io: 'input', reused: 'ref' 
 export const blueprintToolJsonSchema = {
 	type: 'object',
 	properties: {
-		operation: { type: 'string', enum: ['catalog', 'create', 'inspect', 'place', 'check'] },
+		operation: {
+			type: 'string',
+			enum: ['catalog', 'create', 'program', 'inspect', 'place', 'check']
+		},
 		display: { type: 'boolean' },
 		args: { type: 'object' }
 	},
@@ -121,6 +127,19 @@ export async function factoryBlueprint(
 	input: unknown,
 	player?: { name: string; requireAdmin: boolean }
 ) {
+	if (
+		typeof input === 'object' &&
+		input !== null &&
+		'operation' in input &&
+		input.operation === 'program'
+	) {
+		const request = blueprintProgramSchema.parse(input);
+		const base = request.designId
+			? await readBlueprintDraft(server.directory, request.designId, request.force)
+			: blueprintDesignSchema.parse({ force: request.force, label: request.label });
+		const design = await runBlueprintProgram(request.program, { ...base, label: request.label });
+		return factoryBlueprint(server, { ...design, operation: 'create' }, player);
+	}
 	const schema =
 		typeof input === 'object' && input !== null && !Array.isArray(input)
 			? 'designId' in input
