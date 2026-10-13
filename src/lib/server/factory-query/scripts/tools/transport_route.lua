@@ -3,7 +3,7 @@
 local force_lookup=require('scripts.tools.force_lookup')
 local surface_lookup=require('scripts.tools.surface_lookup')
 local M={}
-M.manifest={route_belt={desc='Use the dedicated route_belt tool to design a charted, collision-free belt connection. It can use matching underground belts to cross obstacles and returns saved blueprint sections. Existing endpoints must be same-force transport belts; unrelated buildings and underground connections are preserved. No demolition, landfill, construction or material grants occur.',params={surface='string! exact surface',belt='string! transport-belt prototype',underground='string optional matching underground-belt prototype',x='number! start tile center x',y='number! start tile center y',target_x='number! destination tile center x',target_y='number! destination tile center y',margin='number optional detour margin, default 16, max 64'}}}
+M.manifest={route_belt={desc='Use the dedicated route_belt tool to design a charted, collision-free belt connection. It can use matching underground belts to cross obstacles and returns saved blueprint sections. Existing endpoints must be same-force transport belts; unrelated buildings and underground connections are preserved. No demolition, landfill, construction or material grants occur.',params={surface='string! exact surface',belt='string! transport-belt prototype',underground='string optional matching underground-belt prototype',x='number! start tile center x',y='number! start tile center y',target_x='number! destination tile center x',target_y='number! destination tile center y',target_lane='string optional left, right or both; side loading requires a built straight bus belt with an inline feed',margin='number optional detour margin, default 16, max 64'}}}
 local directions={{dx=0,dy=-1,d=0},{dx=1,dy=0,d=4},{dx=0,dy=1,d=8},{dx=-1,dy=0,d=12}}
 local function before(a,b) return a.f<b.f or (a.f==b.f and a.h<b.h) end
 local function push(heap,node)
@@ -97,6 +97,22 @@ local function route(a)
   if draft and surface.can_place_entity{name=draft.name,position=draft.position,direction=draft.direction,force=force,build_check_type=defines.build_check_type.manual,forced=false} then return draft end
  end
  local start_entity,end_entity=endpoint(a.x,a.y),endpoint(a.target_x,a.target_y)
+ local entry_direction
+ if a.target_lane~=nil then
+  if a.target_lane~='left' and a.target_lane~='right' and a.target_lane~='both' then error('Choose target_lane left, right or both',0) end
+  if not end_entity or end_entity.type~='transport-belt' or planned_entities[end_entity] then error('Lane routing requires a built destination belt',0) end
+  if a.target_lane~='both' then
+   -- A corner maps both source lanes through its turn. Side loading needs an
+   -- existing inline feed to keep the destination straight after construction.
+   local inline=false
+   for _,e in pairs(end_entity.belt_neighbours.inputs) do
+    if e.force==force and e.direction==end_entity.direction then inline=true end
+   end
+   if end_entity.belt_shape~='straight' or not inline then error('Choose a straight bus belt with an existing inline feed for side loading',0) end
+  end
+  entry_direction=(end_entity.direction+(a.target_lane=='left' and 4 or a.target_lane=='right' and 12 or 0))%16
+ end
+ local function entry_allowed(d) return not entry_direction or d==entry_direction end
  local function fits(name,x,y,d)
   if x<left or x>right or y<top or y>bottom or not known(x,y) then return false end
   local key=name..':'..x..':'..y..':'..d
@@ -134,7 +150,7 @@ local function route(a)
  if end_entity then
   local accessible=false
   for _,step in ipairs(directions) do
-   if (step.d+8)%16~=end_entity.direction and fits(a.belt,a.target_x-step.dx,a.target_y-step.dy,step.d) then accessible=true;break end
+   if entry_allowed(step.d) and (step.d+8)%16~=end_entity.direction and fits(a.belt,a.target_x-step.dx,a.target_y-step.dy,step.d) then accessible=true;break end
   end
   if not accessible then return {found=false,surface=surface.name,visited=0,note='The destination is surrounded by existing transport. Inspect its upstream feed or plan the necessary connection edits; routing does not replace those belts.'} end
  end
@@ -182,7 +198,7 @@ local function route(a)
     if #entities>800 then error('Route has too many entities; choose a closer waypoint',0) end
     local function existing(e) return e and not planned_entities[e] and {name=e.type=='entity-ghost' and e.ghost_name or e.name,ghost=e.type=='entity-ghost',unit_number=e.unit_number,position=e.position,direction=e.direction} or nil end
     local function planned_endpoint(e) return e and planned_entities[e] and {name=e.name,position=e.position,direction=e.direction} or nil end
-    return {found=true,force=force.name,surface=surface.name,tick=game.tick,visited=visited,entities=entities,start=existing(start_entity),destination=existing(end_entity),plannedStart=planned_endpoint(start_entity),plannedDestination=planned_endpoint(end_entity),note='Native collision and chart checks passed at this tick. Existing and planned endpoints are retained; saved draft footprints were avoided. Inspect the combined blueprint again before ghost placement; transport flow and power still need verification.'}
+    return {found=true,force=force.name,surface=surface.name,tick=game.tick,visited=visited,entities=entities,start=existing(start_entity),destination=existing(end_entity),plannedStart=planned_endpoint(start_entity),plannedDestination=planned_endpoint(end_entity),destination_lane=a.target_lane,note='Native collision and chart checks passed at this tick. Existing and planned endpoints are retained; saved draft footprints were avoided. Inspect the combined blueprint again before ghost placement; transport flow and power still need verification.'}
    end
    for _,step in ipairs(directions) do
     local may_turn=not node.tunnel and not (node.x==a.x and node.y==a.y and start_entity)
@@ -190,7 +206,7 @@ local function route(a)
      local x,y=node.x+step.dx,node.y+step.dy
      local source_ok=(node.x==a.x and node.y==a.y and start_entity) or fits(node.tunnel and a.underground or a.belt,node.x,node.y,step.d)
      local at_end=x==a.target_x and y==a.target_y
-     local target_ok=(at_end and end_entity and known(x,y) and (step.d+8)%16~=end_entity.direction) or fits(a.belt,x,y,step.d)
+     local target_ok=(at_end and end_entity and known(x,y) and entry_allowed(step.d) and (step.d+8)%16~=end_entity.direction) or fits(a.belt,x,y,step.d)
      -- Prefer readable straight runs over equally short zigzags.
      local turn=node.d~=nil and node.d~=step.d and 0.25 or 0
      if source_ok and target_ok then enqueue(x,y,step.d,false,node.g+1+turn,node) end

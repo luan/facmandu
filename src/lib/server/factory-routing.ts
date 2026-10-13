@@ -21,6 +21,7 @@ export const beltRouteInput = v.object({
 	y: coordinate,
 	target_x: coordinate,
 	target_y: coordinate,
+	target_lane: v.optional(v.picklist(['left', 'right', 'both'])),
 	margin: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(64))),
 	label: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(90))),
 	avoid: v.optional(
@@ -71,6 +72,7 @@ const routeReply = z.discriminatedUnion('found', [
 		destination: endpoint.optional(),
 		plannedStart: endpoint.omit({ unit_number: true, ghost: true }).optional(),
 		plannedDestination: endpoint.omit({ unit_number: true, ghost: true }).optional(),
+		destination_lane: z.enum(['left', 'right', 'both']).optional(),
 		note: z.string()
 	})
 ]);

@@ -117,6 +117,22 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
   assert(not unique[tile] and not blocked[tile],'The route overlaps itself or a building')
   unique[tile]=true
  end
+ world={};blocked={};chart={}
+ existing(0.5,0.5)
+ local bus=existing(10.5,0.5)
+ local feeder=existing(9.5,0.5)
+ bus.belt_shape='straight';bus.belt_neighbours={inputs={feeder}}
+ for _,lane in ipairs{'left','right'} do
+  local selected=route{force='player',surface='nauvis',belt='belt',x=.5,y=.5,target_x=10.5,target_y=.5,target_lane=lane,margin=3}
+  assert(selected.found and selected.destination_lane==lane)
+  local last=selected.entities[#selected.entities]
+  assert(last.position.x==10.5 and last.position.y==(lane=='left' and -.5 or 1.5))
+  assert(last.direction==(lane=='left' and 8 or 0),'The final approach must enter the selected bus lane')
+  assert(world[key(9.5,.5)]==feeder and world[key(10.5,.5)]==bus)
+ end
+ local lane_args={force='player',surface='nauvis',belt='belt',x=.5,y=.5,target_x=10.5,target_y=.5,target_lane='left',margin=3}
+ bus.belt_shape='left';assert(not pcall(route,lane_args),'A corner cannot guarantee side loading')
+ bus.belt_shape='straight';bus.belt_neighbours.inputs={};assert(not pcall(route,lane_args),'An empty belt could curve and change the destination lane')
  planned_args.obstacles[2].position.x=0/0
  assert(not pcall(route,planned_args))
  `)
