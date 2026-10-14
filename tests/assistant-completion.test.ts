@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
 	completionDecision,
 	completionRequest,
+	factoryCompletionEvidenceSchema,
 	missingCommandContent,
 	missingFactoryCheck,
 	missingFactoryDesignAttempt,
@@ -10,6 +11,16 @@ import {
 	placedFactoryRecipeGaps,
 	unfinishedFactoryConnections
 } from '../src/lib/assistant-completion';
+
+test('a bounded partial power scan remains useful evidence without inventing gap counts', () => {
+	const partial = { expectedDesign: 'draft', power: { checked: false } };
+	assert.deepEqual(factoryCompletionEvidenceSchema.parse(partial), partial);
+	assert.equal(
+		factoryCompletionEvidenceSchema.safeParse({ expectedDesign: 'draft', power: { checked: true } })
+			.success,
+		false
+	);
+});
 
 test('a requested command cannot settle as a reference to a hidden earlier draft', () => {
 	const requests = ['Delete concrete ghosts.', 'What Lua command could I run?'];

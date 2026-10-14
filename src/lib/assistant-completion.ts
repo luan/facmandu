@@ -89,18 +89,25 @@ export function unfinishedFactoryConnections(requests: readonly string[], answer
 	);
 }
 
+const powerEvidenceSchema = z.discriminatedUnion('checked', [
+	z.object({
+		checked: z.literal(true),
+		uncovered_total: z.number().nonnegative(),
+		unconnected_total: z.number().nonnegative()
+	}),
+	z.object({
+		checked: z.literal(false),
+		uncovered_total: z.number().nonnegative().optional(),
+		unconnected_total: z.number().nonnegative().optional()
+	})
+]);
+
 export const factoryCompletionEvidenceSchema = z.object({
 	expectedDesign: z.string(),
 	operation: z.literal('place_blueprint').optional(),
 	recipe_machines: z.number().int().nonnegative().optional(),
 	unconfigured_machines: z.number().int().nonnegative().optional(),
-	power: z
-		.object({
-			checked: z.boolean(),
-			uncovered_total: z.number().nonnegative(),
-			unconnected_total: z.number().nonnegative()
-		})
-		.optional()
+	power: powerEvidenceSchema.optional()
 });
 export type FactoryCompletionEvidence = z.infer<typeof factoryCompletionEvidenceSchema>;
 
@@ -115,11 +122,7 @@ export function placedFactoryPowerGaps(
 	});
 	const inspectionSchema = z.object({
 		expectedDesign: z.string(),
-		power: z.object({
-			checked: z.boolean(),
-			uncovered_total: z.number().nonnegative(),
-			unconnected_total: z.number().nonnegative()
-		})
+		power: powerEvidenceSchema
 	});
 	const placement = results
 		.map(({ result }) => placementSchema.safeParse(result))
