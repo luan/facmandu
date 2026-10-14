@@ -12,7 +12,12 @@ export function assistantContextLimit(
 	window: number,
 	maxTokens: number
 ): AssistantContextUsage {
-	let reserve = Math.min(20_000, maxTokens > 0 ? maxTokens : 20_000);
+	// Leave space for large native tool batches and compact long inspection
+	// histories before every model step carries hundreds of thousands of tokens.
+	let reserve = Math.max(
+		Math.min(20_000, maxTokens > 0 ? maxTokens : 20_000),
+		Math.floor(window / 4)
+	);
 	if (window > 0 && reserve * 2 >= window) reserve = Math.max(1024, Math.floor(window / 3));
 	return { model, tokens: null, window, reserve, compactionFailed: false, compacting: false };
 }
