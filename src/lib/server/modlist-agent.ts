@@ -313,7 +313,16 @@ function ModlistAssistant() {
 				response.toolCalls,
 				signal
 			);
-			if (!factoryUnfinished && completion === 'finish') {
+			// Until request intent is typed, skip self-review only for successful
+			// community-source reads. Native designs and world operations retain it.
+			const sourceOnly =
+				response.toolCalls.length > 0 &&
+				response.toolCalls.every(
+					({ tool, isError }) =>
+						!isError &&
+						['search_blueprints', 'fetch_blueprint', 'render_blueprint', 'read_web'].includes(tool)
+				);
+			if (!factoryUnfinished && sourceOnly && completion === 'finish') {
 				writeAnswer(last.text);
 				return;
 			}
