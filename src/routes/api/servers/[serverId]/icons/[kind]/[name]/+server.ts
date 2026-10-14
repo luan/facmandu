@@ -1,5 +1,9 @@
 import { error } from '@sveltejs/kit';
-import { prototypeIcon, validPrototypeIcon } from '$lib/server/prototype-icons';
+import {
+	PrototypeIconsPending,
+	prototypeIcon,
+	validPrototypeIcon
+} from '$lib/server/prototype-icons';
 import { ServerError } from '$lib/server/server-files';
 import { requireServer } from '$lib/server/servers';
 import type { RequestHandler } from './$types';
@@ -11,8 +15,18 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 	if (!validPrototypeIcon(kind, name)) error(400, 'Invalid prototype icon');
 	let png: Buffer | null;
 	try {
-		png = await prototypeIcon(server, kind, name);
+		png = await prototypeIcon(server, kind, name, false);
 	} catch (cause) {
+		if (cause instanceof PrototypeIconsPending)
+			return new Response(null, {
+				status: 202,
+				headers: { 'Retry-After': '2', 'Cache-Control': 'no-store' }
+			});
+		if (cause instanceof ServerError && cause.status === 503)
+			return new Response(cause.message, {
+				status: 503,
+				headers: { 'Retry-After': '30', 'Cache-Control': 'no-store' }
+			});
 		if (cause instanceof ServerError) error(cause.status, cause.message);
 		throw cause;
 	}

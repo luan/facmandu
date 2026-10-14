@@ -12,6 +12,12 @@ const run = promisify(execFile);
 const exportsInProgress = new Map<string, Promise<string>>();
 const failedExports = new Map<string, number>();
 
+export class PrototypeIconsPending extends ServerError {
+	constructor() {
+		super(503, 'Factorio icons are being exported');
+	}
+}
+
 export const prototypeIconKinds = ['technology', 'item', 'fluid', 'recipe', 'entity'] as const;
 export type PrototypeIconKind = (typeof prototypeIconKinds)[number];
 
@@ -114,7 +120,12 @@ async function exportIcons(server: ManagedServer, fingerprint: string): Promise<
 	}
 }
 
-export async function prototypeIcon(server: ManagedServer, kind: PrototypeIconKind, name: string) {
+export async function prototypeIcon(
+	server: ManagedServer,
+	kind: PrototypeIconKind,
+	name: string,
+	waitForExport = true
+) {
 	for (let attempt = 0; attempt < 2; attempt++) {
 		const fingerprint = await prototypeFingerprint(server);
 		const key = `${server.id}:${fingerprint}`;
@@ -130,6 +141,13 @@ export async function prototypeIcon(server: ManagedServer, kind: PrototypeIconKi
 			exportsInProgress.set(key, exportPromise);
 			void exportPromise.finally(() => exportsInProgress.delete(key)).catch(() => {});
 		}
+		if (
+			!waitForExport &&
+			!(await stat(join(server.directory, 'icon-cache', fingerprint, '.complete')).catch(
+				() => null
+			))
+		)
+			throw new PrototypeIconsPending();
 		let root: string;
 		try {
 			root = await exportPromise;

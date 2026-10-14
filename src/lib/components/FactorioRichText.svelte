@@ -18,7 +18,7 @@
 				title={part.caption}
 				style:color={part.color}
 			>
-				<PrototypeIcon prototype={part.prototype} {serverId} />
+				<PrototypeIcon prototype={part.prototype} {serverId} fallbackText={part.caption} />
 			</span>
 		{/if}
 	{/each}
