@@ -41,6 +41,38 @@ test('transient upstream failures show retry progress without retrying credits o
 	}
 });
 
+test('progress follows interleaved reasoning and text without exposing their contents', async () => {
+	const message = fauxAssistantMessage('Public answer');
+	message.content = [
+		{ type: 'thinking', thinking: 'private reasoning' },
+		{ type: 'text', text: 'Public answer' }
+	];
+	const source = createAssistantMessageEventStream();
+	const progress: string[] = [];
+	const stream = assistantStreamProgress(source, (value) => progress.push(value));
+	source.push({ type: 'thinking_start', contentIndex: 0, partial: message });
+	source.push({ type: 'text_start', contentIndex: 1, partial: message });
+	source.push({
+		type: 'thinking_delta',
+		contentIndex: 0,
+		delta: 'private reasoning',
+		partial: message
+	});
+	source.push({
+		type: 'thinking_delta',
+		contentIndex: 0,
+		delta: 'more private reasoning',
+		partial: message
+	});
+	source.push({ type: 'text_delta', contentIndex: 1, delta: 'Public answer', partial: message });
+	source.push({ type: 'done', reason: 'stop', message });
+	let forwarded = 0;
+	for await (const _event of stream) forwarded++;
+	assert.equal(forwarded, 6);
+	assert.deepEqual(progress, ['Reasoning…', 'Responding…', 'Reasoning…', 'Responding…']);
+	assert.equal(await stream.result(), message);
+});
+
 test('decode declared structured fields while retaining strict validation and literal text', () => {
 	const value = decodeToolArguments(
 		{ queries: JSON.stringify([{ ...query, args: JSON.stringify(query.args) }]), prompt: '[1,2]' },

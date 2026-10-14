@@ -13,8 +13,9 @@ export function assistantStreamProgress(
 		let previous = '';
 		for await (const event of { [Symbol.asyncIterator]: iterator }) {
 			let progress = '';
-			if (event.type === 'thinking_start') progress = 'Reasoning…';
-			if (event.type === 'text_start') progress = 'Responding…';
+			if (event.type === 'thinking_start' || event.type === 'thinking_delta')
+				progress = 'Reasoning…';
+			if (event.type === 'text_start' || event.type === 'text_delta') progress = 'Responding…';
 			if (event.type === 'error' && isRetryableAssistantError(event.error))
 				progress = 'Retrying the model connection…';
 			if (event.type === 'toolcall_start' || event.type === 'toolcall_delta') {
