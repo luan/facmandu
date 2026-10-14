@@ -168,25 +168,54 @@ export async function loadAssistantModel(
 	userId: string,
 	modelId: string | undefined
 ): Promise<LoadedAssistantModel> {
-	const catalog = await assistantModelCatalog(userId);
-	const entry = modelId ? catalog.find((model) => model.id === modelId) : catalog[0];
-	if (!entry) throw new Error('Choose an available model in the assistant');
-	const source = (await connectedSources(userId)).find((item) => item.provider === entry.provider);
-	if (!source) throw new Error('Choose an available model in the assistant');
-	const bareId = source.namespaced ? entry.id.slice(source.provider.length + 1) : entry.id;
-	const model = (await source.models(userId)).find((item) => item.id === bareId);
-	if (!model) throw new Error('Choose an available model in the assistant');
-	return {
-		entry,
-		provider: source.providerInstance,
-		model: model as unknown as Model<Api>,
-		accessToken: () => source.accessToken(userId),
-		requestAuth: () =>
-			source.requestAuth
-				? source.requestAuth(userId)
-				: source.accessToken(userId).then((apiKey) => ({ apiKey })),
-		codexTransport: source.codexTransport
-	};
+	const connected = await connectedSources(userId);
+	if (!connected.length) throw new Error('Add a provider in Account settings to use the assistant');
+	let firstError: unknown;
+	// A selected model must not wait on unrelated providers or fetch its catalog twice.
+	for (const source of connected) {
+		if (
+			modelId &&
+			(source.namespaced ? !modelId.startsWith(`${source.provider}:`) : modelId.includes(':'))
+		)
+			continue;
+		let models: CatalogModel[];
+		try {
+			models = await source.models(userId);
+		} catch (cause) {
+			if (modelId) throw cause;
+			firstError ??= cause;
+			continue;
+		}
+		const bareId =
+			modelId && (source.namespaced ? modelId.slice(source.provider.length + 1) : modelId);
+		const model = bareId ? models.find((item) => item.id === bareId) : models[0];
+		if (!model) continue;
+		return {
+			entry: {
+				id: source.namespaced ? `${source.provider}:${model.id}` : model.id,
+				name: source.namespaced ? `${source.label} · ${model.name}` : model.name,
+				efforts: model.efforts,
+				defaultEffort: model.defaultEffort,
+				effortLabels: model.effortLabels,
+				provider: source.provider
+			},
+			provider: source.providerInstance,
+			model: model as unknown as Model<Api>,
+			accessToken: () => source.accessToken(userId),
+			requestAuth: () =>
+				source.requestAuth
+					? source.requestAuth(userId)
+					: source.accessToken(userId).then((apiKey) => ({ apiKey })),
+			codexTransport: source.codexTransport
+		};
+	}
+	throw new Error(
+		modelId
+			? 'Choose an available model in the assistant'
+			: firstError instanceof Error
+				? firstError.message
+				: 'No assistant models are available'
+	);
 }
 
 export async function assistantConnected(userId: string): Promise<boolean> {
