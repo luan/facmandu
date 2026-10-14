@@ -854,7 +854,14 @@ local function blueprint(request,territories)
    if ghost~=existing then blocked[#blocked+1]={name=e.name,position=position,reason='A conflicting construction ghost occupies this position'};break end
   end
  end
- if request.operation=='inspect' then return {ready=#blocked==0,blocked=blocked,expectedTick=game.tick,expectedDesign=request.design,surface=surface.name,position=request.position,entities=#entities,retained_built=retained_built,retained_ghosts=retained_ghosts,tiles=#tiles,tiles_pending=#pending_tiles,cost=cost,construction=construction_report(force,surface,entities,request.position,cost),power=power_report(force,surface,entities,request.position,boxes)} end
+ local recipe_machines,unconfigured_machines=0,0
+ for i,e in ipairs(entities) do
+  if prototypes.entity[e.name].type=='assembling-machine' then
+   recipe_machines=recipe_machines+1
+   if not e.recipe and not (retained[i] and retained[i].get_recipe()) then unconfigured_machines=unconfigured_machines+1 end
+  end
+ end
+ if request.operation=='inspect' then return {ready=#blocked==0,blocked=blocked,expectedTick=game.tick,expectedDesign=request.design,surface=surface.name,position=request.position,entities=#entities,retained_built=retained_built,retained_ghosts=retained_ghosts,recipe_machines=recipe_machines,unconfigured_machines=unconfigured_machines,tiles=#tiles,tiles_pending=#pending_tiles,cost=cost,construction=construction_report(force,surface,entities,request.position,cost),power=power_report(force,surface,entities,request.position,boxes)} end
  if #blocked>0 then error('Placement is blocked at '..blocked[1].name..': '..blocked[1].reason..'; inspect the site again',0) end
  -- Create ghosts at exact inspected coordinates; build_blueprint centers the layout around its cursor.
  local ghosts={}
@@ -927,5 +934,5 @@ local function blueprint(request,territories)
   end
  end
  local requested=#entities-retained_built-retained_ghosts
- return {operation='place_blueprint',expectedDesign=request.design,surface=surface.name,position=request.position,requested=requested,placed=placed,retained_built=retained_built,retained_ghosts=retained_ghosts,requested_tiles=#pending_tiles,placed_tiles=placed_tiles,complete=placed==requested and placed_tiles==#pending_tiles and not failure,error=failure,cost=cost,note=surface.platform and 'Construction requests use real platform hub inventory. Matching entities and settings were retained; no structures were removed.' or 'Construction ghosts require real items and player or robot construction. Matching entities and settings were retained; no structures were removed.'}
+ return {operation='place_blueprint',expectedDesign=request.design,surface=surface.name,position=request.position,requested=requested,placed=placed,retained_built=retained_built,retained_ghosts=retained_ghosts,recipe_machines=recipe_machines,unconfigured_machines=unconfigured_machines,requested_tiles=#pending_tiles,placed_tiles=placed_tiles,complete=placed==requested and placed_tiles==#pending_tiles and not failure,error=failure,cost=cost,note=surface.platform and 'Construction requests use real platform hub inventory. Matching entities and settings were retained; no structures were removed.' or 'Construction ghosts require real items and player or robot construction. Matching entities and settings were retained; no structures were removed.'}
 end

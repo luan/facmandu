@@ -77,6 +77,7 @@ const edits = z
 	.array(
 		z.discriminatedUnion('kind', [
 			editSnapshot.extend({ kind: z.literal('rotate'), to: direction }),
+			editSnapshot.extend({ kind: z.literal('set_recipe'), to: name }),
 			editSnapshot.extend({ kind: z.literal('upgrade'), to: name }),
 			editSnapshot.extend({ kind: z.literal('cancel_upgrade') }),
 			editSnapshot.extend({ kind: z.literal('deconstruct') }),
@@ -232,7 +233,7 @@ export const factoryActionManifest = {
 	task_update:
 		'Update a shared force task using id, title, description, status and completed. Copy expected title, description, status and completed from a fresh task_list read; concurrent edits are rejected. Private player tasks are inaccessible.',
 	entities_edit:
-		'Edit up to 16 exact freshly inspected targets: rotate, upgrade, cancel_upgrade, deconstruct, cancel_deconstruction, or cancel_ghost. Copy entities_inspect snapshots and expectedTick. For upgrade, set to=nextUpgrade: native robots consume real items and preserve the existing entity until replacement, with its existing quality. Missing stock does not require demolition. Only unlocked native next upgrades are accepted; inspect and include both pairedUnderground ends together. Rechecks every target before any write. Deconstruction queues normal robot removal and material recovery; use upgrade for tier changes. Outcomes are per-target; an upgrade_queued result is not a completed upgrade.',
+		'Edit up to 16 exact freshly inspected targets: rotate, set_recipe, upgrade, cancel_upgrade, deconstruct, cancel_deconstruction, or cancel_ghost. Copy entities_inspect snapshots and expectedTick. set_recipe fills an unset assembling-machine or its ghost with an unlocked compatible surface recipe; to is its exact recipe name. Built inventories and fluid storages must be empty; configured recipes are retained. For upgrade, set to=nextUpgrade: native robots consume real items and preserve the existing entity until replacement, with its existing quality. Missing stock does not require demolition. Only unlocked native next upgrades are accepted; inspect and include both pairedUnderground ends together. Rechecks every target before any write. Deconstruction queues normal robot removal and material recovery; use upgrade for tier changes. Outcomes are per-target; an upgrade_queued result is not a completed upgrade.',
 	entity_rotate:
 		'Rotate one stationary player-built factory entity to cardinal direction 0, 4, 8 or 12 using native rotation. Supply exact entity_inspect target, expectedDirection and expectedTick. Inspect again afterward to verify orientation and inserter pickup/drop. Native rotation enforces game constraints; cannot rotate ghosts or vehicles.',
 	ghost_cancel:
@@ -461,7 +462,14 @@ async function execute(
 						z.object({
 							name,
 							unitNumber: entity.shape.unitNumber,
-							state: z.enum(['rotated', 'marked', 'upgrade_queued', 'cancelled', 'refused']),
+							state: z.enum([
+								'rotated',
+								'recipe_set',
+								'marked',
+								'upgrade_queued',
+								'cancelled',
+								'refused'
+							]),
 							error: z.string().optional()
 						})
 					)

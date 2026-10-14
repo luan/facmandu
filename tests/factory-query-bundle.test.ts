@@ -222,7 +222,7 @@ test('machine snapshots include actual attached loaders and their upstream belt 
  prototypes={entity={plant={},loader={},belt={}},item={},fluid={}}
  local force={name='player',is_chunk_charted=function() return true end}
  local inv={valid=true,get_contents=function() return {} end}
- local plant={valid=true,name='plant',type='assembling-machine',force=force,unit_number=1,position={x=.5,y=.5},bounding_box={left_top={x=-1,y=-1},right_bottom={x=2,y=2}},status=1,active=true,crafting_progress=0,crafting_speed=1,energy=100,get_recipe=function() return {name='glass',ingredients={},products={}} end,is_crafting=function() return true end,is_connected_to_electric_network=function() return true end,get_inventory=function() return inv end,get_output_inventory=function() return inv end,get_module_inventory=function() return inv end,get_fluid_contents=function() return {} end}
+ local plant={valid=true,name='plant',type='assembling-machine',prototype={electric_energy_source_prototype={}},get_fuel_inventory=function() return nil end,force=force,unit_number=1,position={x=.5,y=.5},bounding_box={left_top={x=-1,y=-1},right_bottom={x=2,y=2}},status=1,active=true,crafting_progress=0,crafting_speed=1,energy=100,get_recipe=function() return {name='glass',ingredients={},products={}} end,is_crafting=function() return true end,is_connected_to_electric_network=function() return true end,get_inventory=function() return inv end,get_output_inventory=function() return inv end,get_module_inventory=function() return inv end,get_fluid_contents=function() return {} end}
  local belt={valid=true,name='belt',type='transport-belt',force=force,unit_number=3,position={x=.5,y=-3.5},direction=8,belt_neighbours={inputs={},outputs={}}}
  local loader={valid=true,name='loader',type='loader-1x1',force=force,unit_number=2,position={x=.5,y=-2.5},direction=8,status=1,loader_type='input',loader_container=plant,prototype={belt_speed=.03125},bounding_box={left_top={x=0,y=-3},right_bottom={x=1,y=-2}},belt_neighbours={inputs={belt},outputs={}},get_wire_connectors=function() return {} end,get_item_count=function() return 2 end,get_max_transport_line_index=function() return 2 end,get_transport_line=function() return {get_item_count=function() return 1 end,get_contents=function() return {{name='sand',count=1}} end} end}
  local scans=0
@@ -242,7 +242,10 @@ test('machine snapshots include actual attached loaders and their upstream belt 
  assert(transport.blueprint_settings.filters[1].name=='sand')
  assert(#transport.belt_trace.nodes==2 and transport.belt_trace.nodes[2].unit_number==3 and transport.belt_trace.direction=='upstream')
  local simple=inspect{force='player',surface='nauvis',x=.5,y=.5}
- assert(simple.connections==nil and scans==1)
+ assert(simple.connections==nil and scans==1 and simple.energy_source_type=='electric')
+ plant.prototype={burner_prototype={}};plant.is_connected_to_electric_network=function() return false end
+ local burner=inspect{force='player',surface='nauvis',x=.5,y=.5}
+ assert(burner.energy_source_type=='burner' and burner.connected_to_power_source==false)
  loader.loader_container={};assert(inspect{force='player',surface='nauvis',x=.5,y=.5,connections=true}.connections.total==0,'Proximity is not a machine connection')
  assert(not pcall(inspect,{force='enemy',surface='nauvis',x=.5,y=.5}))
  `)

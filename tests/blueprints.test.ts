@@ -588,7 +588,7 @@ test('blueprint extensions retain exact built entities and configured ghosts wit
  local force={name='player',recipes={{enabled=true,products={{type='item',name='building'}}}},logistic_networks={},is_chunk_charted=function() return true end}
  local p={type='transport-belt',tile_width=1,tile_height=1,items_to_place_this={{name='building'}},has_flag=function() return false end}
  local inserter={type='inserter',tile_width=1,tile_height=1,items_to_place_this={{name='building'}},has_flag=function() return false end,inserter_pickup_position={x=0,y=-1},inserter_drop_position={x=0,y=1}}
- local box={type='container',tile_width=1,tile_height=1,items_to_place_this={{name='building'}},has_flag=function() return false end}
+ local box={type='assembling-machine',tile_width=1,tile_height=1,items_to_place_this={{name='building'}},has_flag=function() return false end}
  prototypes={entity={belt=p,inserter=inserter,box=box},item={iron={}}}
  local built={valid=true,name='belt',type='transport-belt',force=force,position={x=.5,y=.5},direction=4}
  local ghost={valid=true,name='entity-ghost',type='entity-ghost',ghost_name='inserter',force=force,position={x=2.5,y=.5},direction=0,bounding_box={{2,0},{3,1}}}
@@ -610,7 +610,7 @@ test('blueprint extensions retain exact built entities and configured ghosts wit
  end
  surface.create_entity=function(q)
   created=created+1
-  local e={valid=true,name='entity-ghost',type='entity-ghost',ghost_name=q.inner_name,position=q.position,force=q.force,direction=q.direction}
+  local e={valid=true,name='entity-ghost',type='entity-ghost',ghost_name=q.inner_name,position=q.position,force=q.force,direction=q.direction,get_recipe=function() return nil end}
   occupants[#occupants+1]=e;return e
  end
  game={tick=100,forces={player=force},surfaces={nauvis=surface},create_inventory=function()
@@ -627,7 +627,7 @@ test('blueprint extensions retain exact built entities and configured ghosts wit
  }}
  local inspection=blueprint(request);assert(inspection.ready and inspection.retained_built==1 and inspection.retained_ghosts==1 and created==0)
  request.operation='place';request.expectedTick=100;request.expectedDesign='extension'
- local placed=blueprint(request);assert(placed.complete and placed.requested==1 and placed.placed==1 and created==1)
+ local placed=blueprint(request);assert(placed.complete and placed.requested==1 and placed.placed==1 and placed.recipe_machines==1 and placed.unconfigured_machines==1 and created==1)
  local replay=blueprint(request);assert(replay.complete and replay.requested==0 and replay.placed==0 and replay.retained_ghosts==2 and created==1)
  built.direction=0;assert(not pcall(blueprint,request) and created==1);built.direction=4
  filters={};assert(not pcall(blueprint,request) and created==1);filters={{index=1,name='iron'}}

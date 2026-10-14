@@ -383,9 +383,31 @@ local function entity_edits(request)
    for _,key in ipairs({'direction','ghost','recipe','deconstructing'}) do if snapshot[key]~=t[key] then fail('Entity state changed; inspect again') end end
    if snapshot.upgradingTo~=(t.upgradingTo or '') or snapshot.upgradeQuality~=(t.upgradeQuality or '') then fail('Upgrade order changed; inspect again') end
    if t.kind=='cancel_ghost' and not snapshot.ghost then fail('Only construction ghosts may be cancelled') end
-   if t.kind~='cancel_ghost' and snapshot.ghost then fail('This operation requires a built entity') end
+   if t.kind~='cancel_ghost' and t.kind~='set_recipe' and snapshot.ghost then fail('This operation requires a built entity') end
    if not snapshot.ghost then
     if not stationary_factory_entity(e) then fail('Select stationary player-built factory entities') end
+   end
+   if t.kind=='set_recipe' then
+    -- Filling unset machines has no old recipe materials to return. Changing a
+    -- configured recipe needs explicit preservation of Factorio's returned items.
+    local p=snapshot.ghost and e.ghost_prototype or prototypes.entity[e.name]
+    if p.type~='assembling-machine' or snapshot.recipe~='' or snapshot.deconstructing or snapshot.upgradingTo~='' then fail('Choose an unset assembling machine or ghost without removal or upgrade orders') end
+    local recipe=game.forces[request.force].recipes[t.to]
+    if not recipe or not recipe.enabled then fail('Recipe is not unlocked') end
+    local compatible=false
+    for _,category in pairs(recipe.categories) do if p.crafting_categories[category] then compatible=true end end
+    if not compatible then fail('Recipe is not compatible with this machine') end
+    local surface=game.surfaces[request.surface]
+    for _,condition in pairs(recipe.prototype.surface_conditions or {}) do
+     local value=surface.get_property(condition.property)
+     if (condition.min and value<condition.min) or (condition.max and value>condition.max) then fail('Recipe is unavailable on this surface') end
+    end
+    if not snapshot.ghost then
+     if next(e.get_fluid_contents()) then fail('Machine fluid storages must be empty before assigning a recipe') end
+     for _,inv in pairs({e.get_inventory(defines.inventory.crafter_input),e.get_output_inventory(),e.get_module_inventory()}) do
+      if inv and not inv.is_empty() then fail('Machine inventories must be empty before assigning a recipe') end
+     end
+    end
    end
    if t.kind=='upgrade' then
     if snapshot.nextUpgrade=='' or t.to~=snapshot.nextUpgrade then fail('Choose the inspected native nextUpgrade target') end
@@ -415,6 +437,9 @@ local function entity_edits(request)
   local player=request.player and game.get_player(request.player.name) or nil
   local ok,message=pcall(function()
    if t.kind=='cancel_ghost' then if not e.destroy{raise_destroy=true} then fail('Factorio refused ghost cancellation') end
+   elseif t.kind=='set_recipe' then
+    e.set_recipe(t.to)
+    local recipe=e.get_recipe();if not recipe or recipe.name~=t.to then fail('Factorio refused the recipe') end
    elseif t.kind=='deconstruct' then if not e.order_deconstruction(request.force,player) then fail('Factorio refused deconstruction') end
    elseif t.kind=='cancel_deconstruction' then e.cancel_deconstruction(request.force,player);if e.to_be_deconstructed() then fail('Deconstruction remains marked') end
    elseif t.kind=='upgrade' then
@@ -431,7 +456,7 @@ local function entity_edits(request)
     end
    end
   end)
-  local state=t.kind=='rotate' and 'rotated' or t.kind=='deconstruct' and 'marked' or t.kind=='upgrade' and 'upgrade_queued' or 'cancelled'
+  local state=t.kind=='rotate' and 'rotated' or t.kind=='set_recipe' and 'recipe_set' or t.kind=='deconstruct' and 'marked' or t.kind=='upgrade' and 'upgrade_queued' or 'cancelled'
   outcomes[#outcomes+1]={name=t.name,unitNumber=t.unitNumber,state=ok and state or 'refused',error=not ok and tostring(message) or nil}
  end
  return {operation=request.operation,tick=game.tick,outcomes=outcomes}

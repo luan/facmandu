@@ -7,6 +7,7 @@ import {
 	missingFactoryCheck,
 	missingFactoryDesignAttempt,
 	placedFactoryPowerGaps,
+	placedFactoryRecipeGaps,
 	unfinishedFactoryConnections
 } from '../src/lib/assistant-completion';
 
@@ -20,6 +21,41 @@ test('a requested command cannot settle as a reference to a hidden earlier draft
 	assert.equal(
 		missingCommandContent(['Design a blueprint.'], 'The blueprint above is ready.'),
 		false
+	);
+});
+
+test('production cores need recipes but explicitly empty machines and future bays may remain unset', () => {
+	const placed = (machines: number, unset: number) => [
+		{
+			result: {
+				operation: 'place_blueprint',
+				expectedDesign: 'draft',
+				recipe_machines: machines,
+				unconfigured_machines: unset
+			}
+		}
+	];
+	assert.equal(placedFactoryRecipeGaps(['we need more glass on the bus'], placed(4, 4)), 4);
+	assert.equal(placedFactoryRecipeGaps(['Build a glass production line.'], placed(4, 4)), 4);
+	assert.equal(placedFactoryRecipeGaps(['we need more glass on the bus'], placed(4, 0)), 0);
+	assert.equal(
+		placedFactoryRecipeGaps(
+			['we need more glass on the bus'],
+			[
+				...placed(4, 4),
+				{ result: { expectedDesign: 'draft', recipe_machines: 4, unconfigured_machines: 0 } }
+			]
+		),
+		0
+	);
+	assert.equal(
+		placedFactoryRecipeGaps(['Build a production mall with future bays.'], placed(8, 3)),
+		0
+	);
+	assert.equal(placedFactoryRecipeGaps(['Place four empty assembler ghosts.'], placed(4, 4)), 0);
+	assert.equal(
+		placedFactoryRecipeGaps(['we need more glass on the bus', 'Stop.'], placed(4, 4)),
+		0
 	);
 });
 

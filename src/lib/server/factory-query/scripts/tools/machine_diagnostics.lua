@@ -41,6 +41,8 @@ local function inspect_machine(a)
   if a.connections~=nil and type(a.connections)~='boolean' then error('connections must be boolean',0) end
   local entity, miss, surface, force = target.find(a)
   if not entity then return miss end
+  local p=entity.prototype
+  local energy_source=p.electric_energy_source_prototype and 'electric' or p.burner_prototype and 'burner' or p.heat_energy_source_prototype and 'heat' or p.fluid_energy_source_prototype and 'fluid' or p.void_energy_source_prototype and 'void' or 'unknown'
   if entity.type=='mining-drill' then
     local mined=entity.mining_target
     local p=mined and mined.valid and force.is_chunk_charted(surface,{x=math.floor(mined.position.x/32),y=math.floor(mined.position.y/32)}) and mined.prototype
@@ -49,6 +51,7 @@ local function inspect_machine(a)
       unit_number=entity.unit_number,x=entity.position.x,y=entity.position.y,direction=entity.direction,
       status=status_name(entity.status),active=entity.active,energy_j=bounded.round(entity.energy,0),
       electric_network_id=entity.electric_network_id,connected_to_power_source=entity.is_connected_to_electric_network(),
+      energy_source_type=energy_source,
       modules=items(entity.get_module_inventory()),fuel=items(entity.get_fuel_inventory()),
       mining_area=entity.mining_area,base_mining_speed=entity.prototype.mining_speed,
       force_mining_productivity_bonus=force.mining_drill_productivity_bonus,
@@ -95,9 +98,11 @@ local function inspect_machine(a)
     energy_j = bounded.round(entity.energy, 0),
     electric_network_id = entity.electric_network_id,
     connected_to_power_source = entity.is_connected_to_electric_network(),
+    energy_source_type = energy_source,
     input = items(entity.get_inventory(INPUT[entity.type])),
     output = items(entity.get_output_inventory()),
     modules = items(entity.get_module_inventory()),
+    fuel = items(entity.get_fuel_inventory()),
   }
   if recipe then
     row.recipe = { name = recipe.name, ingredients = recipe.ingredients, products = recipe.products }

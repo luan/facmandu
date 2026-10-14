@@ -416,3 +416,48 @@ test('native upgrade orders preserve entities and quality, reject locked tiers a
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 	lua.lua_close(state);
 });
+
+test('recipe assignment fills only freshly inspected empty compatible machines and ghosts', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const source = readFileSync('src/lib/server/factory-actions/action.lua', 'utf8');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`${source}
+ local recipe={name='glass',enabled=true,categories={'smelting'},prototype={surface_conditions={}}}
+ local force={name='player',recipes={glass=recipe}}
+ local p={type='assembling-machine',crafting_categories={smelting=true},items_to_place_this={{name='furnace'}}}
+ prototypes={entity={furnace=p}}
+ defines={inventory={crafter_input=1}}
+ local current=nil;local writes=0;local empty=true
+ local inv={is_empty=function() return empty end}
+ local e={valid=true,name='entity-ghost',ghost_name='furnace',ghost_type='assembling-machine',ghost_prototype=p,type='entity-ghost',unit_number=12,force=force,position={x=.5,y=.5},direction=0}
+ e.to_be_deconstructed=function() return false end
+ e.get_upgrade_target=function() return nil end
+ e.get_recipe=function() return current end
+ e.set_recipe=function(name) assert(name=='glass');writes=writes+1;current=recipe end
+ e.get_inventory=function() return inv end;e.get_output_inventory=function() return nil end;e.get_module_inventory=function() return nil end
+ e.get_fluid_contents=function() return {} end
+ local surface={find_entities_filtered=function() return {e} end,get_property=function() return 100 end}
+ game={tick=120,forces={player=force},surfaces={nauvis=surface}}
+ local query={operation='entities_inspect',force='player',surface='nauvis',targets={{unitNumber=12,name='furnace',position=e.position}}}
+ local snapshot=action(query).entities[1];snapshot.kind='set_recipe';snapshot.to='glass'
+ local request={operation='entities_edit',force='player',surface='nauvis',expectedTick=120,edits={snapshot}}
+ recipe.enabled=false;assert(not pcall(action,request) and writes==0);recipe.enabled=true
+ recipe.categories={'crafting'};assert(not pcall(action,request) and writes==0);recipe.categories={'smelting'}
+ recipe.prototype.surface_conditions={{property='pressure',min=200}};assert(not pcall(action,request) and writes==0);recipe.prototype.surface_conditions={}
+ request.expectedTick=121;assert(not pcall(action,request) and writes==0);request.expectedTick=120
+ e.force={name='other'};assert(not pcall(action,request) and writes==0);e.force=force
+ assert(action(request).outcomes[1].state=='recipe_set' and writes==1 and current==recipe)
+ assert(not pcall(action,request) and writes==1,'A stale snapshot must not overwrite a configured recipe')
+ local configured=action(query).entities[1];configured.kind='set_recipe';configured.to='glass';request.edits={configured}
+ assert(not pcall(action,request) and writes==1,'Even a fresh configured recipe is preserved')
+ current=nil;e.type='assembling-machine';e.name='furnace';empty=false
+ local built=action(query).entities[1];built.kind='set_recipe';built.to='glass';request.edits={built}
+ assert(not pcall(action,request) and writes==1,'Existing items must never be discarded')
+ empty=true;assert(action(request).outcomes[1].state=='recipe_set' and writes==2)
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+	lua.lua_close(state);
+});

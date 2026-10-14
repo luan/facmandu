@@ -24,6 +24,7 @@ import {
 	missingFactoryCheck,
 	missingFactoryDesignAttempt,
 	placedFactoryPowerGaps,
+	placedFactoryRecipeGaps,
 	unfinishedFactoryConnections
 } from '$lib/assistant-completion';
 import {
@@ -318,12 +319,13 @@ function ModlistAssistant() {
 					.get();
 				const results = z.array(factoryResultSchema).parse(JSON.parse(turn?.results ?? '[]'));
 				const gaps = placedFactoryPowerGaps(messages, results);
-				if (gaps) {
+				const recipes = placedFactoryRecipeGaps(messages, results);
+				if (gaps || recipes) {
 					append({
 						kind: 'signal',
-						type: 'factory-power-required',
+						type: 'factory-layout-required',
 						attributes: { requestId },
-						body: `The placed expansion's native inspection reports ${gaps} consumer power-connection gaps. Ghost placement is not a connected production layout. Retain matching built entities and ghosts, repair the power route in this saved layout, and inspect it again before settling. Available stock and robot coverage are not required. This grants no new authorization.`
+						body: `The placed expansion's native results report ${gaps} consumer power-connection gaps and ${recipes} recipe-capable machines with no recipe. Ghost placement is not a connected production layout. Retain completed work and repair the saved layout. For an unset assembling machine or its ghost, use fresh entities_inspect snapshots and factory_action entities_edit set_recipe with the unlocked compatible recipe. Configured machines and their items stay protected. Encode that recipe in the saved draft too. Inspect and reapply the repaired layout: matching entities are retained and only missing ghosts are created. Available stock and robot coverage are not required. This grants no new authorization.`
 					});
 					return;
 				}
@@ -391,7 +393,7 @@ function ModlistAssistant() {
 				kind: 'signal',
 				type: 'completion-recovery',
 				attributes: { requestId: requestId ?? '' },
-				body: 'The requested expansion or other authorized work is unfinished. This run is still active; continue using the recorded results, without repeating completed writes or requesting the same authorization again. Existing product buffers or a current surplus do not fulfill a request for more production. After resolving and planning an expansion, attempt its actual layout and connections; a candidate bus search alone cannot rule out a safe join. This reminder grants no new permission. Finish the connected design or authorized ghost layout and fix recoverable tool errors. If an actual external blocker prevents progress, state that concrete blocker. Do not promise background work after ending your response.'
+				body: 'The requested expansion or other authorized work is unfinished. This run is still active; continue using the recorded results, without repeating completed writes or requesting the same authorization again. Stored stock alone does not fulfill increased ongoing delivery. Repairing a proven bottleneck to use existing capacity is valid unless the user requires a new production source. After resolving and planning an expansion, attempt its actual layout and connections; a candidate bus search alone cannot rule out a safe join. This reminder grants no new permission. Finish the connected design or authorized ghost layout and fix recoverable tool errors. If an actual external blocker prevents progress, state that concrete blocker. Do not promise background work after ending your response.'
 			});
 			return;
 		}

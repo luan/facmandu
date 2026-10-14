@@ -44,10 +44,15 @@ export function missingFactoryCheck(
 }
 
 function requestedExpansion(requests: readonly string[]): boolean {
-	const expansion = requests.some((request) =>
-		/^\s*(?:(?:i|we)\s+(?:need|want)\s+(?:more\s+)?\S+|(?:can you\s+)?(?:please\s+)?(?:build|construct|place|design and (?:build|construct|place))\b)/i.test(
-			request
-		)
+	const expansion = requests.some(
+		(request) =>
+			/^\s*(?:i|we)\s+(?:need|want)\s+(?:more\s+)?\S+/i.test(request) ||
+			(/^\s*(?:can you\s+)?(?:please\s+)?(?:build|construct|place|design and (?:build|construct|place))\b/i.test(
+				request
+			) &&
+				/\b(?:factory|production|produce|expansion|module|facility|line|science|glass)\b/i.test(
+					request
+				))
 	);
 	return (
 		expansion &&
@@ -112,6 +117,40 @@ export function placedFactoryPowerGaps(
 		);
 	return inspection?.success && inspection.data.power.checked
 		? inspection.data.power.uncovered_total + inspection.data.power.unconnected_total
+		: 0;
+}
+
+export function placedFactoryRecipeGaps(
+	requests: readonly string[],
+	results: readonly { result: unknown }[]
+): number {
+	if (
+		!requestedExpansion(requests) ||
+		requests.some((request) =>
+			/\b(?:unconfigured|placeholder|empty (?:machines?|assemblers?|furnaces?|ghosts?)|without (?:any )?recipes?)\b/i.test(
+				request
+			)
+		)
+	)
+		return 0;
+	const schema = z.object({
+		operation: z.literal('place_blueprint'),
+		expectedDesign: z.string(),
+		recipe_machines: z.number().int().nonnegative(),
+		unconfigured_machines: z.number().int().nonnegative()
+	});
+	const placed = results
+		.map(({ result }) => schema.safeParse(result))
+		.findLast((value) => value.success);
+	if (!placed?.success) return 0;
+	const inspected = results
+		.map(({ result }) => schema.omit({ operation: true }).safeParse(result))
+		.findLast((value) => value.success && value.data.expectedDesign === placed.data.expectedDesign);
+	const current = inspected?.success ? inspected.data : placed.data;
+	// Mixed layouts can deliberately contain future bays; a production core with
+	// every recipe-capable machine unset cannot fulfill a production request.
+	return current.recipe_machines > 0 && current.unconfigured_machines === current.recipe_machines
+		? current.recipe_machines
 		: 0;
 }
 

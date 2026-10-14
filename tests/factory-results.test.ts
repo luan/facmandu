@@ -412,6 +412,16 @@ test('research actions show the resulting queue and inspect machines show diagno
 	});
 	assert.equal(machine.cards[0]?.tone, 'warning');
 	assert.equal(machine.cards[0]?.gps, '[gps=12,32,nauvis]');
+	const burner = view('inspect_machine', {
+		found: true,
+		name: 'steel-furnace',
+		energy_source_type: 'burner',
+		connected_to_power_source: false,
+		status: 'full_output'
+	});
+	assert.equal(burner.cards[0]?.tone, 'muted');
+	assert.ok(burner.cards[0]?.notes?.includes('Energy source: Burner'));
+	assert.ok(!burner.cards[0]?.notes?.includes('Not connected to power'));
 	assert.deepEqual(machine.tables[0]?.rows[0], ['Iron plate', '8']);
 });
 

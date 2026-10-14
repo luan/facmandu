@@ -578,11 +578,15 @@ function diagnosticView(view: ResultView, tool: string, data: Data) {
 		humanName(data.name) ||
 		humanName(data.station) ||
 		(data.train_id ? `Train ${data.train_id}` : view.title);
+	const noElectricPower =
+		data.connected_to_power_source === false &&
+		(!data.energy_source_type || data.energy_source_type === 'electric');
 	const notes = [
 		data.recipe ? `Recipe: ${humanName(record(data.recipe).name)}` : '',
 		data.destination ? `Destination: ${humanName(data.destination)}` : '',
 		data.station ? `Station: ${humanName(data.station)}` : '',
-		data.connected_to_power_source === false ? 'Not connected to power' : '',
+		noElectricPower ? 'Not connected to power' : '',
+		data.energy_source_type ? `Energy source: ${humanName(data.energy_source_type)}` : '',
 		data.has_path === false ? 'No path' : '',
 		data.supports_requests === false ? 'This entity does not support logistic requests' : ''
 	].filter(Boolean);
@@ -617,8 +621,7 @@ function diagnosticView(view: ResultView, tool: string, data: Data) {
 					: data.manual === false
 						? 'Automatic'
 						: string(data.status || data.state) || undefined,
-			tone:
-				data.connected_to_power_source === false || data.has_path === false ? 'warning' : 'muted',
+			tone: noElectricPower || data.has_path === false ? 'warning' : 'muted',
 			metrics,
 			notes,
 			gps:
@@ -627,7 +630,7 @@ function diagnosticView(view: ResultView, tool: string, data: Data) {
 					: undefined
 		}
 	];
-	for (const key of ['input', 'output', 'modules', 'cargo', 'fluids'])
+	for (const key of ['input', 'output', 'modules', 'fuel', 'cargo', 'fluids'])
 		inventory(view, humanName(key), data[key]);
 	for (const key of ['consumption', 'generation']) {
 		const flow = record(data[key]);
