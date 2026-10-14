@@ -61,6 +61,12 @@ test('site search checks the complete footprint without world writes and stays b
  for _,site in ipairs(result.sites) do assert(site.y<0) end
  request.radius=0
  assert(#blueprint(request).sites==0,'A clear center cannot hide a guarded part of the layout')
+ surface.get_territory_for_chunk=function() return nil end
+ surface.can_place_entity=function(q) return q.position.x==1.5 and q.position.y==0.5 end
+ request.entities={{name='building',position={x=.5,y=.5},direction=0}};request.radius=8
+ local precise=blueprint(request)
+ assert(#precise.sites==1 and precise.sites[1].x==1 and precise.sites[1].y==0,'A one-tile repair must not jump eight tiles')
+ request.radius=0;assert(#blueprint(request).sites==0,'Fine repairs must obey the requested radius')
  request.entities={}
  for i=1,65 do request.entities[i]={name='building',position={x=i+0.5,y=0.5},direction=0} end
  request.radius=128;surface.can_place_entity=function() return false end

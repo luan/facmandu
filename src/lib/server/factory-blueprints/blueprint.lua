@@ -706,6 +706,12 @@ local function blueprint(request,territories)
  if request.operation=='find_site' then
   local offsets={}
   local radius=request.radius or 32
+  -- One-entity repairs need tile precision without widening the native check budget.
+  if #entities==1 and #tiles==0 then
+   for x=-2,2 do for y=-2,2 do
+    if x*x+y*y<=radius*radius then offsets[#offsets+1]={x=x,y=y,distance=x*x+y*y} end
+   end end
+  end
   for gx=-math.floor(radius/8),math.floor(radius/8) do for gy=-math.floor(radius/8),math.floor(radius/8) do
    local x,y=gx*8,gy*8
    if x*x+y*y<=radius*radius then offsets[#offsets+1]={x=x,y=y,distance=x*x+y*y} end
@@ -743,7 +749,7 @@ local function blueprint(request,territories)
     if clear then sites[#sites+1]=at;if #sites==3 then break end end
    end
   end
-  return {operation='find_blueprint_site',surface=surface.name,sites=sites,checked_positions=checked,native_check_budget=checks,truncated=truncated,note='Read-only complete-footprint search on an 8-tile grid, nearest offsets first. Sites exclude guarded/unexplored territory and native collisions. No ghosts placed. External supply/output connections and power need design work; inspect the final connected layout before placement. An empty or truncated search does not prove there is no usable site.'}
+  return {operation='find_blueprint_site',surface=surface.name,sites=sites,checked_positions=checked,native_check_budget=checks,truncated=truncated,note='Read-only complete-footprint search, nearest offsets first. Single-entity repairs try tile offsets within two tiles before the 8-tile grid. Sites exclude guarded/unexplored territory and native collisions. No ghosts placed. External supply/output connections and power need design work; inspect the final connected layout before placement. An empty or truncated search does not prove there is no usable site.'}
  end
  local pending_tiles={}
  local completed_tile_items={}
