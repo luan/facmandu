@@ -7,7 +7,7 @@ import {
 	serverAssistantPlanSchema
 } from '$lib/assistant-results';
 import { chatHistory, newChat, resolveChat, touchChat } from '$lib/server/assistant-chats';
-import { assistantModelCatalog } from '$lib/server/assistant-models';
+import { assistantModelCatalog, loadAssistantModel } from '$lib/server/assistant-models';
 import { authenticationForm, requireSameOrigin } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { genID } from '$lib/server/db/ids';
@@ -188,10 +188,13 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 	}
 	const prompt = String(input.get('prompt') ?? '').trim();
 	if (!prompt || prompt.length > 6000) error(400, 'Enter a question of up to 6,000 characters');
-	const models = await assistantModelCatalog(userId).catch(() => []);
 	const model = String(input.get('model') ?? '');
 	const effort = String(input.get('effort') ?? '');
-	const selected = models.find((item) => item.id === model);
+	const selected = model
+		? await loadAssistantModel(userId, model)
+				.then((loaded) => loaded.entry)
+				.catch(() => undefined)
+		: undefined;
 	if (!selected || (effort && !selected.efforts.some((item) => item === effort)))
 		error(400, 'Choose an available model and effort');
 	if (running.has(key)) error(409, 'A response is already in progress');

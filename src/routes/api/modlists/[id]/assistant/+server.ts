@@ -9,7 +9,7 @@ import {
 } from '$lib/assistant-results';
 import { chatHistory, newChat, resolveChat, touchChat } from '$lib/server/assistant-chats';
 import { assistantErrorMessage } from '$lib/server/assistant-error';
-import { assistantModelCatalog } from '$lib/server/assistant-models';
+import { assistantModelCatalog, loadAssistantModel } from '$lib/server/assistant-models';
 import { authenticationForm, requireSameOrigin } from '$lib/server/auth';
 import { db, userHasModlistAccess } from '$lib/server/db';
 import { genID } from '$lib/server/db/ids';
@@ -536,16 +536,14 @@ export const POST: RequestHandler = async ({ locals, params, request, url }) => 
 	}
 	const selectedModel = String(input.get('model') ?? '').trim();
 	const selectedEffort = String(input.get('effort') ?? '').trim();
-	const catalog = await assistantModelCatalog(userId).catch(() => []);
-	if (
-		selectedEffort &&
-		!catalog
-			.find((model) => model.id === selectedModel)
-			?.efforts.some((effort) => effort === selectedEffort)
-	)
+	const selected = selectedModel
+		? await loadAssistantModel(userId, selectedModel)
+				.then((loaded) => loaded.entry)
+				.catch(() => undefined)
+		: undefined;
+	if (selectedEffort && !selected?.efforts.some((effort) => effort === selectedEffort))
 		error(400, 'Choose an available effort for this model');
-	if (selectedModel && !catalog.some((model) => model.id === selectedModel))
-		error(400, 'Choose an available model in the assistant');
+	if (selectedModel && !selected) error(400, 'Choose an available model in the assistant');
 	const prompt = String(input.get('prompt') ?? '').trim();
 	if (!prompt || prompt.length > 6000) error(400, 'Enter a question of up to 6,000 characters');
 	if (running.has(key)) error(409, 'A response is already in progress');

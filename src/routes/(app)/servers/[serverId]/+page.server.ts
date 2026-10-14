@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { RCON_COMMAND_BYTES } from '$lib/console';
 import { worldGenerationSchema } from '$lib/map-generation';
-import { assistantModelCatalog } from '$lib/server/assistant-models';
+import { loadAssistantModel } from '$lib/server/assistant-models';
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
 import { refreshInGameAssistants } from '$lib/server/in-game-assistant';
@@ -146,9 +146,9 @@ export const actions: Actions = {
 							message: 'Choose valid in-game assistant settings and Factorio player names'
 						});
 					if (parsed.data.enabled) {
-						const model = (await assistantModelCatalog(event.locals.user?.id ?? '')).find(
-							(model) => model.id === parsed.data.model
-						);
+						const model = await loadAssistantModel(event.locals.user?.id ?? '', parsed.data.model)
+							.then((loaded) => loaded.entry)
+							.catch(() => undefined);
 						if (
 							!model ||
 							(parsed.data.effort && !model.efforts.some((effort) => effort === parsed.data.effort))
