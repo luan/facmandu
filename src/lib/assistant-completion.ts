@@ -84,6 +84,37 @@ export function unfinishedFactoryConnections(requests: readonly string[], answer
 	);
 }
 
+export function placedFactoryPowerGaps(
+	requests: readonly string[],
+	results: readonly { result: unknown }[]
+): number {
+	if (!requestedExpansion(requests)) return 0;
+	const placementSchema = z.object({
+		operation: z.literal('place_blueprint'),
+		expectedDesign: z.string()
+	});
+	const inspectionSchema = z.object({
+		expectedDesign: z.string(),
+		power: z.object({
+			checked: z.boolean(),
+			uncovered_total: z.number().nonnegative(),
+			unconnected_total: z.number().nonnegative()
+		})
+	});
+	const placement = results
+		.map(({ result }) => placementSchema.safeParse(result))
+		.findLast((value) => value.success);
+	if (!placement?.success) return 0;
+	const inspection = results
+		.map(({ result }) => inspectionSchema.safeParse(result))
+		.findLast(
+			(value) => value.success && value.data.expectedDesign === placement.data.expectedDesign
+		);
+	return inspection?.success && inspection.data.power.checked
+		? inspection.data.power.uncovered_total + inspection.data.power.unconnected_total
+		: 0;
+}
+
 export function completionRequest(
 	requests: readonly string[],
 	answer: string,

@@ -168,6 +168,18 @@ test('construction feedback distinguishes ghosts, completed machines and measure
 		'Placed 40 of 40 construction ghosts. Real items are required to build them.'
 	);
 	assert.equal(
+		assistantToolFeedback('blueprint_operation', {
+			result: {
+				operation: 'place_blueprint',
+				placed: 0,
+				requested: 0,
+				retained_built: 1,
+				retained_ghosts: 1
+			}
+		}),
+		'Retained 2 matching built entities or existing ghosts. No new ghosts needed.'
+	);
+	assert.equal(
 		assistantToolFeedback('check_build', {
 			result: {
 				operation: 'check_build',

@@ -15,13 +15,15 @@ import {
 	useTool
 } from '@flue/runtime';
 import { sqlite, start } from '@flue/runtime/node';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import * as v from 'valibot';
+import { z } from 'zod';
 import { env } from '$env/dynamic/private';
 import {
 	missingCommandContent,
 	missingFactoryCheck,
 	missingFactoryDesignAttempt,
+	placedFactoryPowerGaps,
 	unfinishedFactoryConnections
 } from '$lib/assistant-completion';
 import {
@@ -29,6 +31,7 @@ import {
 	assistantContextLimit,
 	assistantContextTokens
 } from '$lib/assistant-context';
+import { factoryResultSchema } from '$lib/assistant-results';
 import {
 	modlistRouteBody,
 	modlistRouteFromAnswers,
@@ -301,6 +304,30 @@ function ModlistAssistant() {
 		// Start hooks write state after this render; a new delivery must not use the prior request.
 		const messages = request.id === requestId ? request.messages : [delivery.body];
 		if (last.text && last.finishReason !== 'length') {
+			if (context.serverId && requestId) {
+				const turn = await db
+					.select({ results: serverAssistantTurn.results })
+					.from(serverAssistantTurn)
+					.where(
+						and(
+							eq(serverAssistantTurn.id, requestId),
+							eq(serverAssistantTurn.userId, context.userId),
+							eq(serverAssistantTurn.serverId, context.serverId)
+						)
+					)
+					.get();
+				const results = z.array(factoryResultSchema).parse(JSON.parse(turn?.results ?? '[]'));
+				const gaps = placedFactoryPowerGaps(messages, results);
+				if (gaps) {
+					append({
+						kind: 'signal',
+						type: 'factory-power-required',
+						attributes: { requestId },
+						body: `The placed expansion's native inspection reports ${gaps} consumer power-connection gaps. Ghost placement is not a connected production layout. Retain matching built entities and ghosts, repair the power route in this saved layout, and inspect it again before settling. Available stock and robot coverage are not required. This grants no new authorization.`
+					});
+					return;
+				}
+			}
 			if (missingCommandContent(messages, last.text)) {
 				const attempts = recovery.requestId === (requestId ?? '') ? recovery.attempts : 0;
 				if (attempts >= 2) throw new Error('The final answer still omits the requested command');

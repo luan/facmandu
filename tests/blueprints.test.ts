@@ -506,6 +506,7 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
  end
  surface.find_entities_filtered=function(filter)
   if filter.type=='entity-ghost' or filter.type=='tile-ghost' then return {} end
+  if filter.position then return {} end
   assert(charted and filter.area and filter.limit==16)
   return {
    {name='belt',type='transport-belt',position={x=0.5,y=0.5},force=force,unit_number=7},
@@ -573,6 +574,66 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
  assert(blueprint(inspection).complete and created==1)
  own_foundation=false
  assert(not pcall(blueprint,inspection) and created==1)
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
+
+test('blueprint extensions retain exact built entities and configured ghosts without replacing conflicts', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ local force={name='player',recipes={{enabled=true,products={{type='item',name='building'}}}},logistic_networks={},is_chunk_charted=function() return true end}
+ local p={type='transport-belt',tile_width=1,tile_height=1,items_to_place_this={{name='building'}},has_flag=function() return false end}
+ local inserter={type='inserter',tile_width=1,tile_height=1,items_to_place_this={{name='building'}},has_flag=function() return false end,inserter_pickup_position={x=0,y=-1},inserter_drop_position={x=0,y=1}}
+ local box={type='container',tile_width=1,tile_height=1,items_to_place_this={{name='building'}},has_flag=function() return false end}
+ prototypes={entity={belt=p,inserter=inserter,box=box},item={iron={}}}
+ local built={valid=true,name='belt',type='transport-belt',force=force,position={x=.5,y=.5},direction=4}
+ local ghost={valid=true,name='entity-ghost',type='entity-ghost',ghost_name='inserter',force=force,position={x=2.5,y=.5},direction=0,bounding_box={{2,0},{3,1}}}
+ local occupants={built,ghost};local created=0;local filters={{index=1,name='iron'}}
+ local surface={name='nauvis',get_territory_for_chunk=function() return nil end,is_chunk_generated=function() return true end,get_tile=function() return {name='grass-1'} end}
+ surface.find_entities_filtered=function(q)
+  local result={}
+  for _,e in ipairs(occupants) do
+   local at=q.position and e.position.x==q.position.x and e.position.y==q.position.y
+   local area=q.area and e.position.x>=q.area[1][1] and e.position.x<q.area[2][1] and e.position.y>=q.area[1][2] and e.position.y<q.area[2][2]
+   if (at or area) and (not q.force or q.force==e.force) and (not q.type or q.type==e.type) then result[#result+1]=e end
+  end
+  return result
+ end
+ surface.count_entities_filtered=function(q) return #surface.find_entities_filtered(q) end
+ surface.can_place_entity=function(q)
+  for _,e in ipairs(occupants) do if e.position.x==q.position.x and e.position.y==q.position.y then return false end end
+  return true
+ end
+ surface.create_entity=function(q)
+  created=created+1
+  local e={valid=true,name='entity-ghost',type='entity-ghost',ghost_name=q.inner_name,position=q.position,force=q.force,direction=q.direction}
+  occupants[#occupants+1]=e;return e
+ end
+ game={tick=100,forces={player=force},surfaces={nauvis=surface},create_inventory=function()
+  local saved
+  return {{set_stack=function() end,set_blueprint_entities=function(e) saved=e end,get_blueprint_entities=function() return saved end,get_blueprint_tiles=function() return {} end,cost_to_build={},
+   create_blueprint=function() saved={{filters=filters,use_filters=true}};return {[1]=ghost} end}}
+ end}
+ defines={build_check_type={manual=1}};script={raise_script_built=function() end}
+ ${blueprintSource}
+ local request={operation='inspect',force='player',surface='nauvis',position={x=0,y=0},design='extension',entities={
+  {name='belt',position={x=.5,y=.5},direction=4},
+  {name='inserter',position={x=2.5,y=.5},direction=0,filters={{index=1,name='iron'}},use_filters=true},
+  {name='box',position={x=4.5,y=.5},direction=0}
+ }}
+ local inspection=blueprint(request);assert(inspection.ready and inspection.retained_built==1 and inspection.retained_ghosts==1 and created==0)
+ request.operation='place';request.expectedTick=100;request.expectedDesign='extension'
+ local placed=blueprint(request);assert(placed.complete and placed.requested==1 and placed.placed==1 and created==1)
+ local replay=blueprint(request);assert(replay.complete and replay.requested==0 and replay.placed==0 and replay.retained_ghosts==2 and created==1)
+ built.direction=0;assert(not pcall(blueprint,request) and created==1);built.direction=4
+ filters={};assert(not pcall(blueprint,request) and created==1);filters={{index=1,name='iron'}}
+ ghost.force={name='other'};assert(not pcall(blueprint,request) and created==1);ghost.force=force
+ surface.get_territory_for_chunk=function() return {get_segmented_units=function() return {{valid=true,prototype={name='small-demolisher'}}} end} end
+ assert(not pcall(blueprint,request) and created==1)
  `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));

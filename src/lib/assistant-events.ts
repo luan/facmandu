@@ -143,13 +143,22 @@ export function assistantToolFeedback(tool: string, output: unknown): string {
 	) {
 		const tiles = value.placed_tiles;
 		const requestedTiles = value.requested_tiles;
+		const retained = [value.retained_built, value.retained_ghosts].reduce<number>(
+			(sum, count) => sum + (typeof count === 'number' ? count : 0),
+			0
+		);
+		const retention = retained
+			? ` Retained ${retained} matching built entities or existing ghosts.`
+			: '';
 		if (typeof tiles === 'number' && typeof requestedTiles === 'number' && requestedTiles > 0) {
 			const entities = value.requested
 				? `${value.placed} of ${value.requested} entity ghosts and `
 				: '';
-			return `Placed ${entities}${tiles} of ${requestedTiles} tile ghosts. Real items are required to build them.`;
+			return `Placed ${entities}${tiles} of ${requestedTiles} tile ghosts.${retention} Real items are required to build them.`;
 		}
-		return `Placed ${value.placed} of ${value.requested} construction ghosts. Real items are required to build them.`;
+		if (retained && value.requested === 0)
+			return `Retained ${retained} matching built entities or existing ghosts. No new ghosts needed.`;
+		return `Placed ${value.placed} of ${value.requested} construction ghosts.${retention} Real items are required to build them.`;
 	}
 	if (
 		value.operation === 'check_build' &&

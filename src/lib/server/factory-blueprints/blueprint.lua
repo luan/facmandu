@@ -744,6 +744,42 @@ local function blueprint(request,territories)
  end
  local pending_tiles={}
  local completed_tile_items={}
+ local retained={}
+ local retained_built,retained_ghosts=0,0
+ local function matching_entity(wanted,position)
+  for _,found in ipairs(surface.find_entities_filtered{position=position,force=force,name={wanted.name,'entity-ghost'},limit=16}) do
+   local ghost=found.type=='entity-ghost'
+   if (ghost and found.ghost_name or found.name)==wanted.name and found.position.x==position.x and found.position.y==position.y then
+    if (found.quality and found.quality.name~='normal') or found.direction~=wanted.direction then return nil,'Existing entity quality or direction differs' end
+    if wanted.recipe then local recipe=found.get_recipe();if not recipe or recipe.name~=wanted.recipe then return nil,'Existing recipe differs' end end
+    if wanted.type then
+     local kind=ghost and found.ghost_type or found.type
+     local actual=kind=='underground-belt' and found.belt_to_ground_type or found.loader_type
+     if actual~=wanted.type then return nil,'Existing input/output type differs' end
+    end
+    local configured=false
+    for _,key in ipairs(settings) do if wanted[key]~=nil then configured=true;break end end
+    if configured then
+     local mapping=stack.create_blueprint{surface=surface,force=force,area=found.bounding_box,include_entities=true}
+     local exported=stack.get_blueprint_entities() or {}
+     local actual
+     for index,entity in pairs(mapping) do if entity==found then actual=exported[index];break end end
+     if not actual then return nil,'Existing settings could not be verified' end
+     for _,key in ipairs(settings) do
+      local value=actual[key]
+      if wanted[key]~=nil and (key=='pickup_position' or key=='drop_position') then
+       if value then value={x=value.x or value[1],y=value.y or value[2]}
+       else for _,connection in ipairs(inserter_connections(prototypes.entity[wanted.name]) or {}) do
+        if connection.direction==wanted.direction then value=key=='pickup_position' and connection.pickup_offset or connection.drop_offset;break end
+       end end
+      end
+      if wanted[key]~=nil and difference(value,wanted[key],key,key) then return nil,'Existing '..key..' differs' end
+     end
+    end
+    return found
+   end
+  end
+ end
  for _,tile in ipairs(tiles) do
   local position={x=tile.position.x+request.position.x,y=tile.position.y+request.position.y}
   local danger=hazard(position.x,position.y,position.x+1,position.y+1)
@@ -784,10 +820,16 @@ local function blueprint(request,territories)
    end
   end
   local danger=charted and hazard(b.x1+request.position.x,b.y1+request.position.y,b.x2+request.position.x,b.y2+request.position.y)
+  local existing,conflict
+  if charted and not danger then existing,conflict=matching_entity(e,position) end
+  if existing then
+   retained[i]=existing
+   if existing.type=='entity-ghost' then retained_ghosts=retained_ghosts+1 else retained_built=retained_built+1 end
+  end
   if danger then
    blocked[#blocked+1]={name=e.name,position=position,reason=danger.status=='guarded' and 'Active demolisher territory; placement forbidden' or 'Territory cannot be verified: '..danger.status,territory=danger}
-  elseif not charted or not can_request_ghost(force,surface,e,position,b,request.position) then
-   local row={name=e.name,position=position,reason=charted and 'Occupied, unsuitable terrain or surface restrictions' or 'Outside explored, generated terrain'}
+  elseif conflict or not charted or (not existing and not can_request_ghost(force,surface,e,position,b,request.position)) then
+   local row={name=e.name,position=position,reason=conflict or (charted and 'Occupied, unsuitable terrain or surface restrictions' or 'Outside explored, generated terrain')}
    -- Detail the first eight blocked sites; native placement remains authoritative.
    if charted and request.operation=='inspect' and #blocked<8 then
     local area={{b.x1+request.position.x,b.y1+request.position.y},{b.x2+request.position.x,b.y2+request.position.y}}
@@ -808,10 +850,11 @@ local function blueprint(request,territories)
    end
    blocked[#blocked+1]=row
   end
-  local existing=surface.find_entities_filtered{area={{b.x1+request.position.x,b.y1+request.position.y},{b.x2+request.position.x,b.y2+request.position.y}},type='entity-ghost'}
-  if #existing>0 then blocked[#blocked+1]={name=e.name,position=position,reason='An existing construction ghost occupies this position'} end
+  for _,ghost in ipairs(surface.find_entities_filtered{area={{b.x1+request.position.x,b.y1+request.position.y},{b.x2+request.position.x,b.y2+request.position.y}},type='entity-ghost'}) do
+   if ghost~=existing then blocked[#blocked+1]={name=e.name,position=position,reason='A conflicting construction ghost occupies this position'};break end
+  end
  end
- if request.operation=='inspect' then return {ready=#blocked==0,blocked=blocked,expectedTick=game.tick,expectedDesign=request.design,surface=surface.name,position=request.position,entities=#entities,tiles=#tiles,tiles_pending=#pending_tiles,cost=cost,construction=construction_report(force,surface,entities,request.position,cost),power=power_report(force,surface,entities,request.position,boxes)} end
+ if request.operation=='inspect' then return {ready=#blocked==0,blocked=blocked,expectedTick=game.tick,expectedDesign=request.design,surface=surface.name,position=request.position,entities=#entities,retained_built=retained_built,retained_ghosts=retained_ghosts,tiles=#tiles,tiles_pending=#pending_tiles,cost=cost,construction=construction_report(force,surface,entities,request.position,cost),power=power_report(force,surface,entities,request.position,boxes)} end
  if #blocked>0 then error('Placement is blocked at '..blocked[1].name..': '..blocked[1].reason..'; inspect the site again',0) end
  -- Create ghosts at exact inspected coordinates; build_blueprint centers the layout around its cursor.
  local ghosts={}
@@ -840,6 +883,12 @@ local function blueprint(request,territories)
    local b=boxes[i]
    territory=territories.reader(force,surface)
    if hazard(b.x1+request.position.x,b.y1+request.position.y,b.x2+request.position.x,b.y2+request.position.y) then error('Territory changed during placement; no further ghosts requested',0) end
+   if retained[i] then
+    local matching=matching_entity(e,position)
+    if not matching or matching~=retained[i] then error('Retained entity changed during placement; inspect again',0) end
+    ghosts[i]=matching
+    return
+   end
    if surface.count_entities_filtered{area={{b.x1+request.position.x,b.y1+request.position.y},{b.x2+request.position.x,b.y2+request.position.y}},type="entity-ghost"}>0 then error("Site changed during placement",0) end
    if not can_request_ghost(force,surface,e,position,b,request.position) then error('Site changed during placement',0) end
    local creation={name='entity-ghost',inner_name=e.name,position=position,direction=e.direction,force=force,type=e.type,expires=false}
@@ -877,5 +926,6 @@ local function blueprint(request,territories)
    if failure then break end
   end
  end
- return {operation='place_blueprint',surface=surface.name,position=request.position,requested=#entities,placed=placed,requested_tiles=#pending_tiles,placed_tiles=placed_tiles,complete=placed==#entities and placed_tiles==#pending_tiles and not failure,error=failure,cost=cost,note=surface.platform and 'Construction requests use real platform hub inventory. No structures were removed.' or 'Construction ghosts require real items and player or robot construction. No structures were removed.'}
+ local requested=#entities-retained_built-retained_ghosts
+ return {operation='place_blueprint',expectedDesign=request.design,surface=surface.name,position=request.position,requested=requested,placed=placed,retained_built=retained_built,retained_ghosts=retained_ghosts,requested_tiles=#pending_tiles,placed_tiles=placed_tiles,complete=placed==requested and placed_tiles==#pending_tiles and not failure,error=failure,cost=cost,note=surface.platform and 'Construction requests use real platform hub inventory. Matching entities and settings were retained; no structures were removed.' or 'Construction ghosts require real items and player or robot construction. Matching entities and settings were retained; no structures were removed.'}
 end

@@ -6,6 +6,7 @@ import {
 	missingCommandContent,
 	missingFactoryCheck,
 	missingFactoryDesignAttempt,
+	placedFactoryPowerGaps,
 	unfinishedFactoryConnections
 } from '../src/lib/assistant-completion';
 
@@ -20,6 +21,31 @@ test('a requested command cannot settle as a reference to a hidden earlier draft
 		missingCommandContent(['Design a blueprint.'], 'The blueprint above is ready.'),
 		false
 	);
+});
+
+test('placed expansions retain native power faults even when the final answer omits them', () => {
+	const inspected = (design: string, uncovered: number, unconnected: number, checked = true) => ({
+		result: {
+			expectedDesign: design,
+			power: { checked, uncovered_total: uncovered, unconnected_total: unconnected }
+		}
+	});
+	const placed = (design: string) => ({
+		result: { operation: 'place_blueprint', expectedDesign: design }
+	});
+	const request = ['we need more glass on the bus'];
+	assert.equal(placedFactoryPowerGaps(request, [inspected('a', 8, 0), placed('a')]), 8);
+	assert.equal(
+		placedFactoryPowerGaps(request, [inspected('a', 8, 0), placed('a'), inspected('a', 0, 0)]),
+		0
+	);
+	assert.equal(placedFactoryPowerGaps(request, [inspected('a', 8, 0), placed('b')]), 0);
+	assert.equal(placedFactoryPowerGaps(request, [inspected('a', 8, 0, false), placed('a')]), 0);
+	assert.equal(
+		placedFactoryPowerGaps(['I need a blueprint only.'], [inspected('a', 8, 0), placed('a')]),
+		0
+	);
+	assert.equal(placedFactoryPowerGaps(request, [inspected('a', 8, 0)]), 0);
 });
 
 test('a resolved expansion must attempt a layout or factory action before declining it', () => {
