@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-	completionRequest,
 	completionDecision,
+	completionRequest,
 	missingCommandContent,
 	missingFactoryCheck,
 	missingFactoryDesignAttempt,
