@@ -235,6 +235,15 @@ local function route(a)
    end
   end
  end
+ if visited==1 and start_entity then
+  for _,step in ipairs(directions) do
+   if step.d==start_entity.direction then
+    return {force=force.name,surface=surface.name,tick=game.tick,found=false,visited=visited,
+     sourceExit={x=a.x+step.dx,y=a.y+step.dy,direction=step.d},
+     note='The start belt has no usable forward step. Inspect sourceExit and adjust the proposed outlet or its requested connection; a wider detour cannot fix this first step. Existing belts and buildings are retained.'}
+   end
+  end
+ end
  return {force=force.name,surface=surface.name,tick=game.tick,found=false,visited=visited,closestApproach=closest and {x=closest.x,y=closest.y,remaining=closest.h} or nil,note=visited>=5000 and 'Search budget reached; try a section ending at closestApproach before continuing, or narrow the detour area. No route has been exported.' or 'No charted collision-free route within this area. closestApproach is a reachable surface-belt frontier, not a completed connection. Inspect beyond it or choose a wider detour; routing does not demolish buildings or place landfill.'}
 end
 M.functions={route_belt=route}

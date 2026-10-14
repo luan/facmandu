@@ -106,6 +106,15 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
   assert(e.position.x~=10.5 or e.position.y~=0.5)
   assert(e.position.x<4 or e.position.x>=7 or e.position.y< -1 or e.position.y>=2,'Route intersects the unplaced machine')
  end
+ world={};blocked={};chart={}
+ local trapped_start=existing(.5,.5);local trapped_target=existing(10.5,.5)
+ blocked[key(1.5,.5)]=true
+ for _,margin in ipairs{3,32} do
+  local trapped=route{force='player',surface='nauvis',belt='belt',underground='underground',x=.5,y=.5,target_x=10.5,target_y=.5,margin=margin}
+  assert(not trapped.found and trapped.visited==1 and trapped.sourceExit.x==1.5 and trapped.sourceExit.y==.5 and trapped.sourceExit.direction==4)
+  assert(trapped.note:find('first step',1,true) and not trapped.closestApproach)
+  assert(world[key(.5,.5)]==trapped_start and world[key(10.5,.5)]==trapped_target)
+ end
  -- A direction-aware search used to find a self-crossing path and reject the
  -- whole connection instead of finding the clear alternative in this corridor.
  world={};blocked={};chart={}
