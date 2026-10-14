@@ -4,6 +4,19 @@ import { blueprintDesignSchema } from '../src/lib/blueprints';
 import { runBlueprintProgram } from '../src/lib/server/blueprint-program';
 
 const base = blueprintDesignSchema.parse({ force: 'player', label: 'Program' });
+test('new generated layouts inherit explicit request metadata while force changes remain forbidden', async () => {
+	const result = await runBlueprintProgram(
+		"return {entities={{name='transport-belt',position={x=.5,y=.5}}}}",
+		base
+	);
+	assert.equal(result.force, 'player');
+	assert.equal(result.label, 'Program');
+	assert.equal(result.entities.length, 1);
+	await assert.rejects(
+		runBlueprintProgram("return {force='enemy',entities={}}", base),
+		/cannot change its force/
+	);
+});
 test('layout programs generate rows and revise real settings without changing the source draft', async () => {
 	const saved = blueprintDesignSchema.parse({
 		...base,

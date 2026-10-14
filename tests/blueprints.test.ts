@@ -354,9 +354,10 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
  assert(catalog.entities[3].max_wire_distance==17 and catalog.entities[3].supply_area_distance==4)
  assert(catalog.entities[2].center_offset.x==0.5 and catalog.entities[2].center_offset.y==0.5)
  local aligned,alignment_error=pcall(blueprint,{operation='create',force='player',label='Misaligned furnace',entities={
-  {name='furnace',position={x=2,y=2},direction=0}
+  {name='furnace',position={x=2,y=2},direction=0},
+  {name='furnace',position={x=8,y=2},direction=0}
  }})
- assert(not aligned and alignment_error:match('Entity 1 furnace') and alignment_error:match('integer %+ 0.5'))
+ assert(not aligned and alignment_error:match('Entity 1 furnace') and alignment_error:match('Entity 2 furnace') and alignment_error:match('integer %+ 0.5'))
  local configured,recipe_error=pcall(blueprint,{operation='create',force='player',label='Furnace recipe',entities={
   {name='furnace',position={x=2.5,y=2.5},direction=0,recipe='iron-plate'}
  }})

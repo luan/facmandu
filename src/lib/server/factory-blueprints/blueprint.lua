@@ -271,7 +271,7 @@ local function blueprint(request,territories)
  end
  local function contains(actual,wanted) return difference(actual,wanted,'','')==nil end
  local settings={'filters','use_filters','filter_mode','pickup_position','drop_position','override_stack_size','control_behavior','chunk-filter'}
- local entities,preview,boxes,warnings,collisions={},{},{},{},{}
+ local entities,preview,boxes,warnings,collisions,alignments={},{},{},{},{},{}
  local warned={}
  local function warn(text) if not warned[text] then warnings[#warnings+1]=text;warned[text]=true end end
  local tiles=request.tiles or {}
@@ -333,7 +333,7 @@ local function blueprint(request,territories)
   -- Factorio omits rotation for nondirectional prototypes, including ordinary pipes and chests.
   local direction=p.supports_direction==false and 0 or e.direction
   local w,h=dimensions(p,direction)
-  if (e.position.x-w/2)%1~=0 or (e.position.y-h/2)%1~=0 then error('Entity '..i..' '..e.name..' is not aligned to the tile grid: x must be integer + '..((w/2)%1)..', y must be integer + '..((h/2)%1)..' for this direction. Patch this entity position by index.',0) end
+  if ((e.position.x-w/2)%1~=0 or (e.position.y-h/2)%1~=0) and #alignments<8 then alignments[#alignments+1]='Entity '..i..' '..e.name..' is not aligned to the tile grid: x must be integer + '..((w/2)%1)..', y must be integer + '..((h/2)%1)..' for this direction' end
   local box={x1=e.position.x-w/2,y1=e.position.y-h/2,x2=e.position.x+w/2,y2=e.position.y+h/2}
   for j,b in ipairs(boxes) do
    if box.x1<b.x2 and box.x2>b.x1 and box.y1<b.y2 and box.y2>b.y1 then
@@ -350,6 +350,7 @@ local function blueprint(request,territories)
   for _,wire in ipairs(e.wires or {}) do wires[#wires+1]=wire end
   entities[i].wires=#wires>0 and wires or nil;preview[i].wires=entities[i].wires
  end
+ if #alignments>0 then error(table.concat(alignments,'; ')..'. Patch these positions together by index in the saved draft.',0) end
  if #collisions>0 then error(table.concat(collisions,'; ')..'. Remove unnecessary conflicting entities by index or move them completely outside the other footprints.',0) end
  for _,wire in ipairs(request.wires or {}) do
   local source,target=entities[wire[1]],entities[wire[3]]

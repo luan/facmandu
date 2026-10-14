@@ -39,7 +39,12 @@ export async function runBlueprintProgram(
 		])
 		.parse(JSON.parse(output));
 	if (!reply.ok) throw new ServerError(400, reply.error);
-	const compiled = blueprintDesignSchema.safeParse(reply.design);
+	const generated = z.record(z.string(), z.unknown()).safeParse(reply.design);
+	const compiled = blueprintDesignSchema.safeParse(
+		generated.success
+			? { force: design.force, label: design.label, ...generated.data }
+			: reply.design
+	);
 	if (!compiled.success)
 		throw new ServerError(
 			400,
