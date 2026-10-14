@@ -41,7 +41,7 @@ import {
 } from '$lib/assistant-routing';
 import { recommendationPageSize } from '$lib/recommendations';
 import { listOwnerKey } from './accounts';
-import { unfinishedAssistantResponse } from './assistant-completion';
+import { assistantCompletionDecision } from './assistant-completion';
 import { type LoadedAssistantModel, loadAssistantModel } from './assistant-models';
 import { useAssistantToolGroups } from './assistant-tool-groups';
 import { type CodexModel, codexProvider } from './codex';
@@ -302,6 +302,21 @@ function ModlistAssistant() {
 				});
 				return;
 			}
+			const factoryUnfinished =
+				context.serverId &&
+				(missingFactoryDesignAttempt(messages, response.toolCalls) ||
+					unfinishedFactoryConnections(messages, last.text));
+			const completion = await assistantCompletionDecision(
+				context.userId,
+				messages,
+				last.text,
+				response.toolCalls,
+				signal
+			);
+			if (!factoryUnfinished && completion === 'finish') {
+				writeAnswer(last.text);
+				return;
+			}
 			if (!(request.id === requestId && request.reviewed) && response.toolCalls.length) {
 				setRequest({ id: requestId ?? '', messages, reviewed: true });
 				append({
@@ -312,17 +327,7 @@ function ModlistAssistant() {
 				});
 				return;
 			}
-			if (
-				!(context.serverId && missingFactoryDesignAttempt(messages, response.toolCalls)) &&
-				!(context.serverId && unfinishedFactoryConnections(messages, last.text)) &&
-				!(await unfinishedAssistantResponse(
-					context.userId,
-					messages,
-					last.text,
-					response.toolCalls,
-					signal
-				))
-			) {
+			if (!factoryUnfinished && completion !== 'continue') {
 				writeAnswer(last.text);
 				return;
 			}

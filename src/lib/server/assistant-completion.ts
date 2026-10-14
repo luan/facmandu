@@ -1,7 +1,7 @@
-import { completionRequest, needsContinuation } from '$lib/assistant-completion';
+import { completionDecision, completionRequest } from '$lib/assistant-completion';
 import { accountProviderKeys } from './assistant-providers';
 
-export async function unfinishedAssistantResponse(
+export async function assistantCompletionDecision(
 	userId: string,
 	requests: readonly string[],
 	answer: string,
@@ -9,7 +9,7 @@ export async function unfinishedAssistantResponse(
 	signal: AbortSignal
 ) {
 	const key = (await accountProviderKeys(userId)).get('neuralwatt');
-	if (!key) return false;
+	if (!key) return null;
 	try {
 		const response = await fetch('https://api.neuralwatt.com/v1/systemone', {
 			method: 'POST',
@@ -17,10 +17,10 @@ export async function unfinishedAssistantResponse(
 			body: JSON.stringify(completionRequest(requests, answer, tools)),
 			signal: AbortSignal.any([signal, AbortSignal.timeout(5000)])
 		});
-		return response.ok && needsContinuation(await response.json());
+		return response.ok ? completionDecision(await response.json()) : null;
 	} catch (cause) {
 		if (signal.aborted) throw cause;
 		// Optional Clef checks must not prevent GPT-only accounts from receiving answers.
-		return false;
+		return null;
 	}
 }

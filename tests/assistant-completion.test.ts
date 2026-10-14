@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
 	completionRequest,
+	completionDecision,
 	missingCommandContent,
 	missingFactoryCheck,
 	missingFactoryDesignAttempt,
-	needsContinuation,
 	unfinishedFactoryConnections
 } from '../src/lib/assistant-completion';
 
@@ -105,7 +105,7 @@ test('an expansion with admitted connection gaps continues, while stock shortage
 	assert.equal(unfinishedFactoryConnections(['How could I make more glass?'], answer), false);
 });
 
-test('only a consistent confident unfinished result continues the response', () => {
+test('completion decisions require consistent confident evidence', () => {
 	const result = (choice: string, confidence: number, unfinished: number, finished: number) => ({
 		answers: {
 			completion: {
@@ -116,14 +116,16 @@ test('only a consistent confident unfinished result continues the response', () 
 			}
 		}
 	});
-	assert.equal(needsContinuation(result('continue', 0.95, 0.95, 0.05)), true);
-	assert.equal(needsContinuation(result('continue', 0.75, 0.75, 0.25)), true);
-	assert.equal(needsContinuation(result('finish', 0.95, 0.05, 0.95)), false);
-	assert.equal(needsContinuation(result('continue', 0.6, 0.6, 0.4)), false);
-	assert.equal(needsContinuation(result('continue', 0.95, 0.1, 0.9)), false);
-	assert.equal(needsContinuation(result('continue', 0.95, 0.95, 0.9)), false);
-	assert.equal(needsContinuation(result('place', 0.95, 0.95, 0.05)), false);
-	assert.equal(needsContinuation({}), false);
+	assert.equal(completionDecision(result('continue', 0.95, 0.95, 0.05)), 'continue');
+	assert.equal(completionDecision(result('continue', 0.75, 0.75, 0.25)), 'continue');
+	assert.equal(completionDecision(result('finish', 0.95, 0.05, 0.95)), 'finish');
+	assert.equal(completionDecision(result('finish', 0.95, 0.95, 0.05)), null);
+	assert.equal(completionDecision(result('finish', 0.6, 0.4, 0.6)), null);
+	assert.equal(completionDecision({}), null);
+	assert.equal(completionDecision(result('continue', 0.6, 0.6, 0.4)), null);
+	assert.equal(completionDecision(result('continue', 0.95, 0.1, 0.9)), null);
+	assert.equal(completionDecision(result('continue', 0.95, 0.95, 0.9)), null);
+	assert.equal(completionDecision(result('place', 0.95, 0.95, 0.05)), null);
 	const request = completionRequest(['I need more glass.', 'Use a new mine.'], 'Still checking.', [
 		{ tool: 'factory_query', isError: false }
 	]);

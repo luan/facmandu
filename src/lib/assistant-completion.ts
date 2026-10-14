@@ -103,14 +103,13 @@ export function completionRequest(
 	};
 }
 
-export function needsContinuation(value: unknown): boolean {
+export function completionDecision(value: unknown): 'continue' | 'finish' | null {
 	const parsed = completionSchema.safeParse(value);
-	if (!parsed.success) return false;
+	if (!parsed.success) return null;
 	const result = parsed.data.answers.completion;
-	return (
-		result.choice === 'continue' &&
-		result.confidence >= 0.7 &&
-		Math.abs(result.probabilities.continue - result.confidence) <= 0.01 &&
+	return result.confidence >= 0.7 &&
+		Math.abs(result.probabilities[result.choice] - result.confidence) <= 0.01 &&
 		Math.abs(result.probabilities.continue + result.probabilities.finish - 1) <= 0.02
-	);
+		? result.choice
+		: null;
 }
