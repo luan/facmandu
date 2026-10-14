@@ -179,6 +179,51 @@ local function route(a)
   end
   if not accessible then return {found=false,surface=surface.name,visited=0,note='The destination is surrounded by existing transport. Inspect its upstream feed or plan the necessary connection edits; routing does not replace those belts.'} end
  end
+ local function finish(path,visited)
+  local entities,positions={},{}
+  for i,p in ipairs(path) do
+   local position=p.x..':'..p.y
+   if positions[position] then return {found=false,surface=surface.name,visited=visited,note='The bounded route would overlap itself. Choose a charted waypoint to separate its approaches.'} end
+   positions[position]=true
+   if not (i==1 and start_entity) and not (i==#path and end_entity) then
+    local next_edge=path[i+1]
+    local jump_in=next_edge and next_edge.jump
+    local jump_out=p.jump
+    local d=jump_in and jump_in.d or (path[i+1] and path[i+1].d or p.d)
+    entities[#entities+1]={name=(jump_in or jump_out) and a.underground or a.belt,position={x=p.x,y=p.y},direction=d,type=jump_in and 'input' or jump_out and 'output' or nil}
+   end
+  end
+  if #entities>800 then error('Route has too many entities; choose a closer waypoint',0) end
+  local function existing(e) return e and not planned_entities[e] and {name=e.type=='entity-ghost' and e.ghost_name or e.name,ghost=e.type=='entity-ghost',unit_number=e.unit_number,position=e.position,direction=e.direction} or nil end
+  local function planned_endpoint(e) return e and planned_entities[e] and {name=e.name,position=e.position,direction=e.direction} or nil end
+  return {found=true,force=force.name,surface=surface.name,tick=game.tick,visited=visited,entities=entities,start=existing(start_entity),destination=existing(end_entity),plannedStart=planned_endpoint(start_entity),plannedDestination=planned_endpoint(end_entity),destination_lane=a.target_lane,note='Native collision and chart checks passed at this tick. Existing and planned endpoints are retained; saved draft footprints were avoided. Inspect the combined blueprint again before ghost placement; transport flow and power still need verification.'}
+ end
+ -- Most delivery corridors need one corner. Check both shortest orthogonal
+ -- paths before searching thousands of direction/underground states.
+ for _,horizontal_first in ipairs{true,false} do
+  local path={{x=a.x,y=a.y,d=start_entity and start_entity.direction or nil}}
+  local function line(axis,target)
+   local current=path[#path]
+   while current[axis]~=target do
+    local dx=axis=='x' and (target>current.x and 1 or -1) or 0
+    local dy=axis=='y' and (target>current.y and 1 or -1) or 0
+    local d=dx==1 and 4 or dx==-1 and 12 or dy==1 and 8 or 0
+    current={x=current.x+dx,y=current.y+dy,d=d};path[#path+1]=current
+   end
+  end
+  if horizontal_first then line('x',a.target_x);line('y',a.target_y)
+  else line('y',a.target_y);line('x',a.target_x) end
+  local valid=true
+  for i=1,#path-1 do
+   local from,to=path[i],path[i+1]
+   local first=i==1 and start_entity
+   local last=i+1==#path and end_entity
+   local source_ok=(first and to.d==start_entity.direction) or (not first and fits(a.belt,from.x,from.y,to.d))
+   local target_ok=(last and known(to.x,to.y) and entry_allowed(to.d) and (to.d+8)%16~=end_entity.direction) or (not last and fits(a.belt,to.x,to.y,to.d))
+   if not source_ok or not target_ok then valid=false;break end
+  end
+  if valid then return finish(path,#path) end
+ end
  local heap,best={},{}
  local function enqueue(x,y,d,tunnel,g,parent,jump)
   local id=key(x,y,d,tunnel)
@@ -207,23 +252,7 @@ local function route(a)
    if node.x==a.target_x and node.y==a.target_y then
     local path={};local current=node
     while current do table.insert(path,1,current);current=current.parent end
-    local entities,positions={},{}
-    for i,p in ipairs(path) do
-     local position=p.x..':'..p.y
-     if positions[position] then return {found=false,surface=surface.name,visited=visited,note='The bounded route would overlap itself. Choose a charted waypoint to separate its approaches.'} end
-     positions[position]=true
-     if not (i==1 and start_entity) and not (i==#path and end_entity) then
-      local next_edge=path[i+1]
-      local jump_in=next_edge and next_edge.jump
-      local jump_out=p.jump
-      local d=jump_in and jump_in.d or (path[i+1] and path[i+1].d or p.d)
-      entities[#entities+1]={name=(jump_in or jump_out) and a.underground or a.belt,position={x=p.x,y=p.y},direction=d,type=jump_in and 'input' or jump_out and 'output' or nil}
-     end
-    end
-    if #entities>800 then error('Route has too many entities; choose a closer waypoint',0) end
-    local function existing(e) return e and not planned_entities[e] and {name=e.type=='entity-ghost' and e.ghost_name or e.name,ghost=e.type=='entity-ghost',unit_number=e.unit_number,position=e.position,direction=e.direction} or nil end
-    local function planned_endpoint(e) return e and planned_entities[e] and {name=e.name,position=e.position,direction=e.direction} or nil end
-    return {found=true,force=force.name,surface=surface.name,tick=game.tick,visited=visited,entities=entities,start=existing(start_entity),destination=existing(end_entity),plannedStart=planned_endpoint(start_entity),plannedDestination=planned_endpoint(end_entity),destination_lane=a.target_lane,note='Native collision and chart checks passed at this tick. Existing and planned endpoints are retained; saved draft footprints were avoided. Inspect the combined blueprint again before ghost placement; transport flow and power still need verification.'}
+    return finish(path,visited)
    end
    for _,step in ipairs(directions) do
     local may_turn=not node.tunnel and not (node.x==a.x and node.y==a.y and start_entity)

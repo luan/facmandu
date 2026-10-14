@@ -99,6 +99,11 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
  local turns=0
  for i=2,#open.entities do if open.entities[i].direction~=open.entities[i-1].direction then turns=turns+1 end end
  assert(turns==1,'An open connection needs one corner, not a zigzag')
+ reads=0
+ local corridor=route{force='player',surface='nauvis',belt='belt',underground='underground',x=.5,y=.5,target_x=400.5,target_y=.5,margin=1}
+ assert(corridor.found and #corridor.entities==401)
+ assert(reads<=404,'A clear corridor must not search thousands of underground/direction states')
+ for _,e in ipairs(corridor.entities) do assert(e.name=='belt' and e.direction==4) end
  prototypes.entity.plant={type='assembling-machine',tile_width=3,tile_height=3}
  local planned_args={force='player',surface='nauvis',belt='belt',x=0.5,y=0.5,target_x=10.5,target_y=0.5,margin=3,obstacles={
   {name='belt',position={x=0.5,y=0.5},direction=4},
