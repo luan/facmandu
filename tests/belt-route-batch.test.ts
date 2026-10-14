@@ -1,7 +1,7 @@
 // @ts-expect-error Bun supplies this built-in at runtime; the project uses Node type declarations.
 import { expect, test } from 'bun:test';
 import type * as v from 'valibot';
-import { designBeltRoutes } from '../src/lib/server/belt-route-batch';
+import { designRoutes } from '../src/lib/server/belt-route-batch';
 import type { beltRoutesInput } from '../src/lib/server/factory-routing';
 import { ServerError } from '../src/lib/server/server-files';
 
@@ -19,7 +19,7 @@ const input = {
 
 test('routing reserves completed paths and retains partial results in order', async () => {
 	let call = 0;
-	const result = await designBeltRoutes(input, (request) => {
+	const result = await designRoutes(input, (request) => {
 		call++;
 		expect(request.avoid?.map((part) => part.designId)).toEqual(
 			call === 1 ? ['a'.repeat(64)] : ['a'.repeat(64), 'b'.repeat(64)]
@@ -67,7 +67,7 @@ test('routing reserves completed paths and retains partial results in order', as
 test('a changed permission or disconnected player stops further route reads', async () => {
 	let calls = 0;
 	await expect(
-		designBeltRoutes(input, () => {
+		designRoutes(input, () => {
 			calls++;
 			throw new ServerError(403, 'This chat belongs to another force');
 		})

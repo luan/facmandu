@@ -1,17 +1,20 @@
-import type * as v from 'valibot';
-import type { beltRouteInput, beltRoutesInput, designBeltRoute } from './factory-routing';
+import type {
+	designTransportRoute,
+	TransportRouteInput,
+	TransportRoutesInput
+} from './factory-routing';
 import { ServerError } from './server-files';
 
 // Route in order: each saved path becomes an obstacle for the following connection.
 // Failed connections retain their own result without losing earlier saved drafts.
-export async function designBeltRoutes(
-	input: v.InferOutput<typeof beltRoutesInput>,
-	route: (input: v.InferOutput<typeof beltRouteInput>) => ReturnType<typeof designBeltRoute>
+export async function designRoutes(
+	input: TransportRoutesInput,
+	route: (input: TransportRouteInput) => ReturnType<typeof designTransportRoute>
 ) {
 	const { connections, ...shared } = input;
 	const avoid = [...(input.avoid ?? [])];
 	const results: ({ connection: number; label?: string } & (
-		| Awaited<ReturnType<typeof designBeltRoute>>
+		| Awaited<ReturnType<typeof designTransportRoute>>
 		| { found: false; error: string; placed: false }
 	))[] = [];
 	for (const [index, connection] of connections.entries()) {

@@ -221,7 +221,8 @@ export function assistantToolFeedback(tool: string, output: unknown): string {
 			return `Draft validated: ${parts.join(', ')}${warnings ? `; ${warnings} ${warnings === 1 ? 'warning' : 'warnings'}` : ''}.`;
 		}
 	}
-	if (tool === 'route_belts' && Array.isArray(value.results)) {
+	if ((tool === 'route_belts' || tool === 'route_pipes') && Array.isArray(value.results)) {
+		const transport = tool === 'route_pipes' ? 'pipe' : 'belt';
 		const completed = value.results.filter((row: unknown) => object(row)?.found === true).length;
 		const trapped = value.results.some(
 			(row: unknown) => object(row)?.found === false && object(object(row)?.sourceExit)
@@ -229,7 +230,7 @@ export function assistantToolFeedback(tool: string, output: unknown): string {
 		const blocked = value.results.some(
 			(row: unknown) => object(row)?.found === false && object(object(row)?.sourceBlocked)
 		);
-		return `Drafted ${completed} of ${value.results.length} belt connections.${blocked ? ' A start coordinate cannot accept a belt.' : ''}${trapped ? ' A start belt has no usable forward exit.' : ''} No construction placed.`;
+		return `Drafted ${completed} of ${value.results.length} ${transport} connections.${blocked ? ` A start coordinate cannot accept a ${transport}.` : ''}${trapped ? ' A start belt has no usable forward exit.' : ''} No construction placed.`;
 	}
 	if (tool === 'route_belt' || tool === 'belt_route') {
 		if (value.found === false && object(value.sourceBlocked))

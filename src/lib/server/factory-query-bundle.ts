@@ -74,7 +74,8 @@ export function factoryCommand(
 	owners?: string[]
 ) {
 	const encoded = JSON.stringify(request);
-	const routing = request.op === 'call' && request.tool === 'route_belt';
+	const routing =
+		request.op === 'call' && (request.tool === 'route_belt' || request.tool === 'route_pipe');
 	if (Buffer.byteLength(encoded) > (routing ? 128000 : 8192))
 		throw new ServerError(400, 'Query is too large');
 	// Route geometry goes directly into a saved draft, rather than model context.

@@ -93,6 +93,12 @@ test('partial layout progress counts rows and revisions without exposing entity 
 
 test('tool feedback distinguishes proposed drafts, placement faults and actual query results', () => {
 	assert.equal(
+		assistantToolFeedback('route_pipes', {
+			results: [{ found: true }, { found: false }]
+		}),
+		'Drafted 1 of 2 pipe connections. No construction placed.'
+	);
+	assert.equal(
 		assistantToolFeedback('route_belts', {
 			results: [{ found: false, sourceBlocked: { x: 4.5, y: 7.5 } }]
 		}),

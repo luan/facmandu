@@ -6,26 +6,8 @@ local territories=require('scripts.tools.territory')
 local M={}
 M.manifest={route_belt={desc='Use the dedicated route_belt tool to design a charted, collision-free belt connection. It can use matching underground belts to cross obstacles and returns saved blueprint sections. Existing endpoints must be same-force transport belts; unrelated buildings and underground connections are preserved. No demolition, landfill, construction or material grants occur.',params={surface='string! exact surface',belt='string! transport-belt prototype',underground='string optional matching underground-belt prototype',x='number! start tile center x',y='number! start tile center y',target_x='number! destination tile center x',target_y='number! destination tile center y',target_lane='string optional left, right or both; side loading requires a built straight bus belt with an inline feed',margin='number optional detour margin, default 16, max 64'}}}
 local directions={{dx=0,dy=-1,d=0},{dx=1,dy=0,d=4},{dx=0,dy=1,d=8},{dx=-1,dy=0,d=12}}
-local function before(a,b) return a.f<b.f or (a.f==b.f and a.h<b.h) end
-local function push(heap,node)
- local i=#heap+1
- while i>1 do local parent=math.floor(i/2);if not before(node,heap[parent]) then break end;heap[i]=heap[parent];i=parent end
- heap[i]=node
-end
-local function pop(heap)
- local result,last=heap[1],table.remove(heap)
- if #heap>0 then
-  local i=1
-  while i*2<=#heap do
-   local child=i*2
-   if child<#heap and before(heap[child+1],heap[child]) then child=child+1 end
-   if not before(heap[child],last) then break end
-   heap[i]=heap[child];i=child
-  end
-  heap[i]=last
- end
- return result
-end
+local heap=require('scripts.tools.routing_heap')
+local push,pop=heap.push,heap.pop
 local function route(a)
  local force=force_lookup.require_force(a.force)
  local surface,missing=surface_lookup.find(a.surface)

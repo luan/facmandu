@@ -47,6 +47,26 @@ export const beltRoutesInput = v.object({
 		v.maxLength(8)
 	)
 });
+export const pipeRouteInput = v.object({
+	...v.omit(beltRouteInput, ['belt', 'target_lane', 'margin']).entries,
+	pipe: name,
+	fluid: name,
+	margin: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(32)))
+});
+export const pipeRoutesInput = v.object({
+	...v.omit(pipeRouteInput, ['x', 'y', 'target_x', 'target_y', 'label']).entries,
+	connections: v.pipe(
+		v.array(v.pick(pipeRouteInput, ['x', 'y', 'target_x', 'target_y', 'label'])),
+		v.minLength(1),
+		v.maxLength(8)
+	)
+});
+export type TransportRouteInput =
+	| v.InferOutput<typeof beltRouteInput>
+	| v.InferOutput<typeof pipeRouteInput>;
+export type TransportRoutesInput =
+	| v.InferOutput<typeof beltRoutesInput>
+	| v.InferOutput<typeof pipeRoutesInput>;
 const position = z.object({ x: z.number().finite(), y: z.number().finite() });
 const endpoint = z.object({
 	name: z.string(),
@@ -87,10 +107,7 @@ const routeReply = z.discriminatedUnion('found', [
 	})
 ]);
 
-export async function designBeltRoute(
-	server: ManagedServer,
-	input: v.InferOutput<typeof beltRouteInput>
-) {
+export async function designTransportRoute(server: ManagedServer, input: TransportRouteInput) {
 	const { avoid, ...request } = input;
 	const sections = await Promise.all(
 		(avoid ?? []).map(async (part) => ({
@@ -111,7 +128,11 @@ export async function designBeltRoute(
 			'Route around at most 1000 planned entities; choose nearby sections'
 		);
 	const reply = routeReply.parse(
-		await factoryQuery(server, { op: 'call', tool: 'route_belt', args: { ...request, obstacles } })
+		await factoryQuery(server, {
+			op: 'call',
+			tool: 'pipe' in input ? 'route_pipe' : 'route_belt',
+			args: { ...request, obstacles }
+		})
 	);
 	if (!reply.found) return { ...reply, placed: false as const };
 	const origin = { x: Math.floor(input.x), y: Math.floor(input.y) };
@@ -122,7 +143,7 @@ export async function designBeltRoute(
 		await factoryBlueprint(server, {
 			operation: 'create',
 			force: reply.force,
-			label: input.label ?? 'Belt connection',
+			label: input.label ?? ('pipe' in input ? 'Pipe connection' : 'Belt connection'),
 			entities: entities.map((entity) => ({
 				...entity,
 				position: { x: entity.position.x - origin.x, y: entity.position.y - origin.y }

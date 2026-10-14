@@ -21,7 +21,7 @@ local MODULES = {
   "scripts.tools.kills", "scripts.tools.built", "scripts.tools.fluid_rate", "scripts.tools.trains",
   "scripts.tools.machine_diagnostics", "scripts.tools.transport_diagnostics",
   "scripts.tools.power_diagnostics", "scripts.tools.train_diagnostics",
-  "scripts.tools.logistic_requests", "scripts.tools.planning", "scripts.tools.transport_route",
+  "scripts.tools.logistic_requests", "scripts.tools.planning", "scripts.tools.transport_route", "scripts.tools.fluid_route",
   "scripts.tools.territory_inspection", "scripts.tools.bus_discovery", "scripts.tools.resources", "scripts.tools.production_survey", "scripts.sweep.tool",
 }
 
