@@ -19,7 +19,14 @@ test('progress names the actual tool operation and elapsed time without exposing
 		assistantToolProgress('factory_query', { operation: 'inspect_transport' }),
 		'Inspecting factory: inspect transport…'
 	);
-	assert.equal(assistantToolProgress('sandbox_blueprint', null), 'Testing blueprint…');
+	assert.equal(assistantToolProgress('sandbox_blueprint', null), 'Exporting sandbox blueprint…');
+	assert.equal(assistantToolProgress('test_blueprint', null), 'Simulating blueprint…');
+	assert.equal(
+		assistantToolFeedback('test_blueprint', {
+			result: { status: 'done', outputs: [{ met: true }, { met: false }] }
+		}),
+		'Sandbox trial: 1/2 output targets met. Live factory output is not verified.'
+	);
 	assert.equal(
 		assistantToolProgress('factory_lookup', { tool: 'planning_recipes' }),
 		'Inspecting factory: planning recipes…'

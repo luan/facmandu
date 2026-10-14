@@ -14,6 +14,7 @@ test('Toby panel sends native player requests and preserves typed drafts across 
  package.preload.events=function() ${events} end
  package.preload['planner.control']=function() end
  package.preload['planner.api']=function() end
+ package.preload.sandbox=function() end
  package.preload['planner.books']=function() ${books} end
  package.preload.references=function() ${references} end
  prototypes={item={},fluid={},recipe={},entity={},technology={}}

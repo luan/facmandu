@@ -73,6 +73,7 @@ import { factoryActionInspectJsonSchema, factoryActionJsonSchema } from './facto
 import { blueprintToolJsonSchema } from './factory-blueprints';
 import { addFactoryImages } from './factory-image-context';
 import { factoryImagePath, factoryModelImagePath } from './factory-images';
+import { sandboxToolJsonSchema } from './factory-sandbox';
 import { listRankedRecommendations } from './modlist-recommendations';
 import { startModlistRepair } from './modlist-repair';
 import { saveRecommendationFeedback } from './recommendation-feedback';
@@ -118,6 +119,8 @@ async function registerAssistantProvider(
 				return {
 					...message,
 					toolsAdded: message.toolsAdded?.map((tool) => {
+						if (tool.name === 'test_blueprint')
+							return { ...tool, parameters: { ...tool.parameters, ...sandboxToolJsonSchema } };
 						if (tool.name === 'blueprint_operation')
 							return { ...tool, parameters: { ...tool.parameters, ...blueprintToolJsonSchema } };
 						const schema = argumentSchemas.get(tool.name);

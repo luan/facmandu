@@ -5,6 +5,53 @@ import { assistantResultGroups, presentFactoryResult } from '../src/lib/factory-
 
 const view = (tool: string, result: unknown) =>
 	presentFactoryResult({ kind: 'factory-result', title: tool.replaceAll('_', ' '), result });
+test('sandbox evidence presents measured delivery, failed targets and explicit synthetic conditions', () => {
+	const result = view('test_blueprint', {
+		operation: 'test_blueprint',
+		status: 'done',
+		passed: false,
+		sourceSurface: 'vulcanus',
+		simulatedTicks: 1800,
+		power: 'provided',
+		contextCloned: false,
+		outputs: [
+			{ kind: 'item', name: 'construction-robot', perMinute: 2, targetPerMinute: 10, met: false }
+		],
+		faults: [{ entity: 7, name: 'assembling-machine-2', status: 'item_ingredient_shortage' }]
+	});
+	assert.equal(result.cards[0]?.badge, 'Below target');
+	assert.equal(result.cards[0]?.tone, 'warning');
+	assert.deepEqual(result.tables[0]?.rows, [['Construction robot', '2', '10', 'Below target']]);
+	assert.deepEqual(result.tables[0]?.prototypes?.[0]?.[0], {
+		kind: 'item',
+		name: 'construction-robot'
+	});
+	assert.match(result.assumptions.join(' '), /Synthetic supplies.*Ideal test electricity/u);
+	assert.match(result.cards[0]?.notes.join(' ') ?? '', /live factory production is not verified/u);
+});
+test('sandbox progress folds into the latest result for each native trial', () => {
+	const results = [
+		{
+			kind: 'factory-result' as const,
+			tool: 'test_blueprint',
+			title: 'Sandbox',
+			result: { id: '1', status: 'running' }
+		},
+		{
+			kind: 'factory-result' as const,
+			tool: 'test_blueprint',
+			title: 'Sandbox',
+			result: { id: '2', status: 'done' }
+		},
+		{
+			kind: 'factory-result' as const,
+			tool: 'test_blueprint',
+			title: 'Sandbox',
+			result: { id: '1', status: 'done' }
+		}
+	];
+	assert.deepEqual(assistantResultGroups(results).details, results.slice(1));
+});
 test('a fully constructed layout with zero structural faults still exposes starved production', () => {
 	const result = view('check_build', {
 		operation: 'check_build',

@@ -95,7 +95,8 @@ export function assistantToolProgress(tool: string, input: unknown) {
 	if (tool.startsWith('factory_')) return `Inspecting factory${operation ? `: ${operation}` : ''}…`;
 	if (tool === 'plan_production') return 'Calculating production…';
 	if (tool === 'render_blueprint') return 'Rendering blueprint…';
-	if (tool === 'sandbox_blueprint') return 'Testing blueprint…';
+	if (tool === 'sandbox_blueprint') return 'Exporting sandbox blueprint…';
+	if (tool === 'test_blueprint') return 'Simulating blueprint…';
 	return `${tool.replaceAll('_', ' ')}…`;
 }
 
@@ -111,6 +112,21 @@ export function assistantToolFeedback(tool: string, output: unknown): string {
 	const wrapper = object(output);
 	const value = object(wrapper?.result) ?? wrapper;
 	if (!value) return '';
+	if (tool === 'test_blueprint') {
+		if (value.verdict === 'inconclusive')
+			return 'Sandbox measurement needs a longer sample; output targets are not verified.';
+		if (value.waitingForGameTicks)
+			return 'Sandbox trial is waiting for game ticks; the live game was not unpaused.';
+		if (value.status === 'running') {
+			const ticks = resultNumber(value.elapsedTicks) ?? 0;
+			return `Sandbox simulation: ${Math.floor(ticks / 60)} game seconds elapsed.`;
+		}
+		const outputs = Array.isArray(value.outputs) ? value.outputs : [];
+		const met = outputs.filter((row: unknown) => object(row)?.met === true).length;
+		return value.status === 'done'
+			? `Sandbox trial: ${met}/${outputs.length} output targets met. Live factory output is not verified.`
+			: `Sandbox trial ${typeof value.status === 'string' ? value.status : 'failed'}.`;
+	}
 	if (tool === 'factory_task')
 		return `Factory survey ${typeof value.status === 'string' ? value.status : 'updated'}${typeof value.label === 'string' && value.label ? `: ${value.label}` : '.'}`;
 	if (tool === 'factory_plan' || tool === 'solve_factory_plan' || tool === 'planner_calculation') {

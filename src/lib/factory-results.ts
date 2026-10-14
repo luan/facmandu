@@ -1052,6 +1052,89 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 		lines: [],
 		empty: 'No matches.'
 	};
+	if (tool === 'test_blueprint') {
+		view.title = 'Sandbox trial';
+		view.context = [
+			string(data.sourceSurface),
+			data.mode === 'transport' ? 'Transport test' : 'Production test'
+		]
+			.filter(Boolean)
+			.join(' · ');
+		view.cards = [
+			{
+				title: data.status === 'running' ? 'Simulation running' : 'Measured output',
+				badge:
+					data.status === 'done'
+						? data.verdict === 'inconclusive'
+							? 'Longer sample needed'
+							: data.passed
+								? 'Targets met'
+								: 'Below target'
+						: humanName(data.status),
+				tone: data.status === 'running' ? 'muted' : data.passed ? 'good' : 'warning',
+				metrics: numeric(
+					data.status === 'running' ? 'Game seconds elapsed' : 'Game seconds measured',
+					(resultNumber(data.elapsedTicks ?? data.simulatedTicks) ?? 0) / 60
+				),
+				notes: [
+					string(data.error),
+					'Sandbox evidence; live factory production is not verified.'
+				].filter(Boolean)
+			}
+		];
+		view.tables = [
+			{
+				title: 'Outputs',
+				columns: ['Product', 'Measured / min', 'Target / min', 'Result'],
+				rows: rows(data.outputs).map((row) => [
+					humanName(row.name),
+					display(row.perMinute),
+					display(row.targetPerMinute),
+					row.sampleSufficient === false ? 'Longer sample needed' : row.met ? 'Met' : 'Below target'
+				]),
+				prototypes: rows(data.outputs).map((row) => [
+					prototype(row.kind === 'fluid' ? 'fluid' : 'item', row.name),
+					undefined,
+					undefined,
+					undefined
+				])
+			},
+			{
+				title: 'Test inputs',
+				columns: ['Supply', 'Maximum / min', 'Supplied'],
+				rows: rows(data.inputs).map((row) => [
+					humanName(row.name),
+					display(row.perMinute),
+					display(row.supplied)
+				]),
+				prototypes: rows(data.inputs).map((row) => [
+					prototype(row.kind === 'fluid' ? 'fluid' : 'item', row.name),
+					undefined,
+					undefined
+				])
+			},
+			{
+				title: 'Machine diagnostics',
+				columns: ['Blueprint index', 'Entity', 'Status'],
+				rows: rows(data.faults).map((row) => [
+					display(row.entity),
+					humanName(row.name),
+					humanName(row.status)
+				])
+			}
+		];
+		view.assumptions = [
+			'Synthetic supplies at the declared maximum rates; output endpoints are drained.',
+			'Item targets allow one native recipe batch of measurement-boundary error. Very short samples are inconclusive.',
+			data.power === 'provided'
+				? 'Ideal test electricity; pole coverage and generation capacity are not tested.'
+				: 'Declared external electricity source; planned pole coverage is tested.',
+			data.contextCloned
+				? 'Nearby world context was cloned; source inventories and terrain were untouched.'
+				: 'Empty lab with the source surface properties and current force research.'
+		];
+		return view;
+	}
 	if (tool === 'factory_task') {
 		const task = factoryTaskSchema.safeParse(data);
 		if (task.success)
@@ -1692,6 +1775,11 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 
 // Intermediate inspections remain in Activity, including older chats that displayed every capture.
 export function assistantResultGroups(results: readonly FactoryResult[]) {
+	const trials = new Map<string, number>();
+	results.forEach((item, index) => {
+		const id = string(record(item.result).id);
+		if (item.tool === 'test_blueprint' && id) trials.set(id, index);
+	});
 	const installation = results.findLastIndex((item) => item.tool === 'apply_server_mod_list');
 	const review = results.findLastIndex((item) => item.tool === 'prepare_server_mod_list');
 	const plan = results.findLastIndex(
@@ -1738,6 +1826,12 @@ export function assistantResultGroups(results: readonly FactoryResult[]) {
 		item.tool === 'retry_server_setup';
 	return {
 		primary: results.filter(visible),
-		details: results.filter((item, index) => !visible(item, index))
+		details: results.filter(
+			(item, index) =>
+				!visible(item, index) &&
+				(item.tool !== 'test_blueprint' ||
+					!string(record(item.result).id) ||
+					trials.get(string(record(item.result).id)) === index)
+		)
 	};
 }
