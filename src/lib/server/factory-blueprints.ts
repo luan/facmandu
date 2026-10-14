@@ -33,7 +33,7 @@ const variants = [
 	const { operation, ...fields } = variant.shape;
 	return z.strictObject({
 		operation,
-		display: z.boolean().optional(),
+		display: z.boolean().default(false),
 		args: z.strictObject(fields)
 	});
 });
@@ -46,7 +46,7 @@ export const blueprintToolJsonSchema = {
 			type: 'string',
 			enum: ['catalog', 'create', 'program', 'find_site', 'inspect', 'place', 'check']
 		},
-		display: { type: 'boolean' },
+		display: { type: 'boolean', default: false },
 		args: { type: 'object' }
 	},
 	required: ['operation', 'args'],

@@ -615,7 +615,7 @@ export function serverAssistantTools(initialContext: {
 					'check'
 				]),
 				args: v.record(v.string(), v.unknown()),
-				display: v.optional(v.boolean(), true)
+				display: v.optional(v.boolean(), false)
 			}),
 			async run({ data, signal }) {
 				const instance = await server();
