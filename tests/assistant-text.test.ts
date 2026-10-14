@@ -87,6 +87,13 @@ test('partial layout progress counts rows and revisions without exposing entity 
 test('tool feedback distinguishes proposed drafts, placement faults and actual query results', () => {
 	assert.equal(
 		assistantToolProgress('factory_batch', {
+			afterSeconds: 30,
+			queries: [{ tool: 'item_rate' }]
+		}),
+		'Waiting 30s before the next factory check…'
+	);
+	assert.equal(
+		assistantToolProgress('factory_batch', {
 			queries: [{ tool: 'item_rate' }, { tool: 'item_rate' }, { tool: 'current_research' }]
 		}),
 		'Inspecting factory: item rate, current research…'

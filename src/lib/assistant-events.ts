@@ -36,6 +36,9 @@ export function assistantToolProgress(tool: string, input: unknown) {
 		return 'Surveying a supply chain…';
 	if (tool === 'report_progress') return 'Updating you…';
 	if (tool === 'factory_batch') {
+		const afterSeconds = object(input)?.afterSeconds;
+		if (typeof afterSeconds === 'number' && afterSeconds > 0 && afterSeconds <= 30)
+			return `Waiting ${afterSeconds}s before the next factory check…`;
 		const queries = object(input)?.queries;
 		const names = Array.isArray(queries)
 			? [
