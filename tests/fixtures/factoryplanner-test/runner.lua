@@ -1,6 +1,7 @@
 -- Disposable copied full-pack world only. Research changes never belong on a live save.
 -- Exercise production APIs and real dialogs through the upstream native test hook.
 if script.mod_name~='facmandu-assistant' then return function() end end
+require('__factoryplanner-test__.parity')
 local Line=require('__facmandu-assistant__/planner/backend/data/Line')
 local events=require('__facmandu-assistant__/events').scope('native-performance-qa')
 local function measure(name,fn)

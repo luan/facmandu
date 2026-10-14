@@ -1,4 +1,5 @@
 local Object = require("planner.backend.data.Object")
+local Planning = require("planner.backend.data.Planning")
 local Floor = require("planner.backend.data.Floor")
 local FactoryItem = require("planner.backend.data.FactoryItem")
 
@@ -219,38 +220,23 @@ end
 -- Inputs use the same temperature-specific prototype names as the native solver.
 -- Limit: 32 constraints at up to 1,000,000/min; raise after native large-plan profiling.
 local function validate_constraints(factory, inputs, maximize_product)
-    if type(inputs) ~= "table" or #inputs > 32 then return false end
-    local seen, count = {}, 0
-    for index, input in pairs(inputs) do
-        count = count + 1
-        if type(index) ~= "number" or index % 1 ~= 0 or index < 1 or index > #inputs
-                or type(input) ~= "table" then return false end
-        if (input.type ~= "item" and input.type ~= "fluid") or type(input.name) ~= "string"
-                or type(input.amount) ~= "number" or input.amount ~= input.amount
-                or input.amount < 0 or input.amount > 1000000 / 60
-                or (input.mode ~= "exact" and input.mode ~= "maximum") then return false end
-        local key = input.type .. "/" .. input.name
-        if seen[key] or not prototyper.util.find("items", input.name, input.type) then return false end
-        seen[key] = true
-    end
-    if count ~= #inputs then return false end
+    if not Planning.validate_inputs(inputs) then return false end
     if maximize_product then
         if type(maximize_product) ~= "table" or type(maximize_product.name) ~= "string"
-                or (maximize_product.type ~= "item" and maximize_product.type ~= "fluid")
+                or (maximize_product.type ~= "item" and maximize_product.type ~= "fluid" and maximize_product.type ~= "entity")
                 or not prototyper.util.find("items", maximize_product.name, maximize_product.type) then return false end
-        local found = false
-        for product in factory:iterator() do
-            if product.proto.name == maximize_product.name and product.proto.type == maximize_product.type then found = true;break end
-        end
-        if not found then return false end
     end
     return true
 end
 
 function Factory:set_constraints(inputs, maximize_product)
     if not validate_constraints(self, inputs, maximize_product) then return false end
-    self.inputs = lib.flib.deep_copy(inputs)
+    self.inputs = Planning.resolve_inputs(inputs)
     self.maximize_product = maximize_product and lib.flib.shallow_copy(maximize_product)
+    if maximize_product then
+        local proto = prototyper.util.find("items", maximize_product.name, maximize_product.type)
+        if not self:find({proto=proto}) then self:insert(FactoryItem.init(proto)) end
+    end
     if #inputs > 0 or maximize_product then self.top_floor.solver = "simplex" end
     return true
 end
@@ -283,6 +269,7 @@ function Factory:pack(full)
         notes = self.notes,
         productivity_boni = self.productivity_boni,
         inputs = lib.flib.deep_copy(self.inputs or {}),
+        planning_mode = self.planning_mode,
         maximize_product = self.maximize_product and lib.flib.shallow_copy(self.maximize_product),
         products = self:_pack(full),
         top_floor = self.top_floor:pack(full)
@@ -302,6 +289,7 @@ local function unpack(packed_self)
     unpacked_self.notes = packed_self.notes
     unpacked_self.productivity_boni = packed_self.productivity_boni
     unpacked_self.inputs = lib.flib.deep_copy(packed_self.inputs or {})
+    unpacked_self.planning_mode = packed_self.planning_mode
     unpacked_self.maximize_product = packed_self.maximize_product and lib.flib.shallow_copy(packed_self.maximize_product)
 
     unpacked_self.first = Object.unpack(packed_self.products, FactoryItem.unpack, unpacked_self)  ---@as FactoryItem

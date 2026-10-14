@@ -1,6 +1,7 @@
 local Object = require("planner.backend.data.Object")
 local Line = require("planner.backend.data.Line")
 local SimpleItem = require("planner.backend.data.SimpleItem")
+local Planning = require("planner.backend.data.Planning")
 
 ---@alias LineObject Line | Floor
 ---@alias LineParent Factory | Floor
@@ -77,7 +78,7 @@ function Floor:remove(line, preserve)
     line.parent = nil
     self:_remove(line)
 
-    if preserve or self.level == 1 then return end
+    if preserve or self.level == 1 or self.planning then return end
     ---@cast self.first -nil
 
     -- Convert floor to line in parent if only defining line remains
@@ -223,7 +224,7 @@ end
 ---@param object LineObject
 ---@return boolean compatible
 function Floor:check_product_compatibility(object)
-    if self.level == 1 then return true end
+    if self.level == 1 or self.planning then return true end
 
     local relevant_line = (object.class == "Floor") and object.first or object
     local recipe = relevant_line.recipe  ---@cast recipe -nil
@@ -339,6 +340,14 @@ function Floor:clear_solver_cache(self_only)
     end
 end
 
+function Floor:set_planning(settings)
+    if settings ~= nil and not Planning.validate(settings) then return false end
+    self.planning = settings and lib.flib.deep_copy(settings) or nil
+    if settings then self.solver = "simplex" end
+    self:clear_solver_cache(true)
+    return true
+end
+
 ---@param object CopyableObject
 ---@return boolean success
 ---@return string? error
@@ -375,6 +384,7 @@ function Floor:pack(full)
         class = self.class,
         level = self.level,
         solver = self.solver,
+        planning = self.planning and lib.flib.deep_copy(self.planning) or nil,
         lines = self:_pack(full),
 
         products = (full) and SimpleItem.pack_items(self.products) or nil,
@@ -389,6 +399,7 @@ end
 ---@return Floor floor
 local function unpack(packed_self)
     local unpacked_self = init(packed_self.level, packed_self.solver)
+    unpacked_self.planning = packed_self.planning and lib.flib.deep_copy(packed_self.planning) or nil
 
     ---@param line PackedLineObject
     ---@return LineObject line
@@ -408,6 +419,7 @@ end
 ---@return boolean valid
 function Floor:validate(player)
     self.valid = self:_validate(player)
+    self.valid = (self.planning == nil or Planning.validate(self.planning)) and self.valid
 
     local free_items, valid = prototyper.util.validate_prototype_objects(self.gaussian_free_items, "type")
     self.gaussian_free_items = free_items

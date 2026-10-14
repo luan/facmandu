@@ -133,14 +133,22 @@ function simplex_engine.solve_floor(factory_data, floor_id)
         end
     end
 
-    if floor_data.level == 1 then
+    if floor_data.level == 1 or floor_data.planning then
         -- Add additional variable and constraint to target products, so we get a bounded solution
         for _, item in pairs(floor_data.products) do  ---@cast item SolverItem
             local item_key = structures.pack_item(item)
-            if products[item_key] and item_key ~= maximize then
+            if item.mode == "exact" and item.amount > 0 and not products[item_key] then
+                return {id=floor_id, status="no_solution", products={}, ingredients={}, line_result_map={}}
+            end
+            if products[item_key] and (item_key ~= maximize or item.mode == "exact") then
                 local objective = item_cost(item_key) * objective_vector.target_product
-                tableau:add_item_variable(item_key, "output", objective)
-                tableau:add_item_constraint(item_key, "output", "<=", item.amount, objective)
+                if floor_data.planning then
+                    -- Block limits constrain total net exports, including surplus.
+                    tableau:add_item_constraint(item_key, "export", item.mode == "exact" and "==" or "<=", item.amount, objective)
+                else
+                    tableau:add_item_variable(item_key, "output", objective)
+                    tableau:add_item_constraint(item_key, "output", "<=", item.amount, objective)
+                end
             end
         end
 
@@ -159,6 +167,15 @@ function simplex_engine.solve_floor(factory_data, floor_id)
                 return {id=floor_id, status="no_solution", products={}, ingredients={}, line_result_map={}}
             end
             if limit then tableau:add_line_constraint(line_data.id, comparison, limit, objective_vector.machine_limit) end
+        end
+        -- Machine-led blocks without configured counts start at one defining machine.
+        if floor_data.planning and #floor_data.products == 0 and not maximize and #floor_data.inputs == 0 then
+            local bounded = false
+            for _, line_data in ipairs(relevant_line_data) do
+                local _, limit = machine_bound(line_data)
+                bounded = bounded or limit ~= nil
+            end
+            if not bounded then tableau:add_line_constraint(relevant_line_data[1].id, "==", 1, objective_vector.target_machine) end
         end
     else
         -- Artificially limit the top line to one machine so we get a solution for this subfloor

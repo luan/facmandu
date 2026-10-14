@@ -215,7 +215,7 @@ function generator.recipes.generate(context)
     local entity_filter = {{filter="hidden", invert=true}}
     for _, proto in pairs(prototypes.get_entity_filtered(entity_filter)) do
         -- Note the alphabetically first power generating machine for the electricity recipe below
-        if proto.type == "generator" or proto.type == "burner-generator" then
+        if proto.type == "generator" or proto.type == "burner-generator" or proto.type == "solar-panel" then
             if context.first_generator == nil or proto.name < context.first_generator then
                 context.first_generator = proto.name
             end
@@ -634,6 +634,28 @@ function generator.recipes.generate(context)
         insert_prototype(recipes, electricity_recipe, nil)
     end
 
+    local storage_recipe = custom_recipe()
+    storage_recipe.name = "impostor-electricity-storage"
+    storage_recipe.localised_name = "Night power storage"
+    storage_recipe.sprite = "item/accumulator"
+    storage_recipe.order = "z-b"
+    storage_recipe.categories = {["electricity-storage"] = true}
+    storage_recipe.energy = 1
+    local stored = {{type="entity", name="custom-electric-buffer", amount=1}}
+    generator.util.format_recipe(storage_recipe, stored, stored[1], {})
+    insert_prototype(recipes, storage_recipe, nil)
+
+    local heat_recipe = custom_recipe()
+    heat_recipe.name = "impostor-reactor-heat"
+    heat_recipe.localised_name = {"toby-planner.heat_power"}
+    heat_recipe.sprite = "toby_planner_heat_power"
+    heat_recipe.order = "z-c"
+    heat_recipe.categories = {["reactor-heat"] = true}
+    heat_recipe.energy = 1
+    local heat = {{type="entity", name="custom-heat-power", amount=1}}
+    generator.util.format_recipe(heat_recipe, heat, heat[1], {})
+    insert_prototype(recipes, heat_recipe, nil)
+
     return recipes
 end
 
@@ -767,12 +789,18 @@ function generator.items.generate(context)
     generator.util.add_entity_groups(electric_power, context.first_generator)
     custom_items["custom-electric-power"] = electric_power
 
+    custom_items["custom-electric-buffer"] = {
+        name="custom-electric-buffer", localised_name="Night power storage", sprite="item/accumulator",
+        hidden=false, order="z-c2", special=true
+    }
+    generator.util.add_default_groups(custom_items["custom-electric-buffer"])
+
     custom_items["custom-heat-power"] = {
         name = "custom-heat-power",
         localised_name = {"toby-planner.heat_power"},
         sprite = "toby_planner_heat_power",
-        hidden = true,
-        order = "z-c2",
+        hidden = false,
+        order = "z-c3",
         special = true
     }
     generator.util.add_default_groups(custom_items["custom-heat-power"])
@@ -984,7 +1012,7 @@ end
 ---@field maximum_temperature float?
 
 ---@alias EmissionsMap table<string, double>
----@alias PrototypeCategory ("crafter" | "launcher" | "mining_drill" | "boiler" | "offshore_pump" | "generator" | "lab" | "container")
+---@alias PrototypeCategory ("crafter" | "launcher" | "mining_drill" | "boiler" | "offshore_pump" | "generator" | "solar_panel" | "energy_storage" | "reactor" | "lab" | "container")
 
 ---@param context GeneratorContext
 ---@return NamedPrototypesWithCategory<FPMachinePrototype>
@@ -1041,7 +1069,7 @@ function generator.machines.generate(context)
         local burner = nil  ---@type MachineBurner?
 
         local energy_usage  ---@type number
-        if prototype_category == "generator" then
+        if prototype_category == "generator" or prototype_category == "solar_panel" then
             -- For these machines this is the power they put out, not what they consume. It can't
             -- come from get_max_energy_usage(), which reports a burner generator's fuel consumption,
             -- ie. its output divided by its effectivity.
@@ -1310,6 +1338,27 @@ function generator.machines.generate(context)
             if machine then
                 -- Speed in watts combines with the recipe energy of 1J to produce
                 --   that many joules of power per second
+                machine.speed = machine.energy_usage * 60
+                insert_machine(machine)
+            end
+        elseif proto.type == "solar-panel" then
+            local machine = generate_category_entry("electricity", proto, "solar_panel")
+            if machine then
+                machine.speed = machine.energy_usage * 60
+                machine.energy_usage, machine.energy_drain, machine.energy_type = 0, 0, "void"
+                insert_machine(machine)
+            end
+        elseif proto.type == "accumulator" then
+            local machine = generate_category_entry("electricity-storage", proto, "energy_storage")
+            if machine then
+                machine.speed = proto.electric_energy_source_prototype.buffer_capacity
+                machine.quality_affects_capacity = proto.quality_affects_capacity
+                machine.energy_usage, machine.energy_drain, machine.energy_type = 0, 0, "void"
+                insert_machine(machine)
+            end
+        elseif proto.type == "reactor" then
+            local machine = generate_category_entry("reactor-heat", proto, "reactor")
+            if machine then
                 machine.speed = machine.energy_usage * 60
                 insert_machine(machine)
             end

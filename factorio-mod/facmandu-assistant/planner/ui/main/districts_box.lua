@@ -25,6 +25,7 @@ local function change_district_location(player, tags, event)
     local district = OBJECT_INDEX[tags.district_id]  ---@as District
     local location_proto_id = event.element.selected_index
     district.location_proto = prototyper.util.find("locations", location_proto_id, nil)  ---@as FPLocationPrototype
+    district.surface_name = nil
 
     for factory in district:iterator() do
         factory.top_floor:reset_surface_compatibility()

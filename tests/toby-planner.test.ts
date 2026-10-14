@@ -8,6 +8,8 @@ test('native planner solver respects supply, recycling balances, output goals an
 	lualib.luaL_openlibs(state);
 	const modules = [
 		'backend.calculation.simplex_engine',
+		'backend.calculation.sequential_engine',
+		'backend.calculation.solar',
 		'backend.calculation.SimplexTableau',
 		'backend.calculation.LUDecomposition',
 		'backend.calculation.structures',
@@ -73,6 +75,48 @@ test('native planner solver respects supply, recycling balances, output goals an
    end
   end
  end
+ -- Independent blocks solve against their own goals instead of a defining-machine unit.
+ local block={id=20,level=2,line_ids={1},planning={linked=false},products={{name='plate',type='item',amount=3,mode='exact'}},inputs={{name='ore',type='item',amount=8,mode='maximum'}}}
+ local data={floor_data_map={[20]=block},line_data_map={[1]={id=1,products={['item/plate']=1},ingredients={['item/ore']=2}}}}
+ local fixed_block=engine.solve_floor(data,20)
+ assert(fixed_block.status=='solved');near(fixed_block.products['item/plate'],3);near(fixed_block.ingredients['item/ore'],6)
+ data.line_data_map[1].machine_constraints={{id=1,count=5,mode='exact',coefficient=1}}
+ assert(engine.solve_floor(data,20).status=='no_solution','Surplus exports cannot bypass an exact block output')
+ block.products[1].mode='maximum'
+ assert(engine.solve_floor(data,20).status=='no_solution','Surplus exports cannot bypass a block output ceiling')
+ data.line_data_map[1].machine_constraints=nil
+ block.products[1].mode='exact'
+ block.inputs[1].amount=5
+ assert(engine.solve_floor(data,20).status=='no_solution','An infeasible child goal must not be silently relaxed')
+ block.products={};block.inputs[1].amount=8;block.maximize_product={name='plate',type='item'}
+ local forward=engine.solve_floor(data,20)
+ assert(forward.status=='solved');near(forward.products['item/plate'],4)
+ block.products={{name='missing',type='item',amount=1,mode='exact'}};block.maximize_product=nil
+ assert(engine.solve_floor(data,20).status=='no_solution','An exact unavailable output cannot be ignored')
+ local solar=require('planner.backend.calculation.solar')
+ local sunlight,seconds=solar.profile({ticks_per_day=25000})
+ near(sunlight,.7);near(seconds,100)
+ near(solar.storage_power(5000000,300000,300000,sunlight,seconds),50000)
+ for _,duration in ipairs{10000,25000,50000} do
+  local mean,night_seconds=solar.profile({ticks_per_day=duration})
+  near(mean,.7);near(night_seconds,duration*.24/60)
+  near(solar.storage_power(5000000,300000,300000,mean,night_seconds),math.min(5000000/night_seconds,300000))
+ end
+ local frozen,frozen_storage=solar.profile({freeze_daytime=true,daytime=.5})
+ near(frozen,0);assert(frozen_storage==math.huge)
+ near(solar.storage_power(5000000,300000,300000,frozen,frozen_storage),0)
+ near(solar.storage_power(5000000,1000,300000,.7,100),1000*.7/.3)
+ local sequential=require('planner.backend.calculation.sequential_engine')
+ local demand_floor={id=30,level=1,line_ids={1,2},products={{name='plate',type='item',amount=80}}}
+ local demand_data={floor_data_map={[30]=demand_floor},line_data_map={
+  [1]={id=1,production_type='produce',production_percent=25,products={['item/plate']=1},ingredients={['item/ore']=2}},
+  [2]={id=2,production_type='produce',products={['item/plate']=1},ingredients={['item/ore']=2}}}}
+ local split=sequential.solve_floor(demand_data,30)
+ near(split.line_result_map[1].machine_amount,20);near(split.line_result_map[2].machine_amount,60)
+ near(split.products['item/plate'],80);near(split.ingredients['item/ore'],160)
+ demand_data.line_data_map[1].production_percent=0
+ local off=sequential.solve_floor(demand_data,30)
+ near(off.line_result_map[1].machine_amount,0);near(off.line_result_map[2].machine_amount,80)
  local cached_line={id=1,products={['item/plate']=1},ingredients={['item/ore']=2},machine_constraints={{id=1,count=2,mode='maximum',coefficient=1}}}
  local cached_floor={id=10,level=1,line_ids={1},products={{name='plate',type='item',amount=100}},inputs={{name='ore',type='item',amount=7,mode='maximum'}},maximize_product={name='plate',type='item'}}
  local cached_data={floor_data_map={[10]=cached_floor},line_data_map={[1]=cached_line}}

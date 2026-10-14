@@ -208,10 +208,10 @@ end
 ---@param modal_data BeaconDialogModalData
 local function open_beacon_dialog(player, modal_data)
     local line = OBJECT_INDEX[modal_data.line_id]  ---@as Line
-    modal_data.line = line
+    module_configurator.begin_edit(player, modal_data, line)
+    line = modal_data.line
 
     if line.beacon ~= nil then
-        modal_data.beacon_backup = line.beacon:clone(player)
         modal_data.object = line.beacon
     else
         local default_beacon = defaults.get(player, "beacons")
@@ -245,19 +245,18 @@ local function close_beacon_dialog(player, action)
     local modal_data = lib.globals.modal_data(player)  ---@as BeaconDialogModalData
 
     if action == "submit" then
+        modal_data.object.parent = modal_data.original_line
+        modal_data.original_line:set_beacon(modal_data.object)
         solver.update(player)
         lib.gui.run_refresh(player, "production")
 
     elseif action == "delete" then
-        modal_data.line:set_beacon(nil)
+        modal_data.original_line:set_beacon(nil)
         solver.update(player)
         lib.gui.run_refresh(player, "production")
 
-    else -- action == "cancel"
-        modal_data.line:set_beacon(modal_data.beacon_backup)  -- could be nil
-        -- Need to refresh so the buttons have the 'new' backup beacon for further actions
-        lib.gui.run_refresh(player, "production")
     end
+    module_configurator.finish_edit(modal_data)
 end
 
 

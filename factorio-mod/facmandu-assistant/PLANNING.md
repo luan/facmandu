@@ -6,7 +6,7 @@ The agent harness uses Factory Planner's UI components and interaction patterns.
 
 ## Source and current boundary
 
-`planner/` starts from the installed Factory Planner 2.1.18 distribution, verified as 184 matching files before adaptation. Toby 0.0.10 loads and packages the fork. Imports, GUI and prototype names, remote interfaces, asset paths, lifecycle registration and planner storage are namespaced for coexistence. The native simplex engine now supports exact or maximum input supply and a nominated output to maximize.
+`planner/` starts from the installed Factory Planner 2.1.18 distribution, verified as 184 matching files before adaptation. Toby 0.0.11 loads and packages the fork. Imports, GUI and prototype names, remote interfaces, asset paths, lifecycle registration and planner storage are namespaced for coexistence. The native simplex engine now supports exact or maximum input supply and a nominated output to maximize.
 
 - Upstream: https://github.com/ClaudeMetz/FactoryPlanner
 - Release: `v2.1.18`, commit `f4cc3fea9fd6badd1b073214bc7d0ba7a0723461`.
@@ -25,17 +25,19 @@ Preserve these notices in the released Toby archive. Attribute any subsequently 
 | Multiple products and byproducts | Already present | Keep explicit targets and surplus visible |
 | Recipe and machine choices, modules, beacons, quality | Already present | Use the same controls for manual and agent edits |
 | Fluids with temperature, surface conditions, research effects | Already present | Preserve these identities and checks in tools |
-| Nested floors and per-floor solver selection | Already present | Reuse for linked production blocks |
+| Nested floors and per-floor solver selection | Already present | Independently configured input, output and machine blocks, with optional parent scaling |
 | Sequential, Gaussian, and simplex calculations | Already present | Extend the existing engines rather than add another solver |
-| Available input supply | Simplex has a limited-ingredients TODO | Implemented exact or maximum input rates |
+| Available input supply | Simplex has a limited-ingredients TODO | Exact or maximum rates, belts, lanes, stack sizes and watts through the native picker |
 | Counts for a specific recipe line | Existing machine goals resolve through a product's first matching line | Implemented on the selected recipe line, including nested floors |
-| Agent workspace | Existing Toby panel and remote updates | Rewrite using the planner's components and event system |
+| Partial recipe coverage | Matrix solvers choose recipe ratios | Sequential percentage of remaining demand; retained and explicitly inactive under matrix solvers |
+| Solar, storage and reactor planning | Existing generator recipe infrastructure | Average/peak solar, day-cycle storage coverage and active reactor neighbor bonuses |
+| Agent workspace | Existing Toby panel and remote updates | Native planner components, shared plans and revision-checked edits |
 
-Additional Helmod capabilities should be added against concrete examples. Do not silently replace supported mining, power, fuel, spoilage, or modded mechanics with ordinary crafting approximations.
+The port covers the requested flexible planning workflows, rather than every unrelated Helmod screen. Mining, fuel, spoilage, fluid temperatures, quality and surface rules retain their native prototype mechanics.
 
 ## Planning controls
 
-Keep Factory Planner's district, factory, floor, and production table. Add an Inputs section alongside Products. A player chooses an item or fluid through the native picker, enters a rate or belt amount, and chooses **Use exactly** or **Use at most**. Show actual consumption and unused supply separately.
+Keep Factory Planner's district, factory, floor, and production table. The Planning editor provides available inputs alongside the existing Products controls. A player chooses an item or fluid through the native picker, enters a rate or belt amount, and chooses **Use exactly** or **Use at most**. Show actual consumption and unused supply separately.
 
 Output-led planning retains the existing target controls. Input-led planning chooses the output to maximize and constrains available inputs; it does not invent imports to cover a shortage. Machine-led planning selects a recipe line, machine, quality, and count. **Exactly** fixes operating capacity; **At most** permits unused capacity. Display fractional operating counts separately from the whole machines needed to build.
 
@@ -124,3 +126,18 @@ The cached simplex basis is now checked for feasibility and optimized for the cu
 Native manual entry of3.5 operating machines and submission updates the same saved plan. Five indexed iron-recipe choices measured7.2–15.5ms; searches measured below1ms. The no-result recipe panel is130px high, excluding its title. A full item-catalog opening previously reached150.9ms. The picker now indexes all searchable metadata but constructs buttons only for visited groups; five openings measured18.5–26.4ms, and searches across production, material and temperature-specific fluid groups measured2.5–11.0ms. Native rendering verifies empty searches, single-row filtered results, existing-product styling and return to previously visited groups. Keyboard submit, cancel, select-all and search were used through the actual game UI; these results do not claim a mouse transport pass.
 
 Saved book delivery carries separate immutable exported-blueprint receipt IDs and saved-draft design IDs. Explicit `revisionOf` links replace the corresponding save-owned module only within the same force and conversation. Retired receipt/design ancestry prevents replay from resurrecting older modules; missing-parent deliveries coalesce when their ancestry arrives. Independent modules and user-held snapshots remain preserved. Each module retains up to64 prior revision records; refused deliveries are not acknowledged and remain visibly incomplete. Tests exercise every three-revision delivery order, older-host metadata backfill, branches, cross-chat rejection, capacity limits and force merging. Native book export, Factorio import, revision replacement, replay and save/reload pass on the reviewed archive. The old0.0.1 upgrade also replaces its text launcher with the native icon button while retaining the conversation, blueprint and inventory.
+
+
+## 0.0.11 flexible planning
+
+Factory and nested-block planning support output targets, arbitrary available inputs, and operating machine counts. The native picker accepts rates, belt or lane quantities and stack sizes, including ingredient-only materials and temperature-specific fluids. Empty-product input-first plans display the maximized output in Products. Block outputs accept exact or maximum net exports; surplus cannot bypass these bounds. Independent blocks run at their configured quantities, while linked blocks scale their recipe mix within absolute supply and machine limits. A failed child block makes the parent infeasible. Restore defining-recipe scaling returns to the upstream floor behavior.
+
+Shift+Alt+I adds an input, Shift+Alt+O chooses an output to maximize, and Shift+Alt+B opens the current block's planning settings. These chords consume game input to prevent blueprint import from stealing focus. Ctrl+left-click on an ingredient opens its supply picker. Apply-and-add-recipe actions reuse the indexed consumer and producer dialogs. Machine buttons expose exact/maximum operating counts, Sequential coverage percentages, average/peak solar output and reactor neighbors. Solar and accumulator coverage use the selected surface's actual day cycle, frozen daytime, solar multiplier, quality, capacity and charge/discharge limits. Accumulator coverage is a separate output measured in watts of night load; it never supplies free electricity to a material balance.
+
+Manual dialogs and agent tools operate on the same saved model. Agent operations now include independent block settings, add/move/remove recipe lines and explicit solver selection. Solver changes reject unsupported supply, block or machine constraints. Machine and beacon dialogs edit a detached draft; Submit applies it, cancellation discards it, and a stale revision or force change prevents an old draft from returning or overwriting a newer edit. Shareable references remain revision-checked within the requesting force.
+
+The native parity fixture checks linked and independent output/input blocks, belt-defined input and output targets, machine-first plans, shortages, parent/child balances, line operations, power-limited production, solar quality/peak output, accumulator capacity and charging limits, reactor fuel/neighbor ratios, Sequential percentage coverage and clearing overrides. The checks pass on vanilla Space Age and the copied Beast modpack. The full-pack 200-row benchmark measured cold solves at 40.5/57.4/88.6ms for 50/100/200 rows, warm solves at 4.0/6.5/10.6ms, complete edits at 24.3–25.4ms and repeated supply edits at 24.1–24.3ms after a 102.0ms structural solve. These are event costs, not a sustained UPS guarantee.
+
+`tests/fixtures/factoryplanner-test/ui-parity.lua` runs native dialog callbacks on a disposable copied world and checks belt editing, concurrent agent cancellation and force changes. It then pauses for actual keyboard entry of 3.5 operating machines and saves the qualified plans. Hardware mouse delivery is distinct from these callback and keyboard checks. Never install these fixtures on a live world.
+
+The final 0.0.11 full-pack GUI qualification entered and submitted 3.5 operating machines through the actual keyboard, checked the resulting native API balance, filtered recipes to no matches, and filtered the item catalog to one row. Five recipe openings measured 7.3–13.0ms; five item openings measured 15.8–28.1ms; item filtering measured 2.1–4.4ms. The packaged archive preserves configured blocks, belt definitions, solar/storage quality, reactor neighbors and Sequential coverage after named native save/reload, including external Factory Planner coexistence. A true pre-planner 0.0.1 save upgrades with its conversation, blueprint book and inventory intact and then saves/reloads successfully. An existing 0.0.10 save also loads successfully. All 296 host/solver tests, the type check and production build pass.

@@ -303,7 +303,10 @@ local player_events = {
     "toby_planner_confirm_dialog",
     "toby_planner_confirm_gui",
     "toby_planner_focus_searchfield",
-    "toby_planner_toggle_calculator"
+    "toby_planner_toggle_calculator",
+    "toby_planner_add_input",
+    "toby_planner_choose_output",
+    "toby_planner_block_planning"
 }  ---@type (defines.events | string)[]
 
 -- Events generated at runtime have no name of their own, so they need to be named manually

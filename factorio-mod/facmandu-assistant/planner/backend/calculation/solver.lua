@@ -3,6 +3,8 @@ local gaussian_engine = require("planner.backend.calculation.gaussian_engine")
 local simplex_engine = require("planner.backend.calculation.simplex_engine")
 local structures = require("planner.backend.calculation.structures")
 local SimpleItem = require("planner.backend.data.SimpleItem")
+local Planning = require("planner.backend.data.Planning")
+local solar = require("planner.backend.calculation.solar")
 
 ---@alias SolverName "sequential" | "simplex" | "gaussian"
 
@@ -101,7 +103,7 @@ end
 ---@param line Line
 ---@param requirement MachineRequirement
 ---@return LineData
-local function generate_line_data(player, factory, line, requirement)
+local function generate_line_data(player, factory, line, requirement, power_profile)
     local products = {}  ---@type SolverMap
     local ingredients = {}  ---@type SolverMap
     local machine_amount = 1
@@ -110,6 +112,22 @@ local function generate_line_data(player, factory, line, requirement)
     local recipe_proto = line.recipe.proto  ---@as FPRecipePrototype
     local machine_speed = line.machine:get_speed()
     local recipe_energy = recipe_proto.energy  ---@as number
+    if machine_proto.prototype_category == "solar_panel" then
+        local native = prototypes.entity[machine_proto.name]
+        local property = native.solar_panel_solar_coefficient_property
+        local name = property and (type(property) == "string" and property or property.name) or "solar-power"
+        local multiplier = (power_profile.properties[name] or 100) / 100 * power_profile.multiplier
+        local daylight = line.power_mode == "peak" and 1 or power_profile.average
+        local day = native.solar_panel_performance_at_day or 1
+        local night = native.solar_panel_performance_at_night or 0
+        machine_speed = machine_speed * multiplier * (night + (day - night) * daylight)
+    elseif machine_proto.prototype_category == "energy_storage" then
+        local source = prototypes.entity[machine_proto.name].electric_energy_source_prototype
+        machine_speed = solar.storage_power(machine_speed, source.get_input_flow_limit(line.machine.quality_proto.name) * 60,
+            source.get_output_flow_limit(line.machine.quality_proto.name) * 60, power_profile.average, power_profile.storage_seconds)
+    elseif machine_proto.prototype_category == "reactor" then
+        machine_speed = machine_speed * (1 + (line.neighbor_count or 0) * (prototypes.entity[machine_proto.name].neighbour_bonus or 0))
+    end
 
     -- Update line effects
     local force = player.force  ---@as LuaForce
@@ -310,6 +328,7 @@ local function generate_line_data(player, factory, line, requirement)
         machine_constraints = line.machine_constraint and {{id=line.id, count=line.machine_constraint.count,
             mode=line.machine_constraint.mode, coefficient=1}} or nil,
         production_type = line.recipe.production_type,
+        production_percent = line.production_percent,
     }  ---@type LineData
 end
 
@@ -349,6 +368,15 @@ local function generate_line_data_from_result(factory_data, floor_id, subfloor_r
                 coefficient=capacity.coefficient * (result and result.machine_amount or 0)}
         end
     end
+    if subfloor_data.planning then
+        for _, input in ipairs(subfloor_data.inputs) do
+            capacities[#capacities + 1] = {id=subfloor_result.id, count=input.amount, mode=input.mode,
+                coefficient=subfloor_result.ingredients[structures.pack_item(input)] or 0}
+        end
+        if not subfloor_data.planning.linked then
+            capacities[#capacities + 1] = {id=subfloor_result.id, count=1, mode="exact", coefficient=1}
+        end
+    end
     factory_data.line_data_map[subfloor_result.id] = {
         id = subfloor_result.id,
         floor_id = floor_id,
@@ -358,7 +386,8 @@ local function generate_line_data_from_result(factory_data, floor_id, subfloor_r
         priority_item = subfloor_line.priority_item,
         machine_requirement = subfloor_line.machine_requirement,
         machine_constraints = capacities,
-        production_type = "produce"
+        production_type = "produce",
+        production_percent = subfloor_line.production_percent
     }
 end
 
@@ -381,15 +410,17 @@ end
 ---@param machine_requirements table<ObjectID, MachineRequirement>
 ---@return FloorDataMap
 ---@return LineDataMap
-local function generate_floor_data(player, factory, floor, machine_requirements)
+local function generate_floor_data(player, factory, floor, machine_requirements, power_profile)
     local free_items = floor.gaussian_free_items  ---@as FPItemPrototype[]
+    local planning = floor.level > 1 and floor.planning
     local floor_data = {
         id = floor.id,
         level = floor.level,
-        solver_choice = floor.solver,
-        products = floor.level == 1 and factory_products(factory) or {},
-        inputs = floor.level == 1 and factory.inputs or {},
-        maximize_product = floor.level == 1 and factory.maximize_product or nil,
+        solver_choice = planning and "simplex" or floor.solver,
+        products = floor.level == 1 and factory_products(factory) or Planning.resolve_inputs(planning and planning.products),
+        inputs = Planning.resolve_inputs(floor.level == 1 and factory.inputs or planning and planning.inputs),
+        maximize_product = floor.level == 1 and factory.maximize_product or planning and planning.maximize_product or nil,
+        planning = planning,
         line_ids = {},
         gaussian_free_items = free_items,
         simplex_basis = floor.simplex_basis_cache
@@ -401,18 +432,18 @@ local function generate_floor_data(player, factory, floor, machine_requirements)
     for line in floor:iterator() do
         if line.class == "Floor" then  ---@cast line Floor
             local subfloor_floor_map, subfloor_line_map
-            subfloor_floor_map, subfloor_line_map = generate_floor_data(player, factory, line, machine_requirements)
+            subfloor_floor_map, subfloor_line_map = generate_floor_data(player, factory, line, machine_requirements, power_profile)
             if subfloor_floor_map[line.id] then table.insert(floor_data.line_ids, line.id) end
             for k, v in pairs (subfloor_floor_map) do floor_data_map[k] = v end
             for k, v in pairs (subfloor_line_map) do line_data_map[k] = v end
         else  ---@cast line Line
-            local requirement = machine_requirements[line.id]
+            local requirement = not planning and machine_requirements[line.id] or nil
             if line:get_blocker() then
                 -- A blocked defining recipe disables the entire subtree
                 if line == floor.first and floor.level > 1 then break end
             else
                 table.insert(floor_data.line_ids, line.id)
-                line_data_map[line.id] = generate_line_data(player, factory, line, requirement)
+                line_data_map[line.id] = generate_line_data(player, factory, line, requirement, power_profile)
             end
         end
     end
@@ -433,8 +464,18 @@ end
 ---@return FactoryData
 local function generate_factory_data(player, factory)
     local machine_requirements = resolve_machine_requirements(factory)
+    local location = factory.parent.location_proto
+    local properties = location.surface_properties or {}
+    local surface = game.surfaces[factory.parent.surface_name or location.name]
+    local day = surface and {dusk=surface.dusk, evening=surface.evening, morning=surface.morning, dawn=surface.dawn,
+        ticks_per_day=surface.ticks_per_day, freeze_daytime=surface.freeze_daytime, daytime=surface.daytime}
+        or {ticks_per_day=properties["day-night-cycle"] or 25000,
+            freeze_daytime=properties["day-night-cycle"] == 0, daytime=0}
+    local average, storage_seconds = solar.profile(day)
+    local power_profile = {average=average, storage_seconds=storage_seconds,
+        properties=properties, multiplier=surface and surface.solar_power_multiplier or 1}
     local floor_data_map, line_data_map =
-        generate_floor_data(player, factory, factory.top_floor, machine_requirements)
+        generate_floor_data(player, factory, factory.top_floor, machine_requirements, power_profile)
 
     local factory_data = {
         player_index = player.index,
@@ -762,15 +803,6 @@ local function update_factory(factory_data, result_map)
 end
 
 
-local function has_machine_constraints(floor)
-    for line in floor:iterator() do
-        if line.class == "Floor" then
-            if has_machine_constraints(line) then return true end
-        elseif line.machine_constraint then return true end
-    end
-    return false
-end
-
 -- ** TOP LEVEL **
 --- Updates the whole factory calculations from top to bottom
 ---@param player LuaPlayer
@@ -779,7 +811,7 @@ function solver.update(player, factory)
     factory = factory or lib.context.get(player, "Factory")  ---@as Factory
     if factory and factory.valid then
         -- Supply bounds and maximization require inequalities at the root.
-        if factory.maximize_product or #(factory.inputs or {}) > 0 or has_machine_constraints(factory.top_floor) then
+        if factory.maximize_product or #(factory.inputs or {}) > 0 or Planning.has_constraints(factory.top_floor) then
             factory.top_floor:set_solver("simplex", false)
         end
         -- Cancel any pending update as it'll be running right now
@@ -804,13 +836,21 @@ function solver.update(player, factory)
             -- Recurse the floor tree from the leaves to the top floor (root)
             local floor_data = factory_data.floor_data_map[floor_id]
             if not floor_data then return end
+            local failed_child
             for _, line_object_id in pairs(floor_data.line_ids) do
                 if factory_data.floor_data_map[line_object_id] then
                     local cache_invalid = solve_floor(line_object_id)
                     if cache_invalid then
                         floor_data.simplex_basis = nil
                     end
+                    local child = result_map[line_object_id]
+                    if child and child.status ~= "solved" then failed_child = child.status end
                 end
+            end
+
+            if failed_child then
+                result_map[floor_id] = {id=floor_id, status=failed_child, products={}, ingredients={}, line_result_map={}}
+                return true
             end
 
             local result = nil

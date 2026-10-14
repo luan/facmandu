@@ -223,12 +223,17 @@ function modal_dialog.exit(player, action, skip_opened, dialog_close)
 
     local modal_elements = ui_state.modal_data.modal_elements
     local submit_button = modal_elements.dialog_submit_button
+    local factory = ui_state.modal_data.shared_factory
+    local stale = factory and (factory ~= lib.context.get(player, "Factory")
+        or ui_state.modal_data.shared_revision ~= (factory.revision or 0))
+    if stale then action = "cancel" end
 
     -- Stop exiting if trying to submit while submission is disabled
     if action == "submit" and (submit_button and not submit_button.enabled) then return end
 
     -- Call the closing function for this dialog, if it has one
     if dialog_close ~= nil then dialog_close(player, action) end
+    local next_dialog = not stale and ui_state.modal_data.next_dialog
 
     -- Unregister the delayed search handler if present
     local search_tick = ui_state.modal_data.next_search_tick
@@ -241,6 +246,7 @@ function modal_dialog.exit(player, action, skip_opened, dialog_close)
     modal_elements.modal_frame.destroy()
 
     if not skip_opened then player.opened = ui_state.main_elements.main_frame end
+    if next_dialog then lib.gui.open_dialog(player, next_dialog) end
 end
 
 
@@ -480,6 +486,8 @@ listeners.gui = {
 
 listeners.player = {
     toby_planner_confirm_dialog = function(player, _)
+        if lib.globals.ui_state(player).modal_dialog_type == "picker"
+            and GLOBAL_HANDLERS["confirm_picker_search"](player) then return end
         lib.gui.close_dialog(player, "submit")
     end,
 

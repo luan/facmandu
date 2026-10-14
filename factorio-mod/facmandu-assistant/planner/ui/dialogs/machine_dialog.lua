@@ -1,8 +1,6 @@
 ---@class MachineDialogModalData: ModuleConfiguratorModalData
 ---@field machine_id ObjectID
 ---@field object Machine
----@field machine_backup Machine
----@field beacon_backup Beacon
 
 local function read_capacity(modal_data)
     local text = modal_data.capacity_amount.text
@@ -16,7 +14,26 @@ end
 local function validate_capacity(player)
     local modal_data = lib.globals.modal_data(player)
     local _, valid = read_capacity(modal_data)
+    if modal_data.production_percent and modal_data.production_percent.enabled then
+        local text = modal_data.production_percent.text
+        local percent = tonumber(text)
+        valid = valid and (not text:match("%S") or percent and percent == percent and percent >= 0 and percent <= 1000)
+    end
+    if modal_data.reactor_neighbors and modal_data.reactor_flow.visible then
+        local neighbors = tonumber(modal_data.reactor_neighbors.text)
+        valid = valid and neighbors and neighbors == neighbors and neighbors >= 0 and neighbors <= 4
+    end
     modal_data.modal_elements.dialog_submit_button.enabled = valid
+end
+
+local function refresh_power_controls(player)
+    local modal = lib.globals.modal_data(player)
+    if not modal.solar_flow then return end
+    local category = modal.object.proto.prototype_category
+    modal.solar_flow.visible = category == "solar_panel"
+    modal.reactor_flow.visible = category == "reactor"
+    modal.storage_note.visible = category == "energy_storage"
+    validate_capacity(player)
 end
 
 -- ** LOCAL UTIL **
@@ -139,6 +156,7 @@ local function reset_machine(player)
     refresh_fuel_frame(player)
     module_configurator.refresh_modules_flow(player, false)
     refresh_defaults_buttons(player)
+    refresh_power_controls(player)
 end
 
 
@@ -220,6 +238,7 @@ local function handle_machine_choice(player, _, event)
     refresh_fuel_frame(player)
     module_configurator.refresh_modules_flow(player, false)
     refresh_defaults_buttons(player)
+    refresh_power_controls(player)
 end
 
 ---@param player LuaPlayer
@@ -246,12 +265,11 @@ end
 ---@param player LuaPlayer
 ---@param modal_data MachineDialogModalData
 local function open_machine_dialog(player, modal_data)
-    modal_data.object = OBJECT_INDEX[modal_data.machine_id]  ---@as Machine
-    modal_data.line = modal_data.object.parent
+    local original = OBJECT_INDEX[modal_data.machine_id]  ---@as Machine
+    module_configurator.begin_edit(player, modal_data, original.parent)
+    modal_data.object = modal_data.line.machine
 
     modal_data.module_set = modal_data.object.module_set
-    modal_data.machine_backup = modal_data.object:clone(player)
-    modal_data.beacon_backup = modal_data.line.beacon and modal_data.line.beacon:clone(player)
 
     local content_frame = modal_data.modal_elements.content_frame
 
@@ -271,6 +289,34 @@ local function open_machine_dialog(player, modal_data)
     modal_data.capacity_mode = capacity.add{type="drop-down", items={"At most", "Exactly"},
         selected_index=constraint and constraint.mode == "exact" and 2 or 1}
     capacity.add{type="label", caption="Current: " .. lib.format.number(modal_data.line.machine.amount, 3)}
+    local share = content_frame.add{type="flow", direction="horizontal"}
+    share.style.vertical_align = "center"
+    share.add{type="label", caption="Remaining demand", style="bold_label"}
+    modal_data.production_percent = share.add{type="textfield",
+        text=modal_data.line.production_percent and tostring(modal_data.line.production_percent) or "",
+        numeric=true, allow_decimal=true, allow_negative=false, enabled=modal_data.original_line:production_solver() == "sequential",
+        tooltip="Sequential: cover this percentage of remaining demand (blank: 100%). Matrix solvers choose their own recipe ratios.",
+        tags={mod="toby-planner", on_gui_text_changed="machine_production_percent"}}
+    modal_data.production_percent.style.width = 100
+    share.add{type="label", caption="% · Sequential solver"}
+    modal_data.solar_flow = content_frame.add{type="flow", direction="horizontal"}
+    modal_data.solar_flow.style.vertical_align = "center"
+    modal_data.solar_flow.add{type="label", caption="Solar output", style="bold_label"}
+    modal_data.power_mode = modal_data.solar_flow.add{type="drop-down", items={"Average day cycle", "Peak daylight"},
+        selected_index=modal_data.line.power_mode == "peak" and 2 or 1}
+    modal_data.reactor_flow = content_frame.add{type="flow", direction="horizontal"}
+    modal_data.reactor_flow.style.vertical_align = "center"
+    modal_data.reactor_flow.add{type="label", caption="Active neighbors per reactor", style="bold_label"}
+    modal_data.reactor_neighbors = modal_data.reactor_flow.add{type="textfield", text=tostring(modal_data.line.neighbor_count or 0),
+        numeric=true, allow_decimal=true, allow_negative=false,
+        tags={mod="toby-planner", on_gui_text_changed="machine_reactor_neighbors"},
+        tooltip="Mean active adjacent reactors, from 0 to 4. Neighbor bonuses increase heat without increasing fuel use."}
+    modal_data.reactor_neighbors.style.width = 100
+    modal_data.storage_note = content_frame.add{type="label",
+        caption="Night load coverage uses the surface day cycle, stored energy and charge/discharge limits."}
+    modal_data.storage_note.style.single_line = false
+    modal_data.storage_note.style.maximal_width = 480
+    refresh_power_controls(player)
     validate_capacity(player)
 
     -- Modules
@@ -283,30 +329,42 @@ end
 ---@param action GUICloseAction
 local function close_machine_dialog(player, action)
     local modal_data = lib.globals.modal_data(player)  ---@as MachineDialogModalData
-    local machine, line = modal_data.object, modal_data.line
+    local machine, line = modal_data.object, modal_data.original_line
 
     if action == "submit" then
         local constraint, valid = read_capacity(modal_data)
-        if not valid or not line:set_machine_constraint(constraint) then return end
+        if not valid or not modal_data.line:set_machine_constraint(constraint) then return end
+        if modal_data.production_percent.enabled then
+            if not modal_data.line:set_production_percent(tonumber(modal_data.production_percent.text)) then return end
+        end
+        local mode = modal_data.solar_flow.visible and (modal_data.power_mode.selected_index == 2 and "peak" or "average") or nil
+        local neighbors = modal_data.reactor_flow.visible and tonumber(modal_data.reactor_neighbors.text) or nil
+        if not modal_data.line:set_power_configuration(mode, neighbors) then return end
         machine.module_set:normalize({sort=true})
+        line.machine = machine
+        machine.parent = line
+        if modal_data.line.beacon then modal_data.line.beacon.parent = line end
+        line:set_beacon(modal_data.line.beacon)
+        line.machine_constraint = modal_data.line.machine_constraint
+        line.production_percent = modal_data.line.production_percent
+        line.power_mode, line.neighbor_count = mode, neighbors
+        line.surface_compatibility = nil
+        machine:summarize_effects()
 
         solver.update(player)
         lib.gui.run_refresh(player, "production")
 
-    else  -- action == "cancel"
-        line.machine = modal_data.machine_backup
-        line.machine.module_set:normalize({effects=true})
-        line:set_beacon(modal_data.beacon_backup)
-        -- Need to refresh so the buttons have the 'new' backup machine for further actions
-        lib.gui.run_refresh(player, "production")
     end
+    module_configurator.finish_edit(modal_data)
 end
 
 -- ** EVENTS **
 local listeners = {}  ---@type ListenerDefinitions
 
 listeners.gui = {
-    on_gui_text_changed = {{name="machine_capacity", handler=validate_capacity}},
+    on_gui_text_changed = {{name="machine_capacity", handler=validate_capacity},
+        {name="machine_production_percent", handler=validate_capacity},
+        {name="machine_reactor_neighbors", handler=validate_capacity}},
     on_gui_elem_changed = {
         {
             name = "choose_machine",

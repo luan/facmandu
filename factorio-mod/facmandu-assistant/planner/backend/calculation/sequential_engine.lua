@@ -101,6 +101,9 @@ local function solve_line(line_data, aggregate, is_relevant_line)
     else
         machine_amount = determine_producing_ratio(line_data, aggregate, demanded_products)
     end
+    if not is_relevant_line and not line_data.machine_requirement then
+        machine_amount = machine_amount * (line_data.production_percent or 100) / 100
+    end
 
     -- Determine byproducts
     for _, byproduct in pairs(byproducts) do

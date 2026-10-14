@@ -1,6 +1,7 @@
 local Floor = require("planner.backend.data.Floor")
 local Line = require("planner.backend.data.Line")
 local FactoryItem = require("planner.backend.data.FactoryItem")
+local Planning = require("planner.backend.data.Planning")
 
 -- ** LOCAL UTIL **
 ---@param player LuaPlayer
@@ -64,7 +65,8 @@ local function handle_solver_change(player, tags, event)
     local recursive = event.shift or not lib.globals.preferences(player).per_floor_solver
     local target_floor = recursive and factory.top_floor or floor
     if target_floor == factory.top_floor and tags.solver ~= "simplex"
-        and (factory.maximize_product or #(factory.inputs or {}) > 0) then return end
+        and (factory.maximize_product or #(factory.inputs or {}) > 0 or Planning.has_constraints(factory.top_floor)) then return end
+    if target_floor.planning and tags.solver ~= "simplex" then return end
     if not target_floor:set_solver(tags.solver, recursive) then return end
     factory:clear_solver_cache()
 
@@ -122,6 +124,8 @@ local function refresh_production_box(player)
 
     production_box_elements.convert_subfloor_button.visible = factory_valid
     production_box_elements.convert_subfloor_button.enabled = (current_level > 1)
+    production_box_elements.block_settings_button.visible = factory_valid and current_level > 1
+    production_box_elements.block_settings_button.enabled = factory_valid and not factory.archived
 
     production_box_elements.solver_flow.visible = factory_valid
     if factory_valid then  ---@cast factory -nil
@@ -134,10 +138,10 @@ local function refresh_production_box(player)
                 and {"", tooltip, {"toby-planner.solver_apply_factory"}} or tooltip
             button.toggled = (solver_name == floor.solver)
             button.enabled = (not factory.archived)
-                and not (floor == factory.top_floor and solver_name ~= "simplex"
-                    and (factory.maximize_product or #(factory.inputs or {}) > 0))
+                and not (solver_name ~= "simplex" and (floor.planning or floor == factory.top_floor
+                    and (factory.maximize_product or #(factory.inputs or {}) > 0 or Planning.has_constraints(factory.top_floor))))
             if not button.enabled and not factory.archived then
-                button.tooltip = "Input supply and maximization require Simplex. Clear them to choose another solver."
+                button.tooltip = "Supply limits, operating counts and independent block goals require Simplex."
             end
         end
     end
@@ -223,6 +227,10 @@ local function build_production_box(player)
         style="toby_planner_sprite-button_rounded_icon", mouse_button_filter={"left"}}
     button_convert_subfloor.style.top_margin = 2
     main_elements.production_box["convert_subfloor_button"] = button_convert_subfloor
+
+    main_elements.production_box["block_settings_button"] = flow_production.add{type="button", caption="Block",
+        style="toby_planner_button_frame_tool", tooltip="Edit this block's goals, supplies and link to its parent.",
+        tags={mod="toby-planner", on_gui_click="edit_block_settings"}}
 
     local button_paste = flow_production.add{type="sprite-button", sprite="utility/import_slot",
         tooltip={"toby-planner.paste_line_tt"}, tags={mod="toby-planner", on_gui_click="paste_line"},

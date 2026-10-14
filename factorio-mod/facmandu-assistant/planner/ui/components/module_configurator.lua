@@ -1,11 +1,37 @@
 local Module = require("planner.backend.data.Module")
+local Line = require("planner.backend.data.Line")
 
 -- Contains the UI and event handling for machine/beacon modules
 module_configurator = {}
 
+-- Shared plans stay committed while a player previews machine and beacon changes.
+function module_configurator.begin_edit(player, modal, line)
+    modal.original_line = line
+    modal.first_draft_id = storage.planner.next_object_ID
+    modal.line = Line.unpack(line:pack(false))
+    modal.line.parent = line.parent
+    modal.line:validate(player)
+    modal.line.machine.amount = line.machine.amount
+    if line.machine.fuel then
+        modal.line.machine.fuel.amount = line.machine.fuel.amount
+        modal.line.machine.fuel.satisfied_amount = line.machine.fuel.satisfied_amount
+    end
+end
+
+function module_configurator.finish_edit(modal)
+    -- Adopted objects now belong to the original line; discard only the draft tree.
+    for id = modal.first_draft_id, storage.planner.next_object_ID - 1 do
+        local object = OBJECT_INDEX[id]
+        while object and object ~= modal.line do object = object.parent end
+        if object then OBJECT_INDEX[id] = nil end
+    end
+end
+
 ---@class ModuleConfiguratorModalData: ModalData
 ---@field object Machine | Beacon
 ---@field line Line
+---@field original_line Line
+---@field first_draft_id ObjectID
 ---@field module_set ModuleSet
 ---@field defaults_refresher string
 ---@field submit_checker string

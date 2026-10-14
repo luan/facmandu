@@ -231,9 +231,25 @@ local function handle_item_button_click(player, tags, action)
         lib.gui.open_dialog(player, {dialog="recipe", modal_data={production_type=production_type,
             category_id=item.proto.category_id, product_id=item.proto.id}})
 
-    elseif action == "edit" then
+    elseif action == "edit" and tags.item_category ~= "ingredient" then
         lib.gui.open_dialog(player, {dialog="picker",
             modal_data={item_id=item.id, item_category=tags.item_category}})
+
+    elseif action == "edit" and tags.item_category == "ingredient" then
+        local factory = lib.context.get(player, "Factory")
+        local floor = lib.context.get(player, "Floor")
+        local draft = lib.flib.deep_copy(floor.planning or {linked=true, mode="input", products={},
+            inputs=floor.level == 1 and factory.inputs or {}, maximize_product=floor.level == 1 and factory.maximize_product or nil})
+        local selected
+        for index, row in ipairs(draft.inputs) do
+            if row.name == item.proto.name and row.type == item.proto.type then selected = index;break end
+        end
+        if not selected then
+            selected = #draft.inputs + 1
+            draft.inputs[selected] = {name=item.proto.name, type=item.proto.type, amount=item.amount, mode="maximum"}
+        end
+        lib.gui.open_dialog(player, {dialog="picker", modal_data={item_category="ingredient", supply_target="input",
+            supply_draft=draft, supply_index=selected, supply_floor_id=floor.id, supply_revision=factory.revision or 0}})
 
     elseif action == "move_left" or action == "move_right" then
         local direction = (action == "move_left") and "previous" or "next"
@@ -393,7 +409,9 @@ listeners.gui = {
             name = "act_on_item_box",
             actions_table = {
                 add_recipe = {shortcut="left", core=true, show=show_add_recipe, enable=lib.actions.can_add_recipe},
-                edit = {shortcut="control-left", core=true, show=is_top_level_product, enable=lib.actions.can_edit_factory},
+                edit = {shortcut="control-left", core=true,
+                    show=function(flags) return is_top_level_product(flags) or not flags.product and not flags.byproduct end,
+                    enable=lib.actions.can_edit_factory},
                 delete = {input="delete", show=is_top_level_product, enable=lib.actions.can_edit_factory},
                 move_left = {show=is_top_level_product, enable=can_move_left},
                 move_right = {show=is_top_level_product, enable=can_move_right},

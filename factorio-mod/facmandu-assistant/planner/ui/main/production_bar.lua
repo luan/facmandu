@@ -64,7 +64,7 @@ local function build_production_bar(player)
 
     local label_factory = flow_factory.add{type="label", caption={"toby-planner.pu_factory", 1}, style="frame_title"}
     label_factory.style.padding = {-1, 8}
-    flow_factory.add{type="button", caption="Input supply", style="toby_planner_button_frame_tool",
+    flow_factory.add{type="button", caption="Planning", style="toby_planner_button_frame_tool",
         tags={mod="toby-planner", on_gui_click="edit_supply"}, mouse_button_filter={"left"}}
     flow_factory.add{type="button", caption="Share", style="toby_planner_button_frame_tool",
         tags={mod="toby-planner", on_gui_click="share_plan"}, mouse_button_filter={"left"}}

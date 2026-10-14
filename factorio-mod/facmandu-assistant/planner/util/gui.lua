@@ -238,7 +238,7 @@ function _gui.parse_expression_field(textfield, positive)
     pcall(function() expression = helpers.evaluate_expression(textfield.text, expression_variables) end)
     ---@cast expression double?
 
-    if expression == nil then return nil
+    if type(expression) ~= "number" or expression ~= expression or math.abs(expression) == math.huge then return nil
     elseif positive and expression <= 0 then return nil
     else return expression end
 end

@@ -167,8 +167,13 @@ function Machine:get_speed()
 
     if category == nil or category == "mining_drill" then
         return speed
-    elseif category == "boiler" or category == "offshore_pump" or category == "generator" then
+    elseif category == "boiler" or category == "offshore_pump" or category == "generator" or category == "solar_panel" then
         return speed * self.quality_proto.default_multiplier
+    elseif category == "energy_storage" then
+        return speed * (self.proto.quality_affects_capacity
+            and prototypes.quality[self.quality_proto.name].accumulator_capacity_multiplier or 1)
+    elseif category == "reactor" then
+        return speed
     elseif category == "launcher" then
         return LAUNCHER_DATA[self.proto.name][self.quality_proto.name].speed
     elseif category == "lab" then

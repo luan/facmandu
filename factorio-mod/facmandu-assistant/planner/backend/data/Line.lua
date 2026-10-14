@@ -75,6 +75,27 @@ function Line:set_machine_constraint(constraint)
     return true
 end
 
+function Line:set_production_percent(percent)
+    -- Cap manual demand coverage at 10x; raise only if a real planning case needs it.
+    if percent ~= nil and (type(percent) ~= "number" or percent ~= percent or percent < 0 or percent > 1000) then return false end
+    self.production_percent = percent
+    return true
+end
+
+function Line:production_solver()
+    local floor = self.parent
+    if floor.level > 1 and floor.first == self and not floor.planning then floor = floor.parent end
+    return floor.solver
+end
+
+function Line:set_power_configuration(mode, neighbors)
+    if mode ~= nil and (self.machine.proto.prototype_category ~= "solar_panel" or mode ~= "average" and mode ~= "peak") then return false end
+    if neighbors ~= nil and (self.machine.proto.prototype_category ~= "reactor" or type(neighbors) ~= "number"
+        or neighbors ~= neighbors or neighbors < 0 or neighbors > 4) then return false end
+    self.power_mode, self.neighbor_count = mode, neighbors
+    return true
+end
+
 
 function Line:index()
     OBJECT_INDEX[self.id] = self
@@ -95,6 +116,8 @@ end
 ---@param player LuaPlayer
 ---@param proto FPMachinePrototype
 function Line:change_machine_to_proto(player, proto)
+    if proto.prototype_category ~= "solar_panel" then self.power_mode = nil end
+    if proto.prototype_category ~= "reactor" then self.neighbor_count = nil end
     if not self.machine then
         self.machine = Machine.init(self, proto)
         self.machine:summarize_effects()
@@ -395,6 +418,9 @@ function Line:pack(full)
         beacon = self.beacon and self.beacon:pack(full),
         comment = self.comment,
         machine_constraint = self.machine_constraint and lib.flib.shallow_copy(self.machine_constraint),
+        production_percent = self.production_percent,
+        power_mode = self.power_mode,
+        neighbor_count = self.neighbor_count,
 
         products = (full) and SimpleItem.pack_items(self.products) or nil,
         byproducts = (full) and SimpleItem.pack_items(self.byproducts) or nil,
@@ -413,6 +439,8 @@ local function unpack(packed_self)
     unpacked_self.beacon = packed_self.beacon and Beacon.unpack(packed_self.beacon, unpacked_self)  ---@as Beacon
     unpacked_self.comment = packed_self.comment
     unpacked_self.machine_constraint = packed_self.machine_constraint and lib.flib.shallow_copy(packed_self.machine_constraint)
+    unpacked_self.production_percent = packed_self.production_percent
+    unpacked_self.power_mode, unpacked_self.neighbor_count = packed_self.power_mode, packed_self.neighbor_count
 
     return unpacked_self
 end
@@ -423,8 +451,9 @@ end
 function Line:validate(player)
     self.valid = self.recipe:validate(player)
     if self.recipe.valid then self.valid = self:set_machine_constraint(self.machine_constraint) and self.valid end
-
+    self.valid = self:set_production_percent(self.production_percent) and self.valid
     if self.recipe.valid then self.valid = self.machine:validate(player) and self.valid end
+    if self.machine and self.machine.valid then self.valid = self:set_power_configuration(self.power_mode, self.neighbor_count) and self.valid end
 
     if self.recipe.valid and self.beacon then self.valid = self.beacon:validate(player) and self.valid end
 
@@ -452,6 +481,8 @@ function Line:repair(player)
     end
 
     self.valid = self:set_machine_constraint(self.machine_constraint) and self.valid
+    self.valid = self:set_production_percent(self.production_percent) and self.valid
+    if self.machine and self.machine.valid then self.valid = self:set_power_configuration(self.power_mode, self.neighbor_count) and self.valid end
 
     return self.valid
 end

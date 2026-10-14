@@ -67,7 +67,8 @@ end
 ---@param name string
 ---@return boolean
 function _lib.is_special_power_item(name)
-    return (name == "custom-electric-power" or name == "custom-heat-power" or name == "custom-heating-power")
+    return (name == "custom-electric-power" or name == "custom-heat-power" or name == "custom-heating-power"
+        or name == "custom-electric-buffer")
 end
 
 return _lib

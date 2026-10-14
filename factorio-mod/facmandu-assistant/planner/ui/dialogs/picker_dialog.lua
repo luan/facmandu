@@ -1,4 +1,5 @@
 local FactoryItem = require("planner.backend.data.FactoryItem")
+local Planning = require("planner.backend.data.Planning")
 
 ---@alias ItemCategory "product" | "byproduct" | "ingredient"
 
@@ -146,13 +147,18 @@ local function add_item_picker(parent_flow, player)
     elements.filter_frame = parent_flow.add{type="frame", style="filter_frame"}
     local group_ids, existing = {}, {}
     elements.groups = {}
-    if not modal_data.create_factory then
+    if modal_data.supply_draft and modal_data.supply_target ~= "maximize" then
+        local category = modal_data.supply_target == "input" and "inputs" or "products"
+        for index, item in ipairs(modal_data.supply_draft[category]) do
+            if index ~= modal_data.supply_index then existing[item.type .. "/" .. item.name] = true end
+        end
+    elseif not modal_data.supply_draft and not modal_data.create_factory then
         local factory = lib.context.get(player, "Factory")  ---@as Factory
         for product in factory:iterator() do existing[product.proto.name] = true end
     end
     -- Index the catalog for search; construct native item buttons only for visited groups.
     for _, proto in ipairs(SORTED_ITEMS) do
-        if not proto.hidden and not proto.ingredient_only then
+        if not proto.hidden and (not proto.ingredient_only or modal_data.supply_target == "input") then
             local name = proto.group.name
             local id = group_ids[name]
             if not id then
@@ -168,7 +174,8 @@ local function add_item_picker(parent_flow, player)
             local translated = translations and translations[proto.type][proto.name]
             local items = elements.groups[id].items
             items[#items + 1] = {proto=proto, translated_name=translated and helpers.multilingual_to_lower(translated) or proto.name,
-                unlocked=lib.availability.is_item_unlocked(force, proto, unlock_cache), existing=existing[proto.name] or false}
+                unlocked=lib.availability.is_item_unlocked(force, proto, unlock_cache),
+                existing=existing[proto.type .. "/" .. proto.name] or existing[proto.name] or false}
         end
     end
     if math.ceil(#elements.groups / groups_per_row) > MAGIC_NUMBERS.group_max_rows then
@@ -186,6 +193,10 @@ end
 -- ** PICKER DIALOG **
 ---@param modal_data PickerDialogModalData
 local function set_appropriate_focus(modal_data)
+    if modal_data.supply_target == "maximize" then
+        modal_data.modal_elements.search_textfield.focus()
+        return
+    end
     if modal_data.amount_defined_by == "machines" then
         lib.gui.select_all(modal_data.modal_elements["machine_count_textfield"])
     elseif modal_data.amount_defined_by == "amount" then
@@ -214,7 +225,7 @@ end
 local function sync_amounts(modal_data)
     local modal_elements = modal_data.modal_elements
 
-    local belt_amount = lib.gui.parse_expression_field(modal_elements.belt_amount_textfield, true)
+    local belt_amount = lib.gui.parse_expression_field(modal_elements.belt_amount_textfield, not modal_data.supply_draft)
     if belt_amount == nil then
         modal_elements.item_amount_textfield.text = ""
     else
@@ -242,7 +253,7 @@ local function set_belt_proto(modal_data, belt_proto)
         -- Might double set the choice button, but it doesn't matter
         modal_elements.belt_choice_button.elem_value = belt_proto.name
 
-        local item_amount = lib.gui.parse_expression_field(modal_elements.item_amount_textfield, true)
+        local item_amount = lib.gui.parse_expression_field(modal_elements.item_amount_textfield, not modal_data.supply_draft)
         if item_amount ~= nil then
             local throughput = belt_proto.throughput * ((modal_data.belts_or_lanes == "belts") and 1 or 0.5)
             local belt_amount = item_amount / throughput / modal_data.timescale / modal_data.belt_stack
@@ -272,9 +283,25 @@ local function set_item_proto(modal_data, item_proto)
 end
 
 ---@param modal_elements table
-local function update_dialog_submit_button(modal_elements)
+local function picker_supply(modal_data)
+    local proto = modal_data.item_proto
+    if not proto then return end
+    local amount = lib.gui.parse_expression_field(modal_data.modal_elements.item_amount_textfield, false)
+    if amount == nil then return end
+    local row = {name=proto.name, type=proto.type, amount=proto.special and amount or amount / modal_data.timescale,
+        mode=modal_data.supply_mode and modal_data.supply_mode.selected_index == 2 and "exact" or "maximum"}
+    if modal_data.amount_defined_by == "belts" then
+        local count = lib.gui.parse_expression_field(modal_data.modal_elements.belt_amount_textfield, false)
+        row.definition = {type="belts", belt=modal_data.belt_proto.name,
+            count=count and count * (modal_data.belts_or_lanes == "lanes" and 0.5 or 1), stack=modal_data.belt_stack}
+        row.amount = Planning.input_amount(row)
+    end
+    if Planning.validate_inputs({row}) then return row end
+end
+
+local function update_dialog_submit_button(modal_elements, modal_data)
     local item_choice_button = modal_elements.item_choice_button
-    local item_amount = lib.gui.parse_expression_field(modal_elements.item_amount_textfield, true)
+    local item_amount = lib.gui.parse_expression_field(modal_elements.item_amount_textfield, not (modal_data and modal_data.supply_draft))
 
     local message  ---@type LocalisedString
     if item_choice_button.sprite == "" then
@@ -285,6 +312,8 @@ local function update_dialog_submit_button(modal_elements)
     elseif item_amount == nil then
         -- The item amount will be filled even if the item is defined_by ~= "amount"
         message = {"toby-planner.picker_issue_enter_amount"}
+    elseif modal_data and modal_data.supply_draft and modal_data.supply_target ~= "maximize" and not picker_supply(modal_data) then
+        message = "Enter a finite non-negative supply within the planner limit."
     end
 
     modal_dialog.set_submit_button_state(modal_elements, (message == nil), message)
@@ -339,6 +368,7 @@ local function add_item_pane(parent_flow, modal_data, item)
 
 
     local flow_belts = create_flow()
+    flow_belts.visible = modal_data.supply_target ~= "maximize"
     local belts_or_lanes = {"toby-planner.pl_" .. modal_data.belts_or_lanes:sub(1, -2), 1}
     flow_belts.add{type="label", caption={"toby-planner.amount_by", belts_or_lanes}}
 
@@ -372,6 +402,7 @@ local function add_item_pane(parent_flow, modal_data, item)
     parent_flow.add{type="line", direction="horizontal"}.style.bottom_margin = 6
 
     local flow_machines = create_flow()
+    flow_machines.visible = not modal_data.supply_draft
     flow_machines.style.horizontal_spacing = 12
     modal_elements["machine_count_checkbox"] = flow_machines.add{type="checkbox", state=(defined_by == "machines"),
         tags={mod="toby-planner", on_gui_checked_state_changed="picker_toggle_machines"},
@@ -396,7 +427,11 @@ local function add_item_pane(parent_flow, modal_data, item)
 
     if (item) then set_appropriate_focus(modal_data)
     else modal_elements.search_textfield.focus() end
-    update_dialog_submit_button(modal_elements)
+    if modal_data.supply_target == "maximize" then
+        modal_elements.item_amount_textfield.text = "1"
+        for _, element in ipairs(flow_amount.children) do element.visible = element == item_choice_button end
+    end
+    update_dialog_submit_button(modal_elements, modal_data)
 end
 
 
@@ -412,10 +447,11 @@ local function handle_item_pick(player, tags, _)
    end
 
     set_item_proto(modal_data, item_proto)  -- no need for sync in this case
+    modal_data.last_search_selection = modal_data.modal_elements.search_textfield.text
     refresh_definition_controls(modal_data)
 
     set_appropriate_focus(modal_data)
-    update_dialog_submit_button(modal_data.modal_elements)
+    update_dialog_submit_button(modal_data.modal_elements, modal_data)
 end
 
 ---@param player LuaPlayer
@@ -429,7 +465,7 @@ local function handle_belt_pick(player, _, event)
     refresh_definition_controls(modal_data)
 
     set_appropriate_focus(modal_data)
-    update_dialog_submit_button(modal_data.modal_elements)
+    update_dialog_submit_button(modal_data.modal_elements, modal_data)
 end
 
 ---@param player LuaPlayer
@@ -450,6 +486,20 @@ local function open_picker_dialog(player, modal_data)
     modal_data.timescale = preferences.timescale
     modal_data.belts_or_lanes = preferences.belts_or_lanes
     modal_data.belt_stack = preferences.belt_stack
+    local search_tags = modal_data.modal_elements.search_textfield.tags
+    search_tags.on_gui_confirmed = "picker_search"
+    modal_data.modal_elements.search_textfield.tags = search_tags
+
+    if modal_data.supply_draft and modal_data.supply_index then
+        local category = modal_data.supply_target == "input" and "inputs" or "products"
+        local input = modal_data.supply_draft[category][modal_data.supply_index]
+        local definition = input.definition
+        modal_data.item = {proto=prototyper.util.find("items", input.name, input.type),
+            definition=definition and {type="belts", belt_count=definition.count,
+                belt_stack=definition.stack, belt_proto=prototyper.util.find("belts", definition.belt)}
+                or {type="amount", amount=input.amount}}
+        if definition then modal_data.belt_stack = definition.stack end
+    end
 
     if modal_data.item_id then
         modal_data.item = OBJECT_INDEX[modal_data.item_id]  ---@as FactoryItem
@@ -461,6 +511,16 @@ local function open_picker_dialog(player, modal_data)
     content_frame.style.minimal_width = 325
     content_frame.style.bottom_padding = 6
     add_item_pane(content_frame, modal_data, modal_data.item)
+    if modal_data.supply_draft then
+        local choices = modal_data.supply_target == "input" and {"Use at most", "Use exactly"}
+            or {"Target up to", "Produce exactly"}
+        local category = modal_data.supply_target == "input" and "inputs" or "products"
+        local row = modal_data.supply_index and modal_data.supply_draft[category][modal_data.supply_index]
+        modal_data.supply_mode = content_frame.add{type="drop-down", items=choices,
+            selected_index=row and (row.mode == "exact" and 2 or 1)
+                or modal_data.supply_target == "input" and modal_data.supply_draft.mode == "input" and 2 or 1}
+        modal_data.supply_mode.visible = modal_data.supply_target ~= "maximize"
+    end
 
     -- The item picker only needs to show when adding a new item
     if modal_data.item_id == nil then
@@ -476,6 +536,8 @@ local function open_picker_dialog(player, modal_data)
         add_item_picker(picker_content_frame, player)
         apply_item_filter(player, "")
     end
+    if modal_data.item then set_appropriate_focus(modal_data)
+    else modal_data.modal_elements.search_textfield.focus() end
 end
 
 ---@param player LuaPlayer
@@ -484,6 +546,27 @@ local function close_picker_dialog(player, action)
     local ui_state = lib.globals.ui_state(player)
     local modal_data = ui_state.modal_data  ---@as PickerDialogModalData
     local factory = lib.context.get(player, "Factory")  ---@as Factory
+
+    if modal_data.supply_draft then
+        local draft = modal_data.supply_draft
+        local category = modal_data.supply_target == "input" and "inputs" or "products"
+        if action == "submit" then
+            if modal_data.supply_target == "maximize" then
+                draft.maximize_product = {name=modal_data.item_proto.name, type=modal_data.item_proto.type}
+                draft.mode = "input"
+            else
+                local row = picker_supply(modal_data)
+                if modal_data.supply_index then draft[category][modal_data.supply_index] = row
+                else draft[category][#draft[category] + 1] = row end
+            end
+        elseif action == "delete" and modal_data.supply_index then
+            table.remove(draft[category], modal_data.supply_index)
+        end
+        modal_data.next_dialog = {dialog="supply", modal_data={draft=draft, floor_id=modal_data.supply_floor_id,
+            draft_revision=modal_data.supply_revision, draft_factory_id=modal_data.shared_factory.id}}
+        ui_state.last_selected_picker_group = modal_data.selected_group_id
+        return
+    end
 
     if action == "submit" then
         local defined_by = modal_data.amount_defined_by
@@ -571,7 +654,7 @@ listeners.gui = {
 
                 refresh_definition_controls(modal_data)
                 set_appropriate_focus(modal_data)
-                update_dialog_submit_button(modal_data.modal_elements)
+                update_dialog_submit_button(modal_data.modal_elements, modal_data)
             end
         }
     },
@@ -592,14 +675,15 @@ listeners.gui = {
                 if cursor_item == nil then return end
 
                 local item_proto = prototyper.util.find("items", cursor_item.name, "item")  ---@as FPItemPrototype?
-                if item_proto == nil or item_proto.hidden or item_proto.ingredient_only then
+                local modal_data = lib.globals.modal_data(player)
+                if item_proto == nil or item_proto.hidden or (item_proto.ingredient_only and modal_data.supply_target ~= "input") then
                     local name = (item_proto) and item_proto.localised_name or {"toby-planner.this"}
                     local modal_data = lib.globals.modal_data(player)  ---@as PickerDialogModalData
                     lib.cursor.create_flying_text(player, {"toby-planner.picker_invalid_product", name,
                         {"toby-planner.pl_" .. modal_data.item_category, 1}})
                 else
                     local factory = lib.context.get(player, "Factory")  ---@as Factory
-                    local enabled = (factory:find({proto = item_proto}) == nil)
+                    local enabled = modal_data.supply_draft ~= nil or (factory:find({proto = item_proto}) == nil)
                     local tags = {item_id=item_proto.id, category_id=item_proto.category_id, enabled=enabled}
                     handle_item_pick(player, tags--[[@as SelectPickerItemTags]])
                 end
@@ -635,31 +719,41 @@ listeners.gui = {
             name = "picker_amount_changed",
             handler = function(player, _, event)
                 ---@cast event EventData.on_gui_text_changed
-                local amount = lib.gui.parse_expression_field(event.element, true)
+                local modal_data = lib.globals.modal_data(player)
+                local amount = lib.gui.parse_expression_field(event.element, not modal_data.supply_draft)
                 lib.gui.update_expression_field(event.element, amount ~= nil)
 
-                update_dialog_submit_button(lib.globals.modal_elements(player))
+                update_dialog_submit_button(lib.globals.modal_elements(player), modal_data)
             end
         },
         {
             name = "picker_belt_amount",
             handler = function(player, _, event)
                 ---@cast event EventData.on_gui_text_changed
-                local belt_amount = lib.gui.parse_expression_field(event.element, true)
+                local modal_data = lib.globals.modal_data(player)
+                local belt_amount = lib.gui.parse_expression_field(event.element, not modal_data.supply_draft)
                 lib.gui.update_expression_field(event.element, belt_amount ~= nil)
 
-                local modal_data = lib.globals.modal_data(player)  ---@as PickerDialogModalData
                 sync_amounts(modal_data)  -- defined_by ~= "amount"
-                update_dialog_submit_button(modal_data.modal_elements)
+                update_dialog_submit_button(modal_data.modal_elements, modal_data)
             end
         }
     },
     on_gui_confirmed = {
         {
+            name = "picker_search",
+            handler = function(player)
+                local selected = GLOBAL_HANDLERS["confirm_picker_search"](player)
+                if not selected and lib.globals.modal_data(player).supply_target == "maximize" then
+                    lib.gui.close_dialog(player, "submit")
+                end
+            end
+        },
+        {
             name = "picker_amount",
             handler = function(player, _, event)
                 ---@cast event EventData.on_gui_confirmed
-                local confirmed = lib.gui.confirm_expression_field(event.element, true)
+                local confirmed = lib.gui.confirm_expression_field(event.element, not lib.globals.modal_data(player).supply_draft)
 
                 local item_proto = lib.globals.modal_data(player)--[[@as PickerDialogModalData]].item_proto
                 local power_item = (item_proto) and lib.is_special_power_item(item_proto.name) or false
@@ -680,7 +774,7 @@ listeners.dialog = {
             search_handler_name = (not modal_data.item_id) and "apply_item_filter" or nil,
             disable_scroll_pane = true,
             show_submit_button = true,
-            show_delete_button = (modal_data.item_id ~= nil)
+            show_delete_button = (modal_data.item_id ~= nil or modal_data.supply_index ~= nil)
         }  ---@as ModalDialogSettings
     end,
     open = open_picker_dialog,
@@ -688,7 +782,25 @@ listeners.dialog = {
 }
 
 listeners.global = {
-    apply_item_filter = apply_item_filter
+    apply_item_filter = apply_item_filter,
+    confirm_picker_search = function(player)
+        local modal = lib.globals.modal_data(player)
+        local search = modal.modal_elements.search_textfield.text
+        if search == "" or search == modal.last_search_selection then return false end
+        modal_dialog.run_search(player)
+        local match, count = nil, 0
+        for _, group in ipairs(modal.modal_elements.groups) do
+            for _, item in ipairs(group.items) do
+                if item.visible and not item.existing then
+                    if item.proto.name == search then match = item;count = 1;break end
+                    match = item;count = count + 1
+                end
+            end
+            if match and match.proto.name == search then break end
+        end
+        if count == 1 then handle_item_pick(player, {item_id=match.proto.id, category_id=match.proto.category_id, enabled=true}) end
+        return true
+    end
 }
 
 return { listeners }
