@@ -1356,7 +1356,10 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 			}
 		];
 		const missing = rows(data.machines).flatMap((machine) =>
-			rows(record(machine.missing_inputs).ingredients).map((ingredient) => ({ machine, ingredient }))
+			rows(record(machine.missing_inputs).ingredients).map((ingredient) => ({
+				machine,
+				ingredient
+			}))
 		);
 		if (missing.length)
 			view.tables.push({
