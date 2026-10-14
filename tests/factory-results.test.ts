@@ -5,6 +5,37 @@ import { assistantResultGroups, presentFactoryResult } from '../src/lib/factory-
 
 const view = (tool: string, result: unknown) =>
 	presentFactoryResult({ kind: 'factory-result', title: tool.replaceAll('_', ' '), result });
+test('robot tests show reserve and cap evidence without claiming job throughput', () => {
+	const result = view('test_blueprint', {
+		mode: 'robot-deployment',
+		status: 'done',
+		passed: false,
+		robotResults: [
+			{
+				name: 'logistic-robot',
+				stage: 'busy near cap',
+				idle: 9,
+				total: 9,
+				minimumIdle: 10,
+				maximumTotal: 500,
+				effectiveTotal: 505,
+				added: 7,
+				met: false
+			}
+		]
+	});
+	assert.equal(result.cards[0]?.badge, 'Checks failed');
+	assert.deepEqual(result.tables[0]?.rows[0], [
+		'Logistic robot',
+		'busy near cap',
+		'9 / 10',
+		'9 / 500',
+		'505',
+		'7',
+		'Failed'
+	]);
+	assert.match(result.assumptions.join(' '), /signal.*real job throughput is not measured/u);
+});
 test('sandbox evidence presents measured delivery, failed targets and explicit synthetic conditions', () => {
 	const result = view('test_blueprint', {
 		operation: 'test_blueprint',

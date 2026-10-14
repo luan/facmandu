@@ -20,6 +20,10 @@ const position = z.strictObject({
 	x: z.number().int().min(-1000000).max(1000000),
 	y: z.number().int().min(-1000000).max(1000000)
 });
+const robotTarget = z.strictObject({
+	minimumIdle: z.number().int().min(1).max(64),
+	maximumTotal: z.number().int().min(3).max(5000)
+});
 export const sandboxRequestSchema = z.discriminatedUnion('operation', [
 	z.strictObject({
 		operation: z.literal('run'),
@@ -28,9 +32,16 @@ export const sandboxRequestSchema = z.discriminatedUnion('operation', [
 		surface: force,
 		position: position.optional(),
 		context: z.boolean().default(false),
-		mode: z.enum(['production', 'transport']).default('production'),
+		mode: z.enum(['production', 'transport', 'robot-deployment']).default('production'),
+		robots: z
+			.strictObject({
+				port: z.number().int().min(1).max(64),
+				logistic: robotTarget,
+				construction: robotTarget
+			})
+			.optional(),
 		inputs: z.array(endpoint).max(16).default([]),
-		outputs: z.array(endpoint).min(1).max(16),
+		outputs: z.array(endpoint).max(16).default([]),
 		seconds: z.number().int().min(10).max(120).default(30),
 		warmupSeconds: z.number().int().min(0).max(30).default(10),
 		power: z.enum(['provided', 'design']).default('provided'),

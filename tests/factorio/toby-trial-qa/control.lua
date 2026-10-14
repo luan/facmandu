@@ -22,15 +22,15 @@ local function start_next()
   assert(not pcall(remote.call,'facmandu-toby-sandbox','read','other',storage.last),'Another force read the trial')
   assert(remote.call('facmandu-toby-sandbox','start',storage.lastRequest).id==storage.last,'Completed delivery replay ran again')
   local request=storage.lastRequest
-  request.idempotencyKey=string.rep('e',64)
+  request.idempotencyKey=string.rep('de',32)
   local pending=remote.call('facmandu-toby-sandbox','start',request)
   assert(remote.call('facmandu-toby-sandbox','cancel','player',pending.id).status=='cancelled','Cancellation failed')
-  request.idempotencyKey=string.rep('f',64);request.outputs[1].entity=request.inputs[1].entity
+  request.idempotencyKey=string.rep('fe',32);request.outputs[1].entity=request.inputs[1].entity
   assert(not pcall(remote.call,'facmandu-toby-sandbox','start',request),'Shared input/output faked delivery')
   storage.verifyAt=game.tick+60;return
  end
  local a={force='player',surface=case.context and 'toby-qa-context' or 'nauvis',context=case.context,position={x=0,y=0},blueprint=blueprint(case.entities),designId=string.rep('a',64),idempotencyKey=string.rep(string.format('%x',storage.case),64),seconds=10,warmupSeconds=5,
-  inputs=case.inputs,outputs=case.outputs,power=case.power or 'provided',mode=(case.inputs[1].name==case.outputs[1].name) and 'transport' or 'production'}
+  inputs=case.inputs,outputs=case.outputs,power=case.power or 'provided',robots=case.robots,mode=case.robots and 'robot-deployment' or ((case.inputs[1].name==case.outputs[1].name) and 'transport' or 'production')}
  if case.context then
   local ok,err=pcall(remote.call,'facmandu-toby-sandbox','start',a)
   assert(not ok and tostring(err):find('Explore context chunk',1,true),'Uncharted context was not rejected')
@@ -48,7 +48,7 @@ script.on_init(function()
   local sentinel=game.surfaces.nauvis.create_entity{name='steel-chest',position={100.5,100.5},force='player'}
   assert(sentinel);sentinel.insert{name='iron-plate',count=37};storage.sentinel=sentinel
   game.create_force('other')
-  for _,name in ipairs{'inserter','fast-inserter','steel-chest','assembling-machine-1','pipe'} do game.forces.player.recipes[name].enabled=true end
+  for _,name in ipairs{'inserter','fast-inserter','steel-chest','assembling-machine-1','pipe','roboport','logistic-robot','construction-robot','constant-combinator','decider-combinator','passive-provider-chest'} do game.forces.player.recipes[name].enabled=true end
   local belts={} for x=0,5 do belts[#belts+1]={name='transport-belt',position={x+.5,.5},direction=4} end
   local broken=helpers.json_to_table(helpers.table_to_json(belts));broken[3].direction=12
   local craft={
@@ -71,7 +71,27 @@ script.on_init(function()
   local copperIn=endpoint(1,'copper-plate',450);copperIn.lane=2
   local ironOut=endpoint(6,'iron-plate',450);ironOut.lane=1
   local copperOut=endpoint(6,'copper-plate',450);copperOut.lane=2
+
+  local robot={
+   {name='roboport',position={0,0},control_behavior={read_items_mode=0,read_robot_stats=true},wires={{1,1,2,1},{1,1,3,1}}},
+   {name='decider-combinator',position={-2.5,-2},control_behavior={decider_conditions={conditions={{first_signal={type='virtual',name='signal-X'},comparator='<',constant=2},{first_signal={type='virtual',name='signal-Y'},comparator='<',constant=10,compare_type='and'}},outputs={{signal={type='virtual',name='signal-L'},copy_count_from_input=false,constant=1}}}},wires={{2,3,4,1}}},
+   {name='decider-combinator',position={2.5,-2},control_behavior={decider_conditions={conditions={{first_signal={type='virtual',name='signal-Z'},comparator='<',constant=3},{first_signal={type='virtual',name='signal-T'},comparator='<',constant=10,compare_type='and'}},outputs={{signal={type='virtual',name='signal-C'},copy_count_from_input=false,constant=1}}}},wires={{3,3,5,1}}},
+   {name='fast-inserter',position={-2.5,.5},direction=12,override_stack_size=1,control_behavior={circuit_enabled=true,circuit_condition={first_signal={type='virtual',name='signal-L'},comparator='>',constant=0}}},
+   {name='fast-inserter',position={2.5,.5},direction=4,override_stack_size=1,control_behavior={circuit_enabled=true,circuit_condition={first_signal={type='virtual',name='signal-C'},comparator='>',constant=0}}},
+   {name='passive-provider-chest',position={-3.5,.5}},
+   {name='passive-provider-chest',position={3.5,.5}}
+  }
+  local disabled=helpers.json_to_table(helpers.table_to_json(robot));disabled[4].control_behavior.circuit_enabled=false;disabled[5].control_behavior.circuit_enabled=false
+  local uncapped=helpers.json_to_table(helpers.table_to_json(robot));table.remove(uncapped[2].control_behavior.decider_conditions.conditions,2);table.remove(uncapped[3].control_behavior.decider_conditions.conditions,2)
+  local robotTargets={port=1,logistic={minimumIdle=2,maximumTotal=10},construction={minimumIdle=3,maximumTotal=10}}
+  local robotInputs={endpoint(6,'logistic-robot',1000),endpoint(7,'construction-robot',1000)}
+  local providerCraft=helpers.json_to_table(helpers.table_to_json(craft));providerCraft[1].name='passive-provider-chest';providerCraft[5].name='passive-provider-chest'
+
   storage.cases={
+   {name='robot idle reserve and population cap',entities=robot,inputs=robotInputs,outputs={},robots=robotTargets,pass=true},
+   {name='disabled robot inserter circuits',entities=disabled,inputs=robotInputs,outputs={},robots=robotTargets,pass=false},
+   {name='missing robot population cap',entities=uncapped,inputs=robotInputs,outputs={},robots=robotTargets,pass=false},
+   {name='logistic chest test endpoints',entities=providerCraft,inputs={endpoint(1,'iron-plate',120)},outputs={endpoint(5,'iron-gear-wheel',45)},pass=true},
    {name='mixed belt lanes',entities=belts,inputs={ironIn,copperIn},outputs={ironOut,copperOut},pass=true},
    {name='connected belt',entities=belts,inputs={endpoint(1,'iron-plate',900)},outputs={endpoint(6,'iron-plate',900)},pass=true},
    {name='reversed ingredient belt',entities=broken,inputs={endpoint(1,'iron-plate',900)},outputs={endpoint(6,'iron-plate',900)},pass=false},

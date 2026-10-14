@@ -23,6 +23,7 @@ import info from '../../../factorio-mod/facmandu-assistant/info.json';
 import locale from '../../../factorio-mod/facmandu-assistant/locale/en/toby.cfg?raw';
 import readme from '../../../factorio-mod/facmandu-assistant/README.md?raw';
 import references from '../../../factorio-mod/facmandu-assistant/references.lua?raw';
+import robotTrial from '../../../factorio-mod/facmandu-assistant/robot-trial.lua?raw';
 import sandbox from '../../../factorio-mod/facmandu-assistant/sandbox.lua?raw';
 import type { ManagedServer } from './db/schema';
 import territory from './factory-query/scripts/tools/territory.lua?raw';
@@ -82,6 +83,7 @@ export function tobyModArchive() {
 				'drone-visuals.lua': droneVisuals,
 				'references.lua': references,
 				'sandbox.lua': sandbox,
+				'robot-trial.lua': robotTrial,
 				'drone-prototypes.lua': dronePrototypes,
 				'locale/en/toby.cfg': locale,
 				'README.md': readme

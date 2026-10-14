@@ -2,6 +2,7 @@
 -- keep its archive and player labs intact until upstream exposes one.
 local events=require('events').scope('sandbox')
 local M={}
+local robotTrial=require('robot-trial')
 local PREFIX='toby-trial-'
 local function state()
  storage.toby_trials=storage.toby_trials or {sequence=0,jobs={},forces={}}
@@ -93,12 +94,17 @@ local function finish(job,status,message)
   passed=passed and met
   sufficient=sufficient and sampleSufficient
  end
+ if job.robot then passed=job.robot.passed;sufficient=true;outputs=nil end
  local faults,total={},0
  local statuses={} for name,value in pairs(defines.entity_status) do statuses[value]=name end
  for i,e in ipairs(job.entities or {}) do
   if e.valid and (e.type=='assembling-machine' or e.type=='furnace' or e.type=='mining-drill' or e.type=='inserter') then
    local s=statuses[e.status]
-   if s~='working' and s~='normal' then
+   if job.robot and e.type=='inserter' then
+    local b=e.get_or_create_control_behavior()
+    if b.circuit_condition and b.circuit_condition.first_signal and not b.circuit_enable_disable then s='circuit_condition_disabled' end
+   end
+   if s~='working' and s~='normal' and not (job.robot and s=='disabled_by_control_behavior') then
     total=total+1
     if #faults<32 then faults[#faults+1]={entity=i,name=e.name,status=s} end
    end
@@ -109,10 +115,10 @@ local function finish(job,status,message)
  job.result={operation='test_blueprint',id=job.id,designId=job.designId,status=status,passed=status=='done' and passed,mode=job.mode,verdict=status=='done' and (not sufficient and 'inconclusive' or passed and 'passed' or 'below_target') or status,
   sourceSurface=job.source,contextCloned=job.context,simulatedTicks=math.max(0,(job.sampleEnd or game.tick)-job.sampleStart),
   warmupTicks=job.warmup,outputs=outputs,inputs=inputs,faults=faults,faultsTotal=total,error=message,
-  power=job.power,liveFactoryVerified=false,note='Isolated simulation. Declared inputs are synthetic; output endpoints are drained. Live supplies, placement and delivered production still need verification.'}
+  robotResults=job.robot and job.robot.evidence or nil,power=job.power,liveFactoryVerified=false,note=job.robot and 'Isolated robot-controller test. Busy demand and near-cap totals use synthetic circuit signals; real job throughput and live supplies are not verified.' or 'Isolated simulation. Declared inputs are synthetic; output endpoints are drained. Live supplies, placement and delivered production still need verification.'}
  job.status=status
  if not cleanup(job.surface) then job.result.cleanupBlocked=true end
- job.entities=nil;job.surface=nil;job.inputs=nil;job.outputs=nil
+ job.entities=nil;job.surface=nil;job.inputs=nil;job.outputs=nil;job.robot=nil
 end
 function M.read(force,id)
  local job=job_for(force,id)
@@ -243,7 +249,7 @@ function M.start(a)
     existing=existing or {role=role};existing[slot]=true;used[p.entity]=existing
     if not number(p.perMinute,0.01,1000000) then error('Choose a positive endpoint rate up to 1000000/min',0) end
     if p.kind=='item' then
-     if not prototypes.item[p.name] or (e.type~='container' and e.type~='transport-belt' and e.type~='underground-belt') then error('Item endpoints must be ordinary chests or belt segments',0) end
+     if not prototypes.item[p.name] or (e.type~='container' and e.type~='logistic-container' and e.type~='transport-belt' and e.type~='underground-belt') then error('Item endpoints must be ordinary or logistic chests or belt segments',0) end
     elseif p.kind=='fluid' then
      if not prototypes.fluid[p.name] or (e.type~='pipe' and e.type~='storage-tank') or e.fluids_count~=1 then error('Fluid endpoints must be pipes or tanks with one fluidbox',0) end
     else error('Choose item or fluid endpoint',0) end
@@ -252,9 +258,10 @@ function M.start(a)
    end
   end
   ports(a.inputs or {},inputs,'input');ports(a.outputs or {},outputs,'output')
-  if #outputs==0 then error('Declare at least one output and its target rate',0) end
   local mode=a.mode or 'production'
-  if mode~='production' and mode~='transport' then error('Choose production or transport mode',0) end
+  if mode~='production' and mode~='transport' and mode~='robot-deployment' then error('Choose production, transport or robot-deployment mode',0) end
+  if #outputs==0 and mode~='robot-deployment' then error('Declare at least one output and its target rate',0) end
+  if mode=='robot-deployment' and a.context then error('Use a standalone controller design without existing-world context for robot tests',0) end
   local seconds=a.seconds
   for _,out in ipairs(outputs) do
    out.batch=1
@@ -278,9 +285,11 @@ function M.start(a)
   local supply=lab.create_entity{name='electric-energy-interface',force=test,position=powerPosition}
   if not supply then error('Test power source is blocked; choose powerPosition near a planned pole',0) end
   supply.electric_buffer_size=1000000000;supply.energy=1000000000;supply.power_production=1000000000
-  local warmup=math.floor(a.warmupSeconds*60)
+  local warmup=math.floor((mode=='robot-deployment' and math.max(30,a.warmupSeconds) or a.warmupSeconds)*60)
+  local robot=mode=='robot-deployment' and robotTrial.setup(a.robots,entities,lab) or nil
+  if robot then seconds=math.max(seconds,30) end
   job={id=id,key=a.idempotencyKey,owner=real.name,designId=a.designId,mode=mode,source=source.name,context=a.context==true,power=a.power,surface=lab,entities=entities,
-   inputs=inputs,outputs=outputs,startTick=game.tick,sampleStart=game.tick+warmup,endTick=game.tick+warmup+math.floor(seconds*60),warmup=warmup,status='running'}
+   robot=robot,inputs=inputs,outputs=outputs,startTick=game.tick,sampleStart=game.tick+warmup,endTick=game.tick+warmup+math.floor(seconds*60),warmup=warmup,status='running'}
   s.jobs[id]=job
  end)
  inv.destroy()
@@ -300,7 +309,10 @@ events.on_event(defines.events.on_tick,function()
     local count=remove(p)
     if game.tick>job.sampleStart then p.delivered=p.delivered+count end
    end
-   if game.tick>=job.endTick then job.sampleEnd=game.tick;finish(job,'done') end
+   if job.robot then
+    if robotTrial.tick(job.robot,game.tick>=job.sampleStart) then job.sampleEnd=game.tick;finish(job,'done')
+    elseif game.tick>job.endTick+60 then error('Robot controller test did not finish within its fixture window',0) end
+   elseif game.tick>=job.endTick then job.sampleEnd=game.tick;finish(job,'done') end
   end)
   if not ok then
    local finalized=pcall(finish,job,'error',tostring(err):match('^[^\n]*'))
@@ -308,10 +320,10 @@ events.on_event(defines.events.on_tick,function()
     -- A mod-invalidated entity or failed cleanup must never crash multiplayer.
     job.result={operation='test_blueprint',id=job.id,designId=job.designId,status='error',passed=false,error=tostring(err):match('^[^\n]*'),liveFactoryVerified=false}
     cleanup(job.surface)
-    job.entities=nil;job.surface=nil;job.inputs=nil;job.outputs=nil
+    job.entities=nil;job.surface=nil;job.inputs=nil;job.outputs=nil;job.robot=nil
    end
   end
  end end
 end)
-remote.add_interface('facmandu-toby-sandbox',{start=M.start,read=M.read,cancel=M.cancel})
+remote.add_interface('facmandu-toby-sandbox',{start=M.start,read=M.read,cancel=M.cancel,features=function() return {robotDeployment=true} end})
 return M

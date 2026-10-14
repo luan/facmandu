@@ -121,6 +121,10 @@ export function assistantToolFeedback(tool: string, output: unknown): string {
 			const ticks = resultNumber(value.elapsedTicks) ?? 0;
 			return `Sandbox simulation: ${Math.floor(ticks / 60)} game seconds elapsed.`;
 		}
+		if (value.mode === 'robot-deployment')
+			return value.passed
+				? 'Robot deployment test passed: idle reserve, population cap and demand recovery.'
+				: 'Robot deployment test failed; review its measured behavior before publishing.';
 		const outputs = Array.isArray(value.outputs) ? value.outputs : [];
 		const met = outputs.filter((row: unknown) => object(row)?.met === true).length;
 		return value.status === 'done'

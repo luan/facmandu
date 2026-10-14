@@ -1125,7 +1125,7 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 		];
 		view.assumptions = [
 			'Synthetic supplies at the declared maximum rates; output endpoints are drained.',
-			'Item targets allow one native recipe batch of measurement-boundary error. Very short samples are inconclusive.',
+			'Batch-boundary uncertainty does not qualify a measured rate below target; use a longer sample.',
 			data.power === 'provided'
 				? 'Ideal test electricity; pole coverage and generation capacity are not tested.'
 				: 'Declared external electricity source; planned pole coverage is tested.',
@@ -1133,6 +1133,44 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 				? 'Nearby world context was cloned; source inventories and terrain were untouched.'
 				: 'Empty lab with the source surface properties and current force research.'
 		];
+		if (data.mode === 'robot-deployment') {
+			view.title = 'Robot deployment test';
+			const card = view.cards[0];
+			if (card) {
+				card.title = 'Measured controller behavior';
+				card.badge =
+					data.status === 'running' ? 'Running' : data.passed ? 'Checks passed' : 'Checks failed';
+			}
+			view.tables = [
+				{
+					title: 'Robot deployment',
+					columns: [
+						'Robot',
+						'Scenario',
+						'Idle / reserve',
+						'Total / cap',
+						'Simulated total',
+						'Added',
+						'Result'
+					],
+					rows: rows(data.robotResults).map((row) => [
+						humanName(row.name),
+						string(row.stage),
+						`${display(row.idle)} / ${display(row.minimumIdle)}`,
+						`${display(row.total)} / ${display(row.maximumTotal)}`,
+						display(row.effectiveTotal),
+						display(row.added),
+						row.met ? 'Passed' : 'Failed'
+					]),
+					prototypes: rows(data.robotResults).map((row) => [prototype('item', row.name)])
+				},
+				...view.tables.filter((table) => table.rows.length > 0)
+			];
+			view.assumptions = [
+				'Robot supplies and electricity exist only inside the disposable lab.',
+				'Busy demand and near-cap counts are simulated through circuit signals; real job throughput is not measured.'
+			];
+		}
 		return view;
 	}
 	if (tool === 'factory_task') {
