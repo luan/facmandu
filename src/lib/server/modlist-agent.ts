@@ -46,7 +46,7 @@ import { type LoadedAssistantModel, loadAssistantModel } from './assistant-model
 import { useAssistantToolGroups } from './assistant-tool-groups';
 import { type CodexModel, codexProvider } from './codex';
 import { db } from './db';
-import { assistantChat, user } from './db/schema';
+import { assistantChat, assistantTurn, serverAssistantTurn, user } from './db/schema';
 import { cachedDecisionRequest } from './decisions';
 import { validModName } from './mod-names';
 import {
@@ -722,6 +722,58 @@ runtimeState.agent ??= FacmanduAssistant;
 const registeredAgent = runtimeState.agent;
 // The runtime patch accepts zero for no deadline; user Stop and recovery limits remain active.
 registeredAgent.durability = FacmanduAssistant.durability;
+async function startAssistantRuntime() {
+	// Flue resumes every pending chat during startup, before a browser reconnects.
+	// Restore each chat's provider first; registering only the first caller loses other runs.
+	const [serverTurns, listTurns] = await Promise.all([
+		db.select().from(serverAssistantTurn).where(eq(serverAssistantTurn.state, 'running')),
+		db.select().from(assistantTurn).where(eq(assistantTurn.state, 'running'))
+	]);
+	for (const turn of [...serverTurns, ...listTurns]) {
+		try {
+			const chat = turn.chatId
+				? await db.select().from(assistantChat).where(eq(assistantChat.id, turn.chatId)).get()
+				: undefined;
+			const loaded = await loadAssistantModel(turn.userId, turn.model ?? undefined);
+			const effort =
+				loaded.entry.efforts.find((item) => item === turn.effort) ?? loaded.entry.defaultEffort;
+			const context: Context =
+				'serverId' in turn
+					? {
+							userId: turn.userId,
+							serverId: turn.serverId,
+							model: loaded.entry.id,
+							chatId: turn.chatId ?? undefined,
+							gamePlayer: turn.gamePlayer ?? undefined,
+							gameForce: chat?.gameForce ?? undefined
+						}
+					: {
+							userId: turn.userId,
+							listId: turn.listId,
+							model: loaded.entry.id,
+							chatId: turn.chatId ?? undefined
+						};
+			await registerAssistantProvider(context, loaded, effort);
+			const id =
+				context.chatId ??
+				`${context.userId}-${'serverId' in turn ? `server-${turn.serverId}` : turn.listId}-chat`;
+			runtimeState.contextUsage?.set(
+				id,
+				assistantContextLimit(loaded.entry.id, loaded.model.contextWindow, loaded.model.maxTokens)
+			);
+		} catch {
+			// A revoked account must not prevent unrelated chats from starting.
+			console.warn('Could not restore assistant provider for pending chat', turn.chatId);
+		}
+	}
+	const directory = resolve(env.FACMANDU_AGENT_DATA ?? '.data/agent');
+	mkdirSync(directory, { recursive: true, mode: 0o700 });
+	return start({
+		agents: [registeredAgent],
+		providers: [],
+		db: sqlite(resolve(directory, 'conversations.db'))
+	});
+}
 export async function agentHandle(
 	userId: string,
 	target: string | { serverId: string; gamePlayer?: string; gameForce?: string },
@@ -754,12 +806,9 @@ export async function agentHandle(
 	runtimeState.contextUsage?.set(id, usage);
 	runtimeState.progress?.get(id)?.({ contextUsage: usage });
 	if (!runtimeState.runtime) {
-		const directory = resolve(env.FACMANDU_AGENT_DATA ?? '.data/agent');
-		mkdirSync(directory, { recursive: true, mode: 0o700 });
-		runtimeState.runtime = start({
-			agents: [registeredAgent],
-			providers: [],
-			db: sqlite(resolve(directory, 'conversations.db'))
+		runtimeState.runtime = startAssistantRuntime().catch((cause) => {
+			runtimeState.runtime = undefined;
+			throw cause;
 		});
 	}
 	await runtimeState.runtime;
