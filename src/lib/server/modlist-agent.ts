@@ -17,9 +17,10 @@ import {
 import { sqlite, start } from '@flue/runtime/node';
 import { and, eq } from 'drizzle-orm';
 import * as v from 'valibot';
-import { z } from 'zod';
 import { env } from '$env/dynamic/private';
 import {
+	type FactoryCompletionEvidence,
+	factoryCompletionEvidenceSchema,
 	missingCommandContent,
 	missingFactoryCheck,
 	missingFactoryDesignAttempt,
@@ -32,7 +33,6 @@ import {
 	assistantContextLimit,
 	assistantContextTokens
 } from '$lib/assistant-context';
-import { factoryResultSchema } from '$lib/assistant-results';
 import {
 	modlistRouteBody,
 	modlistRouteFromAnswers,
@@ -297,6 +297,13 @@ function ModlistAssistant() {
 		messages: [] as string[],
 		reviewed: false
 	});
+	// App transcript results are finalized after this hook. Keep compact native
+	// evidence in the runtime checkpoint before each tool returns instead.
+	const [observedBuild, setObservedBuild] = usePersistentState('factory-completion-evidence', {
+		requestId: '',
+		results: [] as { result: FactoryCompletionEvidence }[]
+	});
+	let buildEvidence = observedBuild.requestId === requestId ? observedBuild.results : [];
 	useAgentStart(() => {
 		const id = requestId ?? '';
 		const messages = request.id === id ? request.messages : [];
@@ -311,7 +318,7 @@ function ModlistAssistant() {
 		if (last.text && last.finishReason !== 'length') {
 			if (context.serverId && requestId) {
 				const turn = await db
-					.select({ results: serverAssistantTurn.results, prompt: serverAssistantTurn.prompt })
+					.select({ prompt: serverAssistantTurn.prompt })
 					.from(serverAssistantTurn)
 					.where(
 						and(
@@ -323,9 +330,8 @@ function ModlistAssistant() {
 					.get();
 				// Older in-game deliveries embedded player context before the request.
 				if (turn && !messages.includes(turn.prompt)) messages = [turn.prompt, ...messages];
-				const results = z.array(factoryResultSchema).parse(JSON.parse(turn?.results ?? '[]'));
-				const gaps = placedFactoryPowerGaps(messages, results);
-				const recipes = placedFactoryRecipeGaps(messages, results);
+				const gaps = placedFactoryPowerGaps(messages, buildEvidence);
+				const recipes = placedFactoryRecipeGaps(messages, buildEvidence);
 				if (gaps || recipes) {
 					append({
 						kind: 'signal',
@@ -413,7 +419,11 @@ function ModlistAssistant() {
 			body: 'The previous model call hit its output limit or returned no answer; the user has not stopped the request. Resume unfinished authorized work from the recorded tool results. Do not repeat completed writes or ask for the same authorization again. Fix remaining design, validation and connection errors with tools. Finish only when the requested work is complete or a concrete external blocker prevents it, then report the concise outcome.'
 		});
 	});
-	if (context.serverId !== undefined) return serverAssistantTools(context);
+	if (context.serverId !== undefined)
+		return serverAssistantTools(context, (result) => {
+			buildEvidence = [...buildEvidence, { result: factoryCompletionEvidenceSchema.parse(result) }];
+			setObservedBuild({ requestId: requestId ?? '', results: buildEvidence });
+		});
 	const listId = context.listId;
 	const groups = useAssistantToolGroups(modlistToolGroups);
 	modlistManagementTools(context, async () => context.listId, groups);

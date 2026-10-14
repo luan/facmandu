@@ -19,7 +19,90 @@ import {
 	useTool
 } from '@flue/runtime';
 import { sqlite, start } from '@flue/runtime/node';
+import {
+	type FactoryCompletionEvidence,
+	factoryCompletionEvidenceSchema,
+	placedFactoryPowerGaps
+} from '../src/lib/assistant-completion';
 import { assistantFinalText, assistantText, submissionEvents } from '../src/lib/assistant-events';
+
+test('finish checks see checkpointed tool evidence before the app transcript is finalized', async () => {
+	const directory = await mkdtemp(join(tmpdir(), 'facmandu-build-evidence-'));
+	const provider = fauxProvider({ provider: 'build-evidence-test', models: [{ id: 'probe' }] });
+	provider.setResponses([
+		fauxAssistantMessage([fauxToolCall('inspect_and_place', {})]),
+		fauxAssistantMessage('All done.'),
+		fauxAssistantMessage([fauxToolCall('repair_power', {})]),
+		fauxAssistantMessage('Connected.')
+	]);
+	let recoveries = 0;
+	function BuildEvidenceProbe() {
+		useModel('build-evidence-test/probe');
+		const writeAnswer = useDataWriter('assistant-answer');
+		const [saved, setSaved] = usePersistentState(
+			'build-evidence',
+			[] as { result: FactoryCompletionEvidence }[]
+		);
+		let evidence = saved;
+		const record = (value: unknown) => {
+			evidence = [...evidence, { result: factoryCompletionEvidenceSchema.parse(value) }];
+			setSaved(evidence);
+		};
+		useTool({
+			name: 'inspect_and_place',
+			description: 'Place an incomplete test layout.',
+			run: () => {
+				record({
+					expectedDesign: 'core',
+					power: { checked: true, uncovered_total: 8, unconnected_total: 0 }
+				});
+				record({ operation: 'place_blueprint', expectedDesign: 'core' });
+				return { output: 'Ghosts placed.' };
+			}
+		});
+		useTool({
+			name: 'repair_power',
+			description: 'Repair its power connections.',
+			run: () => {
+				record({
+					expectedDesign: 'core',
+					power: { checked: true, uncovered_total: 0, unconnected_total: 0 }
+				});
+				return { output: 'Connections checked.' };
+			}
+		});
+		useAgentFinish(({ append }) => {
+			if (placedFactoryPowerGaps(['we need more glass on the bus'], evidence)) {
+				recoveries++;
+				append({
+					kind: 'signal',
+					type: 'repair',
+					body: 'Repair the native power gaps before finishing.'
+				});
+				return;
+			}
+			writeAnswer('Connected.');
+		});
+		return 'Complete a connected production improvement.';
+	}
+	const runtime = await start({
+		agents: [BuildEvidenceProbe],
+		providers: [provider.provider],
+		db: sqlite(join(directory, 'conversations.db'))
+	});
+	try {
+		const handle = init(BuildEvidenceProbe, { id: 'build-evidence' });
+		assert.equal(
+			assistantFinalText(await handle.read(await handle.dispatch('we need more glass on the bus'))),
+			'Connected.'
+		);
+		assert.equal(recoveries, 1);
+		assert.equal(provider.state.callCount, 4);
+	} finally {
+		await runtime.stop();
+		await rm(directory, { recursive: true, force: true });
+	}
+});
 
 test('read-only surveys use a fast model without changing the parent design effort', async () => {
 	const directory = await mkdtemp(join(tmpdir(), 'facmandu-survey-model-'));

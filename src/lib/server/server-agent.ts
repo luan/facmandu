@@ -66,13 +66,16 @@ const manifestSchema = z.object({
 		z.object({ desc: z.string(), params: z.record(z.string(), z.string()).optional() })
 	)
 });
-export function serverAssistantTools(initialContext: {
-	userId: string;
-	serverId: string;
-	gamePlayer?: string;
-	gameForce?: string;
-	chatId?: string;
-}) {
+export function serverAssistantTools(
+	initialContext: {
+		userId: string;
+		serverId: string;
+		gamePlayer?: string;
+		gameForce?: string;
+		chatId?: string;
+	},
+	recordBuildEvidence: (result: unknown) => void
+) {
 	const writeArtifact = useDataWriter('factory-result');
 	const delivery = useDelivery();
 	const [actor, setActor] = usePersistentState<{ name?: string; force?: string }>('game-actor', {
@@ -638,6 +641,7 @@ export function serverAssistantTools(initialContext: {
 					{ ...data.args, operation: data.operation },
 					actor
 				);
+				if (data.operation === 'inspect' || data.operation === 'place') recordBuildEvidence(native);
 				if (data.operation === 'check') {
 					let checked = z
 						.object({ output_sample: buildOutputSampleSchema.optional() })

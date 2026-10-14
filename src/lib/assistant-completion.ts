@@ -89,6 +89,21 @@ export function unfinishedFactoryConnections(requests: readonly string[], answer
 	);
 }
 
+export const factoryCompletionEvidenceSchema = z.object({
+	expectedDesign: z.string(),
+	operation: z.literal('place_blueprint').optional(),
+	recipe_machines: z.number().int().nonnegative().optional(),
+	unconfigured_machines: z.number().int().nonnegative().optional(),
+	power: z
+		.object({
+			checked: z.boolean(),
+			uncovered_total: z.number().nonnegative(),
+			unconnected_total: z.number().nonnegative()
+		})
+		.optional()
+});
+export type FactoryCompletionEvidence = z.infer<typeof factoryCompletionEvidenceSchema>;
+
 export function placedFactoryPowerGaps(
 	requests: readonly string[],
 	results: readonly { result: unknown }[]
