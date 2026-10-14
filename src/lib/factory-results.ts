@@ -1290,6 +1290,7 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 				])
 			}
 		];
+
 		return view;
 	}
 
@@ -1354,6 +1355,29 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 				])
 			}
 		];
+		const missing = rows(data.machines).flatMap((machine) =>
+			rows(record(machine.missing_inputs).ingredients).map((ingredient) => ({ machine, ingredient }))
+		);
+		if (missing.length)
+			view.tables.push({
+				title: 'Missing ingredients',
+				columns: ['Machine', 'Ingredient', 'Available', 'Per craft'],
+				rows: missing.map(({ machine, ingredient }) => [
+					humanName(machine.name),
+					humanName(ingredient.name) +
+						(ingredient.quality && ingredient.quality !== 'normal'
+							? ` (${humanName(ingredient.quality)})`
+							: ''),
+					display(ingredient.available),
+					display(ingredient.required)
+				]),
+				prototypes: missing.map(({ machine, ingredient }) => [
+					prototype('entity', machine.name),
+					prototype(ingredient.type === 'fluid' ? 'fluid' : 'item', ingredient.name),
+					undefined,
+					undefined
+				])
+			});
 		return view;
 	}
 	if (tool === 'blueprint_operation') {

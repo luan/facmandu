@@ -617,6 +617,20 @@ local function blueprint(request,territories)
   local report={operation='check_build',tick=game.tick,surface=surface.name,force=force.name,constructed=0,requested=#entities,ghosts=0,missing={},faults={},faults_total=0,machines={},machines_total=0,machine_status_counts={},product_outputs={},product_outputs_total=0,terminal_belts={},terminal_belts_total=0,settings_verified=false}
   local function issue(list,row) if #list<16 then list[#list+1]=row end end
   local function status(e) for name,id in pairs(defines.entity_status) do if id==e.status then return name end end end
+  local function missing_inputs(entity,recipe,quality)
+   if not recipe then return nil end
+   local inventory=entity.get_inventory(defines.inventory.crafter_input or (entity.type=='furnace' and defines.inventory.furnace_source or defines.inventory.assembling_machine_input))
+   local rows,total={},0
+   for _,ingredient in ipairs(recipe.ingredients) do
+    local fluid=ingredient.type=='fluid'
+    local amount=fluid and entity.get_fluid_count(ingredient.name) or (inventory and inventory.get_item_count{name=ingredient.name,quality=quality and quality.name or 'normal'} or 0)
+    if amount<ingredient.amount then
+     total=total+1
+     issue(rows,{name=ingredient.name,type=ingredient.type,available=amount,required=ingredient.amount,quality=not fluid and (quality and quality.name or 'normal') or nil})
+    end
+   end
+   return {ingredients=rows,total=total,note='Inputs currently below one recipe batch, not proof of missing upstream supply.'}
+  end
   for index,wanted in ipairs(entities) do
    local position={x=wanted.position.x+request.position.x,y=wanted.position.y+request.position.y}
    local found
@@ -632,7 +646,7 @@ local function blueprint(request,territories)
     issue(report.missing,{index=index,name=wanted.name,position=position,reason=ghost and 'Awaiting construction' or 'No matching entity or ghost'})
    else
     report.constructed=report.constructed+1
-    local recipe;if found.type=='assembling-machine' or found.type=='furnace' then recipe=found.get_recipe() end
+    local recipe,recipe_quality;if found.type=='assembling-machine' or found.type=='furnace' then recipe,recipe_quality=found.get_recipe() end
     local mismatch=(found.prototype.supports_direction and found.direction~=wanted.direction) or (wanted.recipe and (not recipe or recipe.name~=wanted.recipe)) or (wanted.type and found.type=='underground-belt' and found.belt_to_ground_type~=wanted.type)
     if mismatch then report.faults_total=report.faults_total+1;issue(report.faults,{index=index,name=found.name,position=position,reason='Direction, recipe or underground type differs from the design',direction=found.direction,recipe=recipe and recipe.name}) end
     if found.type=='assembling-machine' or found.type=='furnace' or found.type=='mining-drill' then
@@ -642,8 +656,12 @@ local function blueprint(request,territories)
      local drill=found.type=='mining-drill'
      local mined=drill and found.mining_target
      local drop=drill and found.drop_target
-     local crafting;if not drill then crafting=found.is_crafting() end
-     issue(report.machines,{index=index,name=found.name,type=found.type,position=position,status=state,recipe=recipe and recipe.name,
+     local crafting,missing;if not drill then
+      crafting=found.is_crafting()
+      if #report.machines<16 and (state=='item_ingredient_shortage' or state=='fluid_ingredient_shortage') then missing=missing_inputs(found,recipe,recipe_quality) end
+     end
+     issue(report.machines,{index=index,name=found.name,type=found.type,unit_number=found.unit_number,position=position,status=state,recipe=recipe and recipe.name,
+      products_finished=not drill and found.products_finished or nil,missing_inputs=missing,
       crafting=crafting,powered=found.is_connected_to_electric_network(),
       mining_target=mined and mined.valid and {name=mined.name,position=mined.position,amount=mined.amount} or nil,
       drop_position=drill and found.drop_position or nil,

@@ -97,7 +97,11 @@ test('a fully constructed layout with zero structural faults still exposes starv
 				name: 'chemical-plant',
 				recipe: 'battery',
 				position: { x: -129.5, y: 109.5 },
-				status: 'item_ingredient_shortage'
+				status: 'item_ingredient_shortage',
+				missing_inputs: {
+					total: 1,
+					ingredients: [{ name: 'copper-plate', type: 'item', available: 0, required: 1 }]
+				}
 			}
 		]
 	});
@@ -110,6 +114,9 @@ test('a fully constructed layout with zero structural faults still exposes starv
 		'-129.5, 109.5',
 		'Item ingredient shortage'
 	]);
+	assert.equal(result.tables[1]?.title, 'Missing ingredients');
+	assert.deepEqual(result.tables[1]?.rows[0], ['Chemical plant', 'Copper plate', '0', '1']);
+	assert.deepEqual(result.tables[1]?.prototypes?.[0]?.[1], { kind: 'item', name: 'copper-plate' });
 });
 test('site search presents candidate offsets without claiming a completed factory', () => {
 	const result = view('blueprint_operation', {

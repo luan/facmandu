@@ -1213,6 +1213,43 @@ test('build delivery uses game ticks and rejects short, changed or drained sampl
 		assert.equal(measureBuildOutput(before, invalid).measured, false);
 });
 
+test('build checks identify current ingredient shortages and retain native craft counters', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ local force={name='player',recipes={{enabled=true,products={{type='item',name='plant'}}}}}
+ local prototype={type='assembling-machine',tile_width=3,tile_height=3,supports_direction=true,items_to_place_this={{name='plant'}},has_flag=function() return false end}
+ prototypes={entity={plant=prototype},item={battery={}}}
+ defines={inventory={crafter_input=1},entity_status={item_ingredient_shortage=1,fluid_ingredient_shortage=2,full_output=3}}
+ local amounts={copper=0,iron=2};local acid=1.5
+ local recipe={name='battery',ingredients={{type='item',name='copper',amount=1},{type='item',name='iron',amount=2},{type='fluid',name='acid',amount=2}}}
+ local machine={name='plant',type='assembling-machine',force=force,position={x=.5,y=.5},unit_number=42,direction=0,prototype=prototype,status=1,products_finished=1000,
+  get_recipe=function() return recipe,{name='uncommon'} end,is_crafting=function() return false end,is_connected_to_electric_network=function() return true end,
+  get_inventory=function(id) assert(id==1);return {get_item_count=function(q) assert(q.quality=='uncommon');return amounts[q.name] end} end,
+  get_fluid_count=function(name) assert(name=='acid');return acid end}
+ local surface={name='nauvis',find_entities_filtered=function() return {machine} end}
+ game={tick=120,forces={player=force},surfaces={nauvis=surface},create_inventory=function()
+  local saved;return {{set_stack=function() end,set_blueprint_entities=function(e) saved=e end,get_blueprint_entities=function() return saved end,get_blueprint_tiles=function() return {} end,cost_to_build={}}}
+ end}
+ ${blueprintSource}
+ local request={operation='check',force='player',surface='nauvis',position={x=0,y=0},item='battery',outputs={},entities={{name='plant',position={x=.5,y=.5},direction=0}}}
+ local check=blueprint(request);local row=check.machines[1]
+ assert(check.constructed==1 and check.faults_total==0 and row.unit_number==42 and row.products_finished==1000)
+ assert(row.missing_inputs.total==2 and #row.missing_inputs.ingredients==2)
+ assert(row.missing_inputs.ingredients[1].name=='copper' and row.missing_inputs.ingredients[1].available==0 and row.missing_inputs.ingredients[1].quality=='uncommon')
+ assert(row.missing_inputs.ingredients[2].name=='acid' and row.missing_inputs.ingredients[2].available==1.5 and not row.missing_inputs.ingredients[2].quality)
+ machine.status=2;amounts.copper=1;machine.products_finished=1001
+ row=blueprint(request).machines[1];assert(row.products_finished==1001 and row.missing_inputs.total==1)
+ machine.status=3;machine.get_inventory=function() error('Full outputs do not need an input diagnosis') end
+ row=blueprint(request).machines[1];assert(row.status=='full_output' and not row.missing_inputs)
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+	lua.lua_close(state);
+});
+
 test('build verification includes working and stalled mining drills without treating them as crafters', () => {
 	const state = lauxlib.luaL_newstate();
 	lualib.luaL_openlibs(state);
