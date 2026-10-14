@@ -40,15 +40,43 @@ export const sandboxRequestSchema = z.discriminatedUnion('operation', [
 ]);
 export const sandboxToolJsonSchema = z.toJSONSchema(sandboxRequestSchema, { io: 'input' });
 
-const resultSchema = z
+export const sandboxResultSchema = z
 	.object({
 		id: z.string(),
 		status: z.enum(['running', 'done', 'cancelled', 'error']),
 		tick: z.number().optional(),
-		passed: z.boolean().optional()
+		passed: z.boolean().optional(),
+		outputs: z
+			.array(
+				z
+					.object({
+						perMinute: z.number().nonnegative(),
+						targetPerMinute: z.number().positive(),
+						met: z.boolean()
+					})
+					.passthrough()
+			)
+			.optional()
 	})
-	.passthrough();
-type TrialResult = z.infer<typeof resultSchema>;
+	.passthrough()
+	.transform((result) => {
+		if (
+			result.status !== 'done' ||
+			!result.outputs?.some((o) => o.perMinute < o.targetPerMinute * 0.95)
+		)
+			return result;
+		// A batch-boundary allowance can explain a short sample, not prove its target.
+		return {
+			...result,
+			passed: false,
+			verdict: result.passed ? 'inconclusive' : result.verdict,
+			outputs: result.outputs.map((o) => ({
+				...o,
+				met: o.met && o.perMinute >= o.targetPerMinute * 0.95
+			}))
+		};
+	});
+type TrialResult = z.infer<typeof sandboxResultSchema>;
 type Actor = { name: string; requireAdmin: boolean };
 
 export function sandboxCommand(method: 'start' | 'read' | 'cancel', args: unknown[]) {
@@ -65,7 +93,7 @@ async function call(server: ManagedServer, method: 'start' | 'read' | 'cancel', 
 	const raw = await rconScript(server, sandboxCommand(method, args));
 	const reply = z
 		.discriminatedUnion('ok', [
-			z.object({ ok: z.literal(true), result: resultSchema }),
+			z.object({ ok: z.literal(true), result: sandboxResultSchema }),
 			z.object({ ok: z.literal(false), error: z.string() })
 		])
 		.parse(JSON.parse(raw.trim()));
