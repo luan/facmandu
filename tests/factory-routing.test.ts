@@ -17,7 +17,7 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
  local belt={type='transport-belt',tile_width=1,tile_height=1,belt_speed=0.03125}
  local underground={type='underground-belt',tile_width=1,tile_height=1,belt_speed=0.03125,max_underground_distance=5}
  prototypes={entity={belt=belt,underground=underground,fast={type='underground-belt',tile_width=1,tile_height=1,belt_speed=0.0625}}}
- defines={build_check_type={manual=1,blueprint_ghost=2}}
+ defines={build_check_type={manual=1,blueprint_ghost=2,ghost_revive=3}}
  local function key(x,y) return x..':'..y end
  local function known(x,y) return not chart[key(math.floor(x/32),math.floor(y/32))] end
  force.is_chunk_charted=function(_,chunk) return not chart[key(chunk.x,chunk.y)] end
@@ -39,10 +39,12 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
   return rows
  end
  surface.can_place_entity=function(q)
-  assert(q.force==force and (q.build_check_type==1 or q.build_check_type==2) and q.forced==false)
+  assert(q.force==force and (q.build_check_type==1 or q.build_check_type==2 or q.build_check_type==3) and q.forced==false)
   if floor_mode then return q.build_check_type==2 and floor_supported and floor_queued and q.position.y==0.5 and q.position.x>=0.5 and q.position.x<=4.5 end
   assert(known(q.position.x,q.position.y),'Uncharted terrain was inspected')
   reads=reads+1
+  local occupied=world[key(q.position.x,q.position.y)]
+  if occupied and occupied.type=='lane-splitter' then return q.build_check_type==1 end
   return not blocked[key(q.position.x,q.position.y)]
  end
  surface.get_tile=function(p)
@@ -113,6 +115,12 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
  assert(corridor.found and #corridor.entities==401)
  assert(reads<=404,'A clear corridor must not search thousands of underground/direction states')
  for _,e in ipairs(corridor.entities) do assert(e.name=='belt' and e.direction==4) end
+ -- A lane splitter can be fast-replaced manually, but routing must leave it intact.
+ world[key(2.5,.5)]={name='lane-splitter',type='lane-splitter',prototype={type='lane-splitter'},force=force,position={x=2.5,y=.5}}
+ local preserve=route{force='player',surface='nauvis',belt='belt',x=.5,y=.5,target_x=4.5,target_y=.5,margin=2}
+ assert(preserve.found)
+ for _,e in ipairs(preserve.entities) do assert(e.position.x~=2.5 or e.position.y~=.5,'Route would replace a lane splitter') end
+ world={}
  prototypes.entity.plant={type='assembling-machine',tile_width=3,tile_height=3}
  local planned_args={force='player',surface='nauvis',belt='belt',x=0.5,y=0.5,target_x=10.5,target_y=0.5,margin=3,obstacles={
   {name='belt',position={x=0.5,y=0.5},direction=4},

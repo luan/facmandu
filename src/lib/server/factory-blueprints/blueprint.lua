@@ -49,7 +49,8 @@ local function custom_inserter_range(force,p)
  return math.min(maximum,minimum+increment)+footprint
 end
 local function can_request_ghost(force,surface,entity,position,box,offset)
- if surface.can_place_entity{name=entity.name,position=position,direction=entity.direction,force=force,build_check_type=defines.build_check_type.manual} then return true end
+ -- Manual placement permits fast replacement; requesting ghosts must preserve obstacles.
+ if surface.can_place_entity{name=entity.name,position=position,direction=entity.direction,force=force,build_check_type=defines.build_check_type.ghost_revive} then return true end
  if surface.platform and surface.platform.force~=force then return false end
  local area={{box.x1+offset.x,box.y1+offset.y},{box.x2+offset.x,box.y2+offset.y}}
  local pending=false

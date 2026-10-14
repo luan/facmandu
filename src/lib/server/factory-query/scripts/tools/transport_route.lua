@@ -71,7 +71,7 @@ local function route(a)
   return status=='unguarded' or status=='cleared'
  end
  local function placeable(name,x,y,d)
-  local check={name=name,position={x=x,y=y},direction=d,force=force,build_check_type=defines.build_check_type.manual,forced=false}
+  local check={name=name,position={x=x,y=y},direction=d,force=force,build_check_type=defines.build_check_type.ghost_revive,forced=false}
   if surface.can_place_entity(check) then return true end
   -- Blueprint checks honor queued foundation/landfill without supplying it.
   -- Script-ghost checks permit unsupported terrain and must never be used here.
@@ -120,7 +120,7 @@ local function route(a)
   if x<left or x>right or y<top or y>bottom or not known(x,y) then return false end
   local key=name..':'..x..':'..y..':'..d
   if placements[key]==nil then
-   -- Manual checks permit fast replacement of belts. Routing must retain them.
+   -- Retain existing transports and ghosts instead of routing through them.
    local occupied=surface.find_entities_filtered{position={x=x,y=y},type={'transport-belt','underground-belt','splitter','loader','loader-1x1','entity-ghost'},limit=1}
    placements[key]=not occupied_plan[math.floor(x)..':'..math.floor(y)] and #occupied==0 and placeable(name,x,y,d)
   end

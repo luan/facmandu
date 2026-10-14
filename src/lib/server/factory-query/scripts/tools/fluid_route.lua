@@ -149,7 +149,7 @@ local function route(a)
   if x<left or x>right or y<top or y>bottom or not known(x,y) or occupied[key(x,y)] or open_ports[key(x,y)] then return false end
   local id=name..':'..x..':'..y..':'..d
   if cache[id]==nil then
-   local q={name=name,position={x=x,y=y},direction=d,force=force,build_check_type=defines.build_check_type.manual,forced=false}
+   local q={name=name,position={x=x,y=y},direction=d,force=force,build_check_type=defines.build_check_type.ghost_revive,forced=false}
    -- Pipe routing preserves every existing entity, including fast-replaceable pipes.
    local p=surface.find_entities_filtered{position=q.position,type={'pipe','pipe-to-ground','entity-ghost'},limit=1}
    cache[id]=#p==0 and surface.can_place_entity(q)

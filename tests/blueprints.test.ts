@@ -524,6 +524,10 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
  local unexplored=blueprint(inspection)
  assert(not unexplored.ready and unexplored.blocked[1].sampled_tiles==nil and unexplored.blocked[1].nearby_entities==nil)
  charted=true
+ defines.build_check_type.ghost_revive=3
+ -- Native manual checks can allow fast replacement where a ghost cannot be placed.
+ surface.can_place_entity=function(check) return check.build_check_type==defines.build_check_type.manual end
+ assert(not blueprint(inspection).ready,'Fast replacement is not ghost clearance')
  defines.build_check_type.blueprint_ghost=2;defines.inventory={hub_main=1}
  surface.platform={force=force,hub={get_inventory=function() return nil end}}
  local own_foundation=true;local native_allowed=true;local ghost_checks=0
