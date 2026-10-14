@@ -15,10 +15,72 @@ import {
 	useDataWriter,
 	useModel,
 	usePersistentState,
+	useSubagent,
 	useTool
 } from '@flue/runtime';
 import { sqlite, start } from '@flue/runtime/node';
 import { assistantFinalText, assistantText, submissionEvents } from '../src/lib/assistant-events';
+
+test('read-only surveys use a fast model without changing the parent design effort', async () => {
+	const directory = await mkdtemp(join(tmpdir(), 'facmandu-survey-model-'));
+	const parent = fauxProvider({
+		provider: 'survey-parent',
+		models: [{ id: 'design', reasoning: true }]
+	});
+	const survey = fauxProvider({
+		provider: 'survey-worker',
+		models: [{ id: 'fast', reasoning: true }]
+	});
+	parent.setResponses([
+		(_context, options) => {
+			assert.equal(options?.reasoning, 'high');
+			return fauxAssistantMessage([
+				fauxToolCall('task', {
+					agent: 'factory_surveyor',
+					prompt: 'Read the assigned production facts.'
+				})
+			]);
+		},
+		(_context, options) => {
+			assert.equal(options?.reasoning, 'high');
+			return fauxAssistantMessage('Design complete.');
+		}
+	]);
+	survey.setResponses([
+		(_context, options) => {
+			assert.equal(options?.reasoning, 'low');
+			return fauxAssistantMessage('Observed inputs and rates.');
+		}
+	]);
+	function SurveyModelProbe() {
+		useModel('survey-parent/design', { thinkingLevel: 'high' });
+		useSubagent({
+			name: 'factory_surveyor',
+			description: 'Read-only production survey.',
+			model: 'survey-worker/fast',
+			thinkingLevel: 'low',
+			agent: () => 'Read the production facts only.'
+		});
+		return 'Use the production survey to complete the design.';
+	}
+	const runtime = await start({
+		agents: [SurveyModelProbe],
+		providers: [parent.provider, survey.provider],
+		db: sqlite(join(directory, 'conversations.db'))
+	});
+	try {
+		const handle = init(SurveyModelProbe, { id: 'survey-model-probe' });
+		assert.equal(
+			(await handle.read(await handle.dispatch('Complete the design.'))).text,
+			'Design complete.'
+		);
+		assert.equal(parent.state.callCount, 2);
+		assert.equal(survey.state.callCount, 1);
+	} finally {
+		await runtime.stop();
+		await rm(directory, { recursive: true, force: true });
+	}
+});
 
 test('zero durability deadline lets an active submission pass one hour without stopping', async () => {
 	const directory = await mkdtemp(join(tmpdir(), 'facmandu-deadline-'));

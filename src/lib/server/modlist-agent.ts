@@ -42,7 +42,11 @@ import {
 import { recommendationPageSize } from '$lib/recommendations';
 import { listOwnerKey } from './accounts';
 import { assistantCompletionDecision } from './assistant-completion';
-import { type LoadedAssistantModel, loadAssistantModel } from './assistant-models';
+import {
+	assistantProviderName,
+	type LoadedAssistantModel,
+	loadAssistantModel
+} from './assistant-models';
 import { useAssistantToolGroups } from './assistant-tool-groups';
 import { type CodexModel, codexProvider } from './codex';
 import { db } from './db';
@@ -87,14 +91,12 @@ type Context = {
 	gamePlayer?: string;
 	gameForce?: string;
 } & ({ listId: string; serverId?: never } | { serverId: string; listId?: never });
-const providerName = (context: Context) => {
-	const target = `${context.userId}-${context.serverId ? `server-${context.serverId}` : context.listId}`;
-	return `codex-${context.chatId && context.chatId !== `${target}-chat` ? context.chatId : target}`;
-};
+const providerName = assistantProviderName;
 async function registerAssistantProvider(
 	context: Context,
 	loaded: LoadedAssistantModel,
-	effort: ThinkingLevel
+	effort: ThinkingLevel,
+	providerId = providerName(context)
 ) {
 	const instance = context.serverId
 		? await requireServer(context.userId, context.serverId)
@@ -152,11 +154,11 @@ async function registerAssistantProvider(
 			loaded.model as CodexModel,
 			effort,
 			loaded.accessToken,
-			transcriptWithImages
+			transcriptWithImages,
+			providerId
 		);
 		return;
 	}
-	const providerId = providerName(context);
 	const selected = loaded.model;
 	// New providers stream directly; only Codex needs the transport shaping below.
 	setProvider({
@@ -189,6 +191,24 @@ async function registerAssistantProvider(
 	});
 }
 
+async function registerAssistantProviders(
+	context: Context,
+	loaded: LoadedAssistantModel,
+	effort: ThinkingLevel
+) {
+	await registerAssistantProvider(context, loaded, effort);
+	const survey =
+		loaded.entry.provider === 'codex'
+			? await loadAssistantModel(context.userId, 'gpt-6-luna').catch(() => loaded)
+			: loaded;
+	await registerAssistantProvider(
+		context,
+		survey,
+		survey.entry.efforts.includes('low') ? 'low' : survey.entry.defaultEffort,
+		`${providerName(context)}-survey`
+	);
+}
+
 function providerProgress(context: Context, stream: Parameters<typeof assistantStreamProgress>[0]) {
 	const id =
 		context.chatId ??
@@ -203,9 +223,9 @@ function registerCodexProvider(
 	selected: CodexModel,
 	effort: ThinkingLevel,
 	accessToken: () => Promise<string>,
-	transcriptWithImages: (context: TranscriptContext) => TranscriptContext
+	transcriptWithImages: (context: TranscriptContext) => TranscriptContext,
+	providerId = providerName(context)
 ) {
-	const providerId = providerName(context);
 	if (!selected) throw new Error('Model unavailable');
 	// A stable model alias keeps one conversation when the user switches models.
 	// Each resolver captures one durable user id. Credentials never enter prompts or agent state.
@@ -753,7 +773,7 @@ async function startAssistantRuntime() {
 							model: loaded.entry.id,
 							chatId: turn.chatId ?? undefined
 						};
-			await registerAssistantProvider(context, loaded, effort);
+			await registerAssistantProviders(context, loaded, effort);
 			const id =
 				context.chatId ??
 				`${context.userId}-${'serverId' in turn ? `server-${turn.serverId}` : turn.listId}-chat`;
@@ -800,7 +820,7 @@ export async function agentHandle(
 					gamePlayer: target.gamePlayer,
 					gameForce: target.gameForce
 				};
-	await registerAssistantProvider(context, loaded, effort);
+	await registerAssistantProviders(context, loaded, effort);
 	const id =
 		chatId ?? `${userId}-${typeof target === 'string' ? target : `server-${target.serverId}`}-chat`;
 	runtimeState.contextUsage?.set(id, usage);

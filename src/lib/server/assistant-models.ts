@@ -15,6 +15,16 @@ import { deriveEfforts } from './provider-auth';
 
 export type AssistantProviderId = 'codex' | 'meta' | 'copilot' | `api:${string}`;
 
+export function assistantProviderName(
+	context: { userId: string; chatId?: string } & (
+		| { serverId: string; listId?: never }
+		| { listId: string; serverId?: never }
+	)
+) {
+	const target = `${context.userId}-${context.serverId ? `server-${context.serverId}` : context.listId}`;
+	return `codex-${context.chatId && context.chatId !== `${target}-chat` ? context.chatId : target}`;
+}
+
 export type AssistantModel = {
 	// Codex keeps bare catalog ids so stored turns still resolve. Meta and
 	// Copilot ids are namespaced to avoid cross-provider collisions.

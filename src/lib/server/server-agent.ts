@@ -21,6 +21,7 @@ import {
 	measureBuildOutput
 } from '$lib/blueprints';
 import type { FactoryImage } from '$lib/factory-images';
+import { assistantProviderName } from './assistant-models';
 import { useAssistantToolGroups } from './assistant-tool-groups';
 import {
 	fetchPublicWeb,
@@ -129,6 +130,8 @@ export function serverAssistantTools(initialContext: {
 	if (groups.has('production') || groups.has('planning'))
 		useSubagent({
 			name: 'factory_surveyor',
+			model: `${assistantProviderName(context)}-survey/assistant`,
+			thinkingLevel: 'low',
 			description:
 				'Read-only supply-chain survey for one independent product or surface in a broad request. Returns measured rates, limiting supply, exact locations and uncertainties; never creates plans, blueprints or ghosts.',
 			agent() {
