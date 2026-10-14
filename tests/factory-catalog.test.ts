@@ -500,3 +500,69 @@ test('platform request inspection distinguishes automatic sections and reports i
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 });
+
+test('logistics coverage distinguishes construction, logistic chests and missing storage without revealing unsafe targets', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const root = resolve('src/lib/server/factory-query');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ package.path=${JSON.stringify(`${root}/?.lua;`)}..package.path
+ local force={name='player',is_chunk_charted=function(_,chunk) return chunk.x<2 end}
+ local function network(id)
+  return {network_id=id,cells={{}},all_logistic_robots=0,available_logistic_robots=0,
+   all_construction_robots=20,available_construction_robots=0,storage_points={},
+   get_contents=function() error('Counts-only inspection must not scan inventories') end}
+ end
+ local main,other=network(10),network(11)
+ force.logistic_networks={nauvis={main,other}}
+ local ports={
+  {position={x=0,y=0},logistic_cell={logistic_network=main,transmitting=true,construction_radius=4,logistic_radius=2},energy=100},
+  {position={x=20,y=0},logistic_cell={logistic_network=other,transmitting=false,construction_radius=4,logistic_radius=2},energy=0}}
+ local function entity(name,kind,x,y)
+  return {name=name,type=kind,unit_number=x*10+100,position={x=x,y=y},
+   bounding_box={left_top={x=x-.5,y=y-.5},right_bottom={x=x+.5,y=y+.5}}}
+ end
+ local targets={entity('machine','assembling-machine',1.5,.5),entity('edge','assembling-machine',4,.5),
+  entity('provider','logistic-container',3.5,.5),entity('guarded','container',34,.5),entity('hidden','container',70,.5)}
+ local walking=false;local calls=0
+ local surface={name='nauvis',valid=true,is_chunk_generated=function() return true end,
+  get_territory_for_chunk=function(c)
+   if c.x==1 then return {get_segmented_units=function() return {{valid=true,prototype={name='small-demolisher'}}} end} end
+  end,
+  find_entities_filtered=function(q)
+   assert(walking,'Ordinary network counts must not walk entities')
+   assert(q.force=='player')
+   if q.type=='roboport' then assert(q.limit==129);return ports end
+   assert(q.limit==1001);return targets
+  end,
+  create_entity=function() error('Coverage is read only') end}
+ surface.find_logistic_network_by_position=function(p,f)
+  assert(f==force and p.x<32,'Unsafe targets must be excluded before coverage reads');calls=calls+1
+  return math.abs(p.x)<=2 and math.abs(p.y)<=2 and main or nil
+ end
+ surface.find_logistic_networks_by_construction_area=function(p,f)
+  assert(f==force and p.x<32,'Unsafe targets must be excluded before coverage reads');calls=calls+1
+  return math.abs(p.x)<=4 and math.abs(p.y)<=4 and {main} or {}
+ end
+ game={tick=123,forces={player=force},surfaces={nauvis=surface}}
+ local summary=require('scripts.tools.logistics').functions.logistics_summary
+ local a={force='player',surface='nauvis',contents=false}
+ assert(summary(a).networks[1].storage_points==0 and calls==0)
+ walking=true;a.coverage=true
+ local c=summary(a).coverage
+ assert(c.primary_network==10 and c.fixed_networks==2 and c.ports==2 and c.active_ports==1)
+ assert(c.checked==3 and c.excluded==2 and not c.truncated)
+ assert(c.logistic_centers==1 and c.construction_covered==2)
+ assert(c.logistic_chests==1 and c.logistic_chests_covered==0)
+ assert(#c.uncovered==2 and c.uncovered[1].name=='edge' and c.uncovered[1].kind=='construction')
+ assert(c.uncovered[2].name=='provider' and c.uncovered[2].kind=='logistic_chest')
+ targets={};for i=1,1001 do targets[i]=entity('machine','assembling-machine',1.5,.5) end
+ calls=0;c=summary(a).coverage
+ assert(c.truncated and c.checked==1000 and c.construction_covered==1000 and calls<=6000)
+ a.coverage='true';assert(not pcall(summary,a))
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});

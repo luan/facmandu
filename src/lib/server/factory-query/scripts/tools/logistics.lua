@@ -4,7 +4,7 @@
 --
 -- logistics_summary: the logistic networks one force has on one surface, read
 -- off the force's own list of them. The engine already groups its networks by
--- surface, so nothing here walks entities.
+-- surface. Only the optional coverage report walks bounded factory targets.
 --
 -- API names verified against the official 2.0.77 docs (fetched 2026-09-10),
 -- https://lua-api.factorio.com/2.0.77/classes/LuaForce.html and
@@ -39,7 +39,8 @@ M.manifest = {
     params = {
       surface  = "string! surface name or index, e.g. nauvis",
       limit    = "integer networks, default " .. DEFAULT_NETWORKS .. ", max " .. MAX_NETWORKS,
-      contents = "boolean include each network's item contents, default true; false skips the get_contents read entirely, for a caller that only wants robot or network counts",
+      contents = "boolean include each network's item contents, default true; false skips get_contents",
+      coverage = "boolean optional native coverage audit of up to 1000 safe factory targets and 128 fixed ports; reports green construction center/corner samples, orange logistics centers, uncovered coordinates and connected/active ports. Use contents=false for this audit",
     },
   },
 }
@@ -55,6 +56,7 @@ local function network_row(network, with_contents)
   local row = {
     id = network.network_id,
     cells = #network.cells,
+    storage_points = #(network.storage_points or {}),
     logistic_robots = network.all_logistic_robots,
     logistic_robots_available = network.available_logistic_robots,
     construction_robots = network.all_construction_robots,
@@ -70,7 +72,81 @@ local function network_row(network, with_contents)
   return row
 end
 
+-- Coverage is opt-in: ordinary network counts never walk the factory.
+local function coverage_report(force, surface)
+  local territories = require('scripts.tools.territory')
+  local read = territories.reader(force, surface)
+  local ports = surface.find_entities_filtered{force=force.name,type='roboport',limit=129}
+  local groups, primary, largest = {}, nil, 0
+  local active = 0
+  for i, port in ipairs(ports) do
+    if i > 128 then break end
+    local cell = port.logistic_cell
+    local network = cell and cell.logistic_network
+    if network then
+      local id = network.network_id
+      groups[id] = (groups[id] or 0) + 1
+      if groups[id] > largest or (groups[id] == largest and (not primary or id < primary)) then
+        primary, largest = id, groups[id]
+      end
+    end
+    if cell and cell.transmitting and port.energy > 0 then active = active + 1 end
+  end
+  local network_count = 0
+  for _ in pairs(groups) do network_count = network_count + 1 end
+  local out = {primary_network=primary,ports=math.min(#ports,128),active_ports=active,
+    fixed_networks=network_count,checked=0,excluded=0,logistic_centers=0,
+    construction_covered=0,logistic_chests=0,logistic_chests_covered=0,uncovered={},
+    truncated=#ports>128,tick=game.tick}
+  local function inside(position, construction)
+    if not primary then return false end
+    if construction then
+      for _, network in pairs(surface.find_logistic_networks_by_construction_area(position,force)) do
+        if network.network_id == primary then return true end
+      end
+      return false
+    end
+    local network = surface.find_logistic_network_by_position(position,force)
+    return network and network.network_id == primary or false
+  end
+  -- Add chunk pagination before raising these bounds for larger factories.
+  local targets = surface.find_entities_filtered{force=force.name,limit=1001,type={
+    'assembling-machine','furnace','mining-drill','roboport','lab','container',
+    'logistic-container','generator','boiler','offshore-pump'}}
+  if #targets > 1000 then out.truncated = true end
+  for i, entity in ipairs(targets) do
+    if i > 1000 then break end
+    local b = entity.bounding_box
+    if territories.blocked(read,b.left_top.x,b.left_top.y,b.right_bottom.x,b.right_bottom.y) then
+      out.excluded = out.excluded + 1
+    else
+      out.checked = out.checked + 1
+      local logistic = inside(entity.position,false)
+      if logistic then out.logistic_centers = out.logistic_centers + 1 end
+      local construction = inside(entity.position,true)
+      for _, position in ipairs({
+        {x=b.left_top.x+.01,y=b.left_top.y+.01},{x=b.right_bottom.x-.01,y=b.left_top.y+.01},
+        {x=b.left_top.x+.01,y=b.right_bottom.y-.01},{x=b.right_bottom.x-.01,y=b.right_bottom.y-.01}}) do
+        if construction and not inside(position,true) then construction = false end
+      end
+      if construction then out.construction_covered = out.construction_covered + 1 end
+      local chest = entity.type == 'logistic-container'
+      if chest then
+        out.logistic_chests = out.logistic_chests + 1
+        if logistic then out.logistic_chests_covered = out.logistic_chests_covered + 1 end
+      end
+      if #out.uncovered < 12 and (not construction or chest and not logistic) then
+        out.uncovered[#out.uncovered+1] = {name=entity.name,unit_number=entity.unit_number,
+          x=entity.position.x,y=entity.position.y,kind=not construction and 'construction' or 'logistic_chest'}
+      end
+    end
+  end
+  out.note = 'Current native coverage of charted unguarded/cleared machines, chests and power producers. Construction samples center and four corners; logistics counts centers and chests separately. Personal networks do not qualify. Truncation or excluded targets prevents a whole-surface claim. Active ports do not prove power headroom or material delivery.'
+  return out
+end
+
 local function logistics_summary(a)
+  if a.coverage ~= nil and type(a.coverage) ~= "boolean" then error("coverage must be a boolean",0) end
   local force = force_lookup.require_force(a.force)
   local surface, miss = surface_lookup.find(a.surface)
   if not surface then
@@ -114,6 +190,7 @@ local function logistics_summary(a)
     shown = #rows,
     logistic_robots_total = logistic_total,
     networks = rows,
+    coverage = a.coverage and coverage_report(force,surface) or nil,
   }
 end
 
