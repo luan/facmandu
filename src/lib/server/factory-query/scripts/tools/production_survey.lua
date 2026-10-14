@@ -61,7 +61,7 @@ local function read(a)
  local selected=candidates[1]
  if selected then
   result.selected={name=selected.name,unit_number=selected.unit_number,x=selected.x,y=selected.y}
-  local at={force=force.name,surface=surface.name,x=selected.x,y=selected.y,name=selected.name,unit_number=selected.unit_number}
+  local at={force=force.name,surface=surface.name,x=selected.x,y=selected.y,name=selected.name,unit_number=selected.unit_number,connections=true}
   section('machine',machines.inspect_machine,at)
   section('power',power.inspect_power_network,at)
   section('nearby',locate.find_entities,{force=force.name,surface=surface.name,x=selected.x,y=selected.y,radius=24,details=true,limit=40})

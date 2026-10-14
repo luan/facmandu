@@ -235,15 +235,15 @@ test('machine snapshots include actual attached loaders and their upstream belt 
   return {[1]={set_stack=function() end,create_blueprint=function() return {[1]=loader} end,get_blueprint_entities=function() return {{type='input',filters={{index=1,name='sand'}}}} end},valid=true,destroy=function() end}
  end}
  local inspect=require('scripts.tools.machine_diagnostics').functions.inspect_machine
- local result=inspect{force='player',surface='nauvis',x=.5,y=.5}
+ local result=inspect{force='player',surface='nauvis',x=.5,y=.5,connections=true}
  assert(result.connections.total==1 and result.connections.items[1].role=='input')
  local transport=result.connections.items[1].transport
  assert(transport.loader_container.unit_number==1 and transport.loader_type=='input')
  assert(transport.blueprint_settings.filters[1].name=='sand')
  assert(#transport.belt_trace.nodes==2 and transport.belt_trace.nodes[2].unit_number==3 and transport.belt_trace.direction=='upstream')
- local simple=inspect{force='player',surface='nauvis',x=.5,y=.5,connections=false}
+ local simple=inspect{force='player',surface='nauvis',x=.5,y=.5}
  assert(simple.connections==nil and scans==1)
- loader.loader_container={};assert(inspect{force='player',surface='nauvis',x=.5,y=.5}.connections.total==0,'Proximity is not a machine connection')
+ loader.loader_container={};assert(inspect{force='player',surface='nauvis',x=.5,y=.5,connections=true}.connections.total==0,'Proximity is not a machine connection')
  assert(not pcall(inspect,{force='enemy',surface='nauvis',x=.5,y=.5}))
  `)
 	);
@@ -301,7 +301,7 @@ test('mining snapshots read charted reserves and actual output without invoking 
  prototypes={entity={drill=drill.prototype,belt=belt.prototype},item={},fluid={}}
  game={tick=100,forces={player=force},surfaces={nauvis=surface}}
  local inspect=require('scripts.tools.machine_diagnostics').functions.inspect_machine
- local args={force='player',surface='nauvis',x=.5,y=.5}
+ local args={force='player',surface='nauvis',x=.5,y=.5,connections=true}
  local result=inspect(args)
  assert(result.found and result.type=='mining-drill' and result.base_mining_speed==.5)
  assert(result.mining_target.mining.products[1].name=='stone' and result.force_mining_productivity_bonus==.1)
@@ -309,7 +309,7 @@ test('mining snapshots read charted reserves and actual output without invoking 
  assert(result.resources.items[1].name=='copper' and not result.resources.items[1].compatible)
  assert(result.resources.items[2].amount==100 and result.resources.items[2].compatible)
  assert(result.drop_target.unit_number==2 and #result.output_transport.belt_trace.nodes==1)
- args.connections=false;assert(not inspect(args).output_transport)
+ args.connections=nil;assert(not inspect(args).output_transport)
  drill.mining_target=nil;drill.drop_target=nil;result=inspect(args)
  assert(result.found and not result.mining_target and not result.drop_target and not result.output_transport)
  drill.drop_target=belt;belt.force={name='enemy'};assert(not inspect(args).drop_target)
@@ -344,7 +344,7 @@ test('production surveys preserve useful independent readings and never guess an
   return {found=true,entities={{name='chest',contents={items={{name='sand',count=100}}}}},truncated=false}
  end}}
  package.loaded['scripts.tools.machine_diagnostics']={functions={inspect_machine=function(a)
-  reads=reads+1;return {found=true,unit_number=a.unit_number,status='working',connections={items={{role='input'}}}}
+  assert(a.connections==true);reads=reads+1;return {found=true,unit_number=a.unit_number,status='working',connections={items={{role='input'}}}}
  end}}
  package.loaded['scripts.tools.power_diagnostics']={functions={inspect_power_network=function() error('Power read failed',0) end}}
  package.loaded['scripts.tools.production']={functions={item_rate=function() return {found=true,produced_per_min=50,consumed_per_min=60} end}}

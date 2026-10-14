@@ -6,11 +6,11 @@ local transport = require("scripts.tools.transport_diagnostics")
 local M = {}
 M.manifest = {
   inspect_machine = {
-    desc = "Inspect one built crafting machine or mining drill at exact map coordinates: actual status, inputs/outputs, modules, power and native connections. Crafting machines include recipe, progress, fluids, pipe targets and up to eight attached inserters/loaders with sixteen-node belt traces. Drills include their real mining target, bounded charted resource coverage, native drop target and downstream belt trace. Read these before separate surrounding-entity surveys. The attached scan covers the footprint plus three tiles, so remote custom inserters may be omitted. Base mining speed does not include modules/effects; coverage and stored items do not prove delivered throughput. If ambiguous, use a returned unit_number.",
+    desc = "Inspect one built crafting machine or mining drill at exact map coordinates: actual status, inputs/outputs, modules, power and native connections. Crafting machines include recipe, progress, fluids and pipe targets. Set connections=true for up to eight attached inserters/loaders with sixteen-node belt traces. Drills include their real mining target, bounded charted resource coverage and native drop target; connections=true adds its downstream belt trace. Read these before separate surrounding-entity surveys. The attached scan covers the footprint plus three tiles, so remote custom inserters may be omitted. Base mining speed does not include modules/effects; coverage and stored items do not prove delivered throughput. If ambiguous, use a returned unit_number.",
     tier = "2",
     params = {
       surface = "string! surface name or index", x = "number! map x", y = "number! map y",
-      connections = "boolean default true; false skips attached transport reads",
+      connections = "boolean default false; true includes attached transport and downstream drill traces",
       name = "string entity prototype name to disambiguate", unit_number = "integer entity unit number to disambiguate",
     },
   },
@@ -72,7 +72,7 @@ local function inspect_machine(a)
     local drop=entity.drop_target
     if drop and drop.valid and drop.force==force and force.is_chunk_charted(surface,{x=math.floor(drop.position.x/32),y=math.floor(drop.position.y/32)}) then
       row.drop_target={name=drop.name,unit_number=drop.unit_number,position=drop.position}
-      if a.connections~=false then
+      if a.connections==true then
         local ok,value=pcall(transport.functions.inspect_transport,{force=force.name,surface=surface.name,x=drop.position.x,y=drop.position.y,name=drop.name,unit_number=drop.unit_number,trace_limit=16})
         row.output_transport=ok and value or nil;row.output_transport_error=not ok and tostring(value):match('^[^\n]*') or nil
       end
@@ -121,7 +121,7 @@ local function inspect_machine(a)
     end
     row.fluid_ports={total=#ports,shown=math.min(#ports,32),truncated=#ports>32,connections=bounded.cut(ports,32),position_reference='World coordinates. pipe_position is the intended neighboring pipe center; connected_to is the actual connection, if any.'}
   end
-  if a.connections~=false then
+  if a.connections==true then
     local b=entity.bounding_box
     local area={{b.left_top.x-3,b.left_top.y-3},{b.right_bottom.x+3,b.right_bottom.y+3}}
     local candidates=surface.find_entities_filtered{area=area,force=force,type={'inserter','loader','loader-1x1'},limit=64}
