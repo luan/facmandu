@@ -329,3 +329,64 @@ test('long tool runs compact before the next model call and keep completed write
 		await rm(directory, { recursive: true, force: true });
 	}
 });
+
+for (const [name, error, retried] of [
+	['upstream retry buffer failure', 'exceeded request buffer limit while retrying upstream', true],
+	['exhausted provider credits', '429 insufficient_quota', false]
+] as const) {
+	test(`${name} preserves completed tool writes and respects provider retryability`, async () => {
+		const directory = await mkdtemp(join(tmpdir(), 'facmandu-model-retry-'));
+		const provider = fauxProvider({ provider: 'retry-boundary-test', models: [{ id: 'probe' }] });
+		provider.setResponses([
+			fauxAssistantMessage([fauxToolCall('place', {})]),
+			fauxAssistantMessage('', { stopReason: 'error', errorMessage: error }),
+			fauxAssistantMessage('Verified saved build.')
+		]);
+		let writes = 0;
+		function RetryBoundaryProbe() {
+			useModel('retry-boundary-test/probe');
+			useTool({
+				name: 'place',
+				description: 'Record one completed construction write.',
+				run: () => {
+					writes++;
+					return { output: 'Saved construction receipt.' };
+				}
+			});
+			return 'Complete and verify this build.';
+		}
+		const runtime = await start({
+			agents: [RetryBoundaryProbe],
+			providers: [provider.provider],
+			db: sqlite(join(directory, 'conversations.db'))
+		});
+		const originalTimer = globalThis.setTimeout;
+		// Advance retry/backoff waits immediately without changing long durability deadlines.
+		globalThis.setTimeout = new Proxy(originalTimer, {
+			apply(target, receiver, args: unknown[]) {
+				const [callback, delay, ...rest] = args;
+				return Reflect.apply(target, receiver, [
+					callback,
+					typeof delay === 'number' && delay >= 1000 && delay <= 10000 ? 0 : delay,
+					...rest
+				]);
+			}
+		});
+		try {
+			const handle = init(RetryBoundaryProbe, { id: 'retry-boundary' });
+			const receipt = await handle.dispatch('Finish the build.');
+			if (retried) {
+				assert.equal((await handle.read(receipt)).text, 'Verified saved build.');
+				assert.equal((await handle.read(receipt)).text, 'Verified saved build.');
+			} else {
+				await assert.rejects(handle.read(receipt));
+			}
+			assert.equal(provider.state.callCount, retried ? 3 : 2);
+			assert.equal(writes, 1, 'Recovery must not repeat completed world writes');
+		} finally {
+			globalThis.setTimeout = originalTimer;
+			await runtime.stop();
+			await rm(directory, { recursive: true, force: true });
+		}
+	});
+}

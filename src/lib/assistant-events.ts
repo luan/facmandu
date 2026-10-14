@@ -1,4 +1,5 @@
 import type { AssistantMessageEventStream } from '@earendil-works/pi-ai';
+import { isRetryableAssistantError } from '@earendil-works/pi-ai/utils/retry';
 import type { ConversationStreamChunk } from '@flue/runtime';
 import { resultNumber } from './factory-results';
 
@@ -14,6 +15,8 @@ export function assistantStreamProgress(
 			let progress = '';
 			if (event.type === 'thinking_start') progress = 'Reasoning…';
 			if (event.type === 'text_start') progress = 'Responding…';
+			if (event.type === 'error' && isRetryableAssistantError(event.error))
+				progress = 'Retrying the model connection…';
 			if (event.type === 'toolcall_start' || event.type === 'toolcall_delta') {
 				const block = event.partial.content[event.contentIndex];
 				if (block?.type === 'toolCall') {

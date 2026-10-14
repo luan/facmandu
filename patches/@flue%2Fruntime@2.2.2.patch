@@ -32,12 +32,15 @@ index 210bfa06fdd35f698d537e41f6d2adf9299529bd..eae9fd18036814dd06301c0fe993ce08
 -	return submission.acceptedAt + timeoutMs;
 +	return timeoutMs === 0 ? Number.POSITIVE_INFINITY : submission.acceptedAt + timeoutMs;
 diff --git a/dist/dispatch-BlxCz6iq.mjs b/dist/dispatch-BlxCz6iq.mjs
-index 94d0dc4e069259c5f321b429e5a086ed724c5158..b832e05d4626ca70698121058887d888dde783e2 100644
+index 94d0dc4e069259c5f321b429e5a086ed724c5158..bbc08a4bf4ca76f64f6b4826f1e42cb72efadc6a 100644
 --- a/dist/dispatch-BlxCz6iq.mjs
 +++ b/dist/dispatch-BlxCz6iq.mjs
+@@ -4,1 +4,1 @@
+-import { isContextOverflow } from "@earendil-works/pi-ai";
++import { isContextOverflow, isRetryableAssistantError } from "@earendil-works/pi-ai";
 @@ -2317,1 +2317,1 @@
 -	return /overloaded|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|network.?error|connection.?(?:reset|refused|lost|error)|socket hang up|fetch failed|timed? out|timeout|terminated|provider finish_reason:\s*error(?![-\w])/i.test(message.errorMessage);
-+	return /overloaded|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|network.?error|connection.?(?:reset|refused|lost|error)|socket hang up|socket connection was closed unexpectedly|fetch failed|timed? out|timeout|terminated|provider finish_reason:\s*error(?![-\w])/i.test(message.errorMessage);
++	return isRetryableAssistantError(message) || /^provider finish_reason:\s*error$/i.test(message.errorMessage);
 @@ -3195,1 +3195,1 @@
 -	assertPositiveInteger(definition.timeoutMs, `${label} durability.timeoutMs`);
 +	if (definition.timeoutMs !== 0) assertPositiveInteger(definition.timeoutMs, `${label} durability.timeoutMs`);

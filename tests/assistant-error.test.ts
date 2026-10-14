@@ -92,7 +92,7 @@ test('upstream request buffer rejection preserves completed actions without leak
 	);
 	assert.match(message, /Completed actions and designs are saved/u);
 	assert.match(message, /continue from them/u);
-	assert.doesNotMatch(message, /private-token/u);
+	assert.doesNotMatch(message, /oversized|context|private-token/u);
 });
 
 test('an upstream abort reports the saved work without exposing the provider payload', () => {

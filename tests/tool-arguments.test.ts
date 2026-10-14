@@ -6,6 +6,7 @@ import {
 	normalizeContext,
 	type ToolCall
 } from '@earendil-works/pi-ai';
+import { fauxAssistantMessage } from '@earendil-works/pi-ai/providers/faux';
 import { z } from 'zod';
 import { assistantStreamProgress } from '../src/lib/assistant-events';
 import { decodeToolArguments, decodeToolStream } from '../src/lib/server/tool-arguments';
@@ -18,6 +19,27 @@ const input = z.strictObject({
 });
 const schema = z.toJSONSchema(input);
 const query = { tool: 'game_time', args: { force: 'player' } };
+
+test('transient upstream failures show retry progress without retrying credits or user stops', async () => {
+	for (const [errorMessage, retry] of [
+		['exceeded request buffer limit while retrying upstream private-token', true],
+		['429 insufficient_quota private-token', false],
+		['Stopped', false]
+	] as const) {
+		const aborted = errorMessage === 'Stopped';
+		const message = fauxAssistantMessage('', {
+			stopReason: aborted ? 'aborted' : 'error',
+			errorMessage
+		});
+		const source = createAssistantMessageEventStream();
+		const progress: string[] = [];
+		const stream = assistantStreamProgress(source, (value) => progress.push(value));
+		source.push({ type: 'error', reason: aborted ? 'aborted' : 'error', error: message });
+		for await (const event of stream) assert.equal(event.type, 'error');
+		assert.deepEqual(progress, retry ? ['Retrying the model connection…'] : []);
+		assert.equal(await stream.result(), message);
+	}
+});
 
 test('decode declared structured fields while retaining strict validation and literal text', () => {
 	const value = decodeToolArguments(
