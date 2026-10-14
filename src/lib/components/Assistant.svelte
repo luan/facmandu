@@ -154,7 +154,7 @@
  let models = $state<{ id: string; name: string; efforts: string[]; defaultEffort: string; effortLabels?: Partial<Record<string, string>> }[]>([]);
  let model = $state('');
  const visibleContext = $derived(contextUsage?.model === model || gamePlayer ? contextUsage : null);
- const contextBudget = $derived(visibleContext ? Math.max(1, visibleContext.window - visibleContext.reserve) : 0);
+ const contextBudget = $derived(visibleContext ? Math.max(1, visibleContext.window) : 0);
  const contextPercent = $derived(visibleContext?.tokens !== null && visibleContext?.tokens !== undefined && visibleContext.window > 0 ? Math.round(visibleContext.tokens / contextBudget * 100) : null);
  let effort = $state('');
  const effortChoices = $derived(models.find(item => item.id === model)?.efforts ?? []);
@@ -560,8 +560,8 @@
   {/if}
   <section class="mx-auto flex w-full max-w-4xl shrink-0 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-xs text-muted-foreground" aria-label="Context window">
    {#if visibleContext}
-    <span title="Tokens in the latest model request and its response, including cached input. Not cumulative usage.">Working context {visibleContext.tokens === null ? 'not measured yet' : visibleContext.tokens.toLocaleString()} / {visibleContext.window > 0 ? contextBudget.toLocaleString() : 'unknown'} tokens{contextPercent !== null ? ` · ${contextPercent}%` : ''}</span>
-    {#if contextPercent !== null}<progress class="h-1.5 w-20 accent-primary" aria-label="Working context used" max="100" value={Math.min(100, contextPercent)}></progress>{/if}
+    <span title="Tokens in the latest model request and its response, including cached input. Not cumulative usage.">Context {visibleContext.tokens === null ? 'not measured yet' : visibleContext.tokens.toLocaleString()} / {visibleContext.window > 0 ? contextBudget.toLocaleString() : 'unknown'} tokens{contextPercent !== null ? ` · ${contextPercent}%` : ''}</span>
+    {#if contextPercent !== null}<progress class="h-1.5 w-20 accent-primary" aria-label="Model context used" max="100" value={Math.min(100, contextPercent)}></progress>{/if}
     {#if visibleContext.compacting}<span>Compacting…</span>{:else if visibleContext.compactionFailed}<span class="text-destructive" role="status">Compaction failed; context retained</span>{:else}<span title={visibleContext.window > 0 ? `Automatic compaction above ${(visibleContext.window - visibleContext.reserve).toLocaleString()} tokens. Recent context stays verbatim; older context is summarized. Full chat history remains available.` : 'The provider has not supplied a context limit. Compaction can still recover a context overflow.'}>Auto compaction{compacted ? ' · Earlier context summarized' : ''}</span>{/if}
    {:else}<span>Context usage appears after a response.</span>{/if}
   </section>

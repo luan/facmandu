@@ -735,8 +735,7 @@ export async function agentHandle(
 	const usage = assistantContextLimit(
 		details.id,
 		loaded.model.contextWindow,
-		loaded.model.maxTokens,
-		typeof target === 'string' ? undefined : 64_000
+		loaded.model.maxTokens
 	);
 	const context: Context =
 		typeof target === 'string'
