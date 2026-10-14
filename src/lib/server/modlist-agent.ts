@@ -220,9 +220,10 @@ function providerProgress(context: Context, stream: Parameters<typeof assistantS
 	const id =
 		context.chatId ??
 		`${context.userId}-${context.serverId ? `server-${context.serverId}` : context.listId}-chat`;
-	return assistantStreamProgress(stream, (progress) =>
-		runtimeState.progress?.get(id)?.({ progress })
-	);
+	return assistantStreamProgress(stream, (progress) => {
+		if (!runtimeState.contextUsage?.get(id)?.compacting)
+			runtimeState.progress?.get(id)?.({ progress });
+	});
 }
 
 function registerCodexProvider(
