@@ -52,7 +52,7 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
  surface.create_entity=function() error('Routing must not place entities') end
  game={tick=1,forces={player=force},surfaces={nauvis=surface}}
  local function existing(x,y,ghost)
-  local e={name=ghost and 'entity-ghost' or 'belt',ghost_name=ghost and 'belt' or nil,type=ghost and 'entity-ghost' or 'transport-belt',prototype=belt,ghost_prototype=ghost and belt or nil,position={x=x,y=y},direction=4,force=force,unit_number=x+1}
+  local e={name=ghost and 'entity-ghost' or 'belt',ghost_name=ghost and 'belt' or nil,type=ghost and 'entity-ghost' or 'transport-belt',prototype=belt,ghost_prototype=ghost and belt or nil,position={x=x,y=y},direction=4,force=force,unit_number=x+1,to_be_deconstructed=function() return false end}
   setmetatable(e,{__index=function(_,field) error('Unknown native entity field: '..field) end})
   world[key(x,y)]=e;return e
  end
@@ -62,6 +62,15 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
  local args={force='player',surface='nauvis',belt='belt',x=0.5,y=0.5,target_x=8.5,target_y=0.5,margin=1}
  assert(route(args).found==false)
  args.underground='underground'
+ for _,entry in ipairs{{start,'source'},{target,'destination'}} do
+  entry[1].to_be_deconstructed=function() return true end
+  reads=0
+  local marked=route(args)
+  assert(not marked.found and marked.reason=='endpoint_deconstructing' and marked.visited==0)
+  assert(marked.note:find(entry[2]..' belt',1,true) and marked.note:find('cancel',1,true))
+  assert(reads==0,'A doomed endpoint must not trigger a routing search')
+  entry[1].to_be_deconstructed=function() return false end
+ end
  local result=route(args);assert(result.found and result.start.unit_number==start.unit_number and result.destination.ghost)
  local entrance,exit
  local used={}

@@ -112,6 +112,12 @@ local function route(a)
   if draft and placeable(draft.name,x,y,draft.direction) then return draft end
  end
  local start_entity,end_entity=endpoint(a.x,a.y),endpoint(a.target_x,a.target_y)
+ for index,e in pairs{start_entity,end_entity} do
+  if not planned_entities[e] and e.to_be_deconstructed() then
+   return {found=false,surface=surface.name,visited=0,reason='endpoint_deconstructing',
+    note=(index==1 and 'The source belt' or 'The destination belt')..' is marked for deconstruction and may be removed, so it cannot be treated as a continuing feed. Inspect the intended feed and cancel its deconstruction through entities_edit if it should be retained, or choose a different endpoint. No route was exported.'}
+  end
+ end
  local entry_direction
  if a.target_lane~=nil then
   if a.target_lane~='left' and a.target_lane~='right' and a.target_lane~='both' then error('Choose target_lane left, right or both',0) end
