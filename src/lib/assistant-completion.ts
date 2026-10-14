@@ -58,7 +58,7 @@ function requestedExpansion(requests: readonly string[]): boolean {
 		expansion &&
 		!requests.some(
 			(request) =>
-				/\b(?:cancel|stop)\b|\b(?:don't|do not|never)\s+(?:build|place|construct|change|modify)\b|\b(?:only|just)\s+(?:inspect|explain|tell|show)\b/i.test(
+				/^\s*(?:please\s+)?(?:cancel|stop)\b|\b(?:don't|do not|never)\s+(?:build|place|construct|change|modify)\b|\b(?:only|just)\s+(?:inspect|explain|tell|show)\b/i.test(
 					request
 				) ||
 				(/\b(?:blueprint|design|plan|advice)\b/i.test(request) &&

@@ -36,6 +36,13 @@ test('production cores need recipes but explicitly empty machines and future bay
 		}
 	];
 	assert.equal(placedFactoryRecipeGaps(['we need more glass on the bus'], placed(4, 4)), 4);
+	assert.equal(
+		placedFactoryRecipeGaps(
+			['we need more glass on the bus', "Don't stop until it is connected."],
+			placed(4, 4)
+		),
+		4
+	);
 	assert.equal(placedFactoryRecipeGaps(['Build a glass production line.'], placed(4, 4)), 4);
 	assert.equal(placedFactoryRecipeGaps(['we need more glass on the bus'], placed(4, 0)), 0);
 	assert.equal(

@@ -284,6 +284,10 @@ function ModlistAssistant() {
 	const delivery = useDelivery();
 	const writeAnswer = useDataWriter('assistant-answer', { schema: v.string() });
 	const requestId = delivery.kind === 'signal' ? delivery.attributes?.requestId : undefined;
+	const userRequest =
+		delivery.kind === 'signal'
+			? (delivery.attributes?.userRequest ?? delivery.body)
+			: delivery.body;
 	const [recovery, setRecovery] = usePersistentState('answer-recovery', {
 		requestId: '',
 		attempts: 0
@@ -296,18 +300,18 @@ function ModlistAssistant() {
 	useAgentStart(() => {
 		const id = requestId ?? '';
 		const messages = request.id === id ? request.messages : [];
-		if (!messages.includes(delivery.body))
-			setRequest({ id, messages: [...messages, delivery.body], reviewed: false });
+		if (!messages.includes(userRequest))
+			setRequest({ id, messages: [...messages, userRequest], reviewed: false });
 	});
 	useAgentFinish(async ({ append, response, signal }) => {
 		const last = runtimeState.lastTurn?.get(chatId);
 		if (!last) return;
 		// Start hooks write state after this render; a new delivery must not use the prior request.
-		const messages = request.id === requestId ? request.messages : [delivery.body];
+		let messages = request.id === requestId ? request.messages : [userRequest];
 		if (last.text && last.finishReason !== 'length') {
 			if (context.serverId && requestId) {
 				const turn = await db
-					.select({ results: serverAssistantTurn.results })
+					.select({ results: serverAssistantTurn.results, prompt: serverAssistantTurn.prompt })
 					.from(serverAssistantTurn)
 					.where(
 						and(
@@ -317,6 +321,8 @@ function ModlistAssistant() {
 						)
 					)
 					.get();
+				// Older in-game deliveries embedded player context before the request.
+				if (turn && !messages.includes(turn.prompt)) messages = [turn.prompt, ...messages];
 				const results = z.array(factoryResultSchema).parse(JSON.parse(turn?.results ?? '[]'));
 				const gaps = placedFactoryPowerGaps(messages, results);
 				const recipes = placedFactoryRecipeGaps(messages, results);

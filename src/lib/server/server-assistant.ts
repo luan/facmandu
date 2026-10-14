@@ -214,6 +214,7 @@ export async function finishServerTurn(
 							attributes: {
 								groups: JSON.stringify(route?.groups ?? []),
 								requestId: turn.id,
+								userRequest: turn.prompt,
 								...(game ? { gamePlayer: game.player.name, gameForce: game.player.force } : {})
 							}
 						},
@@ -248,6 +249,7 @@ export async function finishServerTurn(
 						attributes: {
 							groups: '[]',
 							requestId: turn.id,
+							userRequest: prompt,
 							...(latestGame
 								? { gamePlayer: latestGame.player.name, gameForce: latestGame.player.force }
 								: {})
