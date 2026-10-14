@@ -308,8 +308,8 @@ local function blueprint(request,territories)
    end
   end
   local directional_type=p.type=='underground-belt' or p.type=='loader' or p.type=='loader-1x1'
-  if e.type and not directional_type then error('Input/output type is only valid for underground belts and loaders',0) end
-  if directional_type and not e.type then error('Specify input/output for underground belt or loader',0) end
+  if e.type and not directional_type then error('Entity '..i..' '..e.name..': input/output type is only valid for underground belts and loaders. Clear the retained setting using program: design.entities['..i..'].type=nil; return design',0) end
+  if directional_type and not e.type then error('Entity '..i..' '..e.name..': specify type="input" or type="output" for this underground belt or loader',0) end
   if (e.pickup_position or e.drop_position or e.use_filters~=nil or e.filter_mode or e.override_stack_size) and p.type~='inserter' then error('Inserter settings require an inserter',0) end
   local reach=custom_inserter_range(force,p)
   if reach then

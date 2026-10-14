@@ -45,14 +45,19 @@ export function missingFactoryCheck(
 
 function requestedExpansion(requests: readonly string[]): boolean {
 	const expansion = requests.some((request) =>
-		/^\s*(?:i|we)\s+(?:need|want)\s+(?:more\s+)?\S+/i.test(request)
+		/^\s*(?:(?:i|we)\s+(?:need|want)\s+(?:more\s+)?\S+|(?:can you\s+)?(?:please\s+)?(?:build|construct|place|design and (?:build|construct|place))\b)/i.test(
+			request
+		)
 	);
 	return (
 		expansion &&
-		!requests.some((request) =>
-			/\b(?:blueprint|design|plan|advice|cancel|stop)\b|\b(?:don't|do not|never)\s+(?:build|place|construct|change|modify)\b|\b(?:only|just)\s+(?:inspect|explain|tell|show)\b/i.test(
-				request
-			)
+		!requests.some(
+			(request) =>
+				/\b(?:cancel|stop)\b|\b(?:don't|do not|never)\s+(?:build|place|construct|change|modify)\b|\b(?:only|just)\s+(?:inspect|explain|tell|show)\b/i.test(
+					request
+				) ||
+				(/\b(?:blueprint|design|plan|advice)\b/i.test(request) &&
+					!/\b(?:build|construct|place)\b/i.test(request))
 		)
 	);
 }
@@ -74,7 +79,7 @@ export function unfinishedFactoryConnections(requests: readonly string[], answer
 	if (!requestedExpansion(requests)) return false;
 	// Missing construction stock is allowed; admitted gaps in the designed
 	// supply, output or power connections still need investigation and repair.
-	return /\b(?:not placed|nothing (?:was )?placed|haven't placed|only (?:designed|drafted))\b|\b(?:could not|cannot|can't|haven't|did not) verify\b[^.!?]{0,120}\b(?:power|supply|feed|connection)\b|\b(?:power|supply|feed|connection)\b[^.!?]{0,60}\b(?:unverified|unconfirmed|not verified)\b/i.test(
+	return /\b(?:not placed|nothing (?:was )?placed|haven't placed|only (?:designed|drafted))\b|\b(?:could not|cannot|can't|haven't|did not) verify\b[^.!?]{0,120}\b(?:power|supply|feed|connection)\b|\b(?:power|supply|feed|connection)\b[^.!?]{0,60}\b(?:unverified|unconfirmed|not verified|unresolved|unconnected|unfinished)\b/i.test(
 		answer
 	);
 }

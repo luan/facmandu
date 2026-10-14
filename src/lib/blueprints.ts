@@ -328,10 +328,16 @@ export function reviseBlueprintDesign(
 	if (saved.force !== revision.force) throw new Error('Blueprint draft belongs to another force');
 	const removed = new Set(revision.removedEntityIndices);
 	for (const index of removed)
-		if (!saved.entities[index - 1]) throw new Error('Removed entity index is outside this draft');
+		if (!saved.entities[index - 1])
+			throw new Error(
+				`Removed entity index ${index} is outside this draft (${saved.entities.length} entities). Indices are 1-based and refer to the current draft; removals renumber subsequent entities.`
+			);
 	const entities = saved.entities.map((entity) => ({ ...entity }));
 	for (const patch of revision.entityChanges) {
-		if (!entities[patch.index - 1]) throw new Error('Entity patch index is outside this draft');
+		if (!entities[patch.index - 1])
+			throw new Error(
+				`Entity patch index ${patch.index} is outside this draft (${entities.length} entities). Indices are 1-based and refer to the current draft; removals renumber subsequent entities.`
+			);
 		if (removed.has(patch.index)) throw new Error('Cannot patch and remove the same entity');
 		entities[patch.index - 1] = blueprintEntitySchema.parse({
 			...entities[patch.index - 1],

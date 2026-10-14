@@ -105,6 +105,34 @@ test('an expansion with admitted connection gaps continues, while stock shortage
 	assert.equal(unfinishedFactoryConnections(['How could I make more glass?'], answer), false);
 });
 
+test('construction requests cannot finish with unresolved ingredient feeds', () => {
+	const answer =
+		'All 18 ghosts are placed. The sand feed from nearby chests remains unresolved, so the furnaces cannot be counted on to run yet.';
+	for (const request of [
+		'we need more glass on the bus',
+		'Build more glass production.',
+		'Can you please construct a robot factory?',
+		'Design and place a glass production blueprint.'
+	]) {
+		assert.equal(unfinishedFactoryConnections([request], answer), true);
+	}
+	for (const request of [
+		'I need a blueprint only.',
+		'Can you design a blueprint?',
+		'Where should we place more glass production?',
+		'Can you explain how to build this?'
+	]) {
+		assert.equal(unfinishedFactoryConnections([request], answer), false);
+	}
+	assert.equal(
+		unfinishedFactoryConnections(
+			['Build more glass production.', 'Do not place anything.'],
+			answer
+		),
+		false
+	);
+});
+
 test('completion decisions require consistent confident evidence', () => {
 	const result = (choice: string, confidence: number, unfinished: number, finished: number) => ({
 		answers: {

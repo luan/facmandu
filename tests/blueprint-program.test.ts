@@ -66,3 +66,17 @@ test('layout programs cannot access host capabilities, change force or bypass bl
 	);
 	await assert.rejects(runBlueprintProgram('return function() end', base), /only data/);
 });
+
+test('a layout program clears underground settings when converting a belt without altering the saved draft', async () => {
+	const saved = blueprintDesignSchema.parse({
+		...base,
+		entities: [{ name: 'underground-belt', type: 'input', position: { x: 0.5, y: 0.5 } }]
+	});
+	const result = await runBlueprintProgram(
+		"design.entities[1].name='transport-belt'; design.entities[1].type=nil; return design",
+		saved
+	);
+	assert.equal(result.entities[0]?.name, 'transport-belt');
+	assert.equal(result.entities[0]?.type, undefined);
+	assert.equal(saved.entities[0]?.type, 'input');
+});

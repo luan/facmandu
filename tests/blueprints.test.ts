@@ -295,7 +295,15 @@ test('draft removal preserves settings and remaps retained wires while adding co
 	assert.deepEqual(revised.entities[3]?.position, { x: 4.5, y: 0.5 });
 	assert.throws(
 		() => reviseBlueprintDesign(saved, { ...revision, removedEntityIndices: [4] }),
-		/outside this draft/
+		/Removed entity index 4.*3 entities.*1-based/
+	);
+	assert.throws(
+		() =>
+			reviseBlueprintDesign(saved, {
+				...revision,
+				entityChanges: [{ index: 4, changes: { direction: 8 } }]
+			}),
+		/Entity patch index 4.*3 entities.*1-based/
 	);
 	assert.throws(
 		() => reviseBlueprintDesign(saved, { ...revision, removedEntityIndices: [2] }),
@@ -353,6 +361,14 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
   {name='furnace',position={x=2.5,y=2.5},direction=0,recipe='iron-plate'}
  }})
  assert(not configured and recipe_error:match('Entity 1 furnace') and recipe_error:match('Remove recipe'))
+ local typed,type_error=pcall(blueprint,{operation='create',force='player',label='Retained underground type',entities={
+  {name='belt',position={x=0.5,y=0.5},type='input'}
+ }})
+ assert(not typed and type_error:match('Entity 1 belt') and type_error:match('type=nil'))
+ local untyped,missing_type_error=pcall(blueprint,{operation='create',force='player',label='Missing underground type',entities={
+  {name='ug',position={x=0.5,y=0.5}}
+ }})
+ assert(not untyped and missing_type_error:match('Entity 1 ug') and missing_type_error:match('type="input"'))
  local clear,collision_error=pcall(blueprint,{operation='create',force='player',label='Two conflicts',entities={
   {name='belt',position={x=0.5,y=0.5},direction=0},
   {name='pole',position={x=0.5,y=0.5},direction=0},
