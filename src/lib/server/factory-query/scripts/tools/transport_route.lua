@@ -158,6 +158,16 @@ local function route(a)
   return true
  end
  local function key(x,y,d,tunnel) return x..':'..y..':'..tostring(d)..':'..tostring(tunnel) end
+ if not start_entity then
+  local accessible=false
+  for _,step in ipairs(directions) do
+   if fits(a.belt,a.x,a.y,step.d) then accessible=true;break end
+  end
+  if not accessible then
+   return {found=false,surface=surface.name,visited=0,sourceBlocked={x=a.x,y=a.y},
+    note='The start coordinate cannot accept a belt in any direction. Inspect sourceBlocked for existing or planned footprints and native terrain support, then choose the actual output endpoint. A wider detour cannot fix the start. No buildings or terrain were changed.'}
+  end
+ end
  if end_entity then
   local accessible=false
   for _,step in ipairs(directions) do

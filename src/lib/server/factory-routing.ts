@@ -62,6 +62,7 @@ const routeReply = z.discriminatedUnion('found', [
 		reason: z.string().optional(),
 		note: z.string().optional(),
 		visited: z.number().optional(),
+		sourceBlocked: position.optional(),
 		sourceExit: position.extend({ direction: z.number().int().min(0).max(15) }).optional(),
 		closestApproach: position.extend({ remaining: z.number().positive() }).optional()
 	}),

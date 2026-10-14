@@ -197,9 +197,14 @@ export function assistantToolFeedback(tool: string, output: unknown): string {
 		const trapped = value.results.some(
 			(row: unknown) => object(row)?.found === false && object(object(row)?.sourceExit)
 		);
-		return `Drafted ${completed} of ${value.results.length} belt connections.${trapped ? ' A start belt has no usable forward exit.' : ''} No construction placed.`;
+		const blocked = value.results.some(
+			(row: unknown) => object(row)?.found === false && object(object(row)?.sourceBlocked)
+		);
+		return `Drafted ${completed} of ${value.results.length} belt connections.${blocked ? ' A start coordinate cannot accept a belt.' : ''}${trapped ? ' A start belt has no usable forward exit.' : ''} No construction placed.`;
 	}
 	if (tool === 'route_belt' || tool === 'belt_route') {
+		if (value.found === false && object(value.sourceBlocked))
+			return 'The start coordinate cannot accept a belt; inspect its footprint and terrain.';
 		if (value.found === false && object(value.sourceExit))
 			return 'The start belt has no usable forward exit; inspect its connection.';
 		if (value.found === false) return 'No valid belt route found in the searched area.';

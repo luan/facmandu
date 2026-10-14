@@ -87,6 +87,12 @@ test('partial layout progress counts rows and revisions without exposing entity 
 test('tool feedback distinguishes proposed drafts, placement faults and actual query results', () => {
 	assert.equal(
 		assistantToolFeedback('route_belts', {
+			results: [{ found: false, sourceBlocked: { x: 4.5, y: 7.5 } }]
+		}),
+		'Drafted 0 of 1 belt connections. A start coordinate cannot accept a belt. No construction placed.'
+	);
+	assert.equal(
+		assistantToolFeedback('route_belts', {
 			results: [{ found: true }, { found: false, sourceExit: { x: 1.5, y: 0.5, direction: 4 } }]
 		}),
 		'Drafted 1 of 2 belt connections. A start belt has no usable forward exit. No construction placed.'

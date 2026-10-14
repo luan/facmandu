@@ -107,6 +107,13 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
   assert(e.position.x<4 or e.position.x>=7 or e.position.y< -1 or e.position.y>=2,'Route intersects the unplaced machine')
  end
  world={};blocked={};chart={}
+ blocked[key(.5,.5)]=true
+ for _,margin in ipairs{3,32} do
+  local unavailable=route{force='player',surface='nauvis',belt='belt',underground='underground',x=.5,y=.5,target_x=10.5,target_y=.5,margin=margin}
+  assert(not unavailable.found and unavailable.visited==0 and unavailable.sourceBlocked.x==.5 and unavailable.sourceBlocked.y==.5)
+  assert(unavailable.note:find('start coordinate',1,true) and not unavailable.sourceExit and not unavailable.closestApproach)
+ end
+ world={};blocked={};chart={}
  local trapped_start=existing(.5,.5);local trapped_target=existing(10.5,.5)
  blocked[key(1.5,.5)]=true
  for _,margin in ipairs{3,32} do
