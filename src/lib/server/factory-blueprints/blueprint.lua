@@ -682,7 +682,7 @@ local function blueprint(request,territories)
    outputs[#outputs+1]={unit_number=found.unit_number,count=found.get_item_count{name=request.item,quality='normal'}}
   end
   if #outputs>0 then report.output_sample={tick=game.tick,item=request.item,outputs=outputs} end
-  report.note='Read-only construction and operating-state check. Belt contents are occupancy, not throughput; circuit settings and input sustainability are not verified. Sample retained destination inventories twice to measure delivery.'
+  report.note='Read-only construction and operating-state check. faults_total counts layout mismatches only, not successful production. machine_status_counts shows working versus ingredient-starved or otherwise stalled machines. Fully constructed machines waiting for inputs still need supply diagnosis. Belt contents are occupancy, not throughput; circuit settings and input sustainability are not verified. Sample retained destination inventories twice to measure delivery.'
   return report
  end
  if request.operation=='place' and (request.expectedDesign~=request.design or request.expectedTick>game.tick or game.tick-request.expectedTick>3600) then error('Placement inspection expired; inspect again',0) end

@@ -5,6 +5,34 @@ import { assistantResultGroups, presentFactoryResult } from '../src/lib/factory-
 
 const view = (tool: string, result: unknown) =>
 	presentFactoryResult({ kind: 'factory-result', title: tool.replaceAll('_', ' '), result });
+test('a fully constructed layout with zero structural faults still exposes starved production', () => {
+	const result = view('check_build', {
+		operation: 'check_build',
+		constructed: 119,
+		requested: 119,
+		ghosts: 0,
+		faults_total: 0,
+		machines_total: 6,
+		machine_status_counts: { item_ingredient_shortage: 5, fluid_ingredient_shortage: 1 },
+		machines: [
+			{
+				name: 'chemical-plant',
+				recipe: 'battery',
+				position: { x: -129.5, y: 109.5 },
+				status: 'item_ingredient_shortage'
+			}
+		]
+	});
+	assert.equal(result.cards[0]?.badge, 'Constructed');
+	assert.equal(result.cards[1]?.badge, 'Inputs missing');
+	assert.equal(result.cards[1]?.tone, 'warning');
+	assert.deepEqual(result.tables[0]?.rows[0], [
+		'Chemical plant',
+		'Battery',
+		'-129.5, 109.5',
+		'Item ingredient shortage'
+	]);
+});
 test('site search presents candidate offsets without claiming a completed factory', () => {
 	const result = view('blueprint_operation', {
 		operation: 'find_blueprint_site',

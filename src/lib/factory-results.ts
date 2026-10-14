@@ -1169,6 +1169,69 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 		return view;
 	}
 
+	if (data.operation === 'check_build') {
+		const counts = record(data.machine_status_counts);
+		const inputShortages =
+			Number(counts.item_ingredient_shortage ?? 0) + Number(counts.fluid_ingredient_shortage ?? 0);
+		view.title = 'Build check';
+		view.cards = [
+			{
+				title: 'Construction',
+				badge:
+					Number(data.faults_total) > 0
+						? 'Layout differs'
+						: Number(data.ghosts) > 0
+							? 'Awaiting construction'
+							: data.constructed === data.requested
+								? 'Constructed'
+								: 'Missing structures',
+				tone:
+					Number(data.faults_total) > 0 || Number(data.constructed) < Number(data.requested)
+						? 'warning'
+						: 'good',
+				metrics: [
+					...numeric('Built', data.constructed),
+					...numeric('Ghosts', data.ghosts),
+					...numeric('Layout mismatches', data.faults_total)
+				],
+				notes: []
+			}
+		];
+		if (Number(data.machines_total) > 0)
+			view.cards.push({
+				title: 'Production snapshot',
+				badge: inputShortages
+					? 'Inputs missing'
+					: Number(counts.working) > 0
+						? 'Machines working'
+						: 'No machine working',
+				tone: inputShortages || !Number(counts.working) ? 'warning' : 'good',
+				metrics: [
+					...numeric('Working', Number(counts.working ?? 0)),
+					...numeric('Waiting for ingredients', inputShortages)
+				],
+				notes: ['A status snapshot does not measure delivered throughput.']
+			});
+		view.tables = [
+			{
+				title: 'Machines',
+				columns: ['Machine', 'Recipe', 'Position', 'Status'],
+				rows: rows(data.machines).map((machine) => [
+					humanName(machine.name),
+					humanName(machine.recipe),
+					`${display(record(machine.position).x)}, ${display(record(machine.position).y)}`,
+					humanName(machine.status)
+				]),
+				prototypes: rows(data.machines).map((machine) => [
+					prototype('entity', machine.name),
+					prototype('recipe', machine.recipe),
+					undefined,
+					undefined
+				])
+			}
+		];
+		return view;
+	}
 	if (tool === 'blueprint_operation') {
 		view.title = item.title;
 		if (data.operation === 'find_blueprint_site') {
