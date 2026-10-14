@@ -3,6 +3,40 @@ import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { lauxlib, lua, lualib, to_luastring } from 'fengari';
 
+test('fluid inspection retains connections when a native storage has no fluid segment', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const root = resolve('src/lib/server/factory-query');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ package.path=${JSON.stringify(`${root}/?.lua;`)}..package.path
+ defines={entity_status={working=1}}
+ script={active_mods={base='2.1.21'}}
+ local force={name='player'}
+ local connected=false;local fluid=nil
+ local pipe={valid=true,name='pipe',type='pipe',force=force,unit_number=1,direction=0,status=1,position={x=.5,y=.5},
+  get_fluid_contents=function() return {} end,
+  has_fluid_segment=function(index) assert(index==1);return connected end,
+  get_fluid_segment_fluid=function(index) assert(connected,'Native storage has no segment');assert(index==1);return fluid end,
+  get_fluid_box_pipe_connections=function(index) assert(index==1);return {{position={x=.5,y=.5},target_position={x=1.5,y=.5},flow_direction='input-output'}} end}
+ prototypes={entity={pipe={}}}
+ local surface={name='nauvis',valid=true,find_entities_filtered=function() return {pipe} end}
+ game={forces={player=force},surfaces={nauvis=surface}}
+ local inspect=require('scripts.tools.transport_diagnostics').functions.inspect_transport
+ local args={force='player',surface='nauvis',x=.5,y=.5,name='pipe'}
+ local row=inspect(args)
+ assert(row.found and row.has_fluid_segment==false and row.segment_fluid==nil)
+ assert(#row.fluid_connections==1 and row.fluid_connections[1].target_position.x==1.5)
+ connected=true;row=inspect(args);assert(row.has_fluid_segment and row.segment_fluid==nil)
+ fluid={name='water',amount=100,temperature=25};row=inspect(args)
+ assert(row.segment_fluid.name=='water' and row.segment_fluid.amount==100)
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+	lua.lua_close(state);
+});
+
 test('belt tracing follows native underground pairs and branches without crossing scope or exceeding its bound', () => {
 	const state = lauxlib.luaL_newstate();
 	lualib.luaL_openlibs(state);

@@ -148,7 +148,8 @@ local function inspect(a)
   if tonumber(major)>2 or (tonumber(major)==2 and tonumber(minor)>=1) then
    -- Pipes and tanks use storage 1. Extend to every pump storage when its native count is verified.
    row.fluid_storage_index=1
-   row.segment_fluid=e.get_fluid_segment_fluid(1)
+   row.has_fluid_segment=e.has_fluid_segment(1)
+   if row.has_fluid_segment then row.segment_fluid=e.get_fluid_segment_fluid(1) end
    row.fluid_connections={}
    for _,c in pairs(e.get_fluid_box_pipe_connections(1) or {}) do
     row.fluid_connections[#row.fluid_connections+1]={position=c.position,target_position=c.target_position,target=reference(c.target),flow_direction=c.flow_direction}
