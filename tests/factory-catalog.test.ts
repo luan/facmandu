@@ -261,7 +261,17 @@ test('native lookup contracts declare scope and preserve exact local targets', (
     prototypes.entity[name]={name=name,type='assembling-machine',items_to_place_this={{name=name,count=1}},get_crafting_speed=function() return 1 end}
    end
    prototypes.get_entity_filtered=function() return prototypes.entity end
-   prototypes.get_recipe_filtered=function() return {placement={}} end
+   prototypes.get_recipe_filtered=function(filters)
+    local rows={}
+    for _,filter in ipairs(filters) do
+     local name=filter.elem_filters[1].name
+     if prototypes.entity[name] then rows.placement={} end
+     for key,r in pairs(force.recipes) do for _,p in pairs(r.products) do
+      if p.name==name and filter.filter=='has-product-'..p.type then rows[key]={} end
+     end end
+    end
+    return rows
+   end
    local recipes=functions.planning_recipes({force='player',product='plastic-bar'})
    assert(recipes.recipes[1].machines[1].availability=='craftable')
    assert(recipes.recipes[1].machines[1].construction_stock==40)

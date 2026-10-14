@@ -96,7 +96,7 @@ local function construction_stock(force, prototype)
   return count
 end
 
-local function machines(categories, force, selected)
+local function machines(categories, force, selected, facts)
   local rows, seen = {}, {}
   for _, category in ipairs(categories) do
     local matching = prototypes.get_entity_filtered{{ filter = "crafting-category", crafting_category = category }}
@@ -118,8 +118,13 @@ local function machines(categories, force, selected)
   local total = #rows
   while #rows > MAX_MACHINES do table.remove(rows) end
   for _, row in ipairs(rows) do
-    row.availability = machine_availability(force, prototypes.entity[row.name])
-    row.construction_stock = construction_stock(force, prototypes.entity[row.name])
+    local known=facts[row.name]
+    if not known then
+      known={availability=machine_availability(force,prototypes.entity[row.name]),construction_stock=construction_stock(force,prototypes.entity[row.name])}
+      facts[row.name]=known
+    end
+    row.availability = known.availability
+    row.construction_stock = known.construction_stock
   end
   return rows, total
 end
@@ -141,7 +146,18 @@ local function planning_recipes(a)
     return {force=force.name,product=a.product,type=a.type,found=false,recipes={},total=0,truncated=false,enabled_total=0,enabled_shown=0,suggestions=suggestions(names,a.product),reason='Unknown product prototype; retry a matching suggestion'}
   end
   local candidates = {}
-  local source = a.recipe and (force.recipes[a.recipe] and {force.recipes[a.recipe]} or {}) or force.recipes
+  local source = {}
+  if a.recipe then
+    if force.recipes[a.recipe] then source[1]=force.recipes[a.recipe] end
+  else
+    local filters={}
+    for _,kind in ipairs({'item','fluid'}) do
+      if not a.type or a.type==kind then filters[#filters+1]={filter='has-product-'..kind,elem_filters={{filter='name',name=a.product}}} end
+    end
+    for name in pairs(prototypes.get_recipe_filtered(filters)) do
+      if force.recipes[name] then source[#source+1]=force.recipes[name] end
+    end
+  end
   for _, recipe in pairs(source) do
     local matches = false
     -- Read product names first. Computing expected yields for every recipe
@@ -171,6 +187,8 @@ local function planning_recipes(a)
   for _, recipe in ipairs(candidates) do if recipe.enabled then enabled_total = enabled_total + 1 end end
   local rows = {}
   local comparisons = {}
+  -- Availability and stock are constant within this read; recipe yields are not.
+  local machine_facts = {}
   local enabled_shown = 0
   for i = 1, math.min(total, MAX_RECIPES) do
     local recipe = candidates[i]
@@ -182,7 +200,7 @@ local function planning_recipes(a)
         categories[#categories + 1] = category
       end
     end
-    local available, total_machines = machines(categories, force, a.machine)
+    local available, total_machines = machines(categories, force, a.machine, machine_facts)
     for _, machine in ipairs(available) do
       if machine.productivity_bonus ~= 0 then
         machine.products = products(recipe, recipe.productivity_bonus + machine.productivity_bonus)
