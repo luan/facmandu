@@ -328,15 +328,18 @@ test('local detailed searches expose finite supplies before scenery without requ
  local force={name='player'}
  local chest={valid=true,name='steel-chest',type='container',force=force,unit_number=2,direction=0,position={x=1,y=1},get_inventory=function() return {get_contents=function() return {{name='coal',count=400,quality='normal'}} end} end}
  local tank={valid=true,name='storage-tank',type='storage-tank',force=force,unit_number=3,direction=0,position={x=2,y=1},get_fluid_contents=function() return {['petroleum-gas']=10000} end}
+ local pipe={valid=true,name='pipe',type='pipe',force=force,unit_number=4,direction=0,position={x=3,y=1},get_fluid_contents=function() return {['molten-copper']=100} end}
+ local belt={valid=true,name='transport-belt',type='transport-belt',force=force,unit_number=5,direction=0,position={x=.5,y=1}}
  local solar={valid=true,name='solar-panel',type='solar-panel',force=force,unit_number=1,direction=0,position={x=0,y=0}}
- local surface={name='nauvis',valid=true,find_entities_filtered=function() return {solar,tank,chest} end}
+ local surface={name='nauvis',valid=true,find_entities_filtered=function() return {solar,belt,pipe,tank,chest} end}
  game={forces={player=force},surfaces={nauvis=surface}}
  prototypes={entity={}}
  local find=require('scripts.tools.locate').functions.find_entities
- local result=find{force='player',surface='nauvis',x=0,y=0,radius=10,details=true,limit=2}
- assert(result.total==3 and result.shown==2 and result.omitted==1)
+ local result=find{force='player',surface='nauvis',x=0,y=0,radius=10,details=true,limit=3}
+ assert(result.total==5 and result.shown==3 and result.omitted==2)
  assert(result.entities[1].unit_number==2 and result.entities[1].contents.items[1].count==400)
  assert(result.entities[2].stored_fluids['petroleum-gas']==10000)
+ assert(result.entities[3].stored_fluids['molten-copper']==100,'Nearby fluid supplies must remain visible ahead of ordinary belts')
  assert(not pcall(find,{force='player',surface='nauvis',name='steel-chest',details=true}))
  `)
 	);

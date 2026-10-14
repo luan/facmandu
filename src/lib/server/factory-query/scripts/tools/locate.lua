@@ -290,7 +290,7 @@ local function find_entities(a)
     types[kind] = (types[kind] or 0) + 1
   end
   if a.details then
-    local priority={container=1,['logistic-container']=1,['storage-tank']=2,['space-platform-hub']=2,roboport=3,['transport-belt']=4,['underground-belt']=4,splitter=4,['electric-pole']=5,['assembling-machine']=6,furnace=6}
+    local priority={container=1,['logistic-container']=1,['storage-tank']=2,['space-platform-hub']=2,pipe=2,['pipe-to-ground']=2,roboport=3,['transport-belt']=4,['underground-belt']=4,splitter=4,['electric-pole']=5,['assembling-machine']=6,furnace=6}
     table.sort(matches,function(a,b)
       local pa,pb=priority[real_type(a)] or 7,priority[real_type(b)] or 7
       if pa~=pb then return pa<pb end

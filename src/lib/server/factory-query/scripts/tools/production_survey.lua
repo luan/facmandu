@@ -37,7 +37,7 @@ local function read(a)
  if #candidates==0 then
   -- A real but unused mod prototype can share the player's everyday item name.
   -- Expose actual alternatives; never silently change which product was requested.
-  local recipes=planning.planning_recipes{force=force.name,product=a.product}
+  local recipes=planning.planning_recipes{force=force.name,surface=surface.name,product=a.product}
   result.recipes=recipes
   if recipes.total==0 then
    result.product_resolution_required=true
@@ -64,8 +64,12 @@ local function read(a)
   local at={force=force.name,surface=surface.name,x=selected.x,y=selected.y,name=selected.name,unit_number=selected.unit_number,connections=true}
   section('machine',machines.inspect_machine,at)
   section('power',power.inspect_power_network,at)
-  section('nearby',locate.find_entities,{force=force.name,surface=surface.name,x=selected.x,y=selected.y,radius=24,details=true,limit=40})
-  if prototypes.item[a.product] then section('buses',buses.find_buses,{force=force.name,surface=surface.name,x=selected.x,y=selected.y,product=a.product,radius=128}) end
+ end
+ -- A new production site still needs local inputs even when it has no producer.
+ local site=selected or (a.x and {x=a.x,y=a.y})
+ if site then
+  section('nearby',locate.find_entities,{force=force.name,surface=surface.name,x=site.x,y=site.y,radius=24,details=true,limit=40})
+  if prototypes.item[a.product] then section('buses',buses.find_buses,{force=force.name,surface=surface.name,x=site.x,y=site.y,product=a.product,radius=128}) end
  end
  if #sections>0 then result.errors=sections end
  return result

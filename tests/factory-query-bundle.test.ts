@@ -335,8 +335,8 @@ test('production surveys preserve useful independent readings and never guess an
  local surface={valid=true,name='nauvis'}
  game={tick=100,forces={player=force},surfaces={nauvis=surface}}
  prototypes={item={glass={}},fluid={}}
- local unknown=false;local no_producers=false;local reads=0
- package.loaded['scripts.tools.planning']={functions={planning_recipes=function() return {total=0,recipes={},suggestions={'real-glass'}} end}}
+ local unknown=false;local no_producers=false;local reads=0;local nearby_at
+ package.loaded['scripts.tools.planning']={functions={planning_recipes=function(a) assert(a.surface=='nauvis');return {total=0,recipes={},suggestions={'real-glass'}} end}}
  package.loaded['scripts.tools.locate']={functions={find_entities=function(a)
   assert(a.force=='player' and a.surface=='nauvis')
   if a.product then
@@ -344,7 +344,7 @@ test('production surveys preserve useful independent readings and never guess an
    if unknown then return {found=false,reason='Unknown product',suggestions={'glass'}} end
    return {found=true,entities=no_producers and {} or {{name='furnace',unit_number=2,x=20,y=20},{name='furnace',unit_number=1,x=10,y=10}},truncated=true,omitted=9}
   end
-  return {found=true,entities={{name='chest',contents={items={{name='sand',count=100}}}}},truncated=false}
+  nearby_at={x=a.x,y=a.y};return {found=true,entities={{name='chest',contents={items={{name='sand',count=100}}}}},truncated=false}
  end}}
  package.loaded['scripts.tools.machine_diagnostics']={functions={inspect_machine=function(a)
   assert(a.connections==true);reads=reads+1;return {found=true,unit_number=a.unit_number,status='working',connections={items={{role='input'}}}}
@@ -367,7 +367,10 @@ test('production surveys preserve useful independent readings and never guess an
  assert(not result.found and result.suggestions[1]=='glass' and reads==before and not result.machine)
  unknown=false;no_producers=true;result=survey(args)
  assert(result.found and result.rate.produced_per_min==50 and not result.selected and reads==before)
+ assert(result.nearby.entities[1].contents.items[1].name=='sand' and nearby_at.x==19 and nearby_at.y==19 and result.buses.truncated)
  assert(result.product=='glass' and result.product_resolution_required and result.alternatives[1].product=='real-glass' and result.alternatives[1].producers==23)
+ result=survey{force='player',surface='nauvis',product='glass'}
+ assert(not result.nearby and not result.buses,'No implicit world location when the caller omitted a site')
  surface.platform={force={name='enemy'}};assert(not pcall(survey,args))
  assert(not pcall(survey,{force='enemy',surface='nauvis',product='glass'}))
  `)
