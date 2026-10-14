@@ -4,7 +4,7 @@ local bounded = require('scripts.tools.bounded')
 local M = {}
 M.manifest = {
  inspect_transport = {
-  desc = 'Inspect one built belt, loader, inserter, collector, combinator, chest, pipe, tank or pump at exact coordinates: status, direction, item counts/contents, individual belt line counts, inserter pickup/drop targets, collector/combinator/inserter native blueprint_settings (relative pickup/drop vectors, filters and control behavior), wire connections and the first fluid storage’s connections. Optional item accepts an item or fluid name; item counts use normal quality and fluid counts use native stored amounts. Belt counts are a snapshot, not measured throughput; sample delivered items over game ticks to verify a full belt. Fluid segment amounts are shared network stock, not independent stock at every pipe. Read-only; ghosts are not built entities.',
+  desc = 'Inspect one built belt, loader, inserter, collector, combinator, chest, pipe, tank or pump at exact coordinates: status, direction, item counts/contents, individual belt line counts, inserter pickup/drop targets, collector/combinator/inserter native blueprint_settings (relative pickup/drop vectors, filters and control behavior), wire connections and the first fluid storage’s connections. Optional item accepts an item or fluid name; item counts use normal quality and fluid counts use native stored amounts. Belt counts are a snapshot, not measured throughput; sample delivered items over game ticks to verify a full belt. Fluid links report connection_type (normal or underground); target_position is the adjacent port position, while target.position is the actual connected entity. Fluid segment amounts are shared network stock, not independent stock at every pipe. Read-only; ghosts are not built entities.',
   params = {surface='string! surface name or index',x='number! map x',y='number! map y',name='string entity prototype name',unit_number='integer unit number to disambiguate',item='string exact item or fluid prototype name to count',trace_limit='integer 1..256: trace built belts, underground pairs and splitter branches at one tick; stops at force/chart boundaries. Topology is not throughput or lane/filter reachability',trace_direction='string downstream (default) for output paths, or upstream to verify actual supply paths; node edges use outputs or inputs respectively'}
  }
 }
@@ -148,11 +148,12 @@ local function inspect(a)
   if tonumber(major)>2 or (tonumber(major)==2 and tonumber(minor)>=1) then
    -- Pipes and tanks use storage 1. Extend to every pump storage when its native count is verified.
    row.fluid_storage_index=1
+   if e.type=='pipe-to-ground' then row.max_underground_distance=e.prototype.max_underground_distance end
    row.has_fluid_segment=e.has_fluid_segment(1)
    if row.has_fluid_segment then row.segment_fluid=e.get_fluid_segment_fluid(1) end
    row.fluid_connections={}
    for _,c in pairs(e.get_fluid_box_pipe_connections(1) or {}) do
-    row.fluid_connections[#row.fluid_connections+1]={position=c.position,target_position=c.target_position,target=reference(c.target),flow_direction=c.flow_direction}
+    row.fluid_connections[#row.fluid_connections+1]={position=c.position,target_position=c.target_position,target=reference(c.target),connection_type=c.connection_type,flow_direction=c.flow_direction}
    end
   end
  end

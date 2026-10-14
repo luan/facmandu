@@ -19,7 +19,7 @@ test('fluid inspection retains connections when a native storage has no fluid se
   get_fluid_contents=function() return {} end,
   has_fluid_segment=function(index) assert(index==1);return connected end,
   get_fluid_segment_fluid=function(index) assert(connected,'Native storage has no segment');assert(index==1);return fluid end,
-  get_fluid_box_pipe_connections=function(index) assert(index==1);return {{position={x=.5,y=.5},target_position={x=1.5,y=.5},flow_direction='input-output'}} end}
+  get_fluid_box_pipe_connections=function(index) assert(index==1);return {{position={x=.5,y=.5},target_position={x=1.5,y=.5},connection_type='normal',flow_direction='input-output'}} end}
  prototypes={entity={pipe={}}}
  local surface={name='nauvis',valid=true,find_entities_filtered=function() return {pipe} end}
  game={forces={player=force},surfaces={nauvis=surface}}
@@ -27,10 +27,14 @@ test('fluid inspection retains connections when a native storage has no fluid se
  local args={force='player',surface='nauvis',x=.5,y=.5,name='pipe'}
  local row=inspect(args)
  assert(row.found and row.has_fluid_segment==false and row.segment_fluid==nil)
- assert(#row.fluid_connections==1 and row.fluid_connections[1].target_position.x==1.5)
+ assert(#row.fluid_connections==1 and row.fluid_connections[1].target_position.x==1.5 and row.fluid_connections[1].connection_type=='normal')
  connected=true;row=inspect(args);assert(row.has_fluid_segment and row.segment_fluid==nil)
  fluid={name='water',amount=100,temperature=25};row=inspect(args)
  assert(row.segment_fluid.name=='water' and row.segment_fluid.amount==100)
+ pipe.type='pipe-to-ground';pipe.prototype={max_underground_distance=20}
+ pipe.get_fluid_box_pipe_connections=function() return {{position=pipe.position,target_position={x=1.5,y=.5},connection_type='underground',target={valid=true,name='pipe-to-ground',unit_number=2,position={x=20.5,y=.5}}}} end
+ row=inspect(args)
+ assert(row.max_underground_distance==20 and row.fluid_connections[1].connection_type=='underground' and row.fluid_connections[1].target.position.x==20.5)
  `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
