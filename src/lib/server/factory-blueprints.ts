@@ -44,7 +44,7 @@ export const blueprintToolJsonSchema = {
 	properties: {
 		operation: {
 			type: 'string',
-			enum: ['catalog', 'create', 'program', 'inspect', 'place', 'check']
+			enum: ['catalog', 'create', 'program', 'find_site', 'inspect', 'place', 'check']
 		},
 		display: { type: 'boolean' },
 		args: { type: 'object' }

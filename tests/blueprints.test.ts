@@ -32,6 +32,54 @@ const design = {
 	entities: [{ name: 'transport-belt', position: { x: 0.5, y: 0.5 }, direction: 4 as const }]
 };
 const target = { ...design, surface: 'nauvis', position: { x: 20, y: 20 } };
+test('site search checks the complete footprint without world writes and stays bounded', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ local force={name='player',recipes={{enabled=true,products={{type='item',name='building'}}}},is_chunk_charted=function() return true end}
+ local p={type='container',tile_width=1,tile_height=1,items_to_place_this={{name='building'}},has_flag=function() return false end}
+ prototypes={entity={building=p}}
+ local surface={name='nauvis',is_chunk_generated=function() return true end,
+  get_territory_for_chunk=function(c) if c.x==0 and c.y==0 then return {get_segmented_units=function() return {{valid=true,prototype={name='small-demolisher'}}} end} end end,
+  can_place_entity=function(q) return q.position.y<0 end,
+  find_entities_filtered=function() return {} end,
+  count_entities_filtered=function() return 0 end,
+  create_entity=function() error('Site search must not create entities') end}
+ game={tick=100,forces={player=force},surfaces={nauvis=surface},create_inventory=function()
+  local saved
+  return {{set_stack=function() end,set_blueprint_entities=function(e) saved=e end,get_blueprint_entities=function() return saved end,get_blueprint_tiles=function() return {} end,cost_to_build={}}}
+ end}
+ defines={build_check_type={manual=1}}
+ ${blueprintSource}
+ local request={operation='find_site',force='player',surface='nauvis',position={x=0,y=0},radius=16,label='Core',entities={
+  {name='building',position={x=0.5,y=0.5},direction=0},{name='building',position={x=8.5,y=0.5},direction=0}}}
+ local result=blueprint(request)
+ assert(result.operation=='find_blueprint_site' and #result.sites>0)
+ assert(result.sites[1].x==0 and result.sites[1].y==-8)
+ for _,site in ipairs(result.sites) do assert(site.y<0) end
+ request.radius=0
+ assert(#blueprint(request).sites==0,'A clear center cannot hide a guarded part of the layout')
+ request.entities={}
+ for i=1,65 do request.entities[i]={name='building',position={x=i+0.5,y=0.5},direction=0} end
+ request.radius=128;surface.can_place_entity=function() return false end
+ local bounded=blueprint(request)
+ assert(bounded.truncated and bounded.checked_positions<=64 and bounded.native_check_budget<=4096)
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+	assert.throws(() =>
+		blueprintReferenceSchema.parse({
+			operation: 'find_site',
+			force: 'player',
+			designId: 'a'.repeat(64),
+			surface: 'nauvis',
+			position: { x: 0, y: 0 },
+			radius: 129
+		})
+	);
+});
 test('build checks identify actual product output belts rather than ingredient feeds', () => {
 	const state = lauxlib.luaL_newstate();
 	lualib.luaL_openlibs(state);

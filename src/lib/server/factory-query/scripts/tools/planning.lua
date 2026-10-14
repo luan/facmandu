@@ -1,6 +1,7 @@
 -- Read force-specific recipes and compatible base-speed crafting machines.
 local force_lookup = require("scripts.tools.force_lookup")
 local suggestions = require("scripts.tools.locate").suggestions
+local surface_lookup = require("scripts.tools.surface_lookup")
 local M = {}
 local MAX_RECIPES = 12
 local MAX_MACHINES = 24
@@ -13,6 +14,7 @@ M.manifest = {
       type = "string item or fluid; omit to search both",
       recipe = "string exact recipe name; restrict the lookup before limits are applied",
       machine = "string exact crafting entity name; restrict compatible machines before limits are applied",
+      surface = "string optional surface; checks native recipe surface conditions and force ownership",
     },
   },
 }
@@ -39,6 +41,7 @@ end
 
 local function products(recipe, productivity)
   productivity = productivity or recipe.productivity_bonus
+  productivity = math.min(productivity, recipe.prototype.maximum_productivity or math.huge)
   local rows = {}
   for i, part in ipairs(recipe.products) do
     local amount
@@ -123,6 +126,12 @@ end
 
 local function planning_recipes(a)
   local force = force_lookup.require_force(a.force)
+  local surface
+  if a.surface then
+    local missing;surface,missing=surface_lookup.find(a.surface)
+    if not surface then return missing end
+    if surface.platform and surface.platform.force~=force then error('Choose a surface belonging to this force',0) end
+  end
   if type(a.product) ~= "string" or a.product == "" then error("product is required", 0) end
   if a.type ~= nil and a.type ~= "item" and a.type ~= "fluid" then error("type must be item or fluid", 0) end
   if not ((a.type~='fluid' and (prototypes.item or {})[a.product]) or (a.type~='item' and (prototypes.fluid or {})[a.product])) then
@@ -161,6 +170,7 @@ local function planning_recipes(a)
   local enabled_total = 0
   for _, recipe in ipairs(candidates) do if recipe.enabled then enabled_total = enabled_total + 1 end end
   local rows = {}
+  local comparisons = {}
   local enabled_shown = 0
   for i = 1, math.min(total, MAX_RECIPES) do
     local recipe = candidates[i]
@@ -178,10 +188,40 @@ local function planning_recipes(a)
         machine.products = products(recipe, recipe.productivity_bonus + machine.productivity_bonus)
       end
     end
+    local surface_compatible
+    if surface then
+      surface_compatible=true
+      for _,condition in pairs(recipe.prototype.surface_conditions or {}) do
+        local value=surface.get_property(condition.property)
+        if (condition.min and value<condition.min) or (condition.max and value>condition.max) then surface_compatible=false end
+      end
+    end
+    local expected=products(recipe)
+    local inputs=ingredients(recipe)
+    -- Different input resources have no universal cost. Expose comparable quantities,
+    -- not an invented ranking that silently prefers a familiar recipe.
+    local best
+    for _,machine in ipairs(available) do
+      if machine.availability=='owned' or machine.availability=='craftable' then
+        local yield=0
+        for _,product in ipairs(machine.products or expected) do
+          if product.name==a.product and (not a.type or product.type==a.type) then yield=yield+product.amount end
+        end
+        if yield>0 then
+          local rate=yield*machine.speed*60/recipe.energy
+          if not best or yield>best.yield or (yield==best.yield and rate>best.rate) then best={machine=machine.name,yield=yield,rate=rate} end
+        end
+      end
+    end
+    if best then
+      local per_output={}
+      for _,part in ipairs(inputs) do per_output[#per_output+1]={name=part.name,type=part.type,amount=part.amount/best.yield} end
+      comparisons[#comparisons+1]={recipe=recipe.name,machine=best.machine,enabled=recipe.enabled,surface_compatible=surface_compatible,output_per_craft=best.yield,output_per_min=best.rate,inputs_per_output=per_output}
+    end
     rows[#rows + 1] = {
       name = recipe.name, enabled = recipe.enabled, hidden = recipe.hidden,
       energy = recipe.energy, categories = categories,
-      ingredients = ingredients(recipe), products = products(recipe),
+      ingredients = inputs, products = expected, surface_compatible=surface_compatible,
       productivity_bonus = recipe.productivity_bonus,
       constrained = constrained(recipe),
       machines = available, machines_total = total_machines,
@@ -189,7 +229,9 @@ local function planning_recipes(a)
   end
   return { force = force.name, product = a.product, type = a.type, recipes = rows,
            total = total, truncated = total > #rows,
-           enabled_total = enabled_total, enabled_shown = enabled_shown, suggestions=alternatives }
+           enabled_total = enabled_total, enabled_shown = enabled_shown, suggestions=alternatives,
+           comparisons=comparisons,surface=surface and surface.name,
+           comparison_note='Gross ingredients per requested output with the best shown available machine yield and base speed; no modules/beacons. Compare actual supply chains and surface compatibility before choosing. Inputs with different names are not interchangeable cost units; byproducts are not deducted. Machine/recipe truncation makes this comparison incomplete.' }
 end
 
 M.functions = { planning_recipes = planning_recipes }

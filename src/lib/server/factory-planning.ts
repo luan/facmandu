@@ -35,6 +35,7 @@ const recipe = z.object({
 	products: wireArray(material),
 	productivity_bonus: z.number(),
 	constrained: z.boolean().default(false),
+	surface_compatible: z.boolean().optional(),
 	machines: wireArray(machine),
 	machines_total: z.number()
 });
@@ -206,6 +207,7 @@ export async function planFactory(
 					tool: 'planning_recipes',
 					args: {
 						force: input.force,
+						surface: input.surface,
 						product: product.name,
 						type: product.type,
 						...(selected ? { recipe: selected } : {}),
@@ -220,7 +222,9 @@ export async function planFactory(
 			result.issues.push(`Unlocked recipe choices for ${product.name} were truncated`);
 			return;
 		}
-		const enabled = reply.recipes.filter((candidate) => candidate.enabled);
+		const enabled = reply.recipes.filter(
+			(candidate) => candidate.enabled && candidate.surface_compatible !== false
+		);
 		const chosen = selected
 			? enabled.find((candidate) => candidate.name === selected)
 			: enabled.length === 1

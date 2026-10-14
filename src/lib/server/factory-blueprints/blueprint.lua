@@ -699,6 +699,48 @@ local function blueprint(request,territories)
  local function hazard(left,top,right,bottom)
   return territories.blocked(territory,left,top,right,bottom)
  end
+ if request.operation=='find_site' then
+  local offsets={}
+  local radius=request.radius or 32
+  for gx=-math.floor(radius/8),math.floor(radius/8) do for gy=-math.floor(radius/8),math.floor(radius/8) do
+   local x,y=gx*8,gy*8
+   if x*x+y*y<=radius*radius then offsets[#offsets+1]={x=x,y=y,distance=x*x+y*y} end
+  end end
+  table.sort(offsets,function(a,b) if a.distance~=b.distance then return a.distance<b.distance end;if a.y~=b.y then return a.y<b.y end;return a.x<b.x end)
+  local sites,seen={},{}
+  local checked,checks=0,0
+  local truncated=false
+  for _,delta in ipairs(offsets) do
+   local key=delta.x..':'..delta.y
+   if not seen[key] then
+    seen[key]=true
+    -- Bound native placement work per RCON tick; large drafts need a narrower search.
+    if checked>=64 or checks+#entities+#tiles>4096 then truncated=true;break end
+    checked=checked+1;checks=checks+#entities+#tiles
+    local at={x=request.position.x+delta.x,y=request.position.y+delta.y}
+    local clear=math.abs(at.x)<=1000000 and math.abs(at.y)<=1000000
+    for _,tile in ipairs(tiles) do
+     if not clear then break end
+     local p={x=tile.position.x+at.x,y=tile.position.y+at.y}
+     if hazard(p.x,p.y,p.x+1,p.y+1) then clear=false
+     else
+      local existing=surface.get_tile(p)
+      clear=existing.name==tile.name or (not existing.has_tile_ghost() and surface.can_place_entity{name='tile-ghost',inner_name=tile.name,position=p,force=force,build_check_type=defines.build_check_type.manual,forced=false})
+     end
+    end
+    for i,e in ipairs(entities) do
+     if not clear then break end
+     local b=boxes[i]
+     local area={{b.x1+at.x,b.y1+at.y},{b.x2+at.x,b.y2+at.y}}
+     clear=not hazard(area[1][1],area[1][2],area[2][1],area[2][2])
+      and can_request_ghost(force,surface,e,{x=e.position.x+at.x,y=e.position.y+at.y},b,at)
+      and surface.count_entities_filtered{area=area,type='entity-ghost'}==0
+    end
+    if clear then sites[#sites+1]=at;if #sites==3 then break end end
+   end
+  end
+  return {operation='find_blueprint_site',surface=surface.name,sites=sites,checked_positions=checked,native_check_budget=checks,truncated=truncated,note='Read-only complete-footprint search on an 8-tile grid, nearest offsets first. Sites exclude guarded/unexplored territory and native collisions. No ghosts placed. External supply/output connections and power need design work; inspect the final connected layout before placement. An empty or truncated search does not prove there is no usable site.'}
+ end
  local pending_tiles={}
  local completed_tile_items={}
  for _,tile in ipairs(tiles) do

@@ -5,6 +5,17 @@ import { assistantResultGroups, presentFactoryResult } from '../src/lib/factory-
 
 const view = (tool: string, result: unknown) =>
 	presentFactoryResult({ kind: 'factory-result', title: tool.replaceAll('_', ' '), result });
+test('site search presents candidate offsets without claiming a completed factory', () => {
+	const result = view('blueprint_operation', {
+		operation: 'find_blueprint_site',
+		surface: 'vulcanus',
+		sites: [{ x: 8, y: -16 }],
+		checked_positions: 4
+	});
+	assert.equal(result.title, 'Build site search');
+	assert.equal(result.cards[0]?.badge, 'Clear footprints found');
+	assert.deepEqual(result.tables[0]?.rows, [['8', '-16']]);
+});
 
 test('shared blueprint tools show source links and theoretical rates without fabricated prototype icons', () => {
 	const searched = view('search_blueprints', {

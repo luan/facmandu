@@ -19,6 +19,45 @@ mock.module('../src/lib/server/factory-query', () => ({
 }));
 const { planFactory } = await import('../src/lib/server/factory-planning');
 const server = {} as ManagedServer;
+test('an unlocked recipe that cannot run on the target surface is not a production plan', async () => {
+	replies.clear();
+	replies.set('planning_recipes:item:plate:offworld:undefined', {
+		force: 'player',
+		product: 'plate',
+		total: 1,
+		truncated: false,
+		recipes: [
+			{
+				name: 'offworld',
+				enabled: true,
+				hidden: false,
+				energy: 1,
+				ingredients: [],
+				products: [{ name: 'plate', type: 'item', amount: 1 }],
+				productivity_bonus: 0,
+				surface_compatible: false,
+				machines: [],
+				machines_total: 0
+			}
+		]
+	});
+	replies.set('item_rate', {
+		found: true,
+		produced_per_min: 0,
+		consumed_per_min: 0,
+		net_per_min: 0
+	});
+	const plan = await planFactory(server, {
+		force: 'player',
+		surface: 'vulcanus',
+		product: 'plate',
+		per_min: 60,
+		recipes: { plate: 'offworld' }
+	});
+	assert.equal(plan.status, 'limited');
+	assert.equal(plan.steps.length, 0);
+	assert.ok(plan.issues.includes('Recipe offworld is unavailable for plate'));
+});
 
 test('plans an exact module recipe and machine from supplied inputs without upstream lookups', async () => {
 	replies.clear();

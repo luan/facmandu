@@ -232,6 +232,18 @@ test('native lookup contracts declare scope and preserve exact local targets', (
    assert(recipes.recipes[1].machines[1].availability=='craftable')
    assert(recipes.recipes[1].machines[1].construction_stock==40)
    assert(recipes.recipes[1].machines[2].construction_stock==0)
+   force.recipes.plastic.ingredients={{name='coal',type='item',amount=1}}
+   force.recipes.plastic.prototype.get_product_amount=function(_,bonus) return 2*(1+bonus) end
+   force.recipes.plastic.prototype.maximum_productivity=0.25
+   prototypes.entity['chemical-plant'].effect_receiver={base_effect={productivity=0.5}}
+   game.surfaces.nauvis.get_property=function() return 1000 end
+   local comparison=functions.planning_recipes({force='player',product='plastic-bar',surface='nauvis'}).comparisons[1]
+   assert(comparison.machine=='chemical-plant' and comparison.output_per_craft==2.5)
+   assert(comparison.output_per_min==150 and comparison.inputs_per_output[1].amount==0.4)
+   force.recipes.plastic.prototype.surface_conditions={{property='pressure',min=2000}}
+   local unavailable=functions.planning_recipes({force='player',product='plastic-bar',surface='nauvis'})
+   assert(unavailable.recipes[1].surface_compatible==false and unavailable.comparisons[1].surface_compatible==false)
+   force.recipes.plastic.prototype.surface_conditions=nil
    force.recipes.recycling={name='recycling',enabled=true,hidden=true,category='chemistry',energy=1,
     ingredients={},products={{name='plastic-bar',type='item',amount=1}},productivity_bonus=0,
     prototype={get_product_amount=function() return 1 end}}

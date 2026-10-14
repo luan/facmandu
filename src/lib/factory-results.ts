@@ -1171,6 +1171,31 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 
 	if (tool === 'blueprint_operation') {
 		view.title = item.title;
+		if (data.operation === 'find_blueprint_site') {
+			const sites = rows(data.sites);
+			view.title = 'Build site search';
+			view.cards = [
+				{
+					title: humanName(data.surface),
+					badge: sites.length
+						? 'Clear footprints found'
+						: data.truncated
+							? 'Partial search'
+							: 'No site in this search',
+					tone: sites.length ? 'good' : 'warning',
+					metrics: numeric('Positions checked', data.checked_positions),
+					notes: [string(data.note)].filter(Boolean)
+				}
+			];
+			view.tables = [
+				{
+					title: 'Candidate world offsets',
+					columns: ['X', 'Y'],
+					rows: sites.map((site) => [display(site.x), display(site.y)])
+				}
+			];
+			return view;
+		}
 		if (data.operation === 'place_blueprint' || typeof data.ready === 'boolean') {
 			view.cards = [
 				{

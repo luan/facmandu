@@ -136,6 +136,10 @@ const buildCheck = {
 	item: name,
 	outputs: z.array(outputTarget).max(16).default([])
 };
+const siteSearch = {
+	operation: z.literal('find_site'),
+	radius: z.number().int().min(0).max(128).default(32)
+};
 export const buildOutputSampleSchema = z.strictObject({
 	tick: z.number().int().nonnegative(),
 	item: name,
@@ -195,6 +199,7 @@ export const blueprintRequestSchema = z
 		}),
 		blueprintDesignSchema.extend({ operation: z.literal('create') }),
 		blueprintTargetSchema.extend({ operation: z.literal('inspect') }),
+		blueprintTargetSchema.extend(siteSearch),
 		blueprintTargetSchema.extend(buildCheck),
 		blueprintTargetSchema.extend({
 			operation: z.literal('place'),
@@ -227,6 +232,11 @@ const entityPatch = blueprintEntitySchema
 	.partial()
 	.extend({ direction: blueprintEntitySchema.shape.direction.removeDefault().optional() });
 export const blueprintReferenceSchema = z.discriminatedUnion('operation', [
+	designReference.extend({
+		...siteSearch,
+		surface: name,
+		position: blueprintTargetSchema.shape.position
+	}),
 	designReference.extend({
 		...buildCheck,
 		surface: name,
