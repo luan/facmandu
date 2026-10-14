@@ -24,6 +24,7 @@ import locale from '../../../factorio-mod/facmandu-assistant/locale/en/toby.cfg?
 import readme from '../../../factorio-mod/facmandu-assistant/README.md?raw';
 import references from '../../../factorio-mod/facmandu-assistant/references.lua?raw';
 import type { ManagedServer } from './db/schema';
+import territory from './factory-query/scripts/tools/territory.lua?raw';
 import { ServerError, serverConfig } from './server-files';
 import { installMod, toggleMod } from './server-mods';
 import { requireStopped } from './server-process';
@@ -76,6 +77,7 @@ export function tobyModArchive() {
 				'data-final-fixes.lua': dataFinalFixes,
 				'events.lua': events,
 				'drone.lua': drone,
+				'territory.lua': territory,
 				'drone-visuals.lua': droneVisuals,
 				'references.lua': references,
 				'drone-prototypes.lua': dronePrototypes,

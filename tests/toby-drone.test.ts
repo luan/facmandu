@@ -12,6 +12,7 @@ test('Toby owns a separate drone, rejects foreign/stale commands and preserves c
 		state,
 		to_luastring(`
  package.preload['drone-visuals']=function() ${visuals} end
+ package.preload['territory']=function() ${readFileSync('src/lib/server/factory-query/scripts/tools/territory.lua', 'utf8')} end
  rendering={draw_animation=function(spec) spec.valid=true;spec.destroy=function() spec.valid=false end;return spec end}
  storage={};defines={inventory={spider_trunk=1}};local api
  local force={name='player',technologies={},recipes={},is_chunk_charted=function(_,chunk) return chunk[1]>=0 end}
@@ -64,6 +65,7 @@ test('automatic Toby constructs without equipment and conserves real materials o
 		state,
 		to_luastring(`
  package.preload['drone-visuals']=function() ${visuals} end
+ package.preload['territory']=function() ${readFileSync('src/lib/server/factory-query/scripts/tools/territory.lua', 'utf8')} end
  rendering={draw_animation=function(spec) spec.valid=true;spec.destroy=function() spec.valid=false end;return spec end}
  storage={};defines={inventory={spider_trunk=1,chest=2}};local api
  local function stack(count)
@@ -79,10 +81,11 @@ test('automatic Toby constructs without equipment and conserves real materials o
   return inv
  end
  local cargo=inventory(0);local stock=inventory(0);local provider=inventory(0)
- local force={name='player',recipes={}};local spawned=0;local built=0;local allow=false
+ local force={name='player',recipes={},is_chunk_charted=function() return true end};local spawned=0;local built=0;local allow=false
  local ghost={valid=true,type='entity-ghost',ghost_name='transport-belt',ghost_prototype={items_to_place_this={{name='transport-belt',count=1}}},quality={name='normal'},position={x=1.5,y=0.5},force=force}
  ghost.revive=function() if not allow then return nil end;ghost.valid=false;built=built+1;return {} end
- local surface={name='nauvis'};ghost.surface=surface
+ local surface={name='nauvis',is_chunk_generated=function() return true end,get_territory_for_chunk=function() return nil end};ghost.surface=surface
+ ghost.bounding_box={left_top={x=1,y=0},right_bottom={x=2,y=1}}
  local entity={stop_spider=function() end,valid=true,name='toby-drone',force=force,unit_number=4,surface=surface,torso_orientation=0,position={x=1,y=0},get_inventory=function() return cargo end}
  surface.find_non_colliding_position=function() return entity.position end
  surface.create_entity=function(input) assert(input.name=='toby-drone' and input.force==force);spawned=spawned+1;return entity end
@@ -99,7 +102,11 @@ test('automatic Toby constructs without equipment and conserves real materials o
  module.tick();assert(ghost.valid and built==0 and spawned==1)
  stock[1].count=2;ghost.quality.name='uncommon';module.tick();assert(stock[1].count==2 and ghost.valid)
  ghost.quality.name='normal';module.tick();assert(stock[1].count==2 and ghost.valid and built==0)
- game.tick=120;allow=true;module.tick();assert(stock[1].count==1 and not ghost.valid and built==1)
+ game.tick=120;allow=true
+ local guardian={valid=true,prototype={name='small-demolisher'}}
+ surface.get_territory_for_chunk=function() return {get_segmented_units=function() return {guardian} end} end
+ module.tick();assert(stock[1].count==2 and ghost.valid and built==0,'Guarded construction must not consume items')
+ guardian.valid=false;module.tick();assert(stock[1].count==1 and not ghost.valid and built==1)
  assert(api.read('player','alice').built==1 and entity.follow_target==nil)
  stock[1].count=0;provider[1].count=1;ghost.valid=true;game.tick=240
  module.tick();assert(provider[1].count==0 and not ghost.valid and built==2)

@@ -21,7 +21,7 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
  local function key(x,y) return x..':'..y end
  local function known(x,y) return not chart[key(math.floor(x/32),math.floor(y/32))] end
  force.is_chunk_charted=function(_,chunk) return not chart[key(chunk.x,chunk.y)] end
- local surface={valid=true,name='nauvis'}
+ local surface={valid=true,name='nauvis',is_chunk_generated=function() return true end,get_territory_for_chunk=function() return nil end}
  surface.find_entity=function(name,p) local e=world[key(p.x,p.y)];return e and e.name==name and e or nil end
  surface.find_entities_filtered=function(q)
   local rows={}
@@ -87,6 +87,13 @@ test('belt routing preserves endpoints, crosses obstacles with matched undergrou
  assert(frontier.closestApproach.remaining>0 and frontier.closestApproach.remaining<64)
  chart[key(2,0)]=true;assert(not pcall(route,args))
  world={};blocked={};chart={}
+ local guardian={valid=true,prototype={name='small-demolisher'}}
+ surface.get_territory_for_chunk=function(c) if c.x==1 and c.y==0 then return {get_segmented_units=function() return {guardian} end} end end
+ local protected=route{force='player',surface='nauvis',belt='belt',underground='underground',x=30.5,y=.5,target_x=34.5,target_y=-.5,margin=3}
+ assert(protected.found)
+ for _,e in ipairs(protected.entities) do assert(math.floor(e.position.x/32)~=1 or math.floor(e.position.y/32)~=0,'Routes must avoid guarded chunks') end
+ assert(not pcall(route,{force='player',surface='nauvis',belt='belt',x=32.5,y=.5,target_x=34.5,target_y=-.5,margin=3}))
+ surface.get_territory_for_chunk=function() return nil end
  local open=route{force='player',surface='nauvis',belt='belt',x=0.5,y=0.5,target_x=20.5,target_y=10.5,margin=1}
  assert(open.found and #open.entities==31)
  local turns=0
@@ -187,7 +194,7 @@ test('bus discovery returns actual matching lanes and distinguishes mixed cargo 
  defines={build_check_type={manual=1}}
  local belts={}
  prototypes={item={glass={}}}
- local surface={valid=true,name='nauvis'}
+ local surface={valid=true,name='nauvis',is_chunk_generated=function() return true end,get_territory_for_chunk=function() return nil end}
  surface.find_entities_filtered=function(q)
   local result={}
   for _,e in ipairs(belts) do

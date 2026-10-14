@@ -1133,6 +1133,42 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 		}
 		return view;
 	}
+	if (tool === 'inspect_territory') {
+		view.title = 'Demolisher territory';
+		const counts = record(data.counts);
+		view.cards = [
+			{
+				title: humanName(data.surface),
+				badge: Number(counts.guarded)
+					? 'Guarded chunks'
+					: Number(counts.unknown) || Number(counts.unexplored)
+						? 'Partial territory scan'
+						: 'No active guardians',
+				tone: Number(counts.guarded) || Number(counts.unknown) ? 'warning' : 'muted',
+				metrics: [
+					...numeric('Guarded', counts.guarded),
+					...numeric('Unguarded', counts.unguarded),
+					...numeric('Cleared', counts.cleared),
+					...numeric('Unexplored', counts.unexplored),
+					...numeric('Unknown', counts.unknown)
+				],
+				notes: [string(data.note)].filter(Boolean)
+			}
+		];
+		view.tables = [
+			{
+				title: 'Chunk boundaries',
+				columns: ['From X, Y', 'To X, Y (exclusive)', 'Territory'],
+				rows: rows(data.chunks).map((chunk) => [
+					`${Number(chunk.x) * 32}, ${Number(chunk.y) * 32}`,
+					`${(Number(chunk.x) + 1) * 32}, ${(Number(chunk.y) + 1) * 32}`,
+					humanName(chunk.status)
+				])
+			}
+		];
+		return view;
+	}
+
 	if (tool === 'blueprint_operation') {
 		view.title = item.title;
 		if (data.operation === 'place_blueprint' || typeof data.ready === 'boolean') {

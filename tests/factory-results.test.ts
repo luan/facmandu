@@ -751,3 +751,27 @@ test('repeated science snapshots stay inspectable while distinct forces and wind
 		details: [first]
 	});
 });
+
+test('territory inspection shows world bounds and leaves unknown territory uncertain', () => {
+	const result = view('inspect_territory', {
+		surface: 'vulcanus',
+		counts: { guarded: 1, unguarded: 2, cleared: 1, unknown: 0, unexplored: 1 },
+		chunks: [
+			{ x: -1, y: 0, status: 'guarded' },
+			{ x: 0, y: 0, status: 'cleared' }
+		],
+		note: 'Other enemies and terrain need separate checks.'
+	});
+	assert.equal(result.title, 'Demolisher territory');
+	assert.equal(result.cards[0]?.badge, 'Guarded chunks');
+	assert.deepEqual(result.tables[0]?.rows[0], ['-32, 0', '0, 32', 'Guarded']);
+	assert.match(result.cards[0]?.notes[0] ?? '', /Other enemies/);
+	assert.equal(
+		view('inspect_territory', {
+			surface: 'vulcanus',
+			counts: { guarded: 0, unknown: 1 },
+			chunks: []
+		}).cards[0]?.badge,
+		'Partial territory scan'
+	);
+});

@@ -1,0 +1,8 @@
+{
+	"name": "toby-territory-qa",
+	"version": "0.0.1",
+	"title": "Toby territory QA",
+	"author": "Facmandu",
+	"factorio_version": "2.1",
+	"dependencies": ["facmandu-assistant >= 0.0.13", "space-age"]
+}

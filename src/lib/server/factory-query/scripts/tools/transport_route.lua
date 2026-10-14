@@ -2,6 +2,7 @@
 -- the search never clears obstacles, reveals terrain or places anything.
 local force_lookup=require('scripts.tools.force_lookup')
 local surface_lookup=require('scripts.tools.surface_lookup')
+local territories=require('scripts.tools.territory')
 local M={}
 M.manifest={route_belt={desc='Use the dedicated route_belt tool to design a charted, collision-free belt connection. It can use matching underground belts to cross obstacles and returns saved blueprint sections. Existing endpoints must be same-force transport belts; unrelated buildings and underground connections are preserved. No demolition, landfill, construction or material grants occur.',params={surface='string! exact surface',belt='string! transport-belt prototype',underground='string optional matching underground-belt prototype',x='number! start tile center x',y='number! start tile center y',target_x='number! destination tile center x',target_y='number! destination tile center y',target_lane='string optional left, right or both; side loading requires a built straight bus belt with an inline feed',margin='number optional detour margin, default 16, max 64'}}}
 local directions={{dx=0,dy=-1,d=0},{dx=1,dy=0,d=4},{dx=0,dy=1,d=8},{dx=-1,dy=0,d=12}}
@@ -78,11 +79,14 @@ local function route(a)
   end
  end
  local charted,placements={},{}
+ local territory=territories.reader(force,surface)
  local function known(x,y)
   local cx,cy=math.floor(x/32),math.floor(y/32)
   local key=cx..':'..cy
   if charted[key]==nil then charted[key]=force.is_chunk_charted(surface,{x=cx,y=cy}) end
-  return charted[key]
+  if not charted[key] then return false end
+  local status=territory(cx,cy).status
+  return status=='unguarded' or status=='cleared'
  end
  local function placeable(name,x,y,d)
   local check={name=name,position={x=x,y=y},direction=d,force=force,build_check_type=defines.build_check_type.manual,forced=false}
@@ -96,7 +100,7 @@ local function route(a)
   return surface.can_place_entity(check)
  end
  local function endpoint(x,y)
-  if not known(x,y) then error('Explore both route endpoints first',0) end
+  if not known(x,y) then error('Route endpoint is unexplored or in guarded demolisher territory; inspect_territory and choose an explored unguarded endpoint',0) end
   local entity=surface.find_entity(a.belt,{x=x,y=y})
   if entity and entity.force==force then return entity end
   -- A different belt tier is also a valid connection, without replacing it.

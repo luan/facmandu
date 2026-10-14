@@ -218,7 +218,7 @@ local function control_example(kind)
  if kind=='constant-combinator' then return {control_behavior={sections={sections={{index=1,filters={{index=1,type='item',name='oxide-asteroid-chunk',quality='normal',comparator='=',count=1}}}}}}} end
  if kind=='decider-combinator' then return {control_behavior={decider_conditions={conditions={{first_signal={type='item',name='oxide-asteroid-chunk'},comparator='<',constant=5}},outputs={{signal={type='virtual',name='signal-A'},copy_count_from_input=false,constant=1}},else_outputs={}}}} end
 end
-local function blueprint(request)
+local function blueprint(request,territories)
  local force=game.forces[request.force]
  if not force then error('Unknown force',0) end
  local actor
@@ -695,12 +695,19 @@ local function blueprint(request)
   end
  end
  local blocked={}
+ local territory=territories.reader(force,surface)
+ local function hazard(left,top,right,bottom)
+  return territories.blocked(territory,left,top,right,bottom)
+ end
  local pending_tiles={}
  local completed_tile_items={}
  for _,tile in ipairs(tiles) do
   local position={x=tile.position.x+request.position.x,y=tile.position.y+request.position.y}
-  local existing=surface.get_tile(position)
-  if existing.name==tile.name then
+  local danger=hazard(position.x,position.y,position.x+1,position.y+1)
+  local existing=not danger and surface.get_tile(position)
+  if danger then
+   blocked[#blocked+1]={name=tile.name,position=position,reason=danger.status=='guarded' and 'Active demolisher territory; placement forbidden' or 'Territory cannot be verified: '..danger.status,territory=danger}
+  elseif existing.name==tile.name then
    local item=prototypes.tile[tile.name].items_to_place_this[1]
    completed_tile_items[item.name]=(completed_tile_items[item.name] or 0)+item.count
   else
@@ -733,7 +740,10 @@ local function blueprint(request)
     if not surface.is_chunk_generated{x=x,y=y} or not force.is_chunk_charted(surface,{x=x,y=y}) then charted=false end
    end
   end
-  if not charted or not can_request_ghost(force,surface,e,position,b,request.position) then
+  local danger=charted and hazard(b.x1+request.position.x,b.y1+request.position.y,b.x2+request.position.x,b.y2+request.position.y)
+  if danger then
+   blocked[#blocked+1]={name=e.name,position=position,reason=danger.status=='guarded' and 'Active demolisher territory; placement forbidden' or 'Territory cannot be verified: '..danger.status,territory=danger}
+  elseif not charted or not can_request_ghost(force,surface,e,position,b,request.position) then
    local row={name=e.name,position=position,reason=charted and 'Occupied, unsuitable terrain or surface restrictions' or 'Outside explored, generated terrain'}
    -- Detail the first eight blocked sites; native placement remains authoritative.
    if charted and request.operation=='inspect' and #blocked<8 then
@@ -759,7 +769,7 @@ local function blueprint(request)
   if #existing>0 then blocked[#blocked+1]={name=e.name,position=position,reason='An existing construction ghost occupies this position'} end
  end
  if request.operation=='inspect' then return {ready=#blocked==0,blocked=blocked,expectedTick=game.tick,expectedDesign=request.design,surface=surface.name,position=request.position,entities=#entities,tiles=#tiles,tiles_pending=#pending_tiles,cost=cost,construction=construction_report(force,surface,entities,request.position,cost),power=power_report(force,surface,entities,request.position,boxes)} end
- if #blocked>0 then error('Placement is blocked at '..blocked[1].name..'; inspect the site again',0) end
+ if #blocked>0 then error('Placement is blocked at '..blocked[1].name..': '..blocked[1].reason..'; inspect the site again',0) end
  -- Create ghosts at exact inspected coordinates; build_blueprint centers the layout around its cursor.
  local ghosts={}
  local placed=0
@@ -768,6 +778,8 @@ local function blueprint(request)
  -- Request tile ghosts only; ordinary robots or the platform supply the materials.
  for _,tile in ipairs(pending_tiles) do
   local ok,err=pcall(function()
+   territory=territories.reader(force,surface)
+   if hazard(tile.position.x,tile.position.y,tile.position.x+1,tile.position.y+1) then error('Territory changed during placement; no further ghosts requested',0) end
    if surface.get_tile(tile.position).has_tile_ghost() or not surface.can_place_entity{name='tile-ghost',inner_name=tile.name,position=tile.position,force=force,build_check_type=defines.build_check_type.manual,forced=false} then error('Tile site changed; inspect again',0) end
    local ghost=surface.create_entity{name='tile-ghost',inner_name=tile.name,position=tile.position,force=force,expires=false}
    if not ghost then error('Factorio refused a tile ghost',0) end
@@ -783,6 +795,8 @@ local function blueprint(request)
   local position={x=e.position.x+request.position.x,y=e.position.y+request.position.y}
   local ok,err=pcall(function()
    local b=boxes[i]
+   territory=territories.reader(force,surface)
+   if hazard(b.x1+request.position.x,b.y1+request.position.y,b.x2+request.position.x,b.y2+request.position.y) then error('Territory changed during placement; no further ghosts requested',0) end
    if surface.count_entities_filtered{area={{b.x1+request.position.x,b.y1+request.position.y},{b.x2+request.position.x,b.y2+request.position.y}},type="entity-ghost"}>0 then error("Site changed during placement",0) end
    if not can_request_ghost(force,surface,e,position,b,request.position) then error('Site changed during placement',0) end
    local creation={name='entity-ghost',inner_name=e.name,position=position,direction=e.direction,force=force,type=e.type,expires=false}

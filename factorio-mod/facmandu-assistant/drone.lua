@@ -1,5 +1,10 @@
 local M={}
 local visuals=require('drone-visuals')
+local territories=require('territory')
+local function guarded(ghost)
+ local b=ghost.bounding_box
+ return territories.blocked(territories.reader(ghost.force,ghost.surface),b.left_top.x,b.left_top.y,b.right_bottom.x,b.right_bottom.y)
+end
 local NAME='toby-drone'
 local function player_for(force,name)
  local player=game.get_player(name)
@@ -109,6 +114,7 @@ local function return_items(reserved,source,entity)
  reserved.destroy()
 end
 local function construct(state,ghost,sources)
+ if guarded(ghost) then return false end
  local stack,source,count=material(sources,ghost)
  if not stack then return false end
  local reserved=game.create_inventory(32)
@@ -138,7 +144,7 @@ local function work(player,state)
  local sources=inventories(player,entity)
  if not ghost then
   for _,candidate in ipairs(candidates) do
-   if distance(candidate.position,player.physical_position)<=24^2 and (candidate~=state.blocked_ghost or game.tick-(state.blocked_tick or 0)>=120) and material(sources,candidate) then state.job=candidate;ghost=candidate;break end
+   if distance(candidate.position,player.physical_position)<=24^2 and (candidate~=state.blocked_ghost or game.tick-(state.blocked_tick or 0)>=120) and not guarded(candidate) and material(sources,candidate) then state.job=candidate;ghost=candidate;break end
   end
  end
  if ghost then
@@ -154,6 +160,8 @@ local function ensure(player)
  local surface=player.physical_surface
  local at=surface.find_non_colliding_position(NAME,player.physical_position,8,0.5)
  if not at then return end
+ local zone=territories.reader(player.force,surface)(math.floor(at.x/32),math.floor(at.y/32))
+ if zone.status~='unguarded' and zone.status~='cleared' then return end
  local entity=surface.create_entity{name=NAME,position=at,force=player.force}
  if entity then
   entity.last_user=player

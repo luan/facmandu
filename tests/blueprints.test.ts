@@ -20,6 +20,12 @@ import {
 } from '../src/lib/blueprints';
 import { blueprintCommand, blueprintToolJsonSchema } from '../src/lib/server/factory-blueprints';
 
+const blueprintSource = `${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
+local source_blueprint=blueprint
+local function blueprint(request) return source_blueprint(request,(function()
+${readFileSync('src/lib/server/factory-query/scripts/tools/territory.lua', 'utf8')}
+end)()) end`;
+
 const design = {
 	force: 'player',
 	label: 'Belt',
@@ -45,7 +51,7 @@ test('build checks identify actual product output belts rather than ingredient f
   return {{set_stack=function() end,set_blueprint_entities=function(e) saved=e end,get_blueprint_entities=function() return saved end,get_blueprint_tiles=function() return {} end,cost_to_build={}}}
  end}
  defines={entity_status={}}
- ${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
+ ${blueprintSource}
  local request={operation='check',force='player',surface='nauvis',position={x=0,y=0},item='glass',outputs={},entities={
   {name='inserter',position={x=0.5,y=0.5},direction=0},{name='inserter',position={x=4.5,y=0.5},direction=0}
  }}
@@ -285,7 +291,7 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
    end,get_blueprint_tiles=function() return {} end,
    export_stack=function() return '0native' end,cost_to_build={{name='building',count=5}}}}
  end}
- ${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
+ ${blueprintSource}
  defines={wire_connector_id={}}
  local catalog=blueprint{operation='catalog',force='player',names={'plant','furnace','pole'}}
  assert(catalog.entities[1].recipe_settable and not catalog.entities[2].recipe_settable)
@@ -428,7 +434,7 @@ test('native blueprint drafts report both belt sides, rotated endpoints and cust
  local force=game.forces.player;force.name='player';force.logistic_networks={}
  local charted=true
  force.is_chunk_charted=function() return charted end
- local surface={name='nauvis',is_chunk_generated=function() return true end,can_place_entity=function() return false end}
+ local surface={get_territory_for_chunk=function() return nil end,name='nauvis',is_chunk_generated=function() return true end,can_place_entity=function() return false end}
  surface.get_tile=function(at)
   assert(charted, 'No terrain reads outside explored area')
   return {name=at.x>0.5 and 'water' or 'grass-1'}
@@ -650,7 +656,7 @@ test('ordinary construction tiles round-trip and obey native placement and site 
  local charted=true;local allowed=true;local occupied=false;local built=false;local renamed=false;local created=0
  local matching_ghost=nil
  force.is_chunk_charted=function() return charted end
- local surface={name='nauvis',is_chunk_generated=function() return true end}
+ local surface={get_territory_for_chunk=function() return nil end,name='nauvis',is_chunk_generated=function() return true end}
  surface.get_tile=function() return {name=built and 'landfill' or 'water',has_tile_ghost=function() return occupied end} end
  surface.find_entities_filtered=function() return matching_ghost and {matching_ghost} or {} end
  surface.can_place_entity=function(check)
@@ -670,12 +676,28 @@ test('ordinary construction tiles round-trip and obey native placement and site 
     if renamed then return {{name='water',position=saved[1].position}} end;return saved
    end,export_stack=function() return '0native' end,cost_to_build={{name='landfill',count=1}}}}
  end}
- ${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
+ ${blueprintSource}
  local request={operation='create',force='player',label='Landfill',entities={},tiles={{name='landfill',position={x=0,y=0}}}}
  assert(blueprint(request).kind=='blueprint')
  renamed=true;assert(not pcall(blueprint,request));renamed=false
  request.tiles[1].name='water';assert(not pcall(blueprint,request));request.tiles[1].name='landfill'
  request.operation='inspect';request.surface='nauvis';request.position={x=0,y=0};request.design='site'
+ local guardian={valid=true,prototype={name='small-demolisher'}}
+ local guarded=false
+ surface.get_territory_for_chunk=function() if guarded then return {get_segmented_units=function() return {guardian} end} end end
+ guarded=true
+ local denied=blueprint(request);assert(not denied.ready and denied.blocked[1].territory.status=='guarded')
+ request.operation='place';request.expectedTick=game.tick;request.expectedDesign=request.design
+ local ok,err=pcall(blueprint,request);assert(not ok and err:find('placement forbidden',1,true) and created==0)
+ guarded=false;request.operation='inspect'
+ assert(blueprint(request).ready)
+ guarded=true;request.operation='place'
+ assert(not pcall(blueprint,request) and created==0,'A guardian arriving after inspection must block placement')
+ guardian.valid=false;request.operation='inspect';assert(blueprint(request).ready)
+ guarded=false
+ surface.get_territory_for_chunk=nil
+ assert(not blueprint(request).ready,'Unavailable territory APIs must not permit placement')
+ surface.get_territory_for_chunk=function() return nil end
  assert(blueprint(request).ready)
  allowed=false;assert(not blueprint(request).ready);allowed=true
  charted=false;assert(not blueprint(request).ready);charted=true
@@ -714,7 +736,7 @@ test('native placement inspection identifies pole gaps and preserves uncertainty
  pole.get_max_wire_distance=function() return 9 end;pole.get_supply_area_distance=function() return 4 end
  prototypes={entity={plant=plant,pole=pole}}
  local source={type='electric-pole',name='pole',quality={name='normal'},position={x=0.5,y=0.5},electric_network={parent_network={flow_last_tick={maximum_production=1,accumulator_energy=0}}}}
- local surface={name='nauvis',can_place_entity=function() return true end,is_chunk_generated=function() return true end}
+ local surface={get_territory_for_chunk=function() return nil end,name='nauvis',can_place_entity=function() return true end,is_chunk_generated=function() return true end}
  surface.find_entities_filtered=function(q)
   if q.type~='electric-pole' then return {} end
   local dx,dy=source.position.x-q.position.x,source.position.y-q.position.y
@@ -725,7 +747,7 @@ test('native placement inspection identifies pole gaps and preserves uncertainty
   return {{set_stack=function() end,set_blueprint_entities=function(e) saved=e end,get_blueprint_entities=function() return saved end,get_blueprint_tiles=function() return {} end,export_stack=function() return '0native' end,cost_to_build={{name='building',count=2}}}}
  end}
  defines={build_check_type={manual=1}}
- ${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
+ ${blueprintSource}
  local request={operation='inspect',force='player',surface='nauvis',position={x=0,y=0},label='Powered module',design='inspection',entities={
   {name='plant',position={x=20.5,y=0.5},direction=0},
   {name='pole',position={x=20.5,y=4.5},direction=0}
@@ -794,7 +816,7 @@ test('native export warns about missing, distant and competing underground partn
    get_blueprint_entities=function() return saved end,get_blueprint_tiles=function() return {} end,
    export_stack=function() return '0native' end,cost_to_build={}}}
  end}
- ${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
+ ${blueprintSource}
  local function belt(x,kind) return {name='underground-belt',position={x=x,y=0.5},direction=4,type=kind} end
  local request={operation='create',force='player',label='Connection',entities={belt(0.5,'input'),belt(5.5,'output')}}
  assert(not blueprint(request).warnings)
@@ -1071,7 +1093,7 @@ test('build verification includes working and stalled mining drills without trea
   local saved;return {{set_stack=function() end,set_blueprint_entities=function(e) saved=e end,get_blueprint_entities=function() return saved end,get_blueprint_tiles=function() return {} end,cost_to_build={}}}
  end}
  defines={entity_status={working=1,no_minable_resources=2}}
- ${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
+ ${blueprintSource}
  local request={operation='check',force='player',surface='nauvis',position={x=0,y=0},item='stone',outputs={},entities={{name='drill',position={x=.5,y=.5},direction=4}}}
  local check=blueprint(request)
  assert(check.constructed==1 and check.machines_total==1 and check.machine_status_counts.working==1)

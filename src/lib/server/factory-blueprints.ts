@@ -17,6 +17,7 @@ import {
 import { runBlueprintProgram } from './blueprint-program';
 import type { ManagedServer } from './db/schema';
 import source from './factory-blueprints/blueprint.lua?raw';
+import territorySource from './factory-query/scripts/tools/territory.lua?raw';
 import { ServerError } from './server-files';
 import { serverStatus } from './server-process';
 import { rconScript } from './server-rcon';
@@ -98,7 +99,9 @@ export function blueprintCommand(
 local inventory
 local ok,result=pcall(function()
 ${source}
-return blueprint(request)
+return blueprint(request,(function()
+${territorySource}
+end)())
 end)
 if inventory and inventory.valid then inventory.destroy() end
 local reply=helpers.table_to_json(ok and {ok=true,result=result} or {ok=false,error=tostring(result):match("^[^\\n]*")})

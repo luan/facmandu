@@ -22,7 +22,7 @@ local MODULES = {
   "scripts.tools.machine_diagnostics", "scripts.tools.transport_diagnostics",
   "scripts.tools.power_diagnostics", "scripts.tools.train_diagnostics",
   "scripts.tools.logistic_requests", "scripts.tools.planning", "scripts.tools.transport_route",
-  "scripts.tools.bus_discovery", "scripts.tools.resources", "scripts.tools.production_survey", "scripts.sweep.tool",
+  "scripts.tools.territory_inspection", "scripts.tools.bus_discovery", "scripts.tools.resources", "scripts.tools.production_survey", "scripts.sweep.tool",
 }
 
 local INTERFACE = "ai-agent-bridge-tools"
