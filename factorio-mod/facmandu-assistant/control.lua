@@ -66,7 +66,6 @@ local function panel(player)
  label(title,'Toby',70,'toby_planner_label_frame_title').ignored_by_interaction=true
  local handle=title.add{type='empty-widget',style='toby_flib_titlebar_drag_handle',ignored_by_interaction=true}
  handle.style.horizontally_stretchable=true;handle.drag_target=frame
- title.add{type='button',name=PREFIX..'planning',caption='Planning',style='toby_planner_button_frame_tool',tooltip='Open production planning · Works without AI'}
  title.add{type='sprite-button',name=PREFIX..'close',sprite='utility/close',style='toby_planner_button_frame',tooltip='Close · Your draft is kept'}
  local layout=frame.add{type='flow',direction='horizontal'}
  layout.style.horizontal_spacing=12
@@ -90,9 +89,9 @@ local function panel(player)
  body.style.vertical_spacing=8
  local heading=label(body,'Toby',content_width,'frame_title')
  heading.style.single_line=true
- local metadata=label(body,'Planning works without AI',content_width)
+ local metadata=label(body,'Shared with '..player.force.name,content_width)
  metadata.style.font_color={r=.75,g=.75,b=.75}
- local status=label(body,'Manual planning ready · Agent not connected',content_width)
+ local status=label(body,'Type a message to Toby.',content_width)
  status.style.font_color={r=.75,g=.75,b=.75}
  local tabs=body.add{type='tabbed-pane',name=PREFIX..'tabs'}
  tabs.style.horizontally_stretchable=true
@@ -131,7 +130,7 @@ local function panel(player)
  tabs.add_tab(book_tab,book_content)
  tabs.selected_tab_index=storage.tabs[player.index] or 1
  drone_status(player,refs)
- local composer=body.add{type='textfield',name=PREFIX..'message',text=storage.drafts[player.index] or '',tooltip='Enter: send or steer · Ctrl+Shift+Enter: open blueprint'}
+ local composer=body.add{type='textfield',name=PREFIX..'message',text=storage.drafts[player.index] or '',tooltip='Message Toby · Enter to send'}
  composer.style.width=content_width;composer.style.height=36
  local actions=body.add{type='flow',direction='horizontal'}
  actions.style.width=content_width
@@ -165,7 +164,7 @@ local function render_books(player,refs)
  local pending=storage.book_sync[player.force.index] or 0
  if pending>0 then label(refs.books,'Book sync incomplete: '..pending..' designs or revisions could not be saved. The save retains up to 32 designs and 64 prior revisions per design; existing designs are preserved.',refs.content_width).style.font_color={r=1,g=.8,b=.45} end
  local entries=books.list(player.force)
- if #entries==0 then label(refs.books,'No saved designs yet. Designs received from Toby will remain here when AI is unavailable.',refs.content_width) end
+ if #entries==0 then label(refs.books,'No saved designs yet.',refs.content_width) end
  for _,entry in ipairs(entries) do
   local row=refs.books.add{type='frame',style='inside_deep_frame',direction='vertical'}
   row.style.width=refs.content_width
@@ -268,7 +267,7 @@ local function update(player_index,state)
  local current
  for _,chat in ipairs(state.chats) do if chat.id==state.current then current=chat;break end end
  refs.heading.caption=current and current.title or 'Toby'
- refs.metadata.caption=current and ((current.author and ('Started by '..current.author..' · ') or '')..'Shared with '..player.force.name) or 'Planning works without AI'
+ refs.metadata.caption=current and ((current.author and ('Started by '..current.author..' · ') or '')..'Shared with '..player.force.name) or ('Shared with '..player.force.name)
  refs.status.caption=state.status
  refs.status.style.font_color=current and current.state=='error' and {r=1,g=.4,b=.3} or state.running and {r=1,g=.8,b=.45} or {r=.75,g=.75,b=.75}
  refs.context.caption=player.surface.name
@@ -347,7 +346,6 @@ local function update(player_index,state)
  return receipt
 end
 local function open(player)
- if main_dialog and main_dialog.is_in_focus(player) then main_dialog.toggle(player) end
  local refs=panel(player)
  refs.frame.visible=true
  if refs.tabs.selected_tab_index==5 then render_books(player,refs) end
@@ -436,12 +434,6 @@ events.on_event(defines.events.on_gui_confirmed,function(event)
  end
 end)
 events.on_event(defines.events.on_gui_click,function(event)
- if event.element and event.element.valid and event.element.name==PREFIX..'planning' then
-  local player=game.get_player(event.player_index)
-  if storage.gui[player.index] and storage.gui[player.index].frame.valid then storage.gui[player.index].frame.visible=false end
-  main_dialog.toggle(player)
-  return
- end
  local element=event.element
  if not element or not element.valid then return end
  local player=game.get_player(event.player_index)
@@ -502,7 +494,11 @@ events.on_nth_tick(5,function(event)
  end
 end)
 events.on_event(defines.events.on_gui_text_changed,function(event)
- if event.element.valid and event.element.name==PREFIX..'message' then event.element.text=bounded_text(event.element.text,6000);remember_draft(game.get_player(event.player_index)) end
+ if event.element.valid and event.element.name==PREFIX..'message' then
+  -- Writing text on every keystroke overwrites multiplayer clients' pending input.
+  if #event.element.text>6000 then event.element.text=bounded_text(event.element.text,6000) end
+  remember_draft(game.get_player(event.player_index))
+ end
 end)
 events.on_event(defines.events.on_gui_selection_state_changed,function(event)
  if event.element.valid and event.element.name==PREFIX..'chats' then

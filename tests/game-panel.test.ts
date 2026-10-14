@@ -58,6 +58,26 @@ test('Toby panel sends native player requests and preserves typed drafts across 
   for _,child in ipairs(element.children) do local found=find(child,name);if found then return found end end
  end
  assert(find(frame,'facmandu-toby-new').tooltip=='New conversation · Other tasks keep working')
+ assert(not find(frame,'facmandu-toby-planning'),'Chat must have its own entry point')
+ local message=refs.message
+ local native_text=message.text
+ local typing=false
+ rawset(message,'text',nil)
+ setmetatable(message,{__index=function(_,key) if key=='text' then return native_text end end,
+  __newindex=function(element,key,value)
+   if key=='text' then assert(not typing,'Typing must not write text back to the native field');native_text=value
+   else rawset(element,key,value) end
+  end})
+ for _,text in ipairs{'i','i need','i need you to design','i need you to design a glass line'} do
+  native_text=text;typing=true
+  handlers[6]({player_index=1,element=message})
+  typing=false
+  assert(message.text==text and storage.drafts[1]==text)
+ end
+ native_text=string.rep('a',5999)..'é'
+ handlers[6]({player_index=1,element=message})
+ assert(#message.text==5999,'The input bound must preserve complete UTF-8 characters')
+
  storage.gui[1].message.text='More glass'
  handlers[6]({player_index=1,element=storage.gui[1].message})
  handlers.migrate();frame=player.gui.screen['facmandu-toby-panel']
@@ -147,5 +167,39 @@ test('Toby panel sends native player requests and preserves typed drafts across 
  assert(storage.gui[1].tabs.selected_tab_index==4)
  `;
 	const status = lauxlib.luaL_dostring(state, to_luastring(script));
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
+
+test('planner and chat advertise independent defaults with the familiar planner keys', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const hotkeys = readFileSync(
+		'factorio-mod/facmandu-assistant/planner/prototypes/hotkeys.lua',
+		'utf8'
+	);
+	const shortcuts = readFileSync(
+		'factorio-mod/facmandu-assistant/planner/prototypes/shortcuts.lua',
+		'utf8'
+	);
+	const data = readFileSync('factorio-mod/facmandu-assistant/data.lua', 'utf8');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ local entries={}
+ data={extend=function(_,rows) for _,row in ipairs(rows) do assert(not entries[row.name]);entries[row.name]=row end end}
+ package.preload['planner.data']=function() end
+ package.preload['drone-prototypes']=function() end
+ ${hotkeys}
+ ${shortcuts}
+ ${data}
+ assert(entries.toby_planner_toggle_interface.key_sequence=='CONTROL + R')
+ assert(entries.toby_planner_toggle_interface.alternative_key_sequence=='U')
+ assert(entries.toby_planner_toggle_compact_view.key_sequence=='CONTROL + SHIFT + R')
+ assert(entries.toby_planner_toggle_calculator.key_sequence=='CONTROL + SHIFT + C')
+ assert(entries['facmandu-toby-toggle'].key_sequence=='CONTROL + SHIFT + T')
+ assert(entries['facmandu-toby-open'].associated_control_input=='facmandu-toby-toggle')
+ assert(entries.toby_planner_open_interface.associated_control_input=='toby_planner_toggle_interface')
+ `)
+	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 });

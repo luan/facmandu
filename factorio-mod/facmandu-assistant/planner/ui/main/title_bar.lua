@@ -78,12 +78,9 @@ local function build_title_bar(player)
         ignored_by_interaction=true}
     left_handle.style.horizontally_stretchable = false  -- necessary so the other side stretches properly
     left_handle.style.width = determine_left_handle_width(player)
-    flow_title_bar.add{type="label", caption="Toby · Planning", style="toby_planner_label_frame_title",
+    flow_title_bar.add{type="label", caption="Production planner", style="toby_planner_label_frame_title",
         ignored_by_interaction=true}
     flow_title_bar.add{type="empty-widget", style="toby_flib_titlebar_drag_handle", ignored_by_interaction=true}
-
-    flow_title_bar.add{type="button", caption="Agent", style="toby_planner_button_frame_tool",
-        tags={mod="toby-planner", on_gui_click="open_toby_agent"}, mouse_button_filter={"left"}}
 
     flow_title_bar.add{type="button", caption={"toby-planner.preferences"}, style="toby_planner_button_frame_tool",
         tags={mod="toby-planner", on_gui_click="title_bar_open_preferences"}, mouse_button_filter={"left"}}
@@ -141,13 +138,6 @@ listeners.gui = {
         {
             name = "toggle_pause_game",
             handler = toggle_paused_state
-        },
-        {
-            name = "open_toby_agent",
-            handler = function(player)
-                main_dialog.toggle(player, true)
-                remote.call("facmandu-assistant", "open_player", player.index)
-            end
         },
         {
             name = "title_bar_open_preferences",

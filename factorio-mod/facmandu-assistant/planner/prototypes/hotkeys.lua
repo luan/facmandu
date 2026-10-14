@@ -16,7 +16,7 @@ local function add_hotkey(name, sequence, alternate, consuming, linked)
     }}
 end
 
-add_hotkey("toggle_interface", "CONTROL + R", nil, "game-only", nil)
+add_hotkey("toggle_interface", "CONTROL + R", "U", "game-only", nil)
 add_hotkey("toggle_compact_view", "CONTROL + SHIFT + R", nil, "game-only", nil)
 add_hotkey("toggle_pause", "CONTROL + P", nil, "none", nil)
 add_hotkey("refresh_production", "R", nil, "none", nil)
