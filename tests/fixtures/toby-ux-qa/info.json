@@ -1,1 +1,8 @@
-{"name":"toby-ux-qa","version":"0.0.1","title":"Toby UX QA","author":"Facmandu","factorio_version":"2.1","dependencies":["base >= 2.1.20","facmandu-assistant >= 0.0.12"]}
+{
+	"name": "toby-ux-qa",
+	"version": "0.0.1",
+	"title": "Toby UX QA",
+	"author": "Facmandu",
+	"factorio_version": "2.1",
+	"dependencies": ["base >= 2.1.20", "facmandu-assistant >= 0.0.12"]
+}
