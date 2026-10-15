@@ -967,19 +967,19 @@ function compact_dialog.rebuild(player, default_visibility)
     local ui_state = lib.globals.ui_state(player)
 
     local interface_visible = default_visibility
-    local compact_frame = ui_state.compact_elements.compact_frame
+    -- Configuration changes can clear the cached references before the GUI is removed.
+    local compact_frame = player.gui.screen.toby_planner_frame_compact_dialog
     -- Delete the existing interface if there is one
     if compact_frame ~= nil then
         if compact_frame.valid then
             interface_visible = compact_frame.visible
             compact_frame.destroy()
         end
-
-        ui_state.compact_elements = {}  -- reset all compact element references
     end
+    ui_state.compact_elements = {}  -- reset all compact element references
 
     local frame_compact_dialog = player.gui.screen.add{type="frame", direction="vertical",
-        visible=interface_visible, name="toby_planner_frame_compact_dialog"}
+        visible=interface_visible, name="toby_planner_frame_compact_dialog", tags={mod="toby-planner"}}
     ui_state.compact_elements["compact_frame"] = frame_compact_dialog
 
     local width, maximal_height = get_compact_frame_dimensions(player)

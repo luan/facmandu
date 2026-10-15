@@ -209,7 +209,9 @@ function _gui.reset_player(player)
     check_empty_flow(player)  -- make sure no empty flow is left behind
 
     for _, gui_element in pairs(player.gui.screen.children) do  -- all mod frames
-        if gui_element.valid and gui_element.tags.mod == "toby-planner" then
+        -- Before 0.0.16 the compact root had no ownership tag.
+        if gui_element.valid and (gui_element.tags.mod == "toby-planner"
+            or gui_element.name == "toby_planner_frame_compact_dialog") then
             gui_element.destroy()
         end
     end
