@@ -70,7 +70,8 @@ end
 for _,entity in ipairs(solved.blueprint.blueprint.entities) do
  local port=entity.name==engine.blueprint.INPUT_PORT or entity.name==engine.blueprint.OUTPUT_PORT
  local row={name=port and problem.tiers.belt or entity.name,position=entity.position,direction=entity.direction or 0,recipe=entity.recipe,type=entity.type}
- if pack.machines[row.name] and pack.machines[row.name].native_size then row.direction=4 end
+ local recipe=row.recipe and pack.recipes[row.recipe]
+ if recipe and #(recipe.fluid_inputs or {})>0 then row.direction=4 end
  if pack.furnaces[row.name] then row.recipe=nil end
  entities[#entities+1]=row
  if port then ports[#ports+1]={entity=#entities,item=entity.tags.interpose_item,kind=entity.name==engine.blueprint.INPUT_PORT and 'input' or 'output',position=entity.position} end

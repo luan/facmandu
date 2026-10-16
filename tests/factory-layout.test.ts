@@ -347,3 +347,40 @@ test('default fluid entries are reserved before routing item belts', async () =>
 	assert.equal(entry.length, 1);
 	assert.equal(entry[0]?.name, 'pipe');
 });
+
+test('recipes sharing an assembler rotate only when they use its fluid connections', async () => {
+	const nativePack = z
+		.json()
+		.parse(JSON.parse(readFileSync('tests/fixtures/interpose/motor-robots-2.1.21.json', 'utf8')));
+	const input = factoryLayoutInput.parse({
+		...robotRequest,
+		width: 28,
+		height: 44,
+		tiers: { ...robotRequest.tiers, machine: 'assembling-machine-3' },
+		recipes: ['battery', 'electric-engine-unit', 'flying-robot-frame', 'logistic-robot'],
+		inputs: robotRequest.inputs
+			.map(({ position, direction, ...port }) => ({
+				...port,
+				item: port.item === 'electric-engine-unit' ? 'engine-unit' : port.item,
+				perMinute: port.item === 'electronic-circuit' ? 30 : port.perMinute
+			}))
+			.concat([
+				{ item: 'advanced-circuit', perMinute: 12 },
+				{ item: 'lubricant', type: 'fluid', perMinute: 90 }
+			]),
+		outputs: [{ item: 'logistic-robot', perMinute: 6 }]
+	});
+	const compiled = await compileFactoryLayout(input, nativePack, modules);
+	const assemblers = compiled.design.entities.filter((e) => e.name === 'assembling-machine-3');
+	assert.equal(assemblers.length, 4);
+	for (const entity of assemblers) {
+		assert.equal(entity.direction, entity.recipe === 'electric-engine-unit' ? 4 : 0);
+	}
+	assert.deepEqual(
+		compiled.inputs.filter((p) => p.type === 'fluid'),
+		[
+			{ item: 'lubricant', type: 'fluid', perMinute: 90 },
+			{ item: 'sulfuric-acid', type: 'fluid', perMinute: 240 }
+		]
+	);
+});
