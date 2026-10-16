@@ -909,3 +909,32 @@ test('territory inspection shows world bounds and leaves unknown territory uncer
 		'Partial territory scan'
 	);
 });
+
+test('headless validation shows preparation progress and separates real time from simulated time', () => {
+	const running = view('test_blueprint', {
+		backend: 'headless',
+		status: 'running',
+		elapsedSeconds: 14,
+		note: 'Loading the matching game and mods.'
+	});
+	assert.equal(running.title, 'Factory simulation');
+	assert.deepEqual(running.cards[0]?.metrics, [{ label: 'Real seconds elapsed', value: '14' }]);
+	assert.ok(running.cards[0]?.notes.includes('Loading the matching game and mods.'));
+	const done = view('test_blueprint', {
+		backend: 'headless',
+		status: 'done',
+		passed: true,
+		simulatedTicks: 7200,
+		wallSeconds: 4.45
+	});
+	assert.ok(
+		done.cards[0]?.metrics.some(
+			(metric) => metric.label === 'Game seconds measured' && metric.value === '120'
+		)
+	);
+	assert.ok(
+		done.cards[0]?.metrics.some(
+			(metric) => metric.label === 'Real seconds' && metric.value === '4.45'
+		)
+	);
+});

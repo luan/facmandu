@@ -358,3 +358,14 @@ test('factory summaries preserve partial evidence and distinguish machine status
 		'Found 1 resource patch in charted terrain (partial scan).'
 	);
 });
+
+test('headless factory validation reports its actual loading phase', () => {
+	assert.equal(
+		assistantToolFeedback('test_blueprint', {
+			status: 'running',
+			backend: 'headless',
+			note: 'Loading the matching game and mods.'
+		}),
+		'Loading the matching game and mods.'
+	);
+});

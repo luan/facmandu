@@ -123,6 +123,7 @@ export function assistantToolFeedback(tool: string, output: unknown): string {
 		if (value.waitingForGameTicks)
 			return 'Sandbox trial is waiting for game ticks; the live game was not unpaused.';
 		if (value.status === 'running') {
+			if (value.backend === 'headless' && typeof value.note === 'string') return value.note;
 			const ticks = resultNumber(value.elapsedTicks) ?? 0;
 			return `Sandbox simulation: ${Math.floor(ticks / 60)} game seconds elapsed.`;
 		}

@@ -131,14 +131,17 @@ function M.cancel(force,id)
  if not job.result then finish(job,'cancelled') end
  return job.result
 end
-function M.start(a)
+function M.start(a,warmupLimit)
+ -- Longer startup is for the private headless runner; the game interface keeps its 30-second cap.
+ warmupLimit=warmupLimit or 30
+ if not number(warmupLimit,0,120) then error('Invalid fixture warmup limit',0) end
  local real=owner(a.force,a.actor)
  local source=game.surfaces[a.surface]
  if not source or source.name:sub(1,#PREFIX)==PREFIX then error('Choose the real source surface',0) end
  -- Platform arrivals, asteroid spawning and the hub require a platform-specific
  -- fixture. Do not claim those effects from a ground lab.
  if source.platform then error('Platform trials need a native platform fixture; ground labs cannot validate collectors or platform logistics',0) end
- if not number(a.seconds,10,120) or not number(a.warmupSeconds,0,30) then error('Trial duration must be 10..120 seconds, warmup 0..30',0) end
+ if not number(a.seconds,10,120) or not number(a.warmupSeconds,0,warmupLimit) then error('Trial duration must be 10..120 seconds, warmup 0..'..warmupLimit,0) end
  local s=state()
  if type(a.idempotencyKey)~='string' or #a.idempotencyKey~=64 or not a.idempotencyKey:match('^[a-f0-9]+$') then error('Invalid trial request key',0) end
  for id,existing in pairs(s.jobs) do
@@ -325,5 +328,5 @@ events.on_event(defines.events.on_tick,function()
   end
  end end
 end)
-remote.add_interface('facmandu-toby-sandbox',{start=M.start,read=M.read,cancel=M.cancel,features=function() return {robotDeployment=true} end})
+remote.add_interface('facmandu-toby-sandbox',{start=function(a) return M.start(a) end,read=M.read,cancel=M.cancel,features=function() return {robotDeployment=true} end})
 return M

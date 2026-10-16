@@ -138,5 +138,24 @@ return function(request)
   pack.recipes[name]={category=category,time=recipe.energy,ingredients=ingredients,results=results,fluid_inputs=fluid_inputs}
   if #(tiers.crafters or {})>0 then pack.recipes[name].machine=crafter.name end
  end
+ if request.trialContext then
+  local technologies,enabled,disabled,properties,modifiers,runtimeSettings={},{},{},{},{},{}
+  local enabledCount,disabledCount=0,0
+  for name,t in pairs(force.technologies) do technologies[name]={researched=t.researched,level=t.level} end
+  for name,r in pairs(force.recipes) do
+   if r.enabled then enabled[name]=true;enabledCount=enabledCount+1
+   else disabled[name]=true;disabledCount=disabledCount+1 end
+  end
+  local defaultEnabled=enabledCount>disabledCount
+  for _,name in ipairs{'inserter_stack_size_bonus','bulk_inserter_capacity_bonus','stack_inserter_capacity_bonus'} do
+   local ok,value=pcall(function() return force[name] end)
+   if ok and type(value)=='number' then modifiers[name]=value end
+  end
+  local recipes={defaultEnabled=defaultEnabled,exceptions=defaultEnabled and disabled or enabled,count=enabledCount+disabledCount}
+  for name in pairs(prototypes.surface_property) do properties[name]=surface.get_property(name) end
+  for name,setting in pairs(settings.global) do runtimeSettings[name]=setting.value end
+  pack.trial_context=helpers.encode_string(helpers.table_to_json({technologies=technologies,recipes=recipes,properties=properties,modifiers=modifiers,runtimeSettings=runtimeSettings,mods=script.active_mods,
+   daytime=surface.daytime,freezeDaytime=surface.freeze_daytime,solarPowerMultiplier=surface.solar_power_multiplier}))
+ end
  return pack
 end

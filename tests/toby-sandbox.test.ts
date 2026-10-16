@@ -60,3 +60,31 @@ test('blueprint artifacts retain native quality-specific construction costs', ()
 	});
 	assert.deepEqual(artifact.cost, [{ name: 'inserter', count: 1, quality: 'uncommon' }]);
 });
+
+test('the public sandbox cannot opt into the headless runner warmup allowance', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const source = readFileSync('factorio-mod/facmandu-assistant/sandbox.lua', 'utf8');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ storage={};defines={events={on_tick=1}}
+ game={forces={player={name='player'}},surfaces={nauvis={name='nauvis'}}}
+ require=function(name)
+  if name=='events' then return {scope=function() return {on_event=function() end} end} end
+  if name=='robot-trial' then return {} end
+  error('Unexpected module')
+ end
+ local api;remote={add_interface=function(name,interface) api=interface end}
+ local native=(function() ${source} end)()
+ local args={force='player',surface='nauvis',seconds=120,warmupSeconds=120}
+ local ok,message=pcall(api.start,args,120)
+ assert(not ok and message:find('warmup 0..30',1,true),tostring(message))
+ ok,message=pcall(native.start,args,120)
+ assert(not ok and message:find('Invalid trial request key',1,true),tostring(message))
+ ok,message=pcall(native.start,args,121)
+ assert(not ok and message:find('Invalid fixture warmup limit',1,true),tostring(message))
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});

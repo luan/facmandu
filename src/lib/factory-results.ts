@@ -1053,7 +1053,7 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 		empty: 'No matches.'
 	};
 	if (tool === 'test_blueprint') {
-		view.title = 'Sandbox trial';
+		view.title = data.backend === 'headless' ? 'Factory simulation' : 'Sandbox trial';
 		view.context = [
 			string(data.sourceSurface),
 			data.mode === 'transport' ? 'Transport test' : 'Production test'
@@ -1072,12 +1072,19 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 								: 'Below target'
 						: humanName(data.status),
 				tone: data.status === 'running' ? 'muted' : data.passed ? 'good' : 'warning',
-				metrics: numeric(
-					data.status === 'running' ? 'Game seconds elapsed' : 'Game seconds measured',
-					(resultNumber(data.elapsedTicks ?? data.simulatedTicks) ?? 0) / 60
-				),
+				metrics:
+					data.status === 'running' && data.backend === 'headless'
+						? numeric('Real seconds elapsed', resultNumber(data.elapsedSeconds) ?? 0)
+						: [
+								...numeric(
+									data.status === 'running' ? 'Game seconds elapsed' : 'Game seconds measured',
+									(resultNumber(data.elapsedTicks ?? data.simulatedTicks) ?? 0) / 60
+								),
+								...numeric('Real seconds', resultNumber(data.wallSeconds))
+							],
 				notes: [
 					string(data.error),
+					data.status === 'running' && data.backend === 'headless' ? string(data.note) : '',
 					'Sandbox evidence; live factory production is not verified.'
 				].filter(Boolean)
 			}

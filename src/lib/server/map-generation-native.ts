@@ -107,7 +107,7 @@ async function packageFiles(
 	return files;
 }
 
-async function fingerprint(server: ManagedServer) {
+export async function nativeProfileFingerprint(server: ManagedServer) {
 	const config = await serverConfig(server);
 	if (!config.version) throw new ServerError(409, 'Select a Factorio version first');
 	const binary = await stat(await executable(server));
@@ -139,7 +139,7 @@ async function snapshotMods(source: string, destination: string) {
 	}
 }
 
-async function withProfile<T>(
+export async function withNativeProfile<T>(
 	server: ManagedServer,
 	callback: (profile: { binary: string; args: string[]; directory: string }) => Promise<T>
 ) {
@@ -209,7 +209,7 @@ async function nativeCatalog(server: ManagedServer, key: string): Promise<MapGen
 	} catch (cause) {
 		if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause;
 	}
-	const catalog = await withProfile(server, async ({ binary, args, directory }) => {
+	const catalog = await withNativeProfile(server, async ({ binary, args, directory }) => {
 		const output = join(directory, 'write', 'script-output');
 		try {
 			await run('xvfb-run', ['-a', binary, ...args, '--threads', '2', '--dump-data'], {
@@ -309,7 +309,7 @@ async function nativeCatalog(server: ManagedServer, key: string): Promise<MapGen
 			throw new ServerError(503, 'Factorio map catalog export failed');
 		}
 	});
-	if ((await fingerprint(server)) !== key)
+	if ((await nativeProfileFingerprint(server)) !== key)
 		throw new ServerError(409, 'Server mods changed during map catalog export');
 	await mkdir(cache, { recursive: true });
 	const temporary = `${ready}.${randomUUID()}.tmp`;
@@ -330,7 +330,7 @@ async function nativeCatalog(server: ManagedServer, key: string): Promise<MapGen
 }
 
 export async function mapGenerationCatalog(server: ManagedServer) {
-	const key = await fingerprint(server);
+	const key = await nativeProfileFingerprint(server);
 	let pending = catalogsInProgress.get(key);
 	if (!pending) {
 		pending = nativeCatalog(server, key);
@@ -345,7 +345,7 @@ export async function withNativeMapGeneration<T>(
 	settings: WorldGenerationSettings,
 	callback: (context: { binary: string; args: string[]; directory: string }) => Promise<T>
 ): Promise<T> {
-	const before = await fingerprint(server);
+	const before = await nativeProfileFingerprint(server);
 	if (settings.noEnemiesMode) {
 		const version = (await serverConfig(server)).version?.version ?? '0.0.0';
 		const [major = 0, minor = 0, patch = 0] = version.split('.').map(Number);
@@ -364,8 +364,8 @@ export async function withNativeMapGeneration<T>(
 			if (!catalog.controls.some((item) => item.name === name))
 				throw new ServerError(400, `Unknown resource control: ${name}`);
 	}
-	return withProfile(server, async ({ binary, args, directory }) => {
-		if ((await fingerprint(server)) !== before)
+	return withNativeProfile(server, async ({ binary, args, directory }) => {
+		if ((await nativeProfileFingerprint(server)) !== before)
 			throw new ServerError(409, 'Server mods changed during map generation');
 		const genFile = join(directory, 'map-gen-settings.json');
 		const settingsFile = join(directory, 'map-settings.json');
@@ -417,7 +417,7 @@ export async function withNativeMapGeneration<T>(
 			nativeArgs.push('--map-settings', settingsFile);
 		}
 		const result = await callback({ binary, directory, args: nativeArgs });
-		if ((await fingerprint(server)) !== before)
+		if ((await nativeProfileFingerprint(server)) !== before)
 			throw new ServerError(409, 'Server mods changed during map generation');
 		return result;
 	});
@@ -434,7 +434,7 @@ export async function mapGenerationPreview(
 		throw new ServerError(503, catalog.previewReason ?? 'Map preview is unavailable');
 	if (settings.noEnemiesMode && !catalog.supportsNoEnemies)
 		throw new ServerError(400, 'This Factorio version does not support no-enemies mode');
-	const initialFingerprint = await fingerprint(server);
+	const initialFingerprint = await nativeProfileFingerprint(server);
 	const key = createHash('sha256')
 		.update('resolved-map-settings-v1')
 		.update(initialFingerprint)
@@ -478,7 +478,7 @@ export async function mapGenerationPreview(
 				const png = await readFile(image);
 				if (!png.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])))
 					throw new ServerError(503, 'Factorio did not produce a PNG preview');
-				if ((await fingerprint(server)) !== initialFingerprint)
+				if ((await nativeProfileFingerprint(server)) !== initialFingerprint)
 					throw new ServerError(409, 'Server mods changed during preview');
 				await mkdir(cache, { recursive: true });
 				const temporary = `${ready}.${randomUUID()}.tmp`;
@@ -515,7 +515,7 @@ export async function mapGenerationPreview(
 const settingsInProgress = new Map<string, Promise<unknown[]>>();
 // Native exports cover shared settings-stage APIs the Lua sandbox cannot emulate.
 export async function nativeModSettingPrototypes(server: ManagedServer): Promise<unknown[]> {
-	const key = await fingerprint(server);
+	const key = await nativeProfileFingerprint(server);
 	const ready = join(server.directory, 'map-generation-cache', `${key}.settings-v1.json`);
 	try {
 		return JSON.parse(await readFile(ready, 'utf8')) as unknown[];
@@ -525,7 +525,7 @@ export async function nativeModSettingPrototypes(server: ManagedServer): Promise
 	const pending = settingsInProgress.get(key);
 	if (pending !== undefined) return pending;
 	const operation = (async () => {
-		const defs = await withProfile(server, async ({ binary, args, directory }) => {
+		const defs = await withNativeProfile(server, async ({ binary, args, directory }) => {
 			try {
 				await run('xvfb-run', ['-a', binary, ...args, '--threads', '2', '--dump-data'], {
 					timeout: 180_000,
@@ -558,7 +558,7 @@ export async function nativeModSettingPrototypes(server: ManagedServer): Promise
 				value && typeof value === 'object' && !Array.isArray(value) ? Object.values(value) : []
 			);
 		});
-		if ((await fingerprint(server)) !== key)
+		if ((await nativeProfileFingerprint(server)) !== key)
 			throw new ServerError(409, 'Mods or settings changed during export. Reload Mod settings.');
 		const temporary = `${ready}.${randomUUID()}.tmp`;
 		try {

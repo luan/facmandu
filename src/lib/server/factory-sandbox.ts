@@ -57,6 +57,8 @@ export const sandboxResultSchema = z
 		id: z.string(),
 		status: z.enum(['running', 'done', 'cancelled', 'error']),
 		tick: z.number().optional(),
+		phase: z.string().optional(),
+		elapsedTicks: z.number().nonnegative().optional(),
 		passed: z.boolean().optional(),
 		outputs: z
 			.array(

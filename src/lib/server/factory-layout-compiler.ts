@@ -140,8 +140,10 @@ export async function compileFactoryLayout(
 			surface: request.surface,
 			inputs: endpoints('input'),
 			outputs: endpoints('output'),
-			warmupSeconds: 30,
-			seconds: report.steps.length > 1 || report.steps.some((step) => step.machines > 1) ? 120 : 30,
+			// Compiled blocks use the accelerated headless fixture, including buffer startup.
+			// Slower batch recipes need a separately qualified longer fixture.
+			warmupSeconds: 120,
+			seconds: 120,
 			power: 'design' as const,
 			powerPosition: { x: Math.floor(pole.position.x), y: Math.floor(pole.position.y) }
 		}
