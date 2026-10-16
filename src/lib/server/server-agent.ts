@@ -715,14 +715,14 @@ export function serverAssistantTools(
 					if (signal?.aborted || !(cause instanceof ServerError)) throw cause;
 					trial = { status: 'error', passed: false, error: cause.message };
 				}
-				writeArtifact({
-					...result('blueprint_operation', 'Compiled factory block', artifact).output,
-					display: true
-				});
 				const tested = z
 					.object({ status: z.string(), passed: z.boolean().optional() })
 					.passthrough()
 					.parse(trial);
+				writeArtifact({
+					...result('blueprint_operation', 'Compiled factory block', artifact).output,
+					display: tested.status === 'done' && tested.passed === true
+				});
 				return {
 					output: {
 						designId: artifact.designId,
