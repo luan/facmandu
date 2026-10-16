@@ -275,3 +275,31 @@ test('mixed crafters preserve proven supply budgets and each selected machine sp
 	assert.equal(compiled.test.outputs[0]?.perMinute, 6);
 	assert.equal(compiled.design.entities.filter((e) => e.name === 'assembling-machine-3').length, 2);
 });
+
+test('finished robot blocks produce their battery and frame intermediates locally', async () => {
+	const nativePack = z
+		.json()
+		.parse(JSON.parse(readFileSync('tests/fixtures/interpose/full-robots-2.1.21.json', 'utf8')));
+	const request = factoryLayoutInput.parse({
+		...robotRequest,
+		label: 'Logistic robots',
+		width: 28,
+		height: 32,
+		tiers: { ...robotRequest.tiers, machine: 'assembling-machine-3' },
+		recipes: [...robotRequest.recipes, 'logistic-robot'],
+		inputs: [
+			...robotRequest.inputs,
+			{ item: 'advanced-circuit', perMinute: 12, position: { x: 0.5, y: 19.5 }, direction: 4 }
+		].map((p) => ({ ...p, perMinute: p.perMinute * 10 })),
+		outputs: [{ item: 'logistic-robot', perMinute: 6, position: { x: 5.5, y: 31.5 }, direction: 8 }]
+	});
+	const compiled = await compileFactoryLayout(request, nativePack, modules);
+	assert.deepEqual(compiled.steps, [
+		{ recipe: 'battery', machines: 1, perMinute: 12 },
+		{ recipe: 'flying-robot-frame', machines: 2, perMinute: 6 },
+		{ recipe: 'logistic-robot', machines: 1, perMinute: 6 }
+	]);
+	assert.ok(compiled.inputs.every((p) => p.item !== 'battery' && p.item !== 'flying-robot-frame'));
+	assert.equal(compiled.test.outputs[0]?.name, 'logistic-robot');
+	assert.equal(compiled.design.entities[compiled.test.outputs[0]!.entity - 1]?.position.x, 5.5);
+});
