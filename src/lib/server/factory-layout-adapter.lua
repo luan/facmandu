@@ -1,5 +1,24 @@
 local engine = require('engine.init')
 local fraction = engine.fraction
+if #(problem.tiers.crafters or {})>0 then
+ -- Ratios use a unit-speed scheduler; row geometry always uses the real crafter.
+ local categories={}
+ for _,recipe in pairs(pack.recipes) do
+  local crafter=pack.machines[recipe.machine] or pack.furnaces[recipe.machine]
+  assert(crafter,'Missing selected recipe crafter')
+  recipe.time=fraction.from(recipe.time)/fraction.from(crafter.crafting_speed)
+  categories[recipe.category]=true
+ end
+ local names={} for name in pairs(categories) do names[#names+1]=name end;table.sort(names)
+ local scheduler='__toby-layout-scheduler'
+ while pack.machines[scheduler] do scheduler=scheduler..'_' end
+ pack.machines[scheduler]={crafting_speed=1,categories=names,size={1,1}}
+ problem.tiers.machine=scheduler
+ engine.rows.machine_of=function(step,_,data)
+  local name=data.recipes[step.recipe].machine
+  return assert(data.machines[name] or data.furnaces[name]),name
+ end
+end
 local directions={[0]={0,-1},[4]={1,0},[8]={0,1},[12]={-1,0}}
 for _,output in ipairs(problem.outputs) do
  local capacity=pack.belts[problem.tiers.belt].items_per_second

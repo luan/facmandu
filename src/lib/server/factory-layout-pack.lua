@@ -29,8 +29,15 @@ return function(request)
  end
  local tiers=request.tiers
  local machine=entity(tiers.machine,'assembling-machine')
- assert(not machine.burner_prototype and machine.electric_energy_source_prototype,'Factory compiler requires electric crafting machines')
- pack.machines[machine.name]={crafting_speed=machine.get_crafting_speed(),categories=keys(machine.crafting_categories),size=size(machine)}
+ local crafters={}
+ local function add_crafter(p)
+  if pack.machines[p.name] then return end
+  assert(not p.burner_prototype and p.electric_energy_source_prototype,'Factory compiler requires electric crafting machines')
+  crafters[#crafters+1]=p
+  pack.machines[p.name]={crafting_speed=p.get_crafting_speed(),categories=keys(p.crafting_categories),size=size(p)}
+ end
+ add_crafter(machine)
+ for _,name in ipairs(tiers.crafters or {}) do add_crafter(entity(name,'assembling-machine')) end
  if tiers.pipe then
   local pipe=entity(tiers.pipe,'pipe')
   local underground_pipe=entity(assert(tiers.pipe_underground,'Select an underground pipe'),'pipe-to-ground')
@@ -89,7 +96,10 @@ return function(request)
   assert(part.type=='item' and (part.probability or 1)==1 and part.amount,'Probabilistic/fluid recipes are not yet supported: '..name)
   local category,crafter
   local categories=recipe.categories
-  for _,c in ipairs(categories) do if machine.crafting_categories[c] then category,crafter=c,machine;break end end
+  for _,candidate in ipairs(crafters) do
+   for _,c in ipairs(categories) do if candidate.crafting_categories[c] and (not candidate.fixed_recipe or candidate.fixed_recipe.name==name) then category,crafter=c,candidate;break end end
+   if crafter then break end
+  end
   if not crafter and tiers.furnace then
    local furnace=prototypes.entity[tiers.furnace]
    for _,c in ipairs(categories) do if furnace.crafting_categories[c] then category,crafter=c,furnace;break end end
@@ -103,9 +113,9 @@ return function(request)
   table.sort(ingredients,function(a,b) return a.name<b.name end)
   local fluid_inputs={}
   if #fluids>0 then
-   assert(crafter==machine and machine.tile_width==machine.tile_height,'Fluid inputs require a square crafting-machine template')
+   assert(pack.machines[crafter.name] and crafter.tile_width==crafter.tile_height,'Fluid inputs require a square crafting-machine template')
    local boxes={}
-   for _,box in pairs(machine.fluidbox_prototypes or {}) do if box.production_type=='input' then boxes[#boxes+1]=box end end
+   for _,box in pairs(crafter.fluidbox_prototypes or {}) do if box.production_type=='input' then boxes[#boxes+1]=box end end
    table.sort(boxes,function(a,b) return a.index<b.index end)
    for i,fluid in ipairs(fluids) do
     local box
@@ -121,11 +131,12 @@ return function(request)
     assert(adjacent,'Fluid port does not fit the east-facing machine template: '..name)
     fluid_inputs[#fluid_inputs+1]={name=fluid.name,amount=fluid.amount,position=adjacent}
    end
-   local model=pack.machines[machine.name]
-   model.native_size=size(machine)
-   model.size={machine.tile_width+2,machine.tile_height}
+   local model=pack.machines[crafter.name]
+   model.native_size=size(crafter)
+   model.size={crafter.tile_width+2,crafter.tile_height}
   end
   pack.recipes[name]={category=category,time=recipe.energy,ingredients=ingredients,results=results,fluid_inputs=fluid_inputs}
+  if #(tiers.crafters or {})>0 then pack.recipes[name].machine=crafter.name end
  end
  return pack
 end

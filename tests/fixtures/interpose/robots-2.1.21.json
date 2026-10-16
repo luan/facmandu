@@ -1,0 +1,66 @@
+{
+	"recipes": {
+		"battery": {
+			"category": "chemistry",
+			"time": 4,
+			"ingredients": [
+				{ "type": "item", "name": "copper-plate", "amount": 1 },
+				{ "type": "item", "name": "iron-plate", "amount": 1 }
+			],
+			"results": [{ "type": "item", "name": "battery", "amount": 1 }],
+			"fluid_inputs": [{ "name": "sulfuric-acid", "amount": 20, "position": { "x": 2, "y": -1 } }],
+			"machine": "chemical-plant"
+		},
+		"flying-robot-frame": {
+			"category": "crafting",
+			"time": 20,
+			"ingredients": [
+				{ "type": "item", "name": "battery", "amount": 2 },
+				{ "type": "item", "name": "electric-engine-unit", "amount": 1 },
+				{ "type": "item", "name": "electronic-circuit", "amount": 3 },
+				{ "type": "item", "name": "steel-plate", "amount": 1 }
+			],
+			"results": [{ "type": "item", "name": "flying-robot-frame", "amount": 1 }],
+			"fluid_inputs": {},
+			"machine": "assembling-machine-2"
+		}
+	},
+	"machines": {
+		"assembling-machine-2": {
+			"crafting_speed": 0.75,
+			"categories": ["advanced-crafting", "crafting", "crafting-with-fluid"],
+			"size": [3, 3]
+		},
+		"chemical-plant": {
+			"crafting_speed": 1,
+			"categories": ["chemistry"],
+			"size": [5, 3],
+			"native_size": [3, 3]
+		}
+	},
+	"belts": { "transport-belt": { "items_per_second": 15, "speed": 0.03125, "size": [1, 1] } },
+	"undergrounds": { "underground-belt": { "max_distance": 5, "speed": 0.03125, "size": [1, 1] } },
+	"splitters": { "splitter": { "speed": 0.03125, "size": [2, 1] } },
+	"inserters": {
+		"fast-inserter": {
+			"pickup_position": [0, -1],
+			"insert_position": [0, 1.19999999999999996447286321199499070644378662109375],
+			"rotation_speed": 0.04,
+			"extension_speed": 0.1,
+			"size": [1, 1]
+		},
+		"long-handed-inserter": {
+			"pickup_position": [0, -2],
+			"insert_position": [0, 2.20000000000000017763568394002504646778106689453125],
+			"rotation_speed": 0.02,
+			"extension_speed": 0.05,
+			"size": [1, 1]
+		}
+	},
+	"furnaces": {},
+	"poles": { "medium-electric-pole": { "size": [1, 1], "supply": 3.5, "reach": 9 } },
+	"fuels": {},
+	"drills": {},
+	"resources": {},
+	"pipes": { "pipe": {}, "pipe-to-ground": { "underground": 10 } }
+}

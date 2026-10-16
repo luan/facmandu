@@ -172,8 +172,8 @@ function fluids.route(p)
   local ALL = { [direction.NORTH] = true, [direction.EAST] = true, [direction.SOUTH] = true, [direction.WEST] = true }
   -- would a pipe-to-ground pair from (x1, y1) to (x2, y2) on an axis cross another pair's line, or
   -- would a pipe-to-ground land between another pair? (pairs join with the nearest one in line)
-  local function ug_line_clear(x1, y1, x2, y2)
-    for _, u in ipairs(ugs) do
+  local function ug_line_clear(x1, y1, x2, y2, route_ugs)
+    for _, u in ipairs(route_ugs) do
       if x1 == x2 and u.x == x1 and u.y > math.min(y1, y2) and u.y < math.max(y1, y2) then
         return false
       end
@@ -183,11 +183,11 @@ function fluids.route(p)
     end
     return true
   end
-  local function lands_between_pair(x, y, axis_vertical)
+  local function lands_between_pair(x, y, axis_vertical, route_ugs)
     -- a new pipe-to-ground on the axis of an existing pair, between its ends
-    for i, u in ipairs(ugs) do
-      for j = i + 1, #ugs do
-        local w = ugs[j]
+    for i, u in ipairs(route_ugs) do
+      for j = i + 1, #route_ugs do
+        local w = route_ugs[j]
         if u.x == w.x and u.x == x and axis_vertical and y > math.min(u.y, w.y) and y < math.max(u.y, w.y) then
           return true
         end
@@ -266,11 +266,25 @@ function fluids.route(p)
             break
           end
         end
+        -- Search paths are not committed yet; their own endpoints must stay occupied too.
+        local pending, route_ugs = {}, {}
+        for _, u in ipairs(ugs) do route_ugs[#route_ugs + 1] = u end
+        local ancestor = cur.id
+        while parent[ancestor] and not parent[ancestor].start do
+          local step = parent[ancestor]
+          pending[key(step.x, step.y)] = true
+          if step.kind == "ug" then
+            pending[key(step.ex, step.ey)] = true
+            route_ugs[#route_ugs + 1] = { x = step.x, y = step.y, dir = back(step.dir) }
+            route_ugs[#route_ugs + 1] = { x = step.ex, y = step.ey, dir = step.dir }
+          end
+          ancestor = step.from
+        end
         local dirs = cur.piece.kind == "pipe" and DIRS or { cur.piece.dir }
         for _, d in ipairs(dirs) do
           local v = vec(d)
           local tx, ty = cur.x + v.x, cur.y + v.y
-          if free(tx, ty) then
+          if free(tx, ty) and not pending[key(tx, ty)] then
             -- a pipe on (tx, ty)
             local id = "p" .. key(tx, ty)
             if not seen[id] and safe(tx, ty, F, ALL) then
@@ -281,7 +295,7 @@ function fluids.route(p)
             end
             -- a pipe-to-ground pair: entry on (tx, ty) open towards cur, exit k tiles on, open onwards
             local entry_open = { [back(d)] = true }
-            if safe(tx, ty, F, entry_open) and not lands_between_pair(tx, ty, v.x == 0) then
+            if safe(tx, ty, F, entry_open) and not lands_between_pair(tx, ty, v.x == 0, route_ugs) then
               for k = 2, p.reach do
                 local ex, ey = tx + v.x * k, ty + v.y * k
                 if not inside(ex, ey) then
@@ -290,10 +304,11 @@ function fluids.route(p)
                 local eid = "u" .. key(tx, ty) .. ">" .. key(ex, ey)
                 if
                   free(ex, ey)
+                  and not pending[key(ex, ey)]
                   and not seen[eid]
                   and safe(ex, ey, F, { [d] = true })
-                  and ug_line_clear(tx, ty, ex, ey)
-                  and not lands_between_pair(ex, ey, v.x == 0)
+                  and ug_line_clear(tx, ty, ex, ey, route_ugs)
+                  and not lands_between_pair(ex, ey, v.x == 0, route_ugs)
                 then
                   seen[eid] = true
                   parent[eid] = { from = cur.id, kind = "ug", x = tx, y = ty, ex = ex, ey = ey, dir = d }
@@ -355,6 +370,7 @@ end
 function fluids.validate(entities, p, pack)
   local pieces = {}
   local list = {}
+  local errors = {}
   for _, e in ipairs(entities) do
     local x, y = math.floor(e.position.x), math.floor(e.position.y)
     local piece = { x = x, y = y }
@@ -362,6 +378,10 @@ function fluids.validate(entities, p, pack)
       piece.kind, piece.dir, piece.reach = "ug", e.direction or 0, pack.pipes[e.name].underground
     else
       piece.kind = "pipe"
+    end
+    if pieces[key(x, y)] then
+      errors[#errors + 1] = issues.new("overlap", "fluid pieces overlap at " .. x .. ", " .. y,
+        "route each fluid entity onto a distinct tile")
     end
     pieces[key(x, y)] = piece
     list[#list + 1] = piece
@@ -408,7 +428,6 @@ function fluids.validate(entities, p, pack)
       end
     end
   end
-  local errors = {}
   local fluid_of = {}
   for _, port in ipairs(p.inputs) do
     local r = find(key(port.x, port.y))

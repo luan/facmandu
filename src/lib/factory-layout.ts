@@ -35,6 +35,7 @@ export const factoryLayoutInput = z
 		recipes: z.array(name).min(1).max(64),
 		tiers: z.strictObject({
 			machine: name,
+			crafters: z.array(name).max(8).optional(),
 			belt: name,
 			underground: name,
 			inserter: name,

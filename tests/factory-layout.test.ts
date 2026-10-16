@@ -197,3 +197,81 @@ test('layout requests accept only bounded production intent and the program entr
 		false
 	);
 });
+
+const robotPack = z
+	.json()
+	.parse(JSON.parse(readFileSync('tests/fixtures/interpose/robots-2.1.21.json', 'utf8')));
+const robotRequest = factoryLayoutInput.parse({
+	force: 'player',
+	surface: 'nauvis',
+	label: 'Robot frame block',
+	width: 28,
+	height: 28,
+	inputs: [
+		{ item: 'iron-plate', perMinute: 12, position: { x: 0.5, y: 0.5 }, direction: 4 },
+		{ item: 'copper-plate', perMinute: 12, position: { x: 0.5, y: 3.5 }, direction: 4 },
+		{ item: 'steel-plate', perMinute: 6, position: { x: 0.5, y: 6.5 }, direction: 4 },
+		{ item: 'electronic-circuit', perMinute: 18, position: { x: 0.5, y: 9.5 }, direction: 4 },
+		{ item: 'electric-engine-unit', perMinute: 6, position: { x: 0.5, y: 12.5 }, direction: 4 },
+		{
+			item: 'sulfuric-acid',
+			type: 'fluid',
+			perMinute: 240,
+			position: { x: 0.5, y: 16.5 },
+			direction: 4
+		}
+	],
+	outputs: [
+		{ item: 'flying-robot-frame', perMinute: 6, position: { x: 24.5, y: 27.5 }, direction: 8 }
+	],
+	recipes: ['battery', 'flying-robot-frame'],
+	tiers: {
+		machine: 'assembling-machine-2',
+		crafters: ['chemical-plant'],
+		belt: 'transport-belt',
+		underground: 'underground-belt',
+		splitter: 'splitter',
+		inserter: 'fast-inserter',
+		long_inserter: 'long-handed-inserter',
+		pole: 'medium-electric-pole',
+		pipe: 'pipe',
+		pipe_underground: 'pipe-to-ground'
+	}
+});
+
+test('mixed crafter blocks keep native machines, exact rates and distinct pipe endpoints', async () => {
+	const compiled = await compileFactoryLayout(robotRequest, robotPack, modules);
+	assert.deepEqual(await compileFactoryLayout(robotRequest, robotPack, modules), compiled);
+	assert.deepEqual(compiled.steps, [
+		{ recipe: 'battery', machines: 1, perMinute: 12 },
+		{ recipe: 'flying-robot-frame', machines: 3, perMinute: 6 }
+	]);
+	assert.equal(compiled.design.entities.filter((e) => e.name === 'chemical-plant').length, 1);
+	assert.equal(compiled.design.entities.filter((e) => e.name === 'assembling-machine-2').length, 3);
+	assert.ok(compiled.design.entities.every((e) => !e.name.startsWith('__toby')));
+	const pipes = compiled.design.entities.filter(
+		(e) => e.name === 'pipe' || e.name === 'pipe-to-ground'
+	);
+	assert.equal(new Set(pipes.map((e) => `${e.position.x},${e.position.y}`)).size, pipes.length);
+	assert.equal(compiled.test.inputs.find((p) => p.kind === 'fluid')?.perMinute, 240);
+});
+
+test('mixed crafters preserve proven supply budgets and each selected machine speed', async () => {
+	const nativePack = z
+		.json()
+		.parse(JSON.parse(readFileSync('tests/fixtures/interpose/robots-am3-2.1.21.json', 'utf8')));
+	const input = {
+		...robotRequest,
+		tiers: { ...robotRequest.tiers, machine: 'assembling-machine-3' },
+		inputs: robotRequest.inputs.map((p) => ({ ...p, perMinute: p.perMinute * 10 }))
+	};
+	const compiled = await compileFactoryLayout(input, nativePack, modules);
+	assert.deepEqual(compiled.steps, [
+		{ recipe: 'battery', machines: 1, perMinute: 12 },
+		{ recipe: 'flying-robot-frame', machines: 2, perMinute: 6 }
+	]);
+	assert.equal(compiled.test.inputs.find((p) => p.kind === 'fluid')?.perMinute, 2400);
+	assert.equal(compiled.inputs.find((p) => p.type === 'fluid')?.perMinute, 240);
+	assert.equal(compiled.test.outputs[0]?.perMinute, 6);
+	assert.equal(compiled.design.entities.filter((e) => e.name === 'assembling-machine-3').length, 2);
+});
