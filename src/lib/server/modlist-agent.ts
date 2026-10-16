@@ -69,6 +69,7 @@ export { inspectList } from './modlist-management-tools';
 
 import type { TranscriptContext } from '@earendil-works/pi-ai';
 import { assistantStreamProgress } from '$lib/assistant-events';
+import { factoryLayoutJsonSchema } from '$lib/factory-layout';
 import { factoryActionInspectJsonSchema, factoryActionJsonSchema } from './factory-actions';
 import { blueprintToolJsonSchema } from './factory-blueprints';
 import { addFactoryImages } from './factory-image-context';
@@ -107,6 +108,7 @@ async function registerAssistantProvider(
 		? await requireServer(context.userId, context.serverId)
 		: undefined;
 	const argumentSchemas = new Map<string, unknown>([
+		['design_factory', factoryLayoutJsonSchema],
 		['factory_action', factoryActionJsonSchema],
 		['factory_action_inspect', factoryActionInspectJsonSchema]
 	]);

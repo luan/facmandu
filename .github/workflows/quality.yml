@@ -19,6 +19,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
+      - run: sudo apt-get update -qq && sudo apt-get install -y lua5.4
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run check

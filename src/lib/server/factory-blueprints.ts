@@ -5,7 +5,6 @@ import { z } from 'zod';
 import {
 	type BlueprintRequest,
 	blueprintDesignSchema,
-	blueprintProgramSchema,
 	blueprintReferenceSchema,
 	blueprintRequestSchema,
 	blueprintRowsSchema,
@@ -14,9 +13,9 @@ import {
 	expandBlueprintRows,
 	reviseBlueprintDesign
 } from '$lib/blueprints';
-import { runBlueprintProgram } from './blueprint-program';
 import type { ManagedServer } from './db/schema';
 import source from './factory-blueprints/blueprint.lua?raw';
+import { requireCompiledFactoryTrial } from './factory-layout-status';
 import territorySource from './factory-query/scripts/tools/territory.lua?raw';
 import { ServerError } from './server-files';
 import { serverStatus } from './server-process';
@@ -25,26 +24,32 @@ import { rconScript } from './server-rcon';
 // The operation belongs outside args. Reusing request schemas verbatim made the
 // model emit a second operation inside args and obscured which fields go together.
 const variants = [
-	...blueprintRequestSchema.options,
-	...blueprintReferenceSchema.options,
-	blueprintRowsSchema,
-	blueprintProgramSchema
-].map((variant) => {
-	const { operation, ...fields } = variant.shape;
-	return z.strictObject({
-		operation,
-		display: z.boolean().default(false),
-		args: z.strictObject(fields)
+	...blueprintRequestSchema.options.filter(
+		(variant) => variant.shape.operation.value === 'catalog'
+	),
+	...blueprintReferenceSchema.options
+]
+	.filter((variant) => variant.shape.operation.value !== 'create')
+	.map((variant) => {
+		const { operation, ...fields } = variant.shape;
+		return z.strictObject({
+			operation,
+			display: z.boolean().default(false),
+			args: z.strictObject(fields)
+		});
 	});
-});
 // Generate the union once so repeated entity/settings schemas share references.
-const contract = z.toJSONSchema(z.union(variants), { io: 'input', reused: 'ref' });
+const toolRequestSchema = z.union(variants);
+const contract = z.toJSONSchema(toolRequestSchema, { io: 'input', reused: 'ref' });
+export function parseBlueprintToolRequest(input: unknown) {
+	return toolRequestSchema.parse(input);
+}
 export const blueprintToolJsonSchema = {
 	type: 'object',
 	properties: {
 		operation: {
 			type: 'string',
-			enum: ['catalog', 'create', 'program', 'find_site', 'inspect', 'place', 'check']
+			enum: ['catalog', 'find_site', 'inspect', 'place', 'check']
 		},
 		display: { type: 'boolean', default: false },
 		args: { type: 'object' }
@@ -119,7 +124,10 @@ export async function readBlueprintDraft(directory: string, id: string, force: s
 			JSON.parse(await readFile(join(directory, 'blueprint-drafts', `${id}.json`), 'utf8'))
 		);
 	} catch {
-		throw new ServerError(404, 'Blueprint draft not found on this server; create it again');
+		throw new ServerError(
+			404,
+			'Blueprint draft not found on this server; compile or import it again'
+		);
 	}
 	if (blueprintDesignHash(saved) !== id || saved.force !== force)
 		throw new ServerError(409, 'Blueprint draft does not match this force or its recorded design');
@@ -131,20 +139,6 @@ export async function factoryBlueprint(
 	player?: { name: string; requireAdmin: boolean }
 ) {
 	let revisionOf: string | undefined;
-	if (
-		typeof input === 'object' &&
-		input !== null &&
-		'operation' in input &&
-		input.operation === 'program'
-	) {
-		const request = blueprintProgramSchema.parse(input);
-		const base = request.designId
-			? await readBlueprintDraft(server.directory, request.designId, request.force)
-			: blueprintDesignSchema.parse({ force: request.force, label: request.label });
-		const design = await runBlueprintProgram(request.program, { ...base, label: request.label });
-		revisionOf = request.designId;
-		input = { ...design, operation: 'create' };
-	}
 	const schema =
 		typeof input === 'object' && input !== null && !Array.isArray(input)
 			? 'designId' in input
@@ -166,6 +160,8 @@ export async function factoryBlueprint(
 	if ('designId' in parsed.data) {
 		const reference = parsed.data;
 		const saved = await readBlueprintDraft(server.directory, reference.designId, reference.force);
+		if (reference.operation === 'place')
+			await requireCompiledFactoryTrial(server.directory, reference.force, reference.designId);
 		if (reference.operation === 'create') {
 			revisionOf = reference.designId;
 			const parts = await Promise.all(
@@ -218,7 +214,7 @@ export async function factoryBlueprint(
 	if (!reply.data.ok)
 		throw new ServerError(
 			409,
-			`${reply.data.error}${designId ? ` Unvalidated draft saved: designId=${designId}. Revise it with create, designId and entityChanges or removedEntityIndices; do not retransmit the layout. No export or placement succeeded.` : ''}`
+			`${reply.data.error}${designId ? ` Unvalidated draft saved: designId=${designId}. Correct the compiler inputs or source design; this draft is not qualified for placement. No export or placement succeeded.` : ''}`
 		);
 	if (resolved.operation === 'create') {
 		const artifact = z

@@ -41,7 +41,7 @@ systemctl --user enable --now facmandu-deploy.timer
 systemctl --user start facmandu-deploy.service
 ```
 
-Python 3.12 or newer, Git, Node, and Bun 1.4.2 must already be installed. The
+Python 3.12 or newer, Git, Node, Lua 5.4 (`lua`), and Bun 1.4.2 must already be installed. The
 existing dev service and Cloudflare Tunnel remain the only app listener and public
 route. No second app process runs against the replica. Before the first cutover,
 save private backups of the environment, a consistent SQLite replica backup, and

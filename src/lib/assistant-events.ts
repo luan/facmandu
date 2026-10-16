@@ -39,6 +39,7 @@ export function assistantToolProgress(tool: string, input: unknown) {
 	if (tool === 'task' && object(input)?.agent === 'factory_surveyor')
 		return 'Surveying a supply chain…';
 	if (tool === 'report_progress') return 'Updating you…';
+	if (tool === 'design_factory') return 'Compiling machine layout, belts and power…';
 	if (tool === 'factory_batch') {
 		const afterSeconds = object(input)?.afterSeconds;
 		if (typeof afterSeconds === 'number' && afterSeconds > 0 && afterSeconds <= 30)
@@ -146,6 +147,8 @@ export function assistantToolFeedback(tool: string, output: unknown): string {
 			return `Native solver: ${value.status}. Production remains unmeasured.`;
 	}
 	if (tool === 'report_progress' && typeof value.message === 'string') return value.message;
+	if (tool === 'design_factory' && typeof value.designId === 'string')
+		return `Compiled ${typeof value.entities === 'number' ? value.entities : ''} entities; ${value.productionValidated === true ? 'sandbox throughput passed' : 'production is not qualified'}.`;
 	if (typeof value.error === 'string') {
 		if (/overlap/i.test(value.error)) return 'Layout validation found overlapping entities.';
 		return `${tool.replaceAll('_', ' ')} failed; expand the tool step for details.`;

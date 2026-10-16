@@ -11,6 +11,7 @@ RUN DATABASE_URL=file:/tmp/facmandu-build.db bun run build
 FROM oven/bun:${BUN_VERSION}-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production BODY_SIZE_LIMIT=101M
+RUN apt-get update && apt-get install -y --no-install-recommends lua5.4 && rm -rf /var/lib/apt/lists/*
 COPY .npmrc bun.lock package.json ./
 RUN bun install --frozen-lockfile --production --ignore-scripts
 COPY --from=build /app/build ./build

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { blueprintArtifactSchema } from '$lib/blueprints';
 import type { ManagedServer } from './db/schema';
 import { factoryBlueprint, readBlueprintDraft } from './factory-blueprints';
+import { recordCompiledFactoryTrial } from './factory-layout-status';
 import { ServerError } from './server-files';
 import { rconScript } from './server-rcon';
 
@@ -123,7 +124,11 @@ export async function testFactoryBlueprint(
 	}
 ) {
 	const data = sandboxRequestSchema.parse(input);
-	if (data.operation !== 'run') return call(server, data.operation, [data.force, data.id]);
+	if (data.operation !== 'run') {
+		const result = await call(server, data.operation, [data.force, data.id]);
+		await recordCompiledFactoryTrial(server.directory, data.force, result);
+		return result;
+	}
 	const draft = await readBlueprintDraft(server.directory, data.designId, data.force);
 	const artifact = blueprintArtifactSchema.parse(
 		await factoryBlueprint(server, { ...draft, operation: 'create' }, options.actor)
@@ -162,6 +167,7 @@ export async function testFactoryBlueprint(
 					note: 'Game ticks are paused. Read this trial after play resumes; global pause was not changed.'
 				};
 		}
+		await recordCompiledFactoryTrial(server.directory, data.force, result);
 		return result;
 	} catch (cause) {
 		if (options.signal?.aborted)

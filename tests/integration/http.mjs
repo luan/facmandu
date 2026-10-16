@@ -2761,6 +2761,7 @@ done
 		'factory_action',
 		'factory_plan',
 		'blueprint_operation',
+		'design_factory',
 		'server_control',
 		'bash',
 		'write',

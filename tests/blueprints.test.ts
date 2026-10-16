@@ -18,7 +18,11 @@ import {
 	measureBuildOutput,
 	reviseBlueprintDesign
 } from '../src/lib/blueprints';
-import { blueprintCommand, blueprintToolJsonSchema } from '../src/lib/server/factory-blueprints';
+import {
+	blueprintCommand,
+	blueprintToolJsonSchema,
+	parseBlueprintToolRequest
+} from '../src/lib/server/factory-blueprints';
 
 const blueprintSource = `${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
 local source_blueprint=blueprint
@@ -132,13 +136,15 @@ test('provider blueprint contracts accept omitted defaults and preserve strict o
 		message.role === 'system' ? (message.toolsAdded ?? []) : []
 	)[0];
 	assert.ok(tool);
-	const validate = (arguments_: JsonObject) =>
+	const validate = (arguments_: JsonObject) => {
 		validateToolArguments(tool, {
 			type: 'toolCall',
 			name: tool.name,
 			id: 'contract',
 			arguments: arguments_
 		});
+		parseBlueprintToolRequest(arguments_);
+	};
 	const [entity] = design.entities;
 	if (!entity) throw new Error('Expected entity');
 	const drafts: JsonObject[] = [
@@ -150,8 +156,8 @@ test('provider blueprint contracts accept omitted defaults and preserve strict o
 		},
 		{ force: 'player', designId: 'a'.repeat(64), removedEntityIndices: [1] }
 	];
-	for (const args of drafts) assert.doesNotThrow(() => validate({ operation: 'create', args }));
-	assert.doesNotThrow(() =>
+	for (const args of drafts) assert.throws(() => validate({ operation: 'create', args }));
+	assert.throws(() =>
 		validate({
 			operation: 'program',
 			args: {
@@ -173,7 +179,18 @@ test('provider blueprint contracts accept omitted defaults and preserve strict o
 			}
 		})
 	);
-	assert.doesNotThrow(() => validate({ operation: 'inspect', args: target }));
+	assert.throws(() => validate({ operation: 'inspect', args: target }));
+	assert.doesNotThrow(() =>
+		validate({
+			operation: 'inspect',
+			args: {
+				force: 'player',
+				designId: 'a'.repeat(64),
+				surface: 'nauvis',
+				position: { x: 20, y: 20 }
+			}
+		})
+	);
 	assert.doesNotThrow(() =>
 		validate({
 			operation: 'check',
