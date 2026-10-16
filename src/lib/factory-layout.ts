@@ -17,8 +17,8 @@ const position = z.strictObject({
 const port = z.strictObject({
 	item: name,
 	type: z.enum(['item', 'fluid']).optional(),
-	position,
-	direction: z.literal([0, 4, 8, 12]),
+	position: position.optional(),
+	direction: z.literal([0, 4, 8, 12]).optional(),
 	perMinute: z.number().min(0.01).max(60000)
 });
 
@@ -47,6 +47,27 @@ export const factoryLayoutInput = z
 			long_inserter: name.optional()
 		})
 	})
+	.transform((request) => ({
+		...request,
+		// Defaults follow the current row templates until the engine exposes row endpoints.
+		// Pin ports for fixed world connections; native throughput still gates every draft.
+		inputs: request.inputs.map((port, index) => ({
+			...port,
+			position: port.position ?? { x: 0.5, y: 0.5 + index * 3 },
+			direction: port.direction ?? (4 as const)
+		})),
+		outputs: request.outputs.map((port, index) => ({
+			...port,
+			position: port.position ?? {
+				x:
+					request.recipes.length === 1 && request.outputs.length === 1
+						? Math.max(5.5, request.width - 7.5)
+						: 5.5 + index * 3,
+				y: request.height - 0.5
+			},
+			direction: port.direction ?? (8 as const)
+		}))
+	}))
 	.superRefine((request, ctx) => {
 		if (request.outputs.some((port) => port.type === 'fluid'))
 			ctx.addIssue({
@@ -61,7 +82,12 @@ export const factoryLayoutInput = z
 				code: 'custom',
 				message: 'Fluid inputs require pipe and pipe_underground tiers'
 			});
+		const occupied = new Set<string>();
 		for (const port of [...request.inputs, ...request.outputs]) {
+			const tile = `${port.position.x},${port.position.y}`;
+			if (occupied.has(tile))
+				ctx.addIssue({ code: 'custom', message: 'Ports must occupy distinct tiles' });
+			occupied.add(tile);
 			if (port.position.x >= request.width || port.position.y >= request.height)
 				ctx.addIssue({ code: 'custom', message: 'Ports must be inside the factory block' });
 		}

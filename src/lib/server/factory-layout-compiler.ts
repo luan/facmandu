@@ -56,6 +56,10 @@ export async function compileFactoryLayout(
 		],
 		inputs: request.inputs.filter((port) => port.type !== 'fluid'),
 		fluid_inputs: request.inputs.filter((port) => port.type === 'fluid'),
+		// Item routing must leave the fluid entry tiles available for pipes.
+		obstacles: request.inputs
+			.filter((port) => port.type === 'fluid')
+			.map((port) => ({ x: Math.floor(port.position.x), y: Math.floor(port.position.y) })),
 		outputs: request.outputs.map((port) => ({ ...port, rate: port.perMinute / 60 })),
 		tiers: { ...request.tiers, poles: [request.tiers.pole] },
 		// Keep candidate search bounded; failure never lowers a player's requested rate.

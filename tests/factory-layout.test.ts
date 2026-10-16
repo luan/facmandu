@@ -301,5 +301,49 @@ test('finished robot blocks produce their battery and frame intermediates locall
 	]);
 	assert.ok(compiled.inputs.every((p) => p.item !== 'battery' && p.item !== 'flying-robot-frame'));
 	assert.equal(compiled.test.outputs[0]?.name, 'logistic-robot');
-	assert.equal(compiled.design.entities[compiled.test.outputs[0]!.entity - 1]?.position.x, 5.5);
+	const output = compiled.test.outputs[0];
+	assert.ok(output);
+	assert.equal(compiled.design.entities[output.entity - 1]?.position.x, 5.5);
+});
+
+test('standalone blocks need only supply rates and keep fixed ports when requested', async () => {
+	const input = factoryLayoutInput.parse({
+		...robotRequest,
+		inputs: robotRequest.inputs.map(({ position, direction, ...port }) => port),
+		outputs: [{ item: 'flying-robot-frame', perMinute: 6 }]
+	});
+	assert.deepEqual(input.inputs[0]?.position, { x: 0.5, y: 0.5 });
+	assert.deepEqual(input.outputs[0]?.position, { x: 5.5, y: 27.5 });
+	assert.equal(input.inputs[0]?.direction, 4);
+	assert.equal(input.outputs[0]?.direction, 8);
+	const compiled = await compileFactoryLayout(input, robotPack, modules);
+	const output = compiled.ports.find((p) => p.kind === 'output');
+	assert.ok(output);
+	assert.deepEqual(output.position, { x: 5.5, y: 27.5 });
+	assert.deepEqual(factoryLayoutInput.parse(robotRequest), robotRequest);
+	assert.equal(factoryLayoutInput.safeParse({ ...input, height: 8 }).success, false);
+	assert.equal(
+		factoryLayoutInput.safeParse({
+			...input,
+			outputs: [{ ...input.outputs[0], position: input.inputs[0]?.position }]
+		}).success,
+		false
+	);
+});
+
+test('default fluid entries are reserved before routing item belts', async () => {
+	const request = factoryLayoutInput.parse({
+		...plastic,
+		inputs: plastic.inputs.map(({ position, direction, ...port }) => port),
+		outputs: plastic.outputs.map(({ position, direction, ...port }) => port)
+	});
+	assert.deepEqual(request.outputs[0]?.position, { x: 24.5, y: 23.5 });
+	const compiled = await compileFactoryLayout(request, plasticPack, modules);
+	const fluid = request.inputs.find((p) => p.type === 'fluid');
+	assert.ok(fluid);
+	const entry = compiled.design.entities.filter(
+		(e) => e.position.x === fluid.position.x && e.position.y === fluid.position.y
+	);
+	assert.equal(entry.length, 1);
+	assert.equal(entry[0]?.name, 'pipe');
 });
