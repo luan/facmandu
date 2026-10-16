@@ -65,7 +65,7 @@ script.on_nth_tick(10,function()
    local water_port,water_index
    for index=1,plant.fluids_count do
     local filter=plant.get_fluid_filter(index)
-    if filter and filter.fluid and filter.fluid.name=='water' then
+    if filter and (filter.object_name=='LuaFluidPrototype' and filter.name or filter.fluid.name)=='water' then
      for _,port in ipairs(plant.get_fluid_box_pipe_connections(index)) do
       if port.flow_direction=='input' then water_port=port.target_position;water_index=index;break end
      end

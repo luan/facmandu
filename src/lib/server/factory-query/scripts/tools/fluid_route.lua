@@ -8,6 +8,10 @@ local M={}
 M.manifest={route_pipe={desc='Draft a native pipe connection without mixing other fluid systems, replacing entities or entering guarded or unexplored terrain. Use the route_pipes tool to save the result. Existing endpoints must be same-force pipes; empty endpoints can meet a matching native fluid port. Requires Factorio 2.1.',params={surface='string! exact surface',pipe='string! one-tile pipe prototype',underground='string optional one-tile pipe-to-ground prototype',fluid='string! exact fluid prototype',x='number! source tile center',y='number! source tile center',target_x='number! destination tile center',target_y='number! destination tile center',margin='number optional detour margin, default 16, maximum 32'}}}
 local directions={{dx=0,dy=-1,d=0},{dx=1,dy=0,d=4},{dx=0,dy=1,d=8},{dx=-1,dy=0,d=12}}
 local function key(x,y) return x..':'..y end
+local function filtered_fluid(entity,index)
+ local filter=entity.get_fluid_filter(index)
+ return filter and (filter.object_name=='LuaFluidPrototype' and filter.name or filter.fluid and filter.fluid.name)
+end
 local function route(a)
  local major,minor=(script.active_mods.base or ''):match('^(%d+)%.(%d+)')
  if not tonumber(major) or (tonumber(major)<2 or tonumber(major)==2 and tonumber(minor)<1) then error('Native pipe routing requires Factorio 2.1',0) end
@@ -109,8 +113,8 @@ local function route(a)
    if not allowed[id] then
     local native=node.entity
     if native.force~=force or not explored(native.position.x,native.position.y) then error('A fluid endpoint connects beyond this force or explored area',0) end
-    local fluid=native.get_fluid(node.index);local filter=native.get_fluid_filter(node.index)
-    if fluid and fluid.name~=a.fluid or filter and filter.fluid and filter.fluid.name~=a.fluid then error('A pipe endpoint contains or requires another fluid',0) end
+    local fluid=native.get_fluid(node.index);local filter=filtered_fluid(native,node.index)
+    if fluid and fluid.name~=a.fluid or filter and filter~=a.fluid then error('A pipe endpoint contains or requires another fluid',0) end
     allowed[id]=true
     for _,n in ipairs(native.get_fluid_box_neighbours(node.index) or {}) do queue[#queue+1]=n end
    end
@@ -134,8 +138,8 @@ local function route(a)
      if not allowed[(e.unit_number or 0)..':'..i] then
       for _,c in ipairs(e.get_fluid_box_pipe_connections(i) or {}) do
        if c.connection_type=='normal' then
-        local p=c.target_position;local filter=e.get_fluid_filter(i);local fluid=e.get_fluid(i)
-        local matching=(filter and filter.fluid and filter.fluid.name==a.fluid) or (fluid and fluid.name==a.fluid)
+        local p=c.target_position;local filter=filtered_fluid(e,i);local fluid=e.get_fluid(i)
+        local matching=filter==a.fluid or (fluid and fluid.name==a.fluid)
         if not (e.force==force and at_end(p.x,p.y) and matching) then open_ports[key(p.x,p.y)]=true end
        end
       end

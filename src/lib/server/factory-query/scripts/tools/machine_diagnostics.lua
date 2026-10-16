@@ -118,7 +118,7 @@ local function inspect_machine(a)
     local ports={}
     for index=1,math.min(entity.fluids_count,32) do
       local filter=entity.get_fluid_filter(index)
-      local filter_value=filter and {name=filter.fluid and filter.fluid.name,minimum_temperature=filter.minimum_temperature,maximum_temperature=filter.maximum_temperature} or nil
+      local filter_value=filter and (filter.object_name=='LuaFluidPrototype' and {name=filter.name} or {name=filter.fluid and filter.fluid.name,minimum_temperature=filter.minimum_temperature,maximum_temperature=filter.maximum_temperature}) or nil
       for _,connection in ipairs(entity.get_fluid_box_pipe_connections(index) or {}) do
         local target=connection.target
         ports[#ports+1]={fluid_storage_index=index,filter=filter_value,flow_direction=connection.flow_direction,connection_type=connection.connection_type,port_position=connection.position,pipe_position=connection.target_position,connected_to=target and target.valid and {name=target.name,unit_number=target.unit_number,position=target.position} or nil}

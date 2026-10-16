@@ -243,6 +243,16 @@ test('machine snapshots include actual attached loaders and their upstream belt 
  assert(#transport.belt_trace.nodes==2 and transport.belt_trace.nodes[2].unit_number==3 and transport.belt_trace.direction=='upstream')
  local simple=inspect{force='player',surface='nauvis',x=.5,y=.5}
  assert(simple.connections==nil and scans==1 and simple.energy_source_type=='electric')
+ script.active_mods.base='2.1.21'
+ plant.fluids_count=1
+ plant.get_fluid_filter=function() return {fluid={name='water'},minimum_temperature=15,maximum_temperature=100} end
+ plant.get_fluid_box_pipe_connections=function() return {{flow_direction='input',connection_type='normal',position={x=.5,y=-1},target_position={x=.5,y=-1.5}}} end
+ local legacy=inspect{force='player',surface='nauvis',x=.5,y=.5}
+ assert(legacy.fluid_ports.connections[1].filter.name=='water' and legacy.fluid_ports.connections[1].filter.maximum_temperature==100)
+ script.active_mods.base='2.1.22'
+ plant.get_fluid_filter=function() return setmetatable({name='water',object_name='LuaFluidPrototype'}, {__index=function(_,field) error('Invalid fluid prototype member: '..field) end}) end
+ local filtered=inspect{force='player',surface='nauvis',x=.5,y=.5}
+ assert(filtered.fluid_ports.connections[1].filter.name=='water')
  plant.prototype={burner_prototype={}};plant.is_connected_to_electric_network=function() return false end
  local burner=inspect{force='player',surface='nauvis',x=.5,y=.5}
  assert(burner.energy_source_type=='burner' and burner.connected_to_power_source==false)
