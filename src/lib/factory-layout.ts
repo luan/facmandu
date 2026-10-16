@@ -16,12 +16,13 @@ const position = z.strictObject({
 });
 const port = z.strictObject({
 	item: name,
+	type: z.enum(['item', 'fluid']).optional(),
 	position,
 	direction: z.literal([0, 4, 8, 12]),
 	perMinute: z.number().min(0.01).max(60000)
 });
 
-// Fluids, platforms and modules need qualified layout templates before enabling them.
+// Fluid outputs, platforms and modules need qualified templates before enabling them.
 export const factoryLayoutInput = z
 	.strictObject({
 		force: name,
@@ -38,12 +39,27 @@ export const factoryLayoutInput = z
 			underground: name,
 			inserter: name,
 			pole: name,
+			pipe: name.optional(),
+			pipe_underground: name.optional(),
 			furnace: name.optional(),
 			splitter: name.optional(),
 			long_inserter: name.optional()
 		})
 	})
 	.superRefine((request, ctx) => {
+		if (request.outputs.some((port) => port.type === 'fluid'))
+			ctx.addIssue({
+				code: 'custom',
+				message: 'Fluid-output production needs a qualified template'
+			});
+		if (
+			request.inputs.some((port) => port.type === 'fluid') &&
+			(!request.tiers.pipe || !request.tiers.pipe_underground)
+		)
+			ctx.addIssue({
+				code: 'custom',
+				message: 'Fluid inputs require pipe and pipe_underground tiers'
+			});
 		for (const port of [...request.inputs, ...request.outputs]) {
 			if (port.position.x >= request.width || port.position.y >= request.height)
 				ctx.addIssue({ code: 'custom', message: 'Ports must be inside the factory block' });

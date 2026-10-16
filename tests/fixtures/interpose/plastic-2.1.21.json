@@ -1,0 +1,86 @@
+{
+	"recipes": {
+		"plastic-bar": {
+			"category": "chemistry",
+			"time": 1,
+			"ingredients": [
+				{
+					"type": "item",
+					"name": "coal",
+					"amount": 1
+				}
+			],
+			"results": [
+				{
+					"type": "item",
+					"name": "plastic-bar",
+					"amount": 2
+				}
+			],
+			"fluid_inputs": [
+				{
+					"name": "petroleum-gas",
+					"amount": 20,
+					"position": {
+						"x": 2,
+						"y": -1
+					}
+				}
+			]
+		}
+	},
+	"machines": {
+		"chemical-plant": {
+			"crafting_speed": 1,
+			"categories": ["chemistry"],
+			"size": [5, 3],
+			"native_size": [3, 3]
+		}
+	},
+	"belts": {
+		"transport-belt": {
+			"items_per_second": 15,
+			"speed": 0.03125,
+			"size": [1, 1]
+		}
+	},
+	"undergrounds": {
+		"underground-belt": {
+			"max_distance": 5,
+			"speed": 0.03125,
+			"size": [1, 1]
+		}
+	},
+	"splitters": {
+		"splitter": {
+			"speed": 0.03125,
+			"size": [2, 1]
+		}
+	},
+	"inserters": {
+		"fast-inserter": {
+			"pickup_position": [0, -1],
+			"insert_position": [0, 1.2],
+			"rotation_speed": 0.04,
+			"extension_speed": 0.1,
+			"size": [1, 1]
+		}
+	},
+	"furnaces": {},
+	"poles": {
+		"medium-electric-pole": {
+			"size": [1, 1],
+			"supply": 3.5,
+			"reach": 9
+		}
+	},
+	"fuels": {},
+	"drills": {},
+	"resources": {},
+	"pipes": {
+		"pipe": {},
+		"pipe-to-ground": {
+			"underground": 10
+		}
+	}
+}

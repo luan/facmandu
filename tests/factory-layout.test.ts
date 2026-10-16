@@ -40,6 +40,103 @@ const request = factoryLayoutInput.parse({
 		pole: 'small-electric-pole'
 	}
 });
+const plasticPack = z
+	.json()
+	.parse(JSON.parse(readFileSync('tests/fixtures/interpose/plastic-2.1.21.json', 'utf8')));
+const plastic = factoryLayoutInput.parse({
+	force: 'player',
+	surface: 'nauvis',
+	label: 'Plastic',
+	width: 32,
+	height: 24,
+	inputs: [
+		{ item: 'coal', perMinute: 450, position: { x: 0.5, y: 0.5 }, direction: 4 },
+		{
+			item: 'petroleum-gas',
+			type: 'fluid',
+			perMinute: 9000,
+			position: { x: 0.5, y: 6.5 },
+			direction: 4
+		}
+	],
+	outputs: [{ item: 'plastic-bar', perMinute: 900, position: { x: 24.5, y: 23.5 }, direction: 8 }],
+	recipes: ['plastic-bar'],
+	tiers: {
+		machine: 'chemical-plant',
+		belt: 'transport-belt',
+		underground: 'underground-belt',
+		splitter: 'splitter',
+		inserter: 'fast-inserter',
+		pole: 'medium-electric-pole',
+		pipe: 'pipe',
+		pipe_underground: 'pipe-to-ground'
+	}
+});
+
+test('fluid-fed production keeps native pipe connections, full-belt rates and exact machine counts', async () => {
+	const compiled = await compileFactoryLayout(plastic, plasticPack, modules);
+	assert.deepEqual(await compileFactoryLayout(plastic, plasticPack, modules), compiled);
+	assert.deepEqual(compiled.inputs, [
+		{ item: 'coal', perMinute: 450 },
+		{ item: 'petroleum-gas', type: 'fluid', perMinute: 9000 }
+	]);
+	const machines = compiled.design.entities.filter((e) => e.recipe === 'plastic-bar');
+	assert.deepEqual(compiled.steps, [
+		{ recipe: 'plastic-bar', machines: machines.length, perMinute: 900 }
+	]);
+	assert.equal(machines.length, 8);
+	for (const machine of machines) {
+		assert.equal(machine.direction, 4);
+		assert.ok(
+			compiled.design.entities.some(
+				(e) =>
+					e.name === 'pipe' &&
+					e.position.x === machine.position.x + 2 &&
+					e.position.y === machine.position.y - 1
+			)
+		);
+	}
+	const endpoint = compiled.test.inputs.find((p) => p.kind === 'fluid');
+	assert.ok(endpoint);
+	assert.equal(compiled.design.entities[endpoint.entity - 1]?.name, 'pipe');
+	assert.equal(endpoint.perMinute, 9000);
+	assert.equal(compiled.test.seconds, 120);
+});
+
+test('fluid budgets and full-belt port space are checked before publishing a design', async () => {
+	const output = plastic.outputs[0];
+	assert.ok(output);
+	await assert.rejects(
+		compileFactoryLayout(
+			{
+				...plastic,
+				inputs: plastic.inputs.map((p) => (p.type === 'fluid' ? { ...p, perMinute: 100 } : p))
+			},
+			plasticPack,
+			modules
+		),
+		/Insufficient declared fluid supply/
+	);
+	await assert.rejects(
+		compileFactoryLayout(
+			{ ...plastic, inputs: plastic.inputs.filter((p) => p.type !== 'fluid') },
+			plasticPack,
+			modules
+		),
+		/Declare the recipe fluid supply/
+	);
+	await assert.rejects(
+		compileFactoryLayout(
+			{
+				...plastic,
+				outputs: [{ ...output, position: { x: 31.5, y: 0.5 }, direction: 4 }]
+			},
+			plasticPack,
+			modules
+		),
+		/side-loading tile/
+	);
+});
 
 test('the compiler produces repeatable connected item factories with normal belt ports and power', async () => {
 	const first = await compileFactoryLayout(request, pack, modules);

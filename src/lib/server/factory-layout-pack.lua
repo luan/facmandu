@@ -4,7 +4,7 @@ return function(request)
  local force=assert(game.forces[request.force],'Unknown force')
  local surface=assert(game.surfaces[request.surface],'Unknown surface')
  assert(not surface.platform,'Platform layouts are not yet qualified by the factory compiler')
- local pack={recipes={},machines={},belts={},undergrounds={},splitters={},inserters={},furnaces={},poles={},fuels={},drills={},resources={}}
+ local pack={recipes={},machines={},belts={},undergrounds={},splitters={},inserters={},furnaces={},poles={},fuels={},drills={},resources={},pipes={}}
  local unlocked={}
  for _,recipe in pairs(force.recipes) do
   if recipe.enabled then for _,product in pairs(recipe.products) do if product.type=='item' then unlocked[product.name]=true end end end
@@ -31,6 +31,17 @@ return function(request)
  local machine=entity(tiers.machine,'assembling-machine')
  assert(not machine.burner_prototype and machine.electric_energy_source_prototype,'Factory compiler requires electric crafting machines')
  pack.machines[machine.name]={crafting_speed=machine.get_crafting_speed(),categories=keys(machine.crafting_categories),size=size(machine)}
+ if tiers.pipe then
+  local pipe=entity(tiers.pipe,'pipe')
+  local underground_pipe=entity(assert(tiers.pipe_underground,'Select an underground pipe'),'pipe-to-ground')
+  pack.pipes[pipe.name]={}
+  local reach=0
+  for _,box in pairs(underground_pipe.fluidbox_prototypes or {}) do
+   for _,connection in pairs(box.pipe_connections or {}) do reach=math.max(reach,connection.max_underground_distance or 0) end
+  end
+  assert(reach>0,'Underground pipe reach is unavailable')
+  pack.pipes[underground_pipe.name]={underground=reach}
+ end
  if tiers.furnace then
   local f=entity(tiers.furnace,'furnace')
   assert(f.electric_energy_source_prototype,'Factory compiler requires electric furnaces')
@@ -64,11 +75,16 @@ return function(request)
   end
   assert(#recipe.products==1,'Byproduct recipes are not yet supported by the factory compiler: '..name)
   assert(#recipe.ingredients<=4,'Recipes with more than four ingredients need an additional layout template: '..name)
-  local ingredients,results={},{}
+  local ingredients,results,fluids={},{},{}
   for _,part in pairs(recipe.ingredients) do
-   assert(part.type=='item','Fluid production is not yet supported by the factory compiler: '..name)
-   ingredients[#ingredients+1]={type='item',name=part.name,amount=part.amount}
+   if part.type=='fluid' then
+    assert(tiers.pipe and tiers.pipe_underground,'Select pipe tiers for '..name)
+    local default=prototypes.fluid[part.name].default_temperature
+    assert(not (part.minimum_temperature and default<part.minimum_temperature or part.maximum_temperature and default>part.maximum_temperature),'Temperature-specific fluid production needs a qualified template: '..name)
+    fluids[#fluids+1]={name=part.name,amount=part.amount,index=part.fluidbox_index}
+   else ingredients[#ingredients+1]={type='item',name=part.name,amount=part.amount} end
   end
+  assert(#ingredients>0,'Fluid-only recipes need a qualified layout template: '..name)
   local part=recipe.products[1]
   assert(part.type=='item' and (part.probability or 1)==1 and part.amount,'Probabilistic/fluid recipes are not yet supported: '..name)
   local category,crafter
@@ -85,7 +101,31 @@ return function(request)
   local amount=p.get_product_amount and p.get_product_amount(1,productivity) or part.amount+math.max(0,part.amount-(part.ignored_by_productivity or 0))*productivity
   results[1]={type='item',name=part.name,amount=amount}
   table.sort(ingredients,function(a,b) return a.name<b.name end)
-  pack.recipes[name]={category=category,time=recipe.energy,ingredients=ingredients,results=results}
+  local fluid_inputs={}
+  if #fluids>0 then
+   assert(crafter==machine and machine.tile_width==machine.tile_height,'Fluid inputs require a square crafting-machine template')
+   local boxes={}
+   for _,box in pairs(machine.fluidbox_prototypes or {}) do if box.production_type=='input' then boxes[#boxes+1]=box end end
+   table.sort(boxes,function(a,b) return a.index<b.index end)
+   for i,fluid in ipairs(fluids) do
+    local box
+    for _,candidate in ipairs(boxes) do if candidate.index==(fluid.index or (boxes[i] and boxes[i].index)) then box=candidate;break end end
+    assert(box and (not box.filter or box.filter.name==fluid.name),'Cannot bind native fluid input: '..fluid.name)
+    local adjacent
+    local offsets={[0]={0,-1},[4]={1,0},[8]={0,1},[12]={-1,0}}
+    for _,connection in pairs(box.pipe_connections or {}) do
+     local p=connection.connection_type=='normal' and connection.positions[2]
+     local out=offsets[((connection.direction or 0)+4)%16]
+     if p and out and out[2]==0 then adjacent={x=(p.x or p[1])+out[1],y=(p.y or p[2])+out[2]};break end
+    end
+    assert(adjacent,'Fluid port does not fit the east-facing machine template: '..name)
+    fluid_inputs[#fluid_inputs+1]={name=fluid.name,amount=fluid.amount,position=adjacent}
+   end
+   local model=pack.machines[machine.name]
+   model.native_size=size(machine)
+   model.size={machine.tile_width+2,machine.tile_height}
+  end
+  pack.recipes[name]={category=category,time=recipe.energy,ingredients=ingredients,results=results,fluid_inputs=fluid_inputs}
  end
  return pack
 end

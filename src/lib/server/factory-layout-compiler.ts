@@ -10,7 +10,13 @@ import { ServerError } from './server-files';
 const resultSchema = z.object({
 	entities: blueprintDesignSchema.shape.entities,
 	wires: blueprintDesignSchema.shape.wires,
-	inputs: z.array(z.object({ item: z.string(), perMinute: z.number() })),
+	inputs: z.array(
+		z.object({
+			item: z.string(),
+			type: z.enum(['item', 'fluid']).optional(),
+			perMinute: z.number()
+		})
+	),
 	steps: z.array(z.object({ recipe: z.string(), machines: z.number(), perMinute: z.number() })),
 	ports: z.array(
 		z.object({
@@ -48,7 +54,8 @@ export async function compileFactoryLayout(
 			[0, 0],
 			[request.width, request.height]
 		],
-		inputs: request.inputs,
+		inputs: request.inputs.filter((port) => port.type !== 'fluid'),
+		fluid_inputs: request.inputs.filter((port) => port.type === 'fluid'),
 		outputs: request.outputs.map((port) => ({ ...port, rate: port.perMinute / 60 })),
 		tiers: { ...request.tiers, poles: [request.tiers.pole] },
 		// Keep candidate search bounded; failure never lowers a player's requested rate.
@@ -108,7 +115,7 @@ export async function compileFactoryLayout(
 				if (!source) throw new ServerError(400, 'Compiler returned an unknown factory port');
 				return {
 					entity: port.entity,
-					kind: 'item' as const,
+					kind: source.type ?? ('item' as const),
 					name: port.item,
 					perMinute: source.perMinute
 				};
@@ -130,7 +137,7 @@ export async function compileFactoryLayout(
 			inputs: endpoints('input'),
 			outputs: endpoints('output'),
 			warmupSeconds: 30,
-			seconds: report.steps.length > 1 ? 120 : 30,
+			seconds: report.steps.length > 1 || report.steps.some((step) => step.machines > 1) ? 120 : 30,
 			power: 'design' as const,
 			powerPosition: { x: Math.floor(pole.position.x), y: Math.floor(pole.position.y) }
 		}
