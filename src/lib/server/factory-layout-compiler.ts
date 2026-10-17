@@ -180,7 +180,8 @@ export async function compileFactoryLayout(
 			outputs: endpoints('output'),
 			// Compiled blocks use the accelerated headless fixture, including buffer startup.
 			// Slower batch recipes need a separately qualified longer fixture.
-			warmupSeconds: 120,
+			warmupSeconds:
+				request.logistics && request.inputs.some((p) => p.type === 'fluid') ? 300 : 120,
 			seconds: sampleSeconds,
 			power: 'design' as const,
 			powerPosition: { x: Math.floor(pole.position.x), y: Math.floor(pole.position.y) }

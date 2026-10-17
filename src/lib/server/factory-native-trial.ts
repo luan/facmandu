@@ -134,7 +134,11 @@ export function testCompiledFactory(
 					writeFile(join(driver, 'robot-trial.lua'), robotTrial),
 					writeFile(
 						join(driver, 'sandbox.lua'),
-						sandbox.replaceAll('facmandu-toby-sandbox', 'facmandu-layout-sandbox')
+						// Large pipe networks need a longer rate-limited startup in the
+						// private worker. The multiplayer mod keeps its existing limits.
+						sandbox
+							.replaceAll('facmandu-toby-sandbox', 'facmandu-layout-sandbox')
+							.replace('number(warmupLimit,0,120)', 'number(warmupLimit,0,300)')
 					),
 					writeFile(join(driver, 'pack.lua'), packSource),
 					writeFile(join(driver, 'request.lua'), `return ${luaString(JSON.stringify(payload))}`)
@@ -200,7 +204,7 @@ export function testCompiledFactory(
 							'--benchmark',
 							ready,
 							'--benchmark-ticks',
-							'14520',
+							String((input.test.warmupSeconds + input.test.seconds) * 60 + 120),
 							'--benchmark-runs',
 							'1'
 						],
