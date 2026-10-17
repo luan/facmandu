@@ -222,9 +222,11 @@ end
 
 ---@return Line?
 function Floor:get_defining_line()
-    local line = self.first
-    while line and line.class == "Floor" do line = line.first end
-    return line
+    for child in self:iterator() do
+        if child.class == "Line" then return child end
+        local line = child:get_defining_line()
+        if line then return line end
+    end
 end
 
 

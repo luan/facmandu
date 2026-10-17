@@ -107,7 +107,6 @@ function builders.done(line, parent_flow, metadata)
     if metadata.fold_out_subfloors and first_subfloor_line then return end
 
     local relevant_line = line
-
     if line.class == "Floor" then relevant_line = line:get_defining_line() end
     ---@class CheckmarkLineTags
     ---@field line_id ObjectID
