@@ -152,8 +152,12 @@ export async function compileFactoryLayout(
 				)
 			})
 			.parse(pack).recipes;
-		const batch = recipes[request.recipes[0]].results[0].amount;
-		const cycle = (60 * batch * report.steps[0].machines) / request.outputs[0].perMinute;
+		const step = report.steps[0];
+		const output = request.outputs[0];
+		const batch = step && recipes[step.recipe]?.results[0];
+		if (!step || !output || !batch)
+			throw new ServerError(400, 'Compiler returned no logistics production recipe');
+		const cycle = (60 * batch.amount * step.machines) / output.perMinute;
 		const duration = Math.floor(120 / cycle + 1e-9) * cycle;
 		// Observe whole supply cycles, with at least three batches per cell. A
 		// partial last cycle can reject a working slow array through sampling alone.
