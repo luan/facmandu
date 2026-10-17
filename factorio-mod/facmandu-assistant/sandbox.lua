@@ -131,10 +131,13 @@ function M.cancel(force,id)
  if not job.result then finish(job,'cancelled') end
  return job.result
 end
-function M.start(a,warmupLimit)
+function M.start(a,warmupLimit,portLimit)
  -- Longer startup is for the private headless runner; the game interface keeps its 30-second cap.
  warmupLimit=warmupLimit or 30
  if not number(warmupLimit,0,120) then error('Invalid fixture warmup limit',0) end
+ -- Private headless fixtures can feed larger chest arrays without doing this work in multiplayer.
+ portLimit=portLimit or 16
+ if not number(portLimit,1,256) then error('Invalid fixture endpoint limit',0) end
  local real=owner(a.force,a.actor)
  local source=game.surfaces[a.surface]
  if not source or source.name:sub(1,#PREFIX)==PREFIX then error('Choose the real source surface',0) end
@@ -240,7 +243,7 @@ function M.start(a,warmupLimit)
   local inputs,outputs={},{}
   local used={}
   local function ports(sourcePorts,destination,role)
-   if type(sourcePorts)~='table' or #sourcePorts>16 then error('Use at most 16 test inputs and outputs',0) end
+   if type(sourcePorts)~='table' or #sourcePorts>portLimit then error('Use at most '..portLimit..' test inputs and outputs',0) end
    for _,p in ipairs(sourcePorts) do
     local e=entities[p.entity]
     if not e then error('Choose an existing blueprint entity index for test endpoints',0) end

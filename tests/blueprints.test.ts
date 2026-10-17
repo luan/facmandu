@@ -1297,3 +1297,33 @@ test('build verification includes working and stalled mining drills without trea
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 	lua.lua_close(state);
 });
+
+test('placement inspection distinguishes robot delivery coverage from construction coverage', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ local force={name='player',logistic_networks={},recipes={{enabled=true,products={{type='item',name='building'}}}},is_chunk_charted=function() return true end}
+ local p={type='logistic-container',tile_width=1,tile_height=1,items_to_place_this={{name='building',count=1}},has_flag=function() return false end}
+ prototypes={entity={chest=p}}
+ local network={network_id=1,available_logistic_robots=3}
+ local surface={name='nauvis',get_territory_for_chunk=function() return nil end,can_place_entity=function() return true end,is_chunk_generated=function() return true end,find_entities_filtered=function() return {} end,
+ find_logistic_network_by_position=function(at) if at.x<2 then return network end end}
+ game={tick=100,forces={player=force},surfaces={nauvis=surface},create_inventory=function()
+  local rows;return {{set_stack=function() end,set_blueprint_entities=function(e) rows=e end,get_blueprint_entities=function() return rows end,get_blueprint_tiles=function() return {} end,cost_to_build={{name='building',count=2}}}}
+ end}
+ defines={build_check_type={manual=1}}
+ ${blueprintSource}
+ local request={operation='inspect',force='player',surface='nauvis',position={x=0,y=0},label='Chests',entities={{name='chest',position={x=.5,y=.5},direction=0},{name='chest',position={x=2.5,y=.5},direction=0}}}
+ local result=blueprint(request).construction
+ assert(not result.single_network_ready)
+ assert(result.logistics_coverage.chests==2 and result.logistics_coverage.covered_chests==1 and result.logistics_coverage.available_robots==3)
+ surface.find_logistic_network_by_position=function() return network end
+ result=blueprint(request).construction
+ assert(result.logistics_coverage.covered_chests==2 and result.logistics_coverage.available_robots==3,'Count shared robot fleets once')
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+	lua.lua_close(state);
+});

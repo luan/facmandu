@@ -33,6 +33,7 @@ export const factoryLayoutInput = z
 		inputs: z.array(port).min(1).max(12),
 		outputs: z.array(port).min(1).max(6),
 		recipes: z.array(name).min(1).max(64),
+		logistics: z.strictObject({ requester: name, provider: name }).optional(),
 		tiers: z.strictObject({
 			machine: name,
 			crafters: z.array(name).max(8).optional(),
@@ -69,6 +70,17 @@ export const factoryLayoutInput = z
 		}))
 	}))
 	.superRefine((request, ctx) => {
+		if (
+			request.logistics &&
+			(request.recipes.length !== 1 ||
+				request.outputs.length !== 1 ||
+				request.inputs.some((port) => port.type === 'fluid'))
+		)
+			ctx.addIssue({
+				code: 'custom',
+				message:
+					'Logistics cells use one item recipe with external item supplies; use separate cells for intermediates'
+			});
 		if (request.outputs.some((port) => port.type === 'fluid'))
 			ctx.addIssue({
 				code: 'custom',

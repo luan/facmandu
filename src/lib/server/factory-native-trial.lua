@@ -44,7 +44,7 @@ events.on_event(defines.events.on_tick,function(e)
    local trial=payload.test
    trial.blueprint=payload.blueprint;trial.designId=payload.designId;trial.idempotencyKey=payload.designId
    trial.anchor=payload.anchor
-   local started=sandbox.start(trial,120)
+   local started=sandbox.start(trial,120,256)
    storage.job=started.id
    helpers.write_file('layout-progress.json',helpers.table_to_json(started),false)
   elseif e.tick%60==0 then

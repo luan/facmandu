@@ -113,8 +113,23 @@ local function construction_report(force,surface,entities,offset,cost)
  table.sort(networks,function(a,b) if a.ready~=b.ready then return a.ready end if a.covered_entities~=b.covered_entities then return a.covered_entities>b.covered_entities end return a.id<b.id end)
  local total=#networks
  while #networks>8 do networks[#networks]=nil end
+ local logistics
+ if surface.find_logistic_network_by_position then
+  logistics={chests=0,covered_chests=0,available_robots=0};local seen={}
+  for _,entity in ipairs(entities) do
+   if prototypes.entity[entity.name].type=='logistic-container' then
+    logistics.chests=logistics.chests+1
+    local network=surface.find_logistic_network_by_position({x=entity.position.x+offset.x,y=entity.position.y+offset.y},force)
+    if network then
+     logistics.covered_chests=logistics.covered_chests+1
+     if not seen[network.network_id] then seen[network.network_id]=true;logistics.available_robots=logistics.available_robots+network.available_logistic_robots end
+    end
+   end
+  end
+  if logistics.chests==0 then logistics=nil end
+ end
  -- A positive result requires one network to cover and stock the whole layout; split-network builds need allocation checks.
- return {single_network_ready=ready,entities=#entities,networks=networks,total_networks=total,production_verified=false,note='Normal-quality stock is not reserved. Coverage and materials do not verify power, input/output connections or throughput.'}
+ return {single_network_ready=ready,entities=#entities,networks=networks,total_networks=total,logistics_coverage=logistics,production_verified=false,note='Normal-quality stock is not reserved. Coverage and materials do not verify power, input/output connections or throughput.'}
 end
 local function power_report(force,surface,entities,offset,boxes)
  if surface.platform or surface.has_global_electric_network then return nil end
@@ -274,7 +289,7 @@ local function blueprint(request,territories)
   for k,v in pairs(wanted) do local mismatch=difference(actual[k],v,path..'.'..k,k);if mismatch then return mismatch end end
  end
  local function contains(actual,wanted) return difference(actual,wanted,'','')==nil end
- local settings={'filters','use_filters','filter_mode','pickup_position','drop_position','override_stack_size','control_behavior','chunk-filter'}
+ local settings={'filters','use_filters','filter_mode','pickup_position','drop_position','override_stack_size','control_behavior','chunk-filter','request_filters','bar'}
  local entities,preview,boxes,warnings,collisions,alignments={},{},{},{},{},{}
  local warned={}
  local function warn(text) if not warned[text] then warnings[#warnings+1]=text;warned[text]=true end end
@@ -315,6 +330,8 @@ local function blueprint(request,territories)
   if e.type and not directional_type then error('Entity '..i..' '..e.name..': input/output type is only valid for underground belts and loaders. Clear the retained setting using program: design.entities['..i..'].type=nil; return design',0) end
   if directional_type and not e.type then error('Entity '..i..' '..e.name..': specify type="input" or type="output" for this underground belt or loader',0) end
   if (e.pickup_position or e.drop_position or e.use_filters~=nil or e.filter_mode or e.override_stack_size) and p.type~='inserter' then error('Inserter settings require an inserter',0) end
+  if e.request_filters and (p.type~='logistic-container' or p.logistic_mode~='requester' and p.logistic_mode~='buffer') then error('Logistic requests require a requester or buffer chest',0) end
+  if e.bar and p.type~='container' and p.type~='logistic-container' then error('Inventory limits require a chest',0) end
   local reach=custom_inserter_range(force,p)
   if reach then
    for _,key in ipairs({'pickup_position','drop_position'}) do

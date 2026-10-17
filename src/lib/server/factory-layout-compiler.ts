@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { blueprintDesignSchema } from '$lib/blueprints';
 import { type FactoryLayoutInput, factoryLayoutInput } from '$lib/factory-layout';
 import adapter from './factory-layout-adapter.lua?raw';
+import logistics from './factory-layout-logistics.lua?raw';
 import source from './factory-layout-worker.lua?raw';
 import { luaString } from './factory-query-bundle';
 import { ServerError } from './server-files';
@@ -23,7 +24,8 @@ const resultSchema = z.object({
 			entity: z.number().int().positive(),
 			item: z.string(),
 			kind: z.enum(['input', 'output']),
-			position: z.object({ x: z.number(), y: z.number() })
+			position: z.object({ x: z.number(), y: z.number() }),
+			perMinute: z.number().positive().optional()
 		})
 	),
 	warnings: z.array(z.json())
@@ -50,6 +52,7 @@ export async function compileFactoryLayout(
 ) {
 	const request = factoryLayoutInput.parse(input);
 	const problem = {
+		logistics: request.logistics,
 		area: [
 			[0, 0],
 			[request.width, request.height]
@@ -95,7 +98,7 @@ export async function compileFactoryLayout(
 				.map(([name, body]) => `[ ${luaString(name)} ]=function()\n${body}\nend`)
 				.join(
 					',\n'
-				)}}\nlocal problem=${luaData(problem)}\nlocal pack=${luaData(pack)}\nlocal adapter=function()\n${adapter}\nend\n${source}`
+				)}}\nlocal problem=${luaData(problem)}\nlocal pack=${luaData(pack)}\nlocal adapter=function()\nif problem.logistics then\n${logistics}\nend\n${adapter}\nend\n${source}`
 		);
 	});
 	const reply = z
@@ -110,6 +113,21 @@ export async function compileFactoryLayout(
 		report.ports
 			.filter((port) => port.kind === kind)
 			.map((port) => {
+				if (request.logistics) {
+					if (
+						!(kind === 'input' ? request.inputs : request.outputs).some(
+							(source) => source.item === port.item
+						) ||
+						!port.perMinute
+					)
+						throw new ServerError(400, 'Compiler returned an unknown logistics endpoint');
+					return {
+						entity: port.entity,
+						kind: 'item' as const,
+						name: port.item,
+						perMinute: port.perMinute
+					};
+				}
 				const source = (kind === 'input' ? request.inputs : request.outputs).find(
 					(p) =>
 						p.item === port.item &&

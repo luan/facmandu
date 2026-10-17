@@ -28,6 +28,15 @@ return function(request)
   return p
  end
  local tiers=request.tiers
+ if request.logistics then
+  pack.chests={}
+  for _,row in ipairs{{request.logistics.requester,'requester'},{request.logistics.provider,'passive-provider'}} do
+   local p=entity(row[1],'logistic-container')
+   assert(p.logistic_mode==row[2],'Select a '..row[2]..' chest: '..row[1])
+   assert(p.tile_width==1 and p.tile_height==1,'Logistics cells require one-tile chests')
+   pack.chests[p.name]={size=size(p),mode=p.logistic_mode}
+  end
+ end
  local machine=entity(tiers.machine,'assembling-machine')
  local crafters={}
  local function add_crafter(p)

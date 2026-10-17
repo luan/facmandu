@@ -30,6 +30,7 @@ local function kind_of(name, pack)
     { "drills", "drill" },
     { "furnaces", "furnace" },
     { "poles", "pole" },
+    { "chests", "chest" },
   }) do
     local proto = pack[k[1]] and pack[k[1]][name]
     if proto then

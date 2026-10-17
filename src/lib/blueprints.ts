@@ -46,6 +46,30 @@ export const blueprintEntitySchema = z.strictObject({
 		.describe('Inserter drop vector relative to its center, not world coordinates')
 		.optional(),
 	override_stack_size: z.number().int().min(0).max(255).optional(),
+	request_filters: z
+		.strictObject({
+			sections: z
+				.array(
+					z.strictObject({
+						index: z.number().int().min(1).max(255),
+						filters: z
+							.array(
+								z.strictObject({
+									index: z.number().int().positive(),
+									name,
+									type: z.literal('item'),
+									quality: name,
+									comparator: z.literal('='),
+									count: z.number().int().positive()
+								})
+							)
+							.max(100)
+					})
+				)
+				.max(16)
+		})
+		.optional(),
+	bar: z.number().int().min(1).max(65535).optional(),
 	control_behavior: z
 		.record(z.string().min(1).max(100), z.json())
 		.describe(

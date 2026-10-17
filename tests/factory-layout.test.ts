@@ -384,3 +384,115 @@ test('recipes sharing an assembler rotate only when they use its fluid connectio
 		]
 	);
 });
+
+const logisticsPack = z
+	.json()
+	.parse(JSON.parse(readFileSync('tests/fixtures/interpose/logistics-2.1.21.json', 'utf8')));
+const logisticsRequest = factoryLayoutInput.parse({
+	force: 'player',
+	surface: 'nauvis',
+	label: 'Robot-fed gears',
+	width: 32,
+	height: 32,
+	inputs: [{ item: 'iron-plate', perMinute: 1800 }],
+	outputs: [{ item: 'iron-gear-wheel', perMinute: 900 }],
+	recipes: ['iron-gear-wheel'],
+	logistics: { requester: 'requester-chest', provider: 'passive-provider-chest' },
+	tiers: {
+		machine: 'assembling-machine-2',
+		belt: 'transport-belt',
+		underground: 'underground-belt',
+		inserter: 'fast-inserter',
+		pole: 'medium-electric-pole'
+	}
+});
+test('logistics-only factories include the whole requested production array, configured requests and providers', async () => {
+	const result = await compileFactoryLayout(logisticsRequest, logisticsPack, modules);
+	assert.deepEqual(result.steps, [{ recipe: 'iron-gear-wheel', machines: 10, perMinute: 900 }]);
+	assert.deepEqual(result.inputs, [{ item: 'iron-plate', perMinute: 1800 }]);
+	const chests = result.design.entities.filter((e) => e.name === 'requester-chest');
+	assert.equal(chests.length, 10);
+	assert.equal(
+		result.design.entities.filter((e) => e.name === 'passive-provider-chest' && e.bar === 5).length,
+		10
+	);
+	assert.equal(result.design.entities.filter((e) => e.name === 'fast-inserter').length, 20);
+	assert.equal(
+		result.design.entities.some((e) => e.name.includes('belt')),
+		false
+	);
+	for (const chest of chests)
+		assert.deepEqual(chest.request_filters, {
+			sections: [
+				{
+					index: 1,
+					filters: [
+						{
+							index: 1,
+							type: 'item',
+							name: 'iron-plate',
+							quality: 'normal',
+							comparator: '=',
+							count: 90
+						}
+					]
+				}
+			]
+		});
+	assert.equal(
+		result.test.inputs.reduce((n, p) => n + p.perMinute, 0),
+		1800
+	);
+	assert.equal(
+		result.test.outputs.reduce((n, p) => n + p.perMinute, 0),
+		900
+	);
+	assert.ok(result.design.wires.length > 0);
+	const oversupplied = await compileFactoryLayout(
+		factoryLayoutInput.parse({
+			...logisticsRequest,
+			inputs: [{ item: 'iron-plate', perMinute: 3600 }]
+		}),
+		logisticsPack,
+		modules
+	);
+	assert.deepEqual(oversupplied.design, result.design);
+	assert.equal(
+		oversupplied.test.inputs.reduce((sum, port) => sum + port.perMinute, 0),
+		1800
+	);
+	const occupied = new Set<string>();
+	for (const e of result.design.entities) {
+		const size = e.name === 'assembling-machine-2' ? 3 : 1;
+		for (let x = e.position.x - size / 2; x < e.position.x + size / 2; x++)
+			for (let y = e.position.y - size / 2; y < e.position.y + size / 2; y++) {
+				const tile = `${x},${y}`;
+				assert.equal(occupied.has(tile), false, `${e.name} overlaps ${tile}`);
+				occupied.add(tile);
+			}
+	}
+});
+test('logistics compilation refuses shortages and undersized blocks without reducing the production target', async () => {
+	for (const request of [
+		{ ...logisticsRequest, inputs: [{ item: 'iron-plate', perMinute: 100 }] },
+		{
+			...logisticsRequest,
+			width: 8,
+			height: 8,
+			outputs: [
+				{ item: 'iron-gear-wheel', perMinute: 900, position: { x: 7.5, y: 7.5 }, direction: 8 }
+			]
+		}
+	])
+		await assert.rejects(
+			compileFactoryLayout(factoryLayoutInput.parse(request), logisticsPack, modules),
+			/Insufficient declared logistics supply|do not fit/
+		);
+	assert.equal(
+		factoryLayoutInput.safeParse({
+			...logisticsRequest,
+			recipes: ['iron-gear-wheel', 'copper-cable']
+		}).success,
+		false
+	);
+});
