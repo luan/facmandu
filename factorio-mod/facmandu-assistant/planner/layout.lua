@@ -54,6 +54,7 @@ local function refresh(player)
   or (w.status=='compiling' and 'Laying out the saved plan…') or (ready and 'Blueprint ready') or 'Configure the layout, then generate a blueprint.'
  if w.status=='ready' and w.blueprint and not ready then status='Plan changed · Generate a new layout' end
  if dirty then status='Settings changed · Generate to update the preview' end
+ if v.error then status=v.error end
  r.robots.visible=r.transport.selected_index==2;r.arms.visible=r.custom.state
  r.status.caption=status;r.elapsed.caption=(w.status=='queued' or w.status=='compiling') and (elapsed..'s') or ''
  r.generate.enabled=w.status~='queued' and w.status~='compiling'

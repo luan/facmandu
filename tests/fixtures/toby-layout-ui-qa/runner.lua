@@ -17,7 +17,11 @@ local function run()
  local frame=assert(player.gui.screen['toby-layout-frame'])
  assert(not player.gui.screen.toby_planner_frame_main_dialog.visible)
  local refs=storage.layouts.viewers[player.index].refs
- refs.width.text='73';refs.height.text='64'
+ refs.width.text='101';refs.height.text='64'
+ script.get_event_handler(defines.events.on_gui_text_changed){name=defines.events.on_gui_text_changed,player_index=player.index,element=refs.width,tick=game.tick}
+ click(player,refs.generate)
+ assert(refs.status.caption:find('8 to 100',1,true),'Layout validation error was hidden by draft status')
+ refs.width.text='73'
  assert(remote.call(ui,'open',player.index,plan.planId) and refs.width.text=='73','Reopen replaced the draft')
  local id=remote.call(ui,'generate',player.index)
  local w=storage.layouts.forces[player.force.index][plan.planId]
