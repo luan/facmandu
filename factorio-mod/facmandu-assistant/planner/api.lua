@@ -475,6 +475,11 @@ local function open_plan(force_name,player_name,id)
 end
 remote.add_interface('facmandu-toby-planner',{
  read_plan=read_plan,
+ plan_status=function(force,player_name,id)
+  local _,factory=find_plan(force,player_name,id)
+  return {revision=factory.revision or 0,valid=factory.valid,
+   status=not factory.valid and 'invalid' or factory.tick_of_solver_update and 'pending' or factory.top_floor.solver_error or 'solved'}
+ end,
  edit_line=edit_line,
  set_solver=function(force,player_name,id,expected_revision,floor_id,name,recursive)
   local player,factory=find_plan(force,player_name,id)

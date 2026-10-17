@@ -66,6 +66,8 @@ local function build_production_bar(player)
     label_factory.style.padding = {-1, 8}
     flow_factory.add{type="button", caption="Planning", style="toby_planner_button_frame_tool",
         tags={mod="toby-planner", on_gui_click="edit_supply"}, mouse_button_filter={"left"}}
+    flow_factory.add{type="button", caption="Layout", style="toby_planner_button_frame_tool",
+        tags={mod="toby-planner", on_gui_click="layout_plan"}, mouse_button_filter={"left"}}
     flow_factory.add{type="button", caption="Share", style="toby_planner_button_frame_tool",
         tags={mod="toby-planner", on_gui_click="share_plan"}, mouse_button_filter={"left"}}
 
@@ -110,6 +112,16 @@ local listeners = {}  ---@type ListenerDefinitions
 
 listeners.gui = {
     on_gui_click = {
+        {
+            name = "layout_plan",
+            handler = function(player)
+                local factory = lib.context.get(player, "Factory")
+                if factory then
+                    local ok, err = pcall(remote.call, "facmandu-toby-layout", "open", player.index, factory.id)
+                    if not ok then player.print(tostring(err)) end
+                end
+            end
+        },
         {
             name = "share_plan",
             handler = function(player)

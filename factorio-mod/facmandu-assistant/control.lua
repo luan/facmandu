@@ -3,6 +3,7 @@ bootstrap.on_init(function() storage.planner={} end)
 bootstrap.on_configuration_changed(function() storage.planner=storage.planner or {} end)
 require('planner.control')
 require('planner.api')
+require('planner.layout')
 require('sandbox')
 local events=require('events').scope('toby')
 local PREFIX='facmandu-toby-'

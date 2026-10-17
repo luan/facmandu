@@ -31,3 +31,13 @@ The agent workspace uses a chat sidebar with actual task status and a larger con
 Toby can create saved native plans, configure independent blocks, add/move/remove recipe lines, choose solvers, and edit output targets and input supplies. Line edits support machine quality, modules, beacons, fuel, applicable fluid temperatures, coverage percentages and power settings. Saved line IDs remain stable through edits and nesting; every edit checks the latest plan revision. Planning results predict rates and do not authorize construction.
 
 Each conversation keeps its own unfinished message. Switching chats, progress updates and reopening the workspace preserve drafts.
+
+### Plan → Layout → Blueprint
+
+Open a production plan, then choose **Layout** in its toolbar. The planner owns recipes, machines and rates. Layout uses that saved revision and never edits its production settings.
+
+Choose the block size, shape, spacing and transport tiers. **Logistic chests** uses blue requester inputs and filtered yellow storage outputs; configure the request buffer and usable output slots. Custom inserter pickup/drop vectors use the installed inserter mod's researched capabilities.
+
+**Generate layout** runs the layout engine through Facmandu, without an AI turn. The preview uses native entity ghosts on a hidden preview surface, so modded graphics match the game and no machines or items are created in the factory. Pan, zoom, open the native blueprint editor, or take the blueprint to place ghosts. Generated layouts are saved with the force's Toby books. Settings and saved layouts survive save/reload. Editing the production plan makes the old layout stale until regenerated.
+
+Manual production planning works independently. Layout generation currently requires a connected Facmandu service. A generated preview is an import-checked design, not a throughput qualification or a live construction result. Unsupported configurations return an error without changing the plan.

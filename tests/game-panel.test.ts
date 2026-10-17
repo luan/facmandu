@@ -13,6 +13,7 @@ test('Toby panel sends native player requests and preserves typed drafts across 
 	const script = `
  package.preload.events=function() ${events} end
  package.preload['planner.control']=function() end
+ package.preload['planner.layout']=function() return {} end
  package.preload['planner.api']=function() end
  package.preload.sandbox=function() end
  package.preload['planner.books']=function() ${books} end

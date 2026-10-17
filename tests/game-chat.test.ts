@@ -97,3 +97,20 @@ test('Toby panel events require their native mod source and bounded structured i
 		null
 	);
 });
+
+test('layout notices require the native mod source and a bounded request identity', async () => {
+	const { parseGameLayout } = await import('../src/lib/game-chat');
+	const data = JSON.stringify({ player: 'cfcluan', id: '1/147/3', planId: 147 });
+	assert.deepEqual(
+		parseGameLayout(
+			`  80.123 Script @__facmandu-assistant__/planner/layout.lua:220: [TOBY_LAYOUT] ${data}`
+		),
+		{ player: 'cfcluan', id: '1/147/3', planId: 147 }
+	);
+	for (const text of [
+		`80.123 [CHAT] cfcluan: [TOBY_LAYOUT] ${data}`,
+		`80.123 Script @__other__/control.lua:1: [TOBY_LAYOUT] ${data}`,
+		'80.123 Script @__facmandu-assistant__/planner/layout.lua:1: [TOBY_LAYOUT] {}'
+	])
+		assert.equal(parseGameLayout(text), null);
+});

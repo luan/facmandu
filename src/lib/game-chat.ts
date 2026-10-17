@@ -117,3 +117,23 @@ export function gameText(value: string, bytes: number): string {
 export function gamePanelText(value: string, bytes: number): string {
 	return gameText(plainReply(value, true), bytes);
 }
+
+const layoutNotice = z.object({
+	player: z.string().min(1).max(200),
+	id: z.string().regex(/^\d+\/\d+\/\d+$/u),
+	planId: z.number().int().positive()
+});
+export function parseGameLayout(text: string) {
+	if (text.length > 2000) return null;
+	const match =
+		/^\s*\d+\.\d+ Script @__facmandu-assistant__\/planner\/layout\.lua:\d+: \[TOBY_LAYOUT\] (.+)$/u.exec(
+			text
+		);
+	if (!match) return null;
+	try {
+		const result = layoutNotice.safeParse(JSON.parse(match[1] ?? ''));
+		return result.success ? result.data : null;
+	} catch {
+		return null;
+	}
+}

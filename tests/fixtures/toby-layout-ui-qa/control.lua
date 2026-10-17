@@ -1,0 +1,1 @@
+-- Loaded by Toby's native test hook. Use only in an isolated copied save.

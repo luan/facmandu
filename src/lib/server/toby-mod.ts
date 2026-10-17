@@ -120,7 +120,9 @@ export function tobyModArchive() {
 						imageBytes(source)
 					] as const
 			)
-		])
+		]),
+		// Published and served archives must have identical bytes.
+		{ mtime: new Date(2026, 0, 1) }
 	);
 }
 
