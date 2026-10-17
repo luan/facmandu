@@ -158,7 +158,8 @@ function M.open(index,id)
  local preview=right.add{type='flow',direction='vertical'};preview.style.vertically_stretchable=true;preview.style.horizontally_stretchable=true
  r.empty=text(preview,'Generate a layout to preview the blueprint here.',width-405)
  r.camera=preview.add{type='camera',position={0,0},surface_index=player.surface.index,zoom=0.5,visible=false}
- r.camera.style.horizontally_stretchable=true;r.camera.style.vertically_stretchable=true;r.camera.style.minimal_height=200
+ -- Cameras have no intrinsic width. Explicit bounds keep the widget visible when the settings pane starts scrolling.
+ r.camera.style.width=width-405;r.camera.style.height=height-225
  local pan=right.add{type='flow',direction='horizontal'}
  for _,b in ipairs{{'pan-left','←'},{'pan-up','↑'},{'pan-down','↓'},{'pan-right','→'}} do pan.add{type='button',caption=b[2],style='toby_planner_button_frame_tool',tags=tagged(b[1])} end
  text(right,'Blueprint preview · No world placement',width-405)
