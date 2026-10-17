@@ -1,6 +1,6 @@
 # [WIP] Toby
 
-Work in progress, version **0.0.17**. Requires Factorio **2.1.22 or later**. Includes production planning, blueprint books and a companion drone. Toby chat connects through a Facmandu-managed server.
+Work in progress, version **0.0.17**. Requires Factorio **2.1.21 or later**. Includes production planning, blueprint books and a companion drone. Toby chat connects through a Facmandu-managed server.
 
 Click the **Toby icon** above the game view or use its game shortcut, or press **Ctrl+Shift+T**, to open the side panel. **New chat** starts a separate conversation without stopping an existing run. **Chat** shows recent messages, **Activity** shows completed tool outcomes, errors and current work. **Design** shows the latest validated working draft or final blueprint, with warnings and construction costs. Inspections are labeled separately. Tab scroll positions survive progress updates. Status, elapsed time and tool results update while Toby works. Switch conversations while a run continues, or use **Steer** to add instructions. Press **Enter** to send or steer. Closing the panel keeps your typed draft. Shortcuts are configurable in Factorio’s Controls settings.
 

@@ -541,9 +541,10 @@ local function refresh_compact_production(player)
     }
 
     for line in floor:iterator() do -- build the individual lines
-        local relevant_line = (line.class == "Floor") and line.first or line  ---@cast relevant_line Line
+        local relevant_line = line
+        if line.class == "Floor" then relevant_line = line:get_defining_line() end
         -- Lines that produce nothing have nothing to build, so they are left out entirely
-        if relevant_line:get_status() ~= nil then goto skip_line end
+        if not relevant_line or relevant_line:get_status() ~= nil then goto skip_line end
 
         -- Recipe and Checkmark
         local recipe_flow = production_table.add{type="flow", direction="horizontal"}
@@ -699,12 +700,13 @@ end
 ---@param action string
 local function handle_recipe_click(player, tags, action)
     local line = OBJECT_INDEX[tags.line_id]  ---@as LineObject
-    local relevant_line = (line.class == "Floor") and line.first or line
+    local relevant_line = line
+    if line.class == "Floor" then relevant_line = line:get_defining_line() end
 
     if action == "open_subfloor" then
         lib.context.set(player, line--[[@as Floor]])
         refresh_compact_factory(player)
-    elseif action == "factoriopedia" then
+    elseif action == "factoriopedia" and relevant_line then
         local proto = relevant_line--[[@as Line]].recipe.proto  ---@as FPRecipePrototype
         player.open_factoriopedia_gui(lib.get_factoriopedia_proto(proto))
     end
@@ -908,8 +910,9 @@ factory_listeners.gui = {
             handler = function(player, tags, _)
                 ---@cast tags CheckmarkCompactLineTags
                 local line = OBJECT_INDEX[tags.line_id]  ---@as LineObject
-                local relevant_line = (line.class == "Floor") and line.first or line
-                relevant_line.done = not relevant_line.done
+                local relevant_line = line
+                if line.class == "Floor" then relevant_line = line:get_defining_line() end
+                if relevant_line then relevant_line.done = not relevant_line.done end
                 refresh_compact_factory(player)
             end
         }

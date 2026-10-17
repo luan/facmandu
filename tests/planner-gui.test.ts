@@ -77,3 +77,37 @@ test('compact planner recovers orphaned windows and survives repeated display ch
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 	lua.lua_close(state);
 });
+
+test('empty planning blocks remain navigable through nested floors', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const sources = ['Object', 'Planning', 'Floor']
+		.map(
+			(name) =>
+				`package.preload['planner.backend.data.${name}']=function() ${readFileSync(`factorio-mod/facmandu-assistant/planner/backend/data/${name}.lua`, 'utf8')} end`
+		)
+		.join('\n');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ script={register_metatable=function() end}
+ storage={planner={next_object_ID=1}}
+ package.preload['planner.backend.data.Line']=function() return {} end
+ package.preload['planner.backend.data.SimpleItem']=function() return {} end
+ ${sources}
+ local Floor=require('planner.backend.data.Floor')
+ local outer=Floor.init(2,'simplex')
+ local empty=Floor.init(3,'simplex')
+ outer:insert(empty)
+ assert(not outer:get_defining_line() and not empty:get_defining_line())
+ assert(not outer:get_status() and not empty:get_status())
+ assert(not outer:check_product_compatibility(empty))
+ empty.solver_error='no_solution'
+ assert(empty:get_status()=='solver_error' and outer:get_status()=='solver_error')
+ outer:remove(empty,true)
+ assert(not outer:get_status() and not outer:get_defining_line())
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+	lua.lua_close(state);
+});

@@ -1,5 +1,13 @@
 local _util = {}
 
+-- 2.1.22 moved temperature limits off fluidboxes; don't read removed API members.
+function _util.get_input_temperatures(proto, fluid_box)
+    if helpers.compare_versions(script.active_mods.base, "2.1.22") >= 0 then
+        return proto.minimum_input_temperature, proto.maximum_input_temperature
+    end
+    return fluid_box.minimum_temperature, fluid_box.maximum_temperature
+end
+
 -- ** LOCAL UTIL **
 ---@alias RecipeItem FormattedProduct | Ingredient
 ---@alias ItemList table<ItemType, table<ItemName, RecipeItem>>
@@ -408,6 +416,7 @@ function _util.get_boiler_conversions(proto)
         end
     end
     if input == nil then return {} end  -- without an input it can't do anything
+    local minimum_temperature, maximum_temperature = _util.get_input_temperatures(proto, input)
 
     -- Only this mode has a target temperature, and only it uses the output fluidbox at all
     -- The other one tops the fluid out at its own maximum, where it stays the same fluid
@@ -422,7 +431,7 @@ function _util.get_boiler_conversions(proto)
             output_proto = (output ~= nil and output.filter) or fluid_proto
             goal_temperature = proto.target_temperature--[[@as double]]
         else
-            goal_temperature = math.min(fluid_proto.max_temperature, proto.maximum_input_temperature or math.huge)
+            goal_temperature = math.min(fluid_proto.max_temperature, maximum_temperature or math.huge)
         end
 
         -- A goal not above the default temperature can't be achieved
@@ -431,9 +440,9 @@ function _util.get_boiler_conversions(proto)
         table.insert(conversions, {
             input = fluid_proto,
             output = output_proto,
-            minimum_temperature = math.max(proto.minimum_input_temperature or -math.huge,
+            minimum_temperature = math.max(minimum_temperature or -math.huge,
                 fluid_proto.default_temperature),
-            maximum_temperature = math.min(proto.maximum_input_temperature or math.huge,
+            maximum_temperature = math.min(maximum_temperature or math.huge,
                 fluid_proto.max_temperature, goal_temperature),
             goal_temperature = goal_temperature
         })

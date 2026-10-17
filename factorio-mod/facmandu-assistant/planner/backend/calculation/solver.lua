@@ -59,10 +59,11 @@ end
 local function resolve_machine_requirements(factory)
     local first_lines = {}  ---@type table<SolverItemKey, ObjectID>
     for line_object in factory.top_floor:iterator() do
-        local line = (line_object.class == "Floor") and line_object.first or line_object  ---@cast line Line
+        local line = line_object
+        if line_object.class == "Floor" then line = line_object:get_defining_line() end
         -- Skip over lines that are blocked or don't calculate machine counts at all
-        local blocker = line:get_blocker()
-        if line.recipe.proto.energy > MAGIC_NUMBERS.minimum_energy and (not blocker or blocker == "disabled") then
+        local blocker = line and line:get_blocker()
+        if line and line.recipe.proto.energy > MAGIC_NUMBERS.minimum_energy and (not blocker or blocker == "disabled") then
             for _, product in pairs(line.recipe.products) do
                 local key = structures.pack_item(product)
                 first_lines[key] = first_lines[key] or line.id

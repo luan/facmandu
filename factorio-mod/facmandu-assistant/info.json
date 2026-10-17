@@ -5,5 +5,5 @@
 	"author": "Luan",
 	"factorio_version": "2.1",
 	"description": "Production planning, in-game chat, blueprints and Toby's automatic construction companion. Uses your server's assistant permissions. No free items or research.",
-	"dependencies": ["base >= 2.1.22", "(?) pypostprocessing"]
+	"dependencies": ["base >= 2.1.21", "(?) pypostprocessing"]
 }

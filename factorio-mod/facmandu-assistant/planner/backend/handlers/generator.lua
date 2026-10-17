@@ -1101,6 +1101,7 @@ function generator.machines.generate(context)
             emissions_per_joule = electric_source.emissions_per_joule
 
             local burns_fluid = proto.burns_fluid or false
+            local minimum_temperature, maximum_temperature = generator.util.get_input_temperatures(proto, generator_fluid_box)
             burner = {
                 effectivity = proto.effectivity or 1,
                 categories = {[fluid_fuel_category(burns_fluid, generator_fluid_box)] = true},
@@ -1114,8 +1115,8 @@ function generator.machines.generate(context)
                 fluid_filter = (generator_fluid_box.filter) and generator_fluid_box.filter.name or nil,
                 -- Deliberately not proto.maximum_temperature: a generator clamps the energy it
                 -- extracts rather than refusing hotter fluid, which is what wasted_share models
-                minimum_temperature = proto.minimum_input_temperature,
-                maximum_temperature = proto.maximum_input_temperature
+                minimum_temperature = minimum_temperature,
+                maximum_temperature = maximum_temperature
             }
 
         elseif burner_prototype then
@@ -1132,6 +1133,7 @@ function generator.machines.generate(context)
             emissions_per_joule = fluid_burner_prototype.emissions_per_joule
 
             local fluid_box = fluid_burner_prototype.fluid_box
+            local minimum_temperature, maximum_temperature = generator.util.get_input_temperatures(fluid_burner_prototype, fluid_box)
             burner = {
                 effectivity = fluid_burner_prototype.effectivity,
                 categories = {[fluid_fuel_category(fluid_burner_prototype.burns_fluid, fluid_box)] = true},
@@ -1145,8 +1147,8 @@ function generator.machines.generate(context)
                 -- burns_fluid == true uses the fluid's fuel_value, otherwise its heat above the default temperature
                 burns_fluid = fluid_burner_prototype.burns_fluid,
                 fluid_filter = (fluid_box.filter) and fluid_box.filter.name or nil,
-                minimum_temperature = fluid_burner_prototype.minimum_input_temperature,
-                maximum_temperature = fluid_burner_prototype.maximum_input_temperature
+                minimum_temperature = minimum_temperature,
+                maximum_temperature = maximum_temperature
             }
 
         elseif proto.electric_energy_source_prototype then

@@ -1,5 +1,6 @@
 -- Runs through Toby's existing native test hook, in an isolated empty world.
 local events = require("__facmandu-assistant__/events").scope("planner-gui-qa")
+local Floor = require("__facmandu-assistant__/planner/backend/data/Floor")
 local listeners = require("__facmandu-assistant__/planner/ui/base/compact_dialog")[2].player
 events.on_nth_tick(1, function()
     if storage.planner_gui_qa_done then return end
@@ -33,8 +34,34 @@ events.on_nth_tick(1, function()
         assert(not legacy.valid and unrelated.valid)
         listeners.on_player_display_resolution_changed(player, {})
         assert(not player.gui.screen[name].visible)
+        local saved = remote.call("facmandu-toby-planner", "create_plan", player.force.name, player.name,
+            "nauvis", "Empty and nested blocks QA", {{name="iron-plate",type="item",machineCount=10}},
+            {{name="iron-plate",machine="stone-furnace"}})
+        local factory = assert(OBJECT_INDEX[saved.planId])
+        local line = factory.top_floor.first
+        local expected = factory.first.amount
+        assert(math.abs(line.machine.amount - 10) < .001)
+        local empty = Floor.init(2, "simplex")
+        assert(empty:set_planning{linked=false, mode="output", inputs={}, products={}})
+        factory.top_floor:insert(empty, line, "previous")
+        assert(not empty:get_defining_line() and not empty:get_status())
+        solver.update(player, factory)
+        assert(math.abs(line.machine.amount - 10) < .001 and math.abs(factory.first.amount - expected) < .001)
+        local outer = Floor.create_subfloor(line)
+        local inner = Floor.create_subfloor(line)
+        assert(outer:get_defining_line() == line and inner:get_defining_line() == line)
+        assert(not inner:check_product_compatibility(empty))
+        solver.update(player, factory)
+        assert(math.abs(line.machine.amount - 10) < .001 and math.abs(factory.first.amount - expected) < .001)
+        local blank = Floor.init(3, "simplex")
+        empty:insert(blank)
+        assert(not empty:get_defining_line() and not empty:get_status())
+        solver.update(player, factory)
+        assert(math.abs(factory.first.amount - expected) < .001)
+        remote.call("facmandu-toby-planner", "open_plan", player.force.name, player.name, saved.planId)
+        lib.gui.run_refresh(player, "all")
         return {passed=true, version=script.active_mods["facmandu-assistant"], displayChanges=14,
-            recoveredOrphan=true, cleanedLegacy=true, preservedOtherGui=true}
+            recoveredOrphan=true, cleanedLegacy=true, preservedOtherGui=true, emptyBlocks=true, nestedBlocks=true, fixedMachines=10}
     end)
     local proof = ok and result or {passed=false, error=tostring(result)}
     helpers.write_file("toby-planner-gui-qa.json", helpers.table_to_json(proof), false)

@@ -13,6 +13,8 @@ test('boiler plans use entity input temperature limits in Factorio 2.1.22', () =
 	const status = lauxlib.luaL_dostring(
 		state,
 		to_luastring(`
+ script={active_mods={base='2.1.22'}}
+ helpers={compare_versions=function(a,b) return a==b and 0 or -1 end}
  local util=(function() ${source} end)()
  local water={name='water',default_temperature=15,max_temperature=100}
  local steam={name='steam',default_temperature=15,max_temperature=500}
@@ -29,6 +31,13 @@ test('boiler plans use entity input temperature limits in Factorio 2.1.22', () =
  boiler.minimum_input_temperature=nil;boiler.maximum_input_temperature=nil
  local unlimited=util.get_boiler_conversions(boiler)[1]
  assert(unlimited.minimum_temperature==15 and unlimited.maximum_temperature==100 and unlimited.goal_temperature==100)
+ script.active_mods.base='2.1.21'
+ input.minimum_temperature=40;input.maximum_temperature=80
+ setmetatable(boiler,{__index=function(_,key)
+  if key=='minimum_input_temperature' or key=='maximum_input_temperature' then error('Unavailable entity member: '..key) end
+ end})
+ local legacy=util.get_boiler_conversions(boiler)[1]
+ assert(legacy.minimum_temperature==40 and legacy.maximum_temperature==80 and legacy.goal_temperature==80)
  `)
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));

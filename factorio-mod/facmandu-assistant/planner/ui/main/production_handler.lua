@@ -24,7 +24,8 @@ end
 ---@param action string
 local function handle_line_recipe_click(player, tags, action)
     local line = OBJECT_INDEX[tags.line_id]  ---@as Line
-    local relevant_line = (line.class == "Floor") and line.first or line
+    local relevant_line = line
+    if line.class == "Floor" then relevant_line = line:get_defining_line() end
 
     if action == "open_subfloor" then
         local new_context = line  ---@as LineObject
@@ -49,7 +50,7 @@ local function handle_line_recipe_click(player, tags, action)
             lib.clipboard.paste(player, line)
         end
 
-    elseif action == "toggle" then
+    elseif action == "toggle" and relevant_line then
         relevant_line.active = not relevant_line.active
         solver.update(player)
         lib.gui.run_refresh(player, "production")
@@ -68,7 +69,7 @@ local function handle_line_recipe_click(player, tags, action)
         solver.update(player)
         lib.gui.run_refresh(player, "production")
 
-    elseif action == "factoriopedia" then
+    elseif action == "factoriopedia" and relevant_line then
         local proto = relevant_line.recipe.proto  ---@as FPRecipePrototype
         player.open_factoriopedia_gui(lib.get_factoriopedia_proto(proto))
     end
@@ -508,8 +509,9 @@ listeners.gui = {
             handler = function(_, tags, _)
                 ---@cast tags CheckmarkLineTags
                 local line = OBJECT_INDEX[tags.line_id]  ---@as Line
-                local relevant_line = (line.class == "Floor") and line.first or line
-                relevant_line.done = not relevant_line.done
+                local relevant_line = line
+                if line.class == "Floor" then relevant_line = line:get_defining_line() end
+                if relevant_line then relevant_line.done = not relevant_line.done end
             end
         }
     },
@@ -520,8 +522,9 @@ listeners.gui = {
                 ---@cast tags LineCommentTags
                 ---@cast event EventData.on_gui_text_changed
                 local line = OBJECT_INDEX[tags.line_id]  ---@as Line
-                local relevant_line = (line.class == "Floor") and line.first or line
-                relevant_line.comment = event.element.text
+                local relevant_line = line
+                if line.class == "Floor" then relevant_line = line:get_defining_line() end
+                if relevant_line then relevant_line.comment = event.element.text end
             end
         }
     }

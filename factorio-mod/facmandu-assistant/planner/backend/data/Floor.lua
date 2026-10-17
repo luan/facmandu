@@ -220,13 +220,22 @@ function Floor:refresh_lines(player)
     return changed
 end
 
+---@return Line?
+function Floor:get_defining_line()
+    local line = self.first
+    while line and line.class == "Floor" do line = line.first end
+    return line
+end
+
 
 ---@param object LineObject
 ---@return boolean compatible
 function Floor:check_product_compatibility(object)
     if self.level == 1 or self.planning then return true end
 
-    local relevant_line = (object.class == "Floor") and object.first or object
+    local relevant_line = object
+    if object.class == "Floor" then relevant_line = object:get_defining_line() end
+    if not relevant_line then return false end
     local recipe = relevant_line.recipe  ---@cast recipe -nil
     local producing = (recipe.production_type == "produce")
 
@@ -300,7 +309,7 @@ end
 --- Returns why this floor doesn't produce anything, or nil if it does
 ---@return FloorStatus?
 function Floor:get_status()
-    if self.first--[[@cast -nil]]:get_status() == "disabled" then return "disabled" end
+    if self.first and self.first:get_status() == "disabled" then return "disabled" end
 
     for line_object in self:iterator() do
         if line_object.class == "Floor" and line_object:get_status() == "solver_error" then return "solver_error" end

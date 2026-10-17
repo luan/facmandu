@@ -106,11 +106,13 @@ function builders.done(line, parent_flow, metadata)
     local first_subfloor_line = (line.parent.level > 1 and line.previous == nil)
     if metadata.fold_out_subfloors and first_subfloor_line then return end
 
-    local relevant_line = (line.class == "Floor") and line.first or line
+    local relevant_line = line
+
+    if line.class == "Floor" then relevant_line = line:get_defining_line() end
     ---@class CheckmarkLineTags
     ---@field line_id ObjectID
     local tags = {mod="toby-planner", on_gui_checked_state_changed="checkmark_line", line_id=line.id}
-    parent_flow.add{type="checkbox", tags=tags, state=relevant_line.done, mouse_button_filter={"left"}}
+    parent_flow.add{type="checkbox", tags=tags, state=relevant_line and relevant_line.done or false, enabled=relevant_line ~= nil, mouse_button_filter={"left"}}
 end
 
 ---@param line_object LineObject
@@ -118,7 +120,8 @@ end
 ---@param metadata ProductionTableMetadata
 ---@param indent integer
 function builders.recipe(line_object, parent_flow, metadata, indent)
-    local relevant_line = (line_object.class == "Floor") and line_object.first or line_object
+    local relevant_line = line_object
+    if line_object.class == "Floor" then relevant_line = line_object:get_defining_line() end
     ---@cast relevant_line Line
 
     parent_flow.style.vertical_align = "center"
@@ -144,7 +147,8 @@ function builders.recipe(line_object, parent_flow, metadata, indent)
         color = "orange"
     end
 
-    local recipe_proto = relevant_line.recipe.proto
+    local recipe_proto = relevant_line and relevant_line.recipe.proto or
+        {localised_name={"toby-planner.pu_floor", 1}, sprite="toby_planner_fold_out_subfloors"}
     local first_line = (note == nil) and {"toby-planner.tt_title", recipe_proto.localised_name}
         or {"toby-planner.tt_title_with_note", recipe_proto.localised_name, note}
     local effects_section = (line_object.class == "Line") and format_effects_tooltip(relevant_line.effects_tooltip) or ""
@@ -155,8 +159,8 @@ function builders.recipe(line_object, parent_flow, metadata, indent)
         defining_recipe = first_subfloor_line,
         archived = metadata.archive_open,
         subfloor = (line_object.class == "Floor"),
-        consuming = (relevant_line.recipe.production_type == "consume"),
-        factoriopedia = (lib.get_factoriopedia_proto(recipe_proto) ~= nil)
+        consuming = relevant_line ~= nil and relevant_line.recipe.production_type == "consume",
+        factoriopedia = relevant_line ~= nil and lib.get_factoriopedia_proto(recipe_proto) ~= nil
     }
     ---@class ActOnLineObjectRecipe
     ---@field line_id ObjectID
@@ -675,12 +679,13 @@ end
 ---@param line LineObject
 ---@param parent_flow LuaGuiElement
 function builders.line_comment(line, parent_flow, _)
-    local relevant_line = (line.class == "Floor") and line.first or line
+    local relevant_line = line
+    if line.class == "Floor" then relevant_line = line:get_defining_line() end
 
     ---@class LineCommentTags
     ---@field line_id ObjectID
     local tags = {mod="toby-planner", on_gui_text_changed="line_comment", line_id=line.id}
-    local textfield_comment = parent_flow.add{type="textfield", tags=tags, text=(relevant_line.comment or "")}
+    local textfield_comment = parent_flow.add{type="textfield", tags=tags, text=(relevant_line and relevant_line.comment or ""), enabled=relevant_line ~= nil}
     textfield_comment.style.width = 250
     textfield_comment.lose_focus_on_confirm = true
 end
