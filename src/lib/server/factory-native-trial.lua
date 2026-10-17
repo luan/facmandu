@@ -1,6 +1,7 @@
 local events=require('events').scope('layout-runner')
 local sandbox=require('sandbox')
 local build=require('pack')
+local build_plan=require('plan-pack')
 local payload=helpers.json_to_table(require('request'))
 local function write(value)
  helpers.write_file('layout-trial.json',helpers.table_to_json(value),false)
@@ -51,7 +52,9 @@ local function context()
  local surface=game.surfaces[payload.request.surface] or game.create_surface(payload.request.surface,{default_enable_all_autoplace_controls=false})
  for name,value in pairs(c.properties) do surface.set_property(name,value) end
  surface.daytime=c.daytime;surface.freeze_daytime=c.freezeDaytime;surface.solar_power_multiplier=c.solarPowerMultiplier
- return build(payload.request)
+ return build(payload.request,function(request,force,surface,entity,pack,crafters)
+  return build_plan(request,force,surface,entity,pack,crafters,payload.plan)
+ end)
 end
 events.on_event(defines.events.on_tick,function(e)
  if storage.finished then return end

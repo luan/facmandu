@@ -95,3 +95,40 @@ test('shared provider output is qualified by total product rate, without relaxin
 	assert.equal(aggregateLogisticsOutputs({ ...measured, status: 'error' }).passed, false);
 	assert.equal(aggregateLogisticsOutputs({ ...measured, error: 'native failure' }).passed, false);
 });
+
+test('an oversupplied fluid destination cannot hide a disconnected one in a logistics plan', () => {
+	const result = aggregateLogisticsOutputs({
+		id: 'fluid-split',
+		status: 'done',
+		passed: false,
+		outputs: [
+			{
+				name: 'water',
+				kind: 'fluid',
+				perMinute: 120,
+				targetPerMinute: 60,
+				met: true,
+				sampleSufficient: true
+			},
+			{
+				name: 'water',
+				kind: 'fluid',
+				perMinute: 0,
+				targetPerMinute: 60,
+				met: false,
+				sampleSufficient: true
+			},
+			{
+				name: 'iron-plate',
+				kind: 'item',
+				perMinute: 10,
+				targetPerMinute: 10,
+				met: true,
+				sampleSufficient: true
+			}
+		]
+	});
+	assert.equal(result.passed, false);
+	assert.equal(result.outputs?.length, 3);
+	assert.equal(result.outputs?.filter((o) => o.kind === 'fluid').length, 2);
+});

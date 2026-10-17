@@ -122,7 +122,13 @@ function fluids.route(p)
   -- placed pieces by tile: {kind = "pipe" | "ug", dir (ug: open side), fluid}
   local placed = {}
   local entities = {}
-  local ugs = {} -- placed pipe-to-ground, for the "nothing between a pair" rule: {x, y, dir}
+  local ug_rows, ug_columns = {}, {} -- sorted committed endpoints by axis
+  local function remember(index, axis, position)
+    local list = index[axis] or {}
+    list[#list + 1] = position
+    table.sort(list)
+    index[axis] = list
+  end
   local function inside(x, y)
     return x >= a[1][1] and y >= a[1][2] and x < a[2][1] and y < a[2][2]
   end
@@ -136,7 +142,7 @@ function fluids.route(p)
         e.direction = piece.dir
       end
       entities[#entities + 1] = e
-      ugs[#ugs + 1] = { x = x, y = y, dir = piece.dir }
+      if piece.dir % 8 == 0 then remember(ug_columns, x, y) else remember(ug_rows, y, x) end
     end
   end
   -- the ports are pipes of their fluid from the start: other fluids keep away from them
@@ -172,22 +178,29 @@ function fluids.route(p)
   local ALL = { [direction.NORTH] = true, [direction.EAST] = true, [direction.SOUTH] = true, [direction.WEST] = true }
   -- would a pipe-to-ground pair from (x1, y1) to (x2, y2) on an axis cross another pair's line, or
   -- would a pipe-to-ground land between another pair? (pairs join with the nearest one in line)
+  local function between(list, first, last)
+    local lo, hi = 1, #(list or {})
+    while lo <= hi do
+      local mid = math.floor((lo + hi) / 2)
+      if list[mid] <= first then lo = mid + 1 else hi = mid - 1 end
+    end
+    return list and list[lo] ~= nil and list[lo] < last
+  end
   local function ug_line_clear(x1, y1, x2, y2, route_ugs)
+    if x1 == x2 and between(ug_columns[x1], math.min(y1, y2), math.max(y1, y2)) then return false end
+    if y1 == y2 and between(ug_rows[y1], math.min(x1, x2), math.max(x1, x2)) then return false end
     for _, u in ipairs(route_ugs) do
-      if x1 == x2 and u.x == x1 and u.y > math.min(y1, y2) and u.y < math.max(y1, y2) then
-        return false
-      end
-      if y1 == y2 and u.y == y1 and u.x > math.min(x1, x2) and u.x < math.max(x1, x2) then
-        return false
-      end
+      if x1 == x2 and u.dir % 8 == 0 and u.x == x1 and u.y > math.min(y1, y2) and u.y < math.max(y1, y2) then return false end
+      if y1 == y2 and u.dir % 8 == 4 and u.y == y1 and u.x > math.min(x1, x2) and u.x < math.max(x1, x2) then return false end
     end
     return true
   end
   local function lands_between_pair(x, y, axis_vertical, route_ugs)
     -- a new pipe-to-ground on the axis of an existing pair, between its ends
-    local lowest, highest
+    local list = axis_vertical and ug_columns[x] or ug_rows[y]
+    local lowest, highest = list and list[1], list and list[#list]
     for _, u in ipairs(route_ugs) do
-      if (axis_vertical and u.x == x) or (not axis_vertical and u.y == y) then
+      if (axis_vertical and u.dir % 8 == 0 and u.x == x) or (not axis_vertical and u.dir % 8 == 4 and u.y == y) then
         local position = axis_vertical and u.y or u.x
         lowest = math.min(lowest or position, position)
         highest = math.max(highest or position, position)
@@ -237,7 +250,10 @@ function fluids.route(p)
       local function h(x, y)
         return math.abs(x - o.x) + math.abs(y - o.y)
       end
-      for _, t in pairs(connected[F]) do
+      local starts = {}
+      for _, t in pairs(connected[F]) do starts[#starts + 1] = t end
+      table.sort(starts, function(u, v) return u.y < v.y or (u.y == v.y and u.x < v.x) end)
+      for _, t in ipairs(starts) do
         local piece = placed[key(t.x, t.y)]
         local id = "s" .. key(t.x, t.y)
         parent[id] = { start = true }
@@ -266,7 +282,6 @@ function fluids.route(p)
         end
         -- Search paths are not committed yet; their own endpoints must stay occupied too.
         local pending, route_ugs = {}, {}
-        for _, u in ipairs(ugs) do route_ugs[#route_ugs + 1] = u end
         local ancestor = cur.id
         while parent[ancestor] and not parent[ancestor].start do
           local step = parent[ancestor]
@@ -415,7 +430,7 @@ function fluids.validate(entities, p, pack)
       local v = vec(u)
       for k2 = 1, piece.reach do
         local n = pieces[key(piece.x + v.x * k2, piece.y + v.y * k2)]
-        if n and n.kind == "ug" then
+        if n and n.kind == "ug" and n.dir % 8 == piece.dir % 8 then
           if n.dir == u then
             local nk = key(n.x, n.y)
             parent[nk] = parent[nk] or nk

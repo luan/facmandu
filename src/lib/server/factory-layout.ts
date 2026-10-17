@@ -4,6 +4,7 @@ import type { ManagedServer } from './db/schema';
 import { blueprintDesignHash, factoryBlueprint } from './factory-blueprints';
 import { compileFactoryLayout } from './factory-layout-compiler';
 import packSource from './factory-layout-pack.lua?raw';
+import planPackSource from './factory-layout-plan-pack.lua?raw';
 import { markCompiledFactory } from './factory-layout-status';
 import { factoryTrialContextSchema } from './factory-native-trial';
 import { luaString } from './factory-query-bundle';
@@ -38,7 +39,8 @@ export async function designFactory(
 		throw new ServerError(409, 'Start the server to read its production rules');
 	const command = `/silent-command local request=helpers.json_to_table(${luaString(JSON.stringify(request))})
 request.trialContext=true
-local ok,result=pcall(function() local build=(function() ${packSource} end)() return build(request) end)
+request.player=${actor ? luaString(actor.name) : 'nil'}
+local ok,result=pcall(function() local build=(function() ${packSource} end)() local plan=(function() ${planPackSource} end)() return build(request,plan) end)
 local reply=helpers.table_to_json(ok and {ok=true,result=result} or {ok=false,error=tostring(result)})
 if #reply>255*1024 then reply=helpers.table_to_json({ok=false,error='Factory snapshot exceeds the RCON frame limit; a paged snapshot is required'}) end
 rcon.print(reply)`;

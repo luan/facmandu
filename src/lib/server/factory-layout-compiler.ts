@@ -4,6 +4,7 @@ import { blueprintDesignSchema } from '$lib/blueprints';
 import { type FactoryLayoutInput, factoryLayoutInput } from '$lib/factory-layout';
 import adapter from './factory-layout-adapter.lua?raw';
 import logistics from './factory-layout-logistics.lua?raw';
+import nativePlan from './factory-layout-plan.lua?raw';
 import source from './factory-layout-worker.lua?raw';
 import { luaString } from './factory-query-bundle';
 import { ServerError } from './server-files';
@@ -53,6 +54,7 @@ export async function compileFactoryLayout(
 	const request = factoryLayoutInput.parse(input);
 	const problem = {
 		logistics: request.logistics,
+		nativePlan: request.nativePlan,
 		area: [
 			[0, 0],
 			[request.width, request.height]
@@ -98,7 +100,7 @@ export async function compileFactoryLayout(
 				.map(([name, body]) => `[ ${luaString(name)} ]=function()\n${body}\nend`)
 				.join(
 					',\n'
-				)}}\nlocal problem=${luaData(problem)}\nlocal pack=${luaData(pack)}\nlocal adapter=function()\nif problem.logistics then\n${logistics}\nend\n${adapter}\nend\n${source}`
+				)}}\nlocal problem=${luaData(problem)}\nlocal pack=${luaData(pack)}\nlocal adapter=function()\nif problem.nativePlan then\n${nativePlan}\nend\nif problem.logistics then\n${logistics}\nend\n${adapter}\nend\n${source}`
 		);
 	});
 	const reply = z
@@ -143,7 +145,7 @@ export async function compileFactoryLayout(
 	const pole = entities.find((entity) => entity.name === request.tiers.pole);
 	if (!pole) throw new ServerError(400, 'Compiler returned no power connection');
 	let sampleSeconds = 120;
-	if (request.logistics) {
+	if (request.logistics && !request.nativePlan) {
 		const recipes = z
 			.object({
 				recipes: z.record(
@@ -181,7 +183,9 @@ export async function compileFactoryLayout(
 			// Compiled blocks use the accelerated headless fixture, including buffer startup.
 			// Slower batch recipes need a separately qualified longer fixture.
 			warmupSeconds:
-				request.logistics && request.inputs.some((p) => p.type === 'fluid') ? 300 : 120,
+				request.nativePlan || (request.logistics && request.inputs.some((p) => p.type === 'fluid'))
+					? 300
+					: 120,
 			seconds: sampleSeconds,
 			power: 'design' as const,
 			powerPosition: { x: Math.floor(pole.position.x), y: Math.floor(pole.position.y) }

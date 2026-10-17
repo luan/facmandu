@@ -10,9 +10,11 @@ require=function(name)
  return loaded[name]
 end
 local instructions=0
+local instruction_limit=problem.nativePlan and 250000000 or 75000000
 hook(function()
  instructions=instructions+10000
- if instructions>75000000 or memory('count')>131072 then error('Factory compiler search/memory budget exhausted',0) end
+ if instructions>instruction_limit then error('Factory compiler search budget exhausted',0) end
+ if memory('count')>131072 then error('Factory compiler memory budget exhausted',0) end
 end,'',10000)
 local function encode(value,depth)
  assert(depth<20,'Compiler result too deeply nested')

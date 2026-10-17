@@ -13,6 +13,7 @@ import sandbox from '../../../factorio-mod/facmandu-assistant/sandbox.lua?raw';
 import type { ManagedServer } from './db/schema';
 import type { compileFactoryLayout } from './factory-layout-compiler';
 import packSource from './factory-layout-pack.lua?raw';
+import planPackSource from './factory-layout-plan-pack.lua?raw';
 import { recordCompiledFactoryTrial } from './factory-layout-status';
 import control from './factory-native-trial.lua?raw';
 import { luaString } from './factory-query-bundle';
@@ -121,6 +122,9 @@ export function testCompiledFactory(
 				};
 				const payload = {
 					request: input.request,
+					plan: input.request.nativePlan
+						? z.object({ plan: z.json() }).parse(input.pack).plan
+						: undefined,
 					context: input.context,
 					test: input.test,
 					blueprint: input.artifact.blueprint,
@@ -141,6 +145,7 @@ export function testCompiledFactory(
 							.replace('number(warmupLimit,0,120)', 'number(warmupLimit,0,300)')
 					),
 					writeFile(join(driver, 'pack.lua'), packSource),
+					writeFile(join(driver, 'plan-pack.lua'), planPackSource),
 					writeFile(join(driver, 'request.lua'), `return ${luaString(JSON.stringify(payload))}`)
 				]);
 				const output = join(directory, 'write', 'script-output');

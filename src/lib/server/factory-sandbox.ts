@@ -93,8 +93,8 @@ export const sandboxResultSchema = trialResultSchema.transform((result) => {
 	};
 });
 
-// Provider inventories serve a shared product target; fixed belt destinations
-// retain their individual targets through sandboxResultSchema.
+// Provider inventories share a product target. Fluid destinations must each
+// receive their declared rate; an oversupplied pipe cannot hide a disconnected one.
 export function aggregateLogisticsOutputs(value: unknown) {
 	const result = trialResultSchema.parse(value);
 	if (result.status !== 'done' || result.error || !result.outputs?.length)
@@ -111,7 +111,9 @@ export function aggregateLogisticsOutputs(value: unknown) {
 			met: boolean;
 		}
 	>();
+	const fluids = result.outputs.filter((endpoint) => endpoint.kind === 'fluid');
 	for (const endpoint of result.outputs) {
+		if (endpoint.kind === 'fluid') continue;
 		const name = z.string().min(1).parse(endpoint.name);
 		const kind = z.enum(['item', 'fluid']).parse(endpoint.kind);
 		const key = JSON.stringify([name, kind]);
@@ -133,14 +135,19 @@ export function aggregateLogisticsOutputs(value: unknown) {
 	const grouped = [...outputs.values()];
 	for (const output of grouped)
 		output.met = output.sampleSufficient && output.perMinute >= output.targetPerMinute * 0.95;
-	const passed = grouped.every((output) => output.met);
+	const destinations = [...grouped, ...fluids];
+	const passed = destinations.every(
+		(output) =>
+			output.sampleSufficient !== false && output.perMinute >= output.targetPerMinute * 0.95
+	);
+
 	return sandboxResultSchema.parse({
 		...result,
-		outputs: grouped,
+		outputs: destinations,
 		passed,
 		verdict: passed
 			? 'passed'
-			: grouped.some((o) => !o.sampleSufficient)
+			: destinations.some((o) => o.sampleSufficient === false)
 				? 'inconclusive'
 				: 'below_target'
 	});

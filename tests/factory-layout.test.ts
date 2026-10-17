@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { z } from 'zod';
@@ -551,5 +552,132 @@ test('fluid-fed logistics arrays fit slow recipes without a single oversized mac
 			modules
 		),
 		/Insufficient declared fluid supply/
+	);
+});
+
+test('perpendicular underground pipe endpoints preserve both native fluid networks', () => {
+	const result = spawnSync('lua', ['-'], {
+		encoding: 'utf8',
+		input: `
+ package.path='src/lib/server/vendor/interpose/?.lua;'..package.path
+ local fluids=require('engine.fluids')
+ local pack={pipes={pipe={},['pipe-to-ground']={underground=10}}}
+ local entities={
+  {name='pipe',position={x=-.5,y=.5}},
+  {name='pipe-to-ground',position={x=.5,y=.5},direction=12},
+  {name='pipe-to-ground',position={x=4.5,y=.5},direction=4},
+  {name='pipe',position={x=5.5,y=.5}},
+  {name='pipe',position={x=2.5,y=-.5}},
+  {name='pipe-to-ground',position={x=2.5,y=.5},direction=0},
+  {name='pipe-to-ground',position={x=2.5,y=4.5},direction=8},
+  {name='pipe',position={x=2.5,y=5.5}}
+ }
+ local problem,issues=fluids.load({area={{-2,-2},{7,7}},inputs={
+  {fluid='water',position={x=-.5,y=.5}},{fluid='crude-oil',position={x=2.5,y=-.5}}},
+ outputs={{fluid='water',position={x=5.5,y=.5}},{fluid='crude-oil',position={x=2.5,y=5.5}}}},pack)
+ assert(problem and #issues==0)
+ assert(fluids.validate(entities,problem,pack).ok)
+ entities[3].direction=12
+ assert(not fluids.validate(entities,problem,pack).ok,'A same-facing pair must remain disconnected')
+ `
+	});
+	assert.equal(result.status, 0, result.stderr);
+});
+
+const chainPack = z
+	.json()
+	.parse(JSON.parse(readFileSync('tests/fixtures/interpose/rocket-chain-2.1.21.json', 'utf8')));
+const chainRequest = factoryLayoutInput.parse({
+	force: 'player',
+	surface: 'vulcanus',
+	label: 'Rocket fuel \u2014 complete current-tech fluid chain',
+	nativePlan: true,
+	width: 100,
+	height: 100,
+	inputs: [
+		{ item: 'iron-plate', perMinute: 120 },
+		{ item: 'calcite', perMinute: 207 },
+		{ item: 'sulfuric-acid', type: 'fluid', perMinute: 20667 },
+		{ item: 'heavy-oil', type: 'fluid', perMinute: 4800 }
+	],
+	outputs: [{ item: 'rocket-fuel', perMinute: 120 }],
+	recipes: [
+		'rocket-fuel',
+		'heavy-oil-cracking',
+		'kr-water-separation',
+		'steam-condensation',
+		'acid-neutralisation',
+		'kr-burn-kr-hydrogen'
+	],
+	logistics: { requester: 'requester-chest', provider: 'passive-provider-chest' },
+	tiers: {
+		machine: 'kr-fuel-refinery',
+		crafters: ['chemical-plant', 'kr-electrolysis-plant'],
+		furnace: 'kr-flare-stack',
+		belt: 'transport-belt',
+		underground: 'underground-belt',
+		inserter: 'fast-inserter',
+		splitter: 'splitter',
+		pipe: 'pipe',
+		pipe_underground: 'pipe-to-ground',
+		pole: 'medium-electric-pole'
+	}
+});
+
+test('native fluid plans compile all production and disposal stages within a bounded block', async () => {
+	const compiled = await compileFactoryLayout(chainRequest, chainPack, modules);
+	assert.deepEqual(await compileFactoryLayout(chainRequest, chainPack, modules), compiled);
+	assert.deepEqual(
+		compiled.steps.map(({ recipe, machines }) => [recipe, machines]),
+		[
+			['rocket-fuel', 32],
+			['heavy-oil-cracking', 4],
+			['kr-water-separation', 15],
+			['steam-condensation', 4],
+			['acid-neutralisation', 2],
+			['kr-burn-kr-hydrogen', 3]
+		]
+	);
+	assert.equal(compiled.design.entities.filter((e) => e.name === 'kr-flare-stack').length, 3);
+	assert.ok(compiled.design.entities.length <= 1000);
+	assert.ok(
+		compiled.design.entities.every(
+			(e) => e.position.x >= 0 && e.position.x < 100 && e.position.y >= 0 && e.position.y < 100
+		)
+	);
+	assert.equal(
+		factoryLayoutInput.safeParse({
+			...chainRequest,
+			inputs: [...chainRequest.inputs, { item: 'heavy-oil', type: 'fluid', perMinute: 4800 }]
+		}).success,
+		false
+	);
+	assert.equal(compiled.test.warmupSeconds, 300);
+	assert.deepEqual(compiled.inputs.map((p) => p.item).sort(), [
+		'calcite',
+		'heavy-oil',
+		'iron-plate',
+		'sulfuric-acid'
+	]);
+	assert.equal(
+		compiled.test.outputs.reduce((sum, p) => sum + p.perMinute, 0),
+		120
+	);
+	assert.ok(compiled.test.inputs.every((p) => p.name !== 'kr-oxygen' && p.name !== 'water'));
+	assert.ok(compiled.design.wires.length > 0);
+	await assert.rejects(
+		compileFactoryLayout(
+			{ ...chainRequest, inputs: chainRequest.inputs.map((p) => ({ ...p, perMinute: 1 })) },
+			chainPack,
+			modules
+		),
+		/Insufficient native plan supply/
+	);
+	assert.equal(
+		factoryLayoutInput.safeParse({
+			...chainRequest,
+			tiers: { ...chainRequest.tiers, pipe: undefined }
+		}).success,
+		false
 	);
 });

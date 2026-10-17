@@ -1,6 +1,6 @@
 -- Read only the requested force's current recipes and entity tiers. No stock,
--- research, player, surface or world state is changed by this adapter.
-return function(request)
+-- research or inventory stock is changed. Native planning uses a temporary plan.
+return function(request,build_plan)
  local force=assert(game.forces[request.force],'Unknown force')
  local surface=assert(game.surfaces[request.surface],'Unknown surface')
  assert(not surface.platform,'Platform layouts are not yet qualified by the factory compiler')
@@ -41,7 +41,7 @@ return function(request)
  local crafters={}
  local function add_crafter(p)
   if pack.machines[p.name] then return end
-  assert(not p.burner_prototype and p.electric_energy_source_prototype,'Factory compiler requires electric crafting machines')
+  assert(not p.burner_prototype and (p.electric_energy_source_prototype or p.void_energy_source_prototype),'Factory compiler requires electric or void-powered crafting machines')
   crafters[#crafters+1]=p
   pack.machines[p.name]={crafting_speed=p.get_crafting_speed(),categories=keys(p.crafting_categories),size=size(p)}
  end
@@ -81,6 +81,9 @@ return function(request)
  end
  local pole=entity(tiers.pole,'electric-pole')
  pack.poles[pole.name]={size=size(pole),supply=pole.get_supply_area_distance(),reach=pole.get_max_wire_distance()}
+ if request.nativePlan then
+  assert(build_plan,'Native plan compiler is unavailable')(request,force,surface,entity,pack,crafters)
+ else
  for _,name in ipairs(request.recipes) do
   local recipe=assert(force.recipes[name],'Unknown recipe: '..name)
   assert(recipe.enabled,'Recipe is locked: '..name)
@@ -146,6 +149,7 @@ return function(request)
   end
   pack.recipes[name]={category=category,time=recipe.energy,ingredients=ingredients,results=results,fluid_inputs=fluid_inputs}
   if #(tiers.crafters or {})>0 then pack.recipes[name].machine=crafter.name end
+ end
  end
  if request.trialContext then
   local technologies,enabled,disabled,properties,modifiers,runtimeSettings={},{},{},{},{},{}

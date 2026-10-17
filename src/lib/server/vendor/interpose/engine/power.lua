@@ -166,15 +166,16 @@ function power.cover(entities, pack, opts)
       end
     end
   end
-  local function linked(t, c)
-    if #placed == 0 then
-      return true
-    end
-    for _, p in ipairs(placed) do
-      if wired(t.reach, c, p.t.reach, p.c) then
+  local function linked(candidate)
+    if #placed == 0 or candidate.linked then return true end
+    for i = candidate.checked + 1, #placed do
+      local p = placed[i]
+      if wired(candidate.t.reach, candidate.c, p.t.reach, p.c) then
+        candidate.linked = true
         return true
       end
     end
+    candidate.checked = #placed
     return false
   end
   -- the layout's own poles first (types not allowed now are still poles: take them as they are)
@@ -182,7 +183,20 @@ function power.cover(entities, pack, opts)
     local p = pack.poles[f.name]
     place({ name = f.name, size = p.size[1], supply = p.supply, reach = p.reach }, f.x, f.y, true)
   end
-  -- every candidate in a fixed order (types by supply, then y, then x): deterministic
+  -- Coverage is fixed; only occupied tiles and connectivity change as poles are
+  -- added. Keep the original type/y/x ordering for deterministic greedy ties.
+  local candidates = {}
+  for _, t in ipairs(types) do
+    for y = a[1][2], a[2][2] - t.size do
+      for x = a[1][1], a[2][1] - t.size do
+        if free(t, x, y) then
+          local c, coverage = centre(t, x, y), {}
+          for i, box in ipairs(needs) do if supplies(t, c, box) then coverage[#coverage + 1] = i end end
+          candidates[#candidates + 1] = {t=t, x=x, y=y, c=c, coverage=coverage, checked=0}
+        end
+      end
+    end
+  end
   local guard = 0
   while #types > 0 do
     guard = guard + 1
@@ -191,24 +205,11 @@ function power.cover(entities, pack, opts)
       break
     end
     local best, best_n
-    for _, t in ipairs(types) do
-      for y = a[1][2], a[2][2] - t.size do
-        for x = a[1][1], a[2][1] - t.size do
-          if free(t, x, y) then
-            local c = centre(t, x, y)
-            if linked(t, c) then
-              local n = 0
-              for _, i in ipairs(todo) do
-                if supplies(t, c, needs[i]) then
-                  n = n + 1
-                end
-              end
-              if n > 0 and (not best_n or n > best_n) then
-                best, best_n = { t = t, x = x, y = y }, n
-              end
-            end
-          end
-        end
+    for _, candidate in ipairs(candidates) do
+      if free(candidate.t, candidate.x, candidate.y) and linked(candidate) then
+        local n = 0
+        for _, i in ipairs(candidate.coverage) do if not powered[i] then n = n + 1 end end
+        if n > 0 and (not best_n or n > best_n) then best, best_n = candidate, n end
       end
     end
     if not best then
@@ -220,17 +221,11 @@ function power.cover(entities, pack, opts)
         here = math.min(here, (p.c.x - tx) ^ 2 + (p.c.y - ty) ^ 2)
       end
       local best_d
-      for _, t in ipairs(types) do
-        for y = a[1][2], a[2][2] - t.size do
-          for x = a[1][1], a[2][1] - t.size do
-            if free(t, x, y) then
-              local c = centre(t, x, y)
-              local d = (c.x - tx) ^ 2 + (c.y - ty) ^ 2
-              if d < here and (not best_d or d < best_d) and linked(t, c) then
-                best, best_d = { t = t, x = x, y = y }, d
-              end
-            end
-          end
+      for _, candidate in ipairs(candidates) do
+        if free(candidate.t, candidate.x, candidate.y) then
+          local c = candidate.c
+          local d = (c.x - tx) ^ 2 + (c.y - ty) ^ 2
+          if d < here and (not best_d or d < best_d) and linked(candidate) then best, best_d = candidate, d end
         end
       end
       if not best then

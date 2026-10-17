@@ -22,7 +22,7 @@ const port = z.strictObject({
 	perMinute: z.number().min(0.01).max(60000)
 });
 
-// Fluid outputs, platforms and modules need qualified templates before enabling them.
+// Platforms and modules need qualified templates before enabling them.
 export const factoryLayoutInput = z
 	.strictObject({
 		force: name,
@@ -33,6 +33,7 @@ export const factoryLayoutInput = z
 		inputs: z.array(port).min(1).max(12),
 		outputs: z.array(port).min(1).max(6),
 		recipes: z.array(name).min(1).max(64),
+		nativePlan: z.boolean().default(false),
 		logistics: z.strictObject({ requester: name, provider: name }).optional(),
 		tiers: z.strictObject({
 			machine: name,
@@ -70,25 +71,54 @@ export const factoryLayoutInput = z
 		}))
 	}))
 	.superRefine((request, ctx) => {
-		if (request.logistics && (request.recipes.length !== 1 || request.outputs.length !== 1))
+		if (
+			!request.nativePlan &&
+			request.logistics &&
+			(request.recipes.length !== 1 || request.outputs.length !== 1)
+		)
 			ctx.addIssue({
 				code: 'custom',
 				message:
 					'Logistics cells use one recipe with external supplies; use separate cells for intermediates'
 			});
-		if (request.outputs.some((port) => port.type === 'fluid'))
+		if (!request.nativePlan && request.outputs.some((port) => port.type === 'fluid'))
 			ctx.addIssue({
 				code: 'custom',
 				message: 'Fluid-output production needs a qualified template'
 			});
+		if (request.nativePlan && request.recipes.length > 24)
+			ctx.addIssue({ code: 'custom', message: 'Native plans support at most 24 selected recipes' });
 		if (
-			request.inputs.some((port) => port.type === 'fluid') &&
+			request.nativePlan &&
+			[...request.inputs, ...request.outputs].some((p) => p.type !== 'fluid') &&
+			!request.logistics
+		)
+			ctx.addIssue({
+				code: 'custom',
+				message: 'Native plan item supplies require requester/provider chests'
+			});
+		if (
+			(request.nativePlan || request.inputs.some((port) => port.type === 'fluid')) &&
 			(!request.tiers.pipe || !request.tiers.pipe_underground)
 		)
 			ctx.addIssue({
 				code: 'custom',
-				message: 'Fluid inputs require pipe and pipe_underground tiers'
+				message: 'Fluid plans require pipe and pipe_underground tiers'
 			});
+		if (request.nativePlan) {
+			for (const ports of [request.inputs, request.outputs]) {
+				const products = new Set<string>();
+				for (const port of ports) {
+					const product = `${port.type ?? 'item'}/${port.item}`;
+					if (products.has(product))
+						ctx.addIssue({
+							code: 'custom',
+							message: 'Native plans require one budget per product'
+						});
+					products.add(product);
+				}
+			}
+		}
 		const occupied = new Set<string>();
 		for (const port of [...request.inputs, ...request.outputs]) {
 			const tile = `${port.position.x},${port.position.y}`;
