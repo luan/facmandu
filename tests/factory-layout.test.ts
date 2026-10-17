@@ -528,6 +528,7 @@ test('fluid-fed logistics arrays fit slow recipes without a single oversized mac
 	});
 	const compiled = await compileFactoryLayout(input, native, modules);
 	assert.deepEqual(compiled.steps, [{ recipe: 'rocket-fuel', machines: 32, perMinute: 120 }]);
+	assert.equal(compiled.test.seconds, 112);
 	assert.equal(compiled.design.entities.filter((e) => e.name === 'kr-fuel-refinery').length, 32);
 	assert.deepEqual(
 		compiled.test.inputs.filter((p) => p.kind === 'fluid').map((p) => [p.name, p.perMinute]),

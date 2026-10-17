@@ -142,6 +142,24 @@ export async function compileFactoryLayout(
 			});
 	const pole = entities.find((entity) => entity.name === request.tiers.pole);
 	if (!pole) throw new ServerError(400, 'Compiler returned no power connection');
+	let sampleSeconds = 120;
+	if (request.logistics) {
+		const recipes = z
+			.object({
+				recipes: z.record(
+					z.string(),
+					z.object({ results: z.array(z.object({ amount: z.number().positive() })).min(1) })
+				)
+			})
+			.parse(pack).recipes;
+		const batch = recipes[request.recipes[0]].results[0].amount;
+		const cycle = (60 * batch * report.steps[0].machines) / request.outputs[0].perMinute;
+		const duration = Math.floor(120 / cycle + 1e-9) * cycle;
+		// Observe whole supply cycles, with at least three batches per cell. A
+		// partial last cycle can reject a working slow array through sampling alone.
+		if (cycle <= 40 && Math.abs(duration - Math.round(duration)) < 1e-6)
+			sampleSeconds = Math.round(duration);
+	}
 	return {
 		design: blueprintDesignSchema.parse({
 			force: request.force,
@@ -159,7 +177,7 @@ export async function compileFactoryLayout(
 			// Compiled blocks use the accelerated headless fixture, including buffer startup.
 			// Slower batch recipes need a separately qualified longer fixture.
 			warmupSeconds: 120,
-			seconds: 120,
+			seconds: sampleSeconds,
 			power: 'design' as const,
 			powerPosition: { x: Math.floor(pole.position.x), y: Math.floor(pole.position.y) }
 		}
