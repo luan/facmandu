@@ -60,7 +60,7 @@ export const blueprintEntitySchema = z.strictObject({
 									type: z.literal('item'),
 									quality: name,
 									comparator: z.literal('='),
-									count: z.number().int().positive()
+									count: z.number().int().nonnegative()
 								})
 							)
 							.max(100)

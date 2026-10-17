@@ -1,6 +1,17 @@
 local engine = require('engine.init')
 local fraction = engine.fraction
-if #(problem.tiers.crafters or {})>0 then
+if problem.layout.spacing=='spacious' then engine.rows.GAP=engine.rows.GAP+3;engine.rows.MACHINE_GAP=1 end
+if problem.inserters then
+ local arm=assert(pack.inserters[problem.tiers.inserter])
+ local _,input=options.arm(arm,problem.inserters.input)
+ local _,output=options.arm(arm,problem.inserters.output)
+ engine.rows.INPUT_SETTINGS=input;engine.rows.OUTPUT_SETTINGS=output
+end
+local solver=require('engine.solve')
+if problem.layout.shape=='tall' then solver.TURNS={'rot90','rot270'}
+elseif problem.layout.shape=='wide' then solver.TURNS={'identity','rot180'}
+end
+if #(problem.tiers.crafters or {})>0 or problem.fixedPlan then
  -- Ratios use a unit-speed scheduler; row geometry always uses the real crafter.
  local categories={}
  for _,recipe in pairs(pack.recipes) do
@@ -18,6 +29,34 @@ if #(problem.tiers.crafters or {})>0 then
   local name=data.recipes[step.recipe].machine
   return assert(data.machines[name] or data.furnaces[name]),name
  end
+end
+if problem.fixedPlan then
+ local native=assert(pack.plan,'Layout requires the planner snapshot')
+ local fixed={steps={},inputs={},warnings={},machine=problem.tiers.machine,crafting_speed=1}
+ for _,line in ipairs(native.lines) do if line.active~=false and line.machines>0.000001 then
+  local recipe=assert(pack.recipes[line.recipe]);assert(#recipe.results==1 and recipe.results[1].type=='item','This belt template needs one solid product per stage')
+  local product=recipe.results[1].name;local rate=0
+  for _,part in ipairs(line.products) do if part.type=='item' and part.name==product then rate=part.perMinute/60 end end
+  fixed.steps[#fixed.steps+1]={recipe=line.recipe,item=product,rate=fraction.from(rate),machines=math.ceil(line.machines-0.000000001),machines_exact=fraction.from(line.machines),depth=0}
+ end end
+ for _,part in ipairs(native.ingredients) do if part.type=='item' and part.perMinute>0 then fixed.inputs[#fixed.inputs+1]={item=part.name,rate=fraction.from(part.perMinute/60)} end end
+ engine.ratios.solve=function() return fixed,{} end
+ -- Routing may not duplicate a saved machine row to work around capacity limits.
+ solver.copies_for=function(p,pack)
+  if problem.layout.shape~='square' then return 1 end
+  local best,score=1,nil
+  for copies=1,3 do
+   local exact=true for _,step in ipairs(fixed.steps) do if step.machines%copies~=0 then exact=false end end
+   if exact then
+    local candidate=engine.rows.place(copies>1 and engine.rows.split(fixed,copies) or fixed,p,pack)
+    if candidate then local delta=math.abs(candidate.size[1]-candidate.size[2])
+     if not score or delta<score then best,score=copies,delta end
+    end
+   end
+  end
+  return best
+ end
+ engine.rows.EXACT_MACHINES=true
 end
 local directions={[0]={0,-1},[4]={1,0},[8]={0,1},[12]={-1,0}}
 for _,output in ipairs(problem.outputs) do
@@ -69,7 +108,7 @@ for _,step in ipairs(solved.plan.steps) do
 end
 for _,entity in ipairs(solved.blueprint.blueprint.entities) do
  local port=entity.name==engine.blueprint.INPUT_PORT or entity.name==engine.blueprint.OUTPUT_PORT
- local row={name=port and problem.tiers.belt or entity.name,position=entity.position,direction=entity.direction or 0,recipe=entity.recipe,type=entity.type}
+ local row={name=port and problem.tiers.belt or entity.name,position=entity.position,direction=entity.direction or 0,recipe=entity.recipe,type=entity.type,pickup_position=entity.pickup_position,drop_position=entity.drop_position}
  local recipe=row.recipe and pack.recipes[row.recipe]
  if recipe and #(recipe.fluid_inputs or {})>0 then row.direction=4 end
  if pack.furnaces[row.name] then row.recipe=nil end

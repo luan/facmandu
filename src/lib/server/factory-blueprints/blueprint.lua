@@ -21,33 +21,6 @@ local function dimensions(p, direction)
  if direction==4 or direction==12 then w,h=h,w end
  return w,h
 end
-local function custom_inserter_range(force,p)
- if p.type~='inserter' or not script or not script.active_mods or not script.active_mods.Smart_Inserters then return nil end
- local function setting(name) return settings.startup[name] and settings.startup[name].value end
- local maximum,mode=setting('si-max-inserters-range'),setting('si-range-adder')
- if type(maximum)~='number' or type(mode)~='string' then error('Smart Inserters range settings are unavailable',0) end
- local function distance(v)
-  return math.max(math.abs(math.floor((v.x or v[1])+0.5)),math.abs(math.floor((v.y or v[2])+0.5)))
- end
- local footprint=(math.max(p.tile_width,p.tile_height)-1)/2
- local native=math.max(distance(p.inserter_pickup_position),distance(p.inserter_drop_position))-footprint
- local minimum=1
- if mode=='inserter' or mode=='inserter-with-rebase' then maximum=native
- elseif mode=='incremental' or mode=='incremental-with-rebase' then maximum=maximum+native
- elseif mode~='equal' and mode~='rebase' then error('Unknown Smart Inserters range mode',0) end
- if mode=='rebase' or mode=='incremental-with-rebase' or mode=='inserter-with-rebase' then minimum=native end
- local increment=5
- if setting('si-range-technologies') then
-  increment=0
-  for level=5,1,-1 do
-   local tech=force.technologies['si-unlock-range-'..level]
-   if tech and tech.researched and not tech.prototype.hidden then increment=level;break end
-  end
- end
- -- Match Smart Inserters 2.1 range settings and researched reach. Other mods need
- -- their own documented range API; native allow_custom_vectors alone has no cap.
- return math.min(maximum,minimum+increment)+footprint
-end
 local function can_request_ghost(force,surface,entity,position,box,offset)
  -- Manual placement permits fast replacement; requesting ghosts must preserve obstacles.
  if surface.can_place_entity{name=entity.name,position=position,direction=entity.direction,force=force,build_check_type=defines.build_check_type.ghost_revive} then return true end
@@ -330,7 +303,7 @@ local function blueprint(request,territories)
   if e.type and not directional_type then error('Entity '..i..' '..e.name..': input/output type is only valid for underground belts and loaders. Clear the retained setting using program: design.entities['..i..'].type=nil; return design',0) end
   if directional_type and not e.type then error('Entity '..i..' '..e.name..': specify type="input" or type="output" for this underground belt or loader',0) end
   if (e.pickup_position or e.drop_position or e.use_filters~=nil or e.filter_mode or e.override_stack_size) and p.type~='inserter' then error('Inserter settings require an inserter',0) end
-  if e.request_filters and (p.type~='logistic-container' or p.logistic_mode~='requester' and p.logistic_mode~='buffer') then error('Logistic requests require a requester or buffer chest',0) end
+  if e.request_filters and (p.type~='logistic-container' or p.logistic_mode~='requester' and p.logistic_mode~='buffer' and p.logistic_mode~='storage') then error('Logistic sections require a requester, buffer or storage chest',0) end
   if e.bar and p.type~='container' and p.type~='logistic-container' then error('Inventory limits require a chest',0) end
   local reach=custom_inserter_range(force,p)
   if reach then

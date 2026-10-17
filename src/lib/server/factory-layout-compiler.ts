@@ -1,9 +1,10 @@
 import { spawn } from 'node:child_process';
 import { z } from 'zod';
 import { blueprintDesignSchema } from '$lib/blueprints';
-import { type FactoryLayoutInput, factoryLayoutInput } from '$lib/factory-layout';
+import { type FactoryLayoutJob, factoryLayoutJobInput } from '$lib/factory-layout';
 import adapter from './factory-layout-adapter.lua?raw';
 import logistics from './factory-layout-logistics.lua?raw';
+import options from './factory-layout-options.lua?raw';
 import nativePlan from './factory-layout-plan.lua?raw';
 import source from './factory-layout-worker.lua?raw';
 import { luaString } from './factory-query-bundle';
@@ -46,15 +47,18 @@ function luaData(value: unknown): string {
 }
 
 export async function compileFactoryLayout(
-	input: FactoryLayoutInput,
+	input: FactoryLayoutJob,
 	pack: z.infer<ReturnType<typeof z.json>>,
 	modules: Record<string, string>,
 	signal?: AbortSignal
 ) {
-	const request = factoryLayoutInput.parse(input);
+	const request = factoryLayoutJobInput.parse(input);
 	const problem = {
 		logistics: request.logistics,
+		layout: request.layout,
+		inserters: request.inserters,
 		nativePlan: request.nativePlan,
+		fixedPlan: request.fixedPlan,
 		area: [
 			[0, 0],
 			[request.width, request.height]
@@ -100,7 +104,7 @@ export async function compileFactoryLayout(
 				.map(([name, body]) => `[ ${luaString(name)} ]=function()\n${body}\nend`)
 				.join(
 					',\n'
-				)}}\nlocal problem=${luaData(problem)}\nlocal pack=${luaData(pack)}\nlocal adapter=function()\nif problem.nativePlan then\n${nativePlan}\nend\nif problem.logistics then\n${logistics}\nend\n${adapter}\nend\n${source}`
+				)}}\nlocal problem=${luaData(problem)}\nlocal pack=${luaData(pack)}\nlocal options=(function()\n${options}\nend)()\nlocal adapter=function()\nif problem.nativePlan then\n${nativePlan}\nend\nif problem.logistics then\n${logistics}\nend\n${adapter}\nend\n${source}`
 		);
 	});
 	const reply = z
@@ -111,6 +115,34 @@ export async function compileFactoryLayout(
 		.parse(JSON.parse(raw));
 	if (!reply.ok) throw new ServerError(400, reply.error);
 	const { entities, wires, ...report } = reply.result;
+	if (request.fixedPlan) {
+		const plan = z
+			.object({
+				plan: z.object({
+					lines: z.array(
+						z.object({
+							recipe: z.string(),
+							machine: z.string(),
+							machines: z.number().nonnegative()
+						})
+					)
+				})
+			})
+			.parse(pack).plan;
+		const expected = new Map<string, number>();
+		for (const line of plan.lines)
+			expected.set(
+				line.machine,
+				(expected.get(line.machine) ?? 0) + Math.ceil(line.machines - 1e-9)
+			);
+		for (const [machine, count] of expected) {
+			if (entities.filter((entity) => entity.name === machine).length !== count)
+				throw new ServerError(
+					400,
+					`Layout changed the saved count for ${machine}; plan was not modified`
+				);
+		}
+	}
 	const endpoints = (kind: 'input' | 'output') =>
 		report.ports
 			.filter((port) => port.kind === kind)
@@ -124,6 +156,7 @@ export async function compileFactoryLayout(
 					return {
 						entity: port.entity,
 						kind: source.type ?? ('item' as const),
+						temperature: source.type === 'fluid' ? source.temperature : undefined,
 						name: port.item,
 						perMinute: port.perMinute
 					};
@@ -138,6 +171,7 @@ export async function compileFactoryLayout(
 				return {
 					entity: port.entity,
 					kind: source.type ?? ('item' as const),
+					temperature: source.type === 'fluid' ? source.temperature : undefined,
 					name: port.item,
 					perMinute: source.perMinute
 				};
@@ -183,7 +217,11 @@ export async function compileFactoryLayout(
 			// Compiled blocks use the accelerated headless fixture, including buffer startup.
 			// Slower batch recipes need a separately qualified longer fixture.
 			warmupSeconds:
-				request.nativePlan || (request.logistics && request.inputs.some((p) => p.type === 'fluid'))
+				request.tiers.pipe &&
+				entities.some(
+					(entity) =>
+						entity.name === request.tiers.pipe || entity.name === request.tiers.pipe_underground
+				)
 					? 300
 					: 120,
 			seconds: sampleSeconds,

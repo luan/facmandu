@@ -1,10 +1,9 @@
 -- Read a solved native plan; model input never supplies machine counts or geometry.
 return function(request,force,surface,entity,pack,crafters,frozen_plan)
- assert(remote.interfaces['facmandu-toby-planner'],'Native plan construction requires Toby production planning')
- local actor=request.player and game.get_player(request.player) or force.players[1]
- assert(frozen_plan or (actor and actor.force==force),'Join this force once to initialize native production planning')
- assert(request.tiers.pipe and request.tiers.pipe_underground,'Native fluid plans require pipe tiers')
- local rows,temperatures={},{}
+ assert(frozen_plan,'Layout requires a solved plan from the planner')
+
+ local temperatures={}
+ for _,port in ipairs(request.inputs) do if port.type=='fluid' and port.temperature then temperatures[port.item]=port.temperature end end
  for _,name in ipairs(request.recipes) do
   local recipe=assert(force.recipes[name],'Unknown recipe: '..name)
   assert(recipe.enabled,'Recipe is locked: '..name)
@@ -15,6 +14,7 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
   end end
  end
  local function ports(crafter,parts,kind,allow_ends)
+  assert(#parts==0 or (request.tiers.pipe and request.tiers.pipe_underground),'Saved fluid stages require pipe tiers')
   assert(crafter.tile_width==crafter.tile_height,'Native fluid cells require square machines: '..crafter.name)
   local boxes={}
   for _,box in pairs(crafter.fluidbox_prototypes or {}) do if box.production_type==kind then boxes[#boxes+1]=box end end
@@ -44,24 +44,23 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
    local value=surface.get_property(condition.property)
    assert(not (condition.min and value<condition.min or condition.max and value>condition.max),'Recipe cannot run on this surface: '..name)
   end
-  local crafter
-  for _,candidate in ipairs(crafters) do
-   for _,category in ipairs(recipe.categories) do if candidate.crafting_categories[category] and (not candidate.fixed_recipe or candidate.fixed_recipe.name==name) then crafter=candidate;break end end
-   if crafter then break end
-  end
-  if not crafter and request.tiers.furnace then
-   local candidate=prototypes.entity[request.tiers.furnace]
-   for _,category in ipairs(recipe.categories) do if candidate.crafting_categories[category] and (not candidate.fixed_recipe or candidate.fixed_recipe.name==name) then crafter=candidate;break end end
-  end
+  local selected
+  for _,line in ipairs(frozen_plan.lines) do if line.recipe==name then
+   assert(not selected or selected==line.machine,'Split recipe lines using different machines into separate layout blocks')
+   selected=line.machine
+  end end
+  local crafter=selected and prototypes.entity[selected]
+  assert(crafter and (pack.machines[selected] or pack.furnaces[selected]),'Saved machine is unavailable: '..tostring(selected))
+  local compatible=false for _,category in ipairs(recipe.categories) do if crafter.crafting_categories[category] then compatible=true end end
+  assert(compatible,'Saved machine cannot craft '..name)
   assert(crafter,'No selected machine can craft '..name)
   assert(not crafter.fixed_recipe or crafter.fixed_recipe.name==name,'Machine has a different fixed recipe: '..name)
   local ingredients,results,fluid_in,fluid_out={},{},{},{}
-  local row={name=name,machine=crafter.name,quality='normal',modules={},beacon=false,temperatures={},productionType=#recipe.products==0 and 'consume' or 'produce'}
   for _,part in pairs(recipe.ingredients) do
    if part.type=='fluid' then
     local temperature=temperatures[part.name] or prototypes.fluid[part.name].default_temperature
+    for _,line in ipairs(frozen_plan.lines) do if line.recipe==name and line.temperatures and line.temperatures[part.name] then assert(line.temperatures[part.name]==temperature,'Saved fluid temperature does not match its supply: '..part.name) end end
     assert(not (part.minimum_temperature and temperature<part.minimum_temperature or part.maximum_temperature and temperature>part.maximum_temperature),'Missing temperature-compatible supply: '..part.name)
-    row.temperatures[part.name]=temperature
     fluid_in[#fluid_in+1]={name=part.name,amount=part.amount,index=part.fluidbox_index}
    else ingredients[#ingredients+1]={type='item',name=part.name,amount=part.amount} end
   end
@@ -80,12 +79,14 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
   for _,c in ipairs(recipe.categories) do if crafter.crafting_categories[c] then category=c;break end end
   pack.recipes[name]={category=category,time=recipe.energy,machine=crafter.name,ingredients=ingredients,results=results,
    fluid_inputs=ports(crafter,fluid_in,'input',allow_ends),fluid_outputs=ports(crafter,fluid_out,'output',allow_ends)}
-  rows[#rows+1]=row
  end
- local products,inputs={},{}
- for _,port in ipairs(request.outputs) do products[#products+1]={name=port.item,type=port.type or 'item',perMinute=port.perMinute,temperature=port.type=='fluid' and (temperatures[port.item] or prototypes.fluid[port.item].default_temperature) or nil} end
- for _,port in ipairs(request.inputs) do inputs[#inputs+1]={name=port.item,type=port.type or 'item',perMinute=port.perMinute,mode='maximum',temperature=port.type=='fluid' and prototypes.fluid[port.item].default_temperature or nil} end
- local solved=frozen_plan or remote.call('facmandu-toby-planner','solve',force.name,actor.name,surface.name,products,rows,inputs)
+ local solved=frozen_plan
+ for _,line in ipairs(solved.lines) do
+  assert(not line.quality or line.quality=='normal','Layout does not yet support this saved quality; keep the plan unchanged')
+  assert(not line.modules or #line.modules==0,'Layout does not yet support saved modules; keep the plan unchanged')
+  assert(not line.beacon,'Layout does not yet support saved beacons; keep the plan unchanged')
+  assert(not line.fuel,'Layout does not yet support saved burner fuel; keep the plan unchanged')
+ end
  assert(solved.status=='solved','Native production plan is '..tostring(solved.status))
  local available={}
  for _,port in ipairs(request.inputs) do available[(port.type or 'item')..'/'..port.item]=port.perMinute end

@@ -10,3 +10,8 @@ Toby plan for 120 rocket fuel/min: acid neutralisation, steam condensation, wate
 separation, oil cracking, fuel refining and hydrogen disposal. It omits player,
 research and runtime context. The whole chain is qualified separately in an
 isolated headless world using the matching full mod profile and declared supplies.
+
+`options-2.1.21.json` was captured for a plan created and read in a disposable
+copy of Beast. Its ten chosen assemblers produce 900 gears/min. It includes native
+Smart Inserters research/settings, requester and storage chest prototypes, and the
+frozen planner calculation. No saved world or player inventory is included.

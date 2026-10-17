@@ -2,10 +2,13 @@ import { z } from 'zod';
 import { factoryLayoutInput } from '$lib/factory-layout';
 import type { ManagedServer } from './db/schema';
 import { blueprintDesignHash, factoryBlueprint } from './factory-blueprints';
+import inserterRules from './factory-inserter-rules.lua?raw';
 import { compileFactoryLayout } from './factory-layout-compiler';
 import packSource from './factory-layout-pack.lua?raw';
 import planPackSource from './factory-layout-plan-pack.lua?raw';
+import { resolveFactoryLayout } from './factory-layout-saved-plan';
 import { markCompiledFactory } from './factory-layout-status';
+import { savedFactoryPlan } from './factory-native-planner';
 import { factoryTrialContextSchema } from './factory-native-trial';
 import { luaString } from './factory-query-bundle';
 import { ServerError } from './server-files';
@@ -34,13 +37,29 @@ export async function designFactory(
 	actor?: { name: string; requireAdmin: boolean },
 	signal?: AbortSignal
 ) {
-	const request = factoryLayoutInput.parse(input);
+	const selection = factoryLayoutInput.parse(input);
 	if (!(await serverStatus(server)).running)
-		throw new ServerError(409, 'Start the server to read its production rules');
+		throw new ServerError(409, 'Start the server to read the saved plan');
+	const snapshot = await savedFactoryPlan(
+		server,
+		{
+			operation: 'read',
+			force: selection.force,
+			player: selection.player,
+			reference: selection.reference
+		},
+		'',
+		actor
+	);
+	const { job: request, plan } = resolveFactoryLayout(selection, snapshot);
 	const command = `/silent-command local request=helpers.json_to_table(${luaString(JSON.stringify(request))})
 request.trialContext=true
-request.player=${actor ? luaString(actor.name) : 'nil'}
-local ok,result=pcall(function() local build=(function() ${packSource} end)() local plan=(function() ${planPackSource} end)() return build(request,plan) end)
+request.player=${luaString(selection.player)}
+local frozen=helpers.json_to_table(${luaString(JSON.stringify(plan))})
+local ok,result=pcall(function()
+local current=remote.call('facmandu-toby-planner','read_plan',request.force,request.player,${Number(selection.reference.split('/').at(-1))})
+assert(current.revision==${selection.expectedRevision},'Plan revision changed; lay out the new revision')
+local build=(function() ${packSource} end)() local plan=(function() ${planPackSource} end)() local rules=(function() ${inserterRules} end)() return build(request,function(a,b,c,d,e,f) return plan(a,b,c,d,e,f,frozen) end,rules) end)
 local reply=helpers.table_to_json(ok and {ok=true,result=result} or {ok=false,error=tostring(result)})
 if #reply>255*1024 then reply=helpers.table_to_json({ok=false,error='Factory snapshot exceeds the RCON frame limit; a paged snapshot is required'}) end
 rcon.print(reply)`;
@@ -62,6 +81,8 @@ rcon.print(reply)`;
 	);
 	return {
 		artifact,
+		request,
+		plan: { reference: selection.reference, revision: selection.expectedRevision },
 		pack,
 		context,
 		inputs: compiled.inputs,

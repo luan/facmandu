@@ -1,6 +1,6 @@
 -- Read only the requested force's current recipes and entity tiers. No stock,
 -- research or inventory stock is changed. Native planning uses a temporary plan.
-return function(request,build_plan)
+return function(request,build_plan,inserter_rules)
  local force=assert(game.forces[request.force],'Unknown force')
  local surface=assert(game.surfaces[request.surface],'Unknown surface')
  assert(not surface.platform,'Platform layouts are not yet qualified by the factory compiler')
@@ -32,21 +32,28 @@ return function(request,build_plan)
   pack.chests={}
   for _,row in ipairs{{request.logistics.requester,'requester'},{request.logistics.provider,'passive-provider'}} do
    local p=entity(row[1],'logistic-container')
-   assert(p.logistic_mode==row[2],'Select a '..row[2]..' chest: '..row[1])
+   assert(p.logistic_mode==row[2] or (row[2]=='passive-provider' and p.logistic_mode=='storage'),'Select a '..row[2]..' or filtered storage chest: '..row[1])
    assert(p.tile_width==1 and p.tile_height==1,'Logistics cells require one-tile chests')
-   pack.chests[p.name]={size=size(p),mode=p.logistic_mode}
+   local capacity=p.get_inventory_size(defines.inventory.chest)
+   assert(row[2]~='passive-provider' or request.logistics.outputSlots<=capacity,'Output slots exceed the selected chest capacity')
+   pack.chests[p.name]={size=size(p),mode=p.logistic_mode,capacity=capacity}
   end
  end
- local machine=entity(tiers.machine,'assembling-machine')
  local crafters={}
  local function add_crafter(p)
-  if pack.machines[p.name] then return end
-  assert(not p.burner_prototype and (p.electric_energy_source_prototype or p.void_energy_source_prototype),'Factory compiler requires electric or void-powered crafting machines')
-  crafters[#crafters+1]=p
-  pack.machines[p.name]={crafting_speed=p.get_crafting_speed(),categories=keys(p.crafting_categories),size=size(p)}
+  if pack.machines[p.name] or pack.furnaces[p.name] then return end
+  if p.type=='furnace' then
+   local f=entity(p.name,'furnace');assert(f.electric_energy_source_prototype,'Factory compiler requires electric furnaces')
+   pack.furnaces[p.name]={crafting_speed=f.get_crafting_speed(),categories=keys(f.crafting_categories),size=size(f)}
+  else
+   p=entity(p.name,'assembling-machine')
+   assert(not p.burner_prototype and (p.electric_energy_source_prototype or p.void_energy_source_prototype),'Factory compiler requires electric or void-powered crafting machines')
+   crafters[#crafters+1]=p
+   pack.machines[p.name]={crafting_speed=p.get_crafting_speed(),categories=keys(p.crafting_categories),size=size(p)}
+  end
  end
- add_crafter(machine)
- for _,name in ipairs(tiers.crafters or {}) do add_crafter(entity(name,'assembling-machine')) end
+ add_crafter(assert(prototypes.entity[tiers.machine],'Saved machine is missing'))
+ for _,name in ipairs(tiers.crafters or {}) do add_crafter(assert(prototypes.entity[name],'Saved machine is missing')) end
  if tiers.pipe then
   local pipe=entity(tiers.pipe,'pipe')
   local underground_pipe=entity(assert(tiers.pipe_underground,'Select an underground pipe'),'pipe-to-ground')
@@ -78,10 +85,11 @@ return function(request,build_plan)
   assert(i.electric_energy_source_prototype,'Factory compiler requires electric inserters')
   local pickup,drop=i.inserter_pickup_position,i.inserter_drop_position
   pack.inserters[name]={pickup_position={pickup.x or pickup[1],pickup.y or pickup[2]},insert_position={drop.x or drop[1],drop.y or drop[2]},rotation_speed=i.get_inserter_rotation_speed(),extension_speed=i.get_inserter_extension_speed(),size=size(i)}
+  if request.inserters then pack.inserters[name].custom=inserter_rules and inserter_rules.profile(force,i) end
  end
  local pole=entity(tiers.pole,'electric-pole')
  pack.poles[pole.name]={size=size(pole),supply=pole.get_supply_area_distance(),reach=pole.get_max_wire_distance()}
- if request.nativePlan then
+ if request.fixedPlan or request.nativePlan then
   assert(build_plan,'Native plan compiler is unavailable')(request,force,surface,entity,pack,crafters)
  else
  for _,name in ipairs(request.recipes) do

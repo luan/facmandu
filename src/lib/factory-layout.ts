@@ -14,16 +14,22 @@ const position = z.strictObject({
 		.max(99.5)
 		.refine((n) => n % 1 === 0.5, 'Use tile centers')
 });
+const arm = z.strictObject({
+	pickup: z.strictObject({ x: z.number().min(-64).max(64), y: z.number().min(-64).max(64) }),
+	drop: z.strictObject({ x: z.number().min(-64).max(64), y: z.number().min(-64).max(64) })
+});
 const port = z.strictObject({
 	item: name,
 	type: z.enum(['item', 'fluid']).optional(),
+	temperature: z.number().finite().optional(),
 	position: position.optional(),
 	direction: z.literal([0, 4, 8, 12]).optional(),
 	perMinute: z.number().min(0.01).max(60000)
 });
 
+// Internal prototype job. Public layout requests below identify a saved plan revision.
 // Platforms and modules need qualified templates before enabling them.
-export const factoryLayoutInput = z
+export const factoryLayoutJobInput = z
 	.strictObject({
 		force: name,
 		surface: name,
@@ -34,7 +40,22 @@ export const factoryLayoutInput = z
 		outputs: z.array(port).min(1).max(6),
 		recipes: z.array(name).min(1).max(64),
 		nativePlan: z.boolean().default(false),
-		logistics: z.strictObject({ requester: name, provider: name }).optional(),
+		fixedPlan: z.boolean().default(false),
+		layout: z
+			.strictObject({
+				shape: z.enum(['auto', 'tall', 'wide', 'square']).default('auto'),
+				spacing: z.enum(['compact', 'spacious']).default('compact')
+			})
+			.default({ shape: 'auto', spacing: 'compact' }),
+		inserters: z.strictObject({ input: arm.optional(), output: arm.optional() }).optional(),
+		logistics: z
+			.strictObject({
+				requester: name,
+				provider: name,
+				requestSeconds: z.number().int().min(1).max(300).default(30),
+				outputSlots: z.number().int().min(1).max(48).default(4)
+			})
+			.optional(),
 		tiers: z.strictObject({
 			machine: name,
 			crafters: z.array(name).max(8).optional(),
@@ -86,7 +107,7 @@ export const factoryLayoutInput = z
 				code: 'custom',
 				message: 'Fluid-output production needs a qualified template'
 			});
-		if (request.nativePlan && request.recipes.length > 24)
+		if (!request.fixedPlan && request.nativePlan && request.recipes.length > 24)
 			ctx.addIssue({ code: 'custom', message: 'Native plans support at most 24 selected recipes' });
 		if (
 			request.nativePlan &&
@@ -98,7 +119,8 @@ export const factoryLayoutInput = z
 				message: 'Native plan item supplies require requester/provider chests'
 			});
 		if (
-			(request.nativePlan || request.inputs.some((port) => port.type === 'fluid')) &&
+			(request.inputs.some((port) => port.type === 'fluid') ||
+				request.outputs.some((port) => port.type === 'fluid')) &&
 			(!request.tiers.pipe || !request.tiers.pipe_underground)
 		)
 			ctx.addIssue({
@@ -129,5 +151,41 @@ export const factoryLayoutInput = z
 				ctx.addIssue({ code: 'custom', message: 'Ports must be inside the factory block' });
 		}
 	});
+export type FactoryLayoutJob = z.infer<typeof factoryLayoutJobInput>;
+// The layout API accepts a saved plan revision, never recipes, machines or rates.
+export const factoryLayoutInput = z.strictObject({
+	force: name,
+	player: name,
+	reference: z.string().regex(/^toby:\/\/plan\/[1-9]\d{0,9}\/[1-9]\d{0,9}$/u),
+	expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+	label: z.string().min(1).max(120).optional(),
+	width: tile.min(8),
+	height: tile.min(8),
+	layout: z
+		.strictObject({
+			shape: z.enum(['auto', 'tall', 'wide', 'square']).default('auto'),
+			spacing: z.enum(['compact', 'spacious']).default('compact')
+		})
+		.default({ shape: 'auto', spacing: 'compact' }),
+	inserters: z.strictObject({ input: arm.optional(), output: arm.optional() }).optional(),
+	logistics: z
+		.strictObject({
+			requester: name,
+			provider: name,
+			requestSeconds: z.number().int().min(1).max(300).default(30),
+			outputSlots: z.number().int().min(1).max(48).default(4)
+		})
+		.optional(),
+	tiers: z.strictObject({
+		belt: name,
+		underground: name,
+		inserter: name,
+		pole: name,
+		pipe: name.optional(),
+		pipe_underground: name.optional(),
+		splitter: name.optional(),
+		long_inserter: name.optional()
+	})
+});
 export type FactoryLayoutInput = z.infer<typeof factoryLayoutInput>;
 export const factoryLayoutJsonSchema = z.toJSONSchema(factoryLayoutInput, { io: 'input' });

@@ -4,8 +4,12 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { z } from 'zod';
 import { blueprintInputSchema } from '../src/lib/blueprints';
-import { factoryLayoutInput } from '../src/lib/factory-layout';
+import {
+	factoryLayoutJobInput as factoryLayoutInput,
+	factoryLayoutInput as savedLayoutInput
+} from '../src/lib/factory-layout';
 import { compileFactoryLayout } from '../src/lib/server/factory-layout-compiler';
+import { resolveFactoryLayout } from '../src/lib/server/factory-layout-saved-plan';
 
 const directory = 'src/lib/server/vendor/interpose/';
 const modules = Object.fromEntries(
@@ -414,7 +418,7 @@ test('logistics-only factories include the whole requested production array, con
 	const chests = result.design.entities.filter((e) => e.name === 'requester-chest');
 	assert.equal(chests.length, 10);
 	assert.equal(
-		result.design.entities.filter((e) => e.name === 'passive-provider-chest' && e.bar === 5).length,
+		result.design.entities.filter((e) => e.name === 'passive-provider-chest' && e.bar === 4).length,
 		10
 	);
 	assert.equal(result.design.entities.filter((e) => e.name === 'fast-inserter').length, 20);
@@ -679,5 +683,159 @@ test('native fluid plans compile all production and disposal stages within a bou
 			tiers: { ...chainRequest.tiers, pipe: undefined }
 		}).success,
 		false
+	);
+});
+
+test('saved layouts preserve planner machine counts across shape, spacing and custom logistics', async () => {
+	const snapshot = {
+		reference: 'toby://plan/1/42',
+		revision: 7,
+		force: 'player',
+		surface: 'nauvis',
+		name: 'Saved gears',
+		valid: true,
+		status: 'solved',
+		products: [{ name: 'iron-gear-wheel', type: 'item', perMinute: 900 }],
+		ingredients: [{ name: 'iron-plate', type: 'item', perMinute: 900 }],
+		byproducts: [],
+		lines: [
+			{
+				lineId: 12,
+				recipe: 'iron-gear-wheel',
+				machine: 'assembling-machine-2',
+				machines: 12,
+				quality: 'normal',
+				modules: [],
+				active: true,
+				products: [{ name: 'iron-gear-wheel', type: 'item', perMinute: 900 }],
+				ingredients: [{ name: 'iron-plate', type: 'item', perMinute: 900 }]
+			}
+		]
+	};
+	const settings = {
+		force: 'player',
+		player: 'cfcluan',
+		reference: snapshot.reference,
+		expectedRevision: 7,
+		width: 100,
+		height: 100,
+		tiers: {
+			belt: 'transport-belt',
+			underground: 'underground-belt',
+			inserter: 'fast-inserter',
+			pole: 'medium-electric-pole'
+		},
+		logistics: {
+			requester: 'requester-chest',
+			provider: 'storage-chest',
+			requestSeconds: 45,
+			outputSlots: 2
+		},
+		inserters: {
+			input: { pickup: { x: -1, y: 0 }, drop: { x: 0, y: 1 } },
+			output: { pickup: { x: 0, y: -1 }, drop: { x: 1, y: 0 } }
+		}
+	};
+	const native = JSON.parse(readFileSync('tests/fixtures/interpose/options-2.1.21.json', 'utf8'));
+	let wideWidth = 0,
+		tallWidth = 0;
+	for (const shape of ['wide', 'tall', 'square'] as const) {
+		const selected = savedLayoutInput.parse({ ...settings, layout: { shape, spacing: 'compact' } });
+		const { job, plan } = resolveFactoryLayout(selected, snapshot);
+		const compiled = await compileFactoryLayout(job, z.json().parse({ ...native, plan }), modules);
+		assert.deepEqual(
+			compiled.steps.map((s) => [s.recipe, s.machines]),
+			[['iron-gear-wheel', 12]]
+		);
+		const machines = compiled.design.entities.filter((e) => e.name === 'assembling-machine-2');
+		assert.equal(machines.length, 12);
+		const width =
+			Math.max(...machines.map((e) => e.position.x)) -
+			Math.min(...machines.map((e) => e.position.x));
+		if (shape === 'wide') wideWidth = width;
+		if (shape === 'tall') tallWidth = width;
+		assert.ok(
+			compiled.design.entities
+				.filter((e) => e.name === 'fast-inserter')
+				.every((e) => e.pickup_position && e.drop_position)
+		);
+		for (const chest of compiled.design.entities.filter((e) => e.name === 'storage-chest')) {
+			assert.equal(chest.bar, 2);
+			assert.deepEqual(chest.request_filters?.sections[0]?.filters, [
+				{
+					index: 1,
+					type: 'item',
+					name: 'iron-gear-wheel',
+					quality: 'normal',
+					comparator: '=',
+					count: 0
+				}
+			]);
+		}
+		const requests = compiled.design.entities.filter((e) => e.name === 'requester-chest');
+		assert.ok(
+			requests.every((e) => e.request_filters?.sections[0]?.filters[0]?.name === 'iron-plate')
+		);
+	}
+	assert.ok(wideWidth > tallWidth);
+	const lowPlan = {
+		...snapshot,
+		revision: 8,
+		products: snapshot.products.map((p) => ({ ...p, perMinute: 90 })),
+		ingredients: snapshot.ingredients.map((p) => ({ ...p, perMinute: 90 })),
+		lines: snapshot.lines.map((line) => ({
+			...line,
+			machines: 1,
+			products: line.products.map((p) => ({ ...p, perMinute: 90 })),
+			ingredients: line.ingredients.map((p) => ({ ...p, perMinute: 90 }))
+		}))
+	};
+	const beltSelection = savedLayoutInput.parse({
+		...settings,
+		expectedRevision: 8,
+		width: 32,
+		height: 32,
+		logistics: undefined,
+		inserters: undefined,
+		layout: { shape: 'square', spacing: 'spacious' }
+	});
+	const belt = resolveFactoryLayout(beltSelection, lowPlan);
+	const result = await compileFactoryLayout(
+		belt.job,
+		z.json().parse({ ...native, plan: belt.plan }),
+		modules
+	);
+	assert.equal(result.design.entities.filter((e) => e.recipe === 'iron-gear-wheel').length, 1);
+	assert.equal(
+		result.design.entities.some((e) => e.name === 'storage-chest'),
+		false
+	);
+	assert.throws(() => savedLayoutInput.parse({ ...settings, recipes: ['different-recipe'] }));
+	assert.throws(() =>
+		savedLayoutInput.parse({
+			...settings,
+			tiers: { ...settings.tiers, machine: 'assembling-machine-3' }
+		})
+	);
+	assert.throws(
+		() => resolveFactoryLayout(savedLayoutInput.parse(settings), { ...snapshot, revision: 8 }),
+		/revision changed/
+	);
+	assert.throws(
+		() => resolveFactoryLayout(savedLayoutInput.parse(settings), { ...snapshot, force: 'enemy' }),
+		/another force/
+	);
+	const { job, plan } = resolveFactoryLayout(savedLayoutInput.parse(settings), snapshot);
+	const unqualified = structuredClone(native);
+	delete unqualified.inserters['fast-inserter'].custom;
+	await assert.rejects(
+		compileFactoryLayout(job, z.json().parse({ ...unqualified, plan }), modules),
+		/qualified custom reach/
+	);
+	const beyond = structuredClone(job);
+	beyond.inserters = { input: { pickup: { x: -64, y: 0 }, drop: { x: 0, y: 1 } } };
+	await assert.rejects(
+		compileFactoryLayout(beyond, z.json().parse({ ...native, plan }), modules),
+		/researched reach/
 	);
 });

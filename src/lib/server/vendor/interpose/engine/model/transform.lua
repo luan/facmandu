@@ -111,6 +111,14 @@ function transform.entities(entities, area, name)
     for _, e in ipairs(out) do
       local u, v, d
       u, v, nw, nh, d = STEPS[step](e.position.x - x1, e.position.y - y1, w, h, e.direction or 0)
+      for _, field in ipairs({"pickup_position", "drop_position"}) do
+        local vector = e[field]
+        if vector then
+          local ox, oy = STEPS[step](0, 0, w, h, 0)
+          local vx, vy = STEPS[step](vector.x, vector.y, w, h, 0)
+          e[field] = {x=vx-ox,y=vy-oy}
+        end
+      end
       e.position = { x = x1 + u, y = y1 + v }
       e.direction = d ~= 0 and d or nil
     end

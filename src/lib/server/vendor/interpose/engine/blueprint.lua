@@ -101,6 +101,8 @@ function blueprint.load(bp, pack)
           w = w,
           h = h,
           recipe = e.recipe,
+          pickup_position = e.pickup_position,
+          drop_position = e.drop_position,
           io = e.type, -- underground belts: "input" or "output"
           item = e.tags and e.tags[blueprint.PORT_ITEM_TAG],
         }

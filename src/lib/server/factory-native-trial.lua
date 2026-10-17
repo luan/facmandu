@@ -2,6 +2,7 @@ local events=require('events').scope('layout-runner')
 local sandbox=require('sandbox')
 local build=require('pack')
 local build_plan=require('plan-pack')
+local inserter_rules=require('inserter-rules')
 local payload=helpers.json_to_table(require('request'))
 local function write(value)
  helpers.write_file('layout-trial.json',helpers.table_to_json(value),false)
@@ -54,7 +55,7 @@ local function context()
  surface.daytime=c.daytime;surface.freeze_daytime=c.freezeDaytime;surface.solar_power_multiplier=c.solarPowerMultiplier
  return build(payload.request,function(request,force,surface,entity,pack,crafters)
   return build_plan(request,force,surface,entity,pack,crafters,payload.plan)
- end)
+ end,inserter_rules)
 end
 events.on_event(defines.events.on_tick,function(e)
  if storage.finished then return end
@@ -68,6 +69,30 @@ events.on_event(defines.events.on_tick,function(e)
    trial.anchor=payload.anchor
    local started=sandbox.start(trial,300,256)
    storage.job=started.id
+   local job=assert(storage.toby_trials.jobs[storage.job])
+   for _,wanted in ipairs(payload.settings or {}) do
+    local entity=assert(job.entities[wanted.index],'Missing configured entity')
+    for _,pair in ipairs{{wanted.pickup,'pickup_position'},{wanted.drop,'drop_position'}} do if pair[1] then
+     local actual=entity[pair[2]]
+     assert(math.abs(actual.x-entity.position.x-pair[1].x)<0.000001 and math.abs(actual.y-entity.position.y-pair[1].y)<0.000001,'Native inserter geometry changed')
+    end end
+    if wanted.requests and entity.type=='logistic-container' and entity.prototype.logistic_mode=='storage' then
+     local actual=entity.storage_filter
+     local name=actual and actual.name and (type(actual.name)=='string' and actual.name or actual.name.name)
+     assert(name==wanted.requests.sections[1].filters[1].name,'Native storage filter changed')
+    elseif wanted.requests then
+     local sections=assert(entity.get_logistic_sections(),'Missing native logistic sections')
+     for _,section in ipairs(wanted.requests.sections) do
+      local actual=assert(sections.get_section(section.index),'Missing native logistic section')
+      for _,filter in ipairs(section.filters) do
+       local got=actual.filters[filter.index]
+       assert(got and got.value and got.value.name==filter.name and (got.min or 0)==filter.count,'Native logistic filter changed')
+      end
+     end
+    end
+    if wanted.bar then assert(entity.get_inventory(defines.inventory.chest).get_bar()==wanted.bar+1,'Native inventory limit changed') end
+   end
+   storage.settings_verified=true
    helpers.write_file('layout-progress.json',helpers.table_to_json(started),false)
   elseif e.tick%60==0 then
    local job=storage.toby_trials.jobs[storage.job]
@@ -77,7 +102,7 @@ events.on_event(defines.events.on_tick,function(e)
    end
    local result=sandbox.read(payload.request.force,storage.job)
    if result.status~='running' then
-    result.diagnostics=storage.diagnostics
+    result.diagnostics=storage.diagnostics;result.settingsVerified=storage.settings_verified
     write({pack=storage.pack,result=result});storage.finished=true
    else helpers.write_file('layout-progress.json',helpers.table_to_json(result),false) end
   end

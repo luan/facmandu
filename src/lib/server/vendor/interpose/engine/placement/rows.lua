@@ -36,6 +36,7 @@ local origin_mod = require("engine.placement.origin")
 local rows = {}
 
 rows.MARGIN = 2 -- free tiles left of, right of and above the rows, for routing
+rows.MACHINE_GAP = 0
 rows.GAP = 2 -- free tile rows between two rows: one for the item coming back, one for side-loading
 rows.INSERTER_EFFICIENCY = fraction.new(4, 5)
 
@@ -438,8 +439,11 @@ function rows.place(plan, problem, pack)
       per_gap = per_gap, -- M11: machines between pole columns (nil: no room for poles)
       pole_row = pole_row,
     }
+    if rows.EXACT_MACHINES and n ~= step.machines then
+      errors[#errors + 1] = issues.new("inserter-capacity", "the selected inserters cannot serve the saved machine counts", "change the logistics or inserters, or revise the plan in the planner")
+    end
     -- room for poles: one column before the machines, one after every per_gap of them
-    local gaps = per_gap and (1 + math.ceil(n / per_gap)) or 0
+    local gaps = (per_gap and (1 + math.ceil(n / per_gap)) or 0) + (n - 1) * rows.MACHINE_GAP
     sized[#sized].gaps = gaps
     widest = math.max(widest, lead + n * w + gaps)
   end
@@ -599,7 +603,7 @@ function rows.place(plan, problem, pack)
         x = x + 1
       end
       lefts[k] = x
-      x = x + w
+      x = x + w + (k < r.n - 1 and rows.MACHINE_GAP or 0)
     end
     if r.per_gap then
       entity(ents, tiers.pole, x + 0.5, y + 2 + r.pole_row + 0.5)
@@ -608,16 +612,16 @@ function rows.place(plan, problem, pack)
       local left = lefts[k]
       -- inserters face north: pickup north, drop south (verified against the game in L2)
       for _, c in ipairs(r.cols_in) do
-        entity(ents, tiers.inserter, left + c + 0.5, yi_in + 0.5, direction.NORTH)
+        entity(ents, tiers.inserter, left + c + 0.5, yi_in + 0.5, direction.NORTH, rows.INPUT_SETTINGS)
       end
       for _, c in ipairs(r.cols_long) do
-        entity(ents, tiers.long_inserter, left + c + 0.5, yi_in + 0.5, direction.NORTH)
+        entity(ents, tiers.long_inserter, left + c + 0.5, yi_in + 0.5, direction.NORTH, rows.INPUT_SETTINGS)
       end
       -- a furnace picks its recipe from what it gets
       local extra = not r.step.furnace and { recipe = r.step.recipe } or nil
       entity(ents, r.machine_name, left + w / 2, ym + h / 2, direction.NORTH, extra)
       for _, c in ipairs(r.cols_out) do
-        entity(ents, tiers.inserter, left + c + 0.5, yi_out + 0.5, direction.NORTH)
+        entity(ents, tiers.inserter, left + c + 0.5, yi_out + 0.5, direction.NORTH, rows.OUTPUT_SETTINGS)
       end
     end
     for i = 0, width - 1 do

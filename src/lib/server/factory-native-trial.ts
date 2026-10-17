@@ -6,11 +6,12 @@ import { isDeepStrictEqual } from 'node:util';
 import { inflateSync } from 'node:zlib';
 import { z } from 'zod';
 import type { BlueprintArtifact } from '$lib/blueprints';
-import type { FactoryLayoutInput } from '$lib/factory-layout';
+import type { FactoryLayoutJob } from '$lib/factory-layout';
 import events from '../../../factorio-mod/facmandu-assistant/events.lua?raw';
 import robotTrial from '../../../factorio-mod/facmandu-assistant/robot-trial.lua?raw';
 import sandbox from '../../../factorio-mod/facmandu-assistant/sandbox.lua?raw';
 import type { ManagedServer } from './db/schema';
+import inserterRules from './factory-inserter-rules.lua?raw';
 import type { compileFactoryLayout } from './factory-layout-compiler';
 import packSource from './factory-layout-pack.lua?raw';
 import planPackSource from './factory-layout-plan-pack.lua?raw';
@@ -64,7 +65,7 @@ let queue: Promise<void> = Promise.resolve();
 export function testCompiledFactory(
 	server: ManagedServer,
 	input: {
-		request: FactoryLayoutInput;
+		request: FactoryLayoutJob;
 		pack: z.infer<ReturnType<typeof z.json>>;
 		context: z.infer<typeof factoryTrialContextSchema>;
 		test: CompiledTest;
@@ -122,13 +123,27 @@ export function testCompiledFactory(
 				};
 				const payload = {
 					request: input.request,
-					plan: input.request.nativePlan
-						? z.object({ plan: z.json() }).parse(input.pack).plan
-						: undefined,
+					plan:
+						input.request.fixedPlan || input.request.nativePlan
+							? z.object({ plan: z.json() }).parse(input.pack).plan
+							: undefined,
 					context: input.context,
 					test: input.test,
 					blueprint: input.artifact.blueprint,
 					designId,
+					settings: input.artifact.entities.flatMap((e, i) =>
+						e.pickup_position || e.drop_position || e.request_filters || e.bar
+							? [
+									{
+										index: i + 1,
+										pickup: e.pickup_position,
+										drop: e.drop_position,
+										requests: e.request_filters,
+										bar: e.bar
+									}
+								]
+							: []
+					),
 					anchor: input.artifact.entities[0]?.position
 				};
 				await Promise.all([
@@ -146,6 +161,7 @@ export function testCompiledFactory(
 					),
 					writeFile(join(driver, 'pack.lua'), packSource),
 					writeFile(join(driver, 'plan-pack.lua'), planPackSource),
+					writeFile(join(driver, 'inserter-rules.lua'), inserterRules),
 					writeFile(join(driver, 'request.lua'), `return ${luaString(JSON.stringify(payload))}`)
 				]);
 				const output = join(directory, 'write', 'script-output');

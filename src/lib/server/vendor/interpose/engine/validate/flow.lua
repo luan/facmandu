@@ -106,8 +106,8 @@ local function build_edges(model, grid)
         edge(e, dst)
       end
     elseif e.kind == "inserter" then
-      local p = direction.rotate({ x = e.proto.pickup_position[1], y = e.proto.pickup_position[2] }, e.dir)
-      local d = direction.rotate({ x = e.proto.insert_position[1], y = e.proto.insert_position[2] }, e.dir)
+      local p = e.pickup_position or direction.rotate({ x = e.proto.pickup_position[1], y = e.proto.pickup_position[2] }, e.dir)
+      local d = e.drop_position or direction.rotate({ x = e.proto.insert_position[1], y = e.proto.insert_position[2] }, e.dir)
       local src = at(grid, e.x + p.x, e.y + p.y)
       local dst = at(grid, e.x + d.x, e.y + d.y)
       if not src or src.kind == "inserter" or src.kind == "output_port" then

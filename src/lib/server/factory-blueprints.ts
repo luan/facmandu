@@ -15,6 +15,7 @@ import {
 } from '$lib/blueprints';
 import type { ManagedServer } from './db/schema';
 import source from './factory-blueprints/blueprint.lua?raw';
+import inserterRules from './factory-inserter-rules.lua?raw';
 import { requireCompiledFactoryTrial } from './factory-layout-status';
 import territorySource from './factory-query/scripts/tools/territory.lua?raw';
 import { ServerError } from './server-files';
@@ -103,6 +104,7 @@ export function blueprintCommand(
 	return `/silent-command local request=helpers.json_to_table([${delimiter}[${encoded}]${delimiter}])
 local inventory
 local ok,result=pcall(function()
+local custom_inserter_range=(function() ${inserterRules} end)().range
 ${source}
 return blueprint(request,(function()
 ${territorySource}

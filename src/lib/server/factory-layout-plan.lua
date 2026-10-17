@@ -1,8 +1,6 @@
 local engine=require('engine.init')
 local plan=assert(pack.plan,'Missing native production plan')
 local entities,ports,sources,sinks,inputs,steps={},{},{},{},{},{}
-local arm=assert(pack.inserters[problem.tiers.inserter])
-assert(math.abs(arm.pickup_position[1])<0.01 and arm.pickup_position[2]==-1 and math.abs(arm.insert_position[1])<0.01 and arm.insert_position[2]>=1 and arm.insert_position[2]<1.5,'Select a standard one-tile inserter for native plan cells')
 local demand,available,requested={},{},{}
 local function key(kind,name) return kind..'/'..name end
 for _,port in ipairs(problem.inputs) do available[key('item',port.item)]=(available[key('item',port.item)] or 0)+port.perMinute end
@@ -29,29 +27,27 @@ for _,line in ipairs(plan.lines) do if line.machines>0.000001 then
  local w,h=table.unpack(machine.native_size or machine.size)
  assert(w==h,'Native plan cells require square machines')
  local count=math.ceil(line.machines-0.000000001)
- local spacing=w+6
- local columns=math.floor((problem.area[2][1]-4)/spacing)
- assert(columns>0,'Native plan machine does not fit the block')
+ local cell=options.cell(w,h,problem,pack,#(recipe.fluid_inputs or {})+#(recipe.fluid_outputs or {})>0)
+ local columns=options.columns(count,cell.width,cell.height,problem.area[2][1]-4,problem.area[2][2]-y-2,problem.layout.shape)
  local rows=math.ceil(count/columns)
- assert(y+rows*(h+5)+2<=problem.area[2][2],'Native plan exceeds the selected area; split the plan into bounded blocks')
  local production=0
  for _,part in ipairs(line.products) do if part.type~='entity' then production=production+part.perMinute end end
  steps[#steps+1]={recipe=line.recipe,machines=count,perMinute=production}
  for i=1,count do
-  local x=((i-1)%columns)*spacing+3+w/2
-  local top=y+math.floor((i-1)/columns)*(h+5)
-  local lane=math.floor(x)+0.5
-  local center=top+2+h/2
+  local left=((i-1)%columns)*cell.width
+  local top=y+math.floor((i-1)/columns)*cell.height
+  local x=left+cell.machine.x
+  local center=top+cell.machine.y
   if #recipe.ingredients>0 then
    assert(problem.logistics,'Item supplies require requester/provider tiers')
    local filters={}
    for j,part in ipairs(recipe.ingredients) do
     assert(demand[key('item',part.name)],'Internal item intermediates need a separate belt or logistics stage: '..part.name)
-    filters[j]={index=j,type='item',name=part.name,quality='normal',comparator='=',count=math.max(math.ceil(part.amount*2),math.ceil(rate(line.ingredients,'item',part.name)/count/2))}
+    filters[j]={index=j,type='item',name=part.name,quality='normal',comparator='=',count=math.max(math.ceil(part.amount*2),math.ceil(rate(line.ingredients,'item',part.name)/count*problem.logistics.requestSeconds/60))}
    end
-   local chest=add(problem.logistics.requester,lane,top+0.5,{request_filters={sections={{index=1,filters=filters}}}})
+   local chest=add(problem.logistics.requester,left+cell.input_chest.x,top+cell.input_chest.y,{request_filters={sections={{index=1,filters=filters}}}})
    for _,part in ipairs(recipe.ingredients) do ports[#ports+1]={entity=chest,item=part.name,kind='input',position=entities[chest].position,perMinute=rate(line.ingredients,'item',part.name)/count} end
-   add(problem.tiers.inserter,lane,top+1.5)
+   add(problem.tiers.inserter,left+cell.input_arm.x,top+cell.input_arm.y,{pickup_position=cell.input_settings.pickup_position,drop_position=cell.input_settings.drop_position})
   end
   local settings={direction=4};if not pack.furnaces[line.machine] then settings.recipe=line.recipe end
   add(line.machine,x,center,settings)
@@ -62,14 +58,15 @@ for _,line in ipairs(plan.lines) do if line.machines>0.000001 then
   end end
   if #item_products>0 then
    assert(problem.logistics,'Item outputs require requester/provider tiers')
-   add(problem.tiers.inserter,lane,top+h+2.5)
-   local chest=add(problem.logistics.provider,lane,top+h+3.5,{bar=5})
+   assert(#item_products==1 or pack.chests[problem.logistics.provider].mode~='storage','Filtered storage cells need one item product')
+   add(problem.tiers.inserter,left+cell.output_arm.x,top+cell.output_arm.y,{pickup_position=cell.output_settings.pickup_position,drop_position=cell.output_settings.drop_position})
+   local chest=add(problem.logistics.provider,left+cell.output_chest.x,top+cell.output_chest.y,options.product_settings(problem,pack,item_products[1].name))
    for _,part in ipairs(item_products) do ports[#ports+1]={entity=chest,item=part.name,kind='output',position=entities[chest].position,perMinute=rate(line.products,'item',part.name)/count} end
   end
-  for _,part in ipairs(recipe.fluid_inputs) do sinks[#sinks+1]={fluid=part.name,position={x=x+part.position.x,y=center+part.position.y},direction=0} end
-  for _,part in ipairs(recipe.fluid_outputs) do sources[#sources+1]={fluid=part.name,position={x=x+part.position.x,y=center+part.position.y},direction=0} end
+  for _,part in ipairs(recipe.fluid_inputs or {}) do sinks[#sinks+1]={fluid=part.name,position={x=x+part.position.x,y=center+part.position.y},direction=0} end
+  for _,part in ipairs(recipe.fluid_outputs or {}) do sources[#sources+1]={fluid=part.name,position={x=x+part.position.x,y=center+part.position.y},direction=0} end
  end
- y=y+rows*(h+5)+2
+ y=y+rows*cell.height+2
 end end
 for _,port in ipairs(problem.fluid_inputs or {}) do if demand[key('fluid',port.item)] then
  sources[#sources+1]={fluid=port.item,position=port.position,direction=port.direction,external=true,perMinute=demand[key('fluid',port.item)]}
@@ -90,13 +87,15 @@ local model,errors=engine.blueprint.load({entities=entities},pack)
 assert(#errors==0,'Invalid native plan machine geometry')
 local obstacles={}
 for _,e in ipairs(model.entities) do for _,tile in ipairs(e.tiles) do obstacles[#obstacles+1]={x=tile[1],y=tile[2]} end end
+local pipes,blocked={},{}
+if #sinks>0 then
 local routed,issues=engine.fluids.solve({kind='fluid',area=problem.area,inputs=roots,outputs=sinks,obstacles=obstacles,
  tiers={pipe=problem.tiers.pipe,underground=problem.tiers.pipe_underground}},pack)
 assert(routed,'Native plan fluid routing failed: '..tostring(issues and issues[1] and issues[1].message))
-local pipes,blocked={},{}
 for _,e in ipairs(routed.blueprint.blueprint.entities) do
  local id=add(e.name,e.position.x,e.position.y,{direction=e.direction or 0})
  local k=engine.blueprint.tile_key(math.floor(e.position.x),math.floor(e.position.y));pipes[k]=id;blocked[k]=true
+end
 end
 for _,entry in ipairs{{sources,'input'},{sinks,'output'}} do for _,port in ipairs(entry[1]) do if port.external then
  ports[#ports+1]={entity=assert(pipes[engine.blueprint.tile_key(math.floor(port.position.x),math.floor(port.position.y))]),

@@ -24,7 +24,10 @@ import {
 	parseBlueprintToolRequest
 } from '../src/lib/server/factory-blueprints';
 
-const blueprintSource = `${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
+const blueprintSource = `local custom_inserter_range=(function()
+${readFileSync('src/lib/server/factory-inserter-rules.lua', 'utf8')}
+end)().range
+${readFileSync('src/lib/server/factory-blueprints/blueprint.lua', 'utf8')}
 local source_blueprint=blueprint
 local function blueprint(request) return source_blueprint(request,(function()
 ${readFileSync('src/lib/server/factory-query/scripts/tools/territory.lua', 'utf8')}
