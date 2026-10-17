@@ -70,16 +70,11 @@ export const factoryLayoutInput = z
 		}))
 	}))
 	.superRefine((request, ctx) => {
-		if (
-			request.logistics &&
-			(request.recipes.length !== 1 ||
-				request.outputs.length !== 1 ||
-				request.inputs.some((port) => port.type === 'fluid'))
-		)
+		if (request.logistics && (request.recipes.length !== 1 || request.outputs.length !== 1))
 			ctx.addIssue({
 				code: 'custom',
 				message:
-					'Logistics cells use one item recipe with external item supplies; use separate cells for intermediates'
+					'Logistics cells use one recipe with external supplies; use separate cells for intermediates'
 			});
 		if (request.outputs.some((port) => port.type === 'fluid'))
 			ctx.addIssue({

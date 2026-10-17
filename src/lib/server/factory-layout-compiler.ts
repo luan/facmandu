@@ -114,16 +114,14 @@ export async function compileFactoryLayout(
 			.filter((port) => port.kind === kind)
 			.map((port) => {
 				if (request.logistics) {
-					if (
-						!(kind === 'input' ? request.inputs : request.outputs).some(
-							(source) => source.item === port.item
-						) ||
-						!port.perMinute
-					)
+					const source = (kind === 'input' ? request.inputs : request.outputs).find(
+						(source) => source.item === port.item
+					);
+					if (!source || !port.perMinute)
 						throw new ServerError(400, 'Compiler returned an unknown logistics endpoint');
 					return {
 						entity: port.entity,
-						kind: 'item' as const,
+						kind: source.type ?? ('item' as const),
 						name: port.item,
 						perMinute: port.perMinute
 					};

@@ -52,7 +52,7 @@ export const sandboxRequestSchema = z.discriminatedUnion('operation', [
 ]);
 export const sandboxToolJsonSchema = z.toJSONSchema(sandboxRequestSchema, { io: 'input' });
 
-export const sandboxResultSchema = z
+const trialResultSchema = z
 	.object({
 		id: z.string(),
 		status: z.enum(['running', 'done', 'cancelled', 'error']),
@@ -66,30 +66,85 @@ export const sandboxResultSchema = z
 					.object({
 						perMinute: z.number().nonnegative(),
 						targetPerMinute: z.number().positive(),
+						endpointCount: z.number().int().positive().optional(),
 						met: z.boolean()
 					})
 					.passthrough()
 			)
 			.optional()
 	})
-	.passthrough()
-	.transform((result) => {
-		if (
-			result.status !== 'done' ||
-			!result.outputs?.some((o) => o.perMinute < o.targetPerMinute * 0.95)
-		)
-			return result;
-		// A batch-boundary allowance can explain a short sample, not prove its target.
-		return {
-			...result,
-			passed: false,
-			verdict: result.passed ? 'inconclusive' : result.verdict,
-			outputs: result.outputs.map((o) => ({
-				...o,
-				met: o.met && o.perMinute >= o.targetPerMinute * 0.95
-			}))
+	.passthrough();
+
+export const sandboxResultSchema = trialResultSchema.transform((result) => {
+	if (
+		result.status !== 'done' ||
+		!result.outputs?.some((o) => o.perMinute < o.targetPerMinute * 0.95)
+	)
+		return result;
+	// A batch-boundary allowance can explain a short sample, not prove its target.
+	return {
+		...result,
+		passed: false,
+		verdict: result.passed ? 'inconclusive' : result.verdict,
+		outputs: result.outputs.map((o) => ({
+			...o,
+			met: o.met && o.perMinute >= o.targetPerMinute * 0.95
+		}))
+	};
+});
+
+// Provider inventories serve a shared product target; fixed belt destinations
+// retain their individual targets through sandboxResultSchema.
+export function aggregateLogisticsOutputs(value: unknown) {
+	const result = trialResultSchema.parse(value);
+	if (result.status !== 'done' || result.error || !result.outputs?.length)
+		return sandboxResultSchema.parse(result);
+	const outputs = new Map<
+		string,
+		{
+			name: string;
+			kind: 'item' | 'fluid';
+			perMinute: number;
+			targetPerMinute: number;
+			endpointCount: number;
+			sampleSufficient: boolean;
+			met: boolean;
+		}
+	>();
+	for (const endpoint of result.outputs) {
+		const name = z.string().min(1).parse(endpoint.name);
+		const kind = z.enum(['item', 'fluid']).parse(endpoint.kind);
+		const key = JSON.stringify([name, kind]);
+		const output = outputs.get(key) ?? {
+			name,
+			kind,
+			perMinute: 0,
+			targetPerMinute: 0,
+			endpointCount: 0,
+			sampleSufficient: true,
+			met: false
 		};
+		output.perMinute += endpoint.perMinute;
+		output.targetPerMinute += endpoint.targetPerMinute;
+		output.endpointCount++;
+		output.sampleSufficient &&= endpoint.sampleSufficient !== false;
+		outputs.set(key, output);
+	}
+	const grouped = [...outputs.values()];
+	for (const output of grouped)
+		output.met = output.sampleSufficient && output.perMinute >= output.targetPerMinute * 0.95;
+	const passed = grouped.every((output) => output.met);
+	return sandboxResultSchema.parse({
+		...result,
+		outputs: grouped,
+		passed,
+		verdict: passed
+			? 'passed'
+			: grouped.some((o) => !o.sampleSufficient)
+				? 'inconclusive'
+				: 'below_target'
 	});
+}
 type TrialResult = z.infer<typeof sandboxResultSchema>;
 type Actor = { name: string; requireAdmin: boolean };
 

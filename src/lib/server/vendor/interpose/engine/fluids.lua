@@ -185,18 +185,16 @@ function fluids.route(p)
   end
   local function lands_between_pair(x, y, axis_vertical, route_ugs)
     -- a new pipe-to-ground on the axis of an existing pair, between its ends
-    for i, u in ipairs(route_ugs) do
-      for j = i + 1, #route_ugs do
-        local w = route_ugs[j]
-        if u.x == w.x and u.x == x and axis_vertical and y > math.min(u.y, w.y) and y < math.max(u.y, w.y) then
-          return true
-        end
-        if u.y == w.y and u.y == y and not axis_vertical and x > math.min(u.x, w.x) and x < math.max(u.x, w.x) then
-          return true
-        end
+    local lowest, highest
+    for _, u in ipairs(route_ugs) do
+      if (axis_vertical and u.x == x) or (not axis_vertical and u.y == y) then
+        local position = axis_vertical and u.y or u.x
+        lowest = math.min(lowest or position, position)
+        highest = math.max(highest or position, position)
       end
     end
-    return false
+    local position = axis_vertical and y or x
+    return lowest ~= nil and lowest < position and position < highest
   end
 
   -- every output, in a fixed order: sorted by fluid, then position

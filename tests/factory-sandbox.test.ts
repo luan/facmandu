@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { sandboxResultSchema } from '../src/lib/server/factory-sandbox';
+import { aggregateLogisticsOutputs, sandboxResultSchema } from '../src/lib/server/factory-sandbox';
 
 for (const measured of [46, 48, 56]) {
 	test(`a batch allowance cannot qualify ${measured}/60 measured output`, () => {
@@ -53,4 +53,45 @@ test('measured success and actual failures retain their evidence', () => {
 		};
 		assert.deepEqual(sandboxResultSchema.parse(native), native);
 	}
+});
+
+test('shared provider output is qualified by total product rate, without relaxing other products', () => {
+	const measured = {
+		id: 'array',
+		status: 'done',
+		passed: false,
+		outputs: Array.from({ length: 32 }, (_, i) => ({
+			name: 'rocket-fuel',
+			kind: 'item',
+			perMinute: i < 10 ? 3.5 : 4,
+			targetPerMinute: 3.75,
+			met: i >= 10,
+			sampleSufficient: true
+		}))
+	};
+	assert.equal(sandboxResultSchema.parse(measured).passed, false);
+	const total = aggregateLogisticsOutputs(measured);
+	assert.equal(total.passed, true);
+	assert.equal(total.outputs?.length, 1);
+	assert.equal(total.outputs?.[0]?.perMinute, 123);
+	assert.equal(total.outputs?.[0]?.targetPerMinute, 120);
+	assert.equal(total.outputs?.[0]?.endpointCount, 32);
+	for (const outputs of [
+		measured.outputs.map((o) => ({ ...o, perMinute: 3.5 })),
+		[
+			...measured.outputs,
+			{
+				name: 'other',
+				kind: 'item',
+				perMinute: 0,
+				targetPerMinute: 10,
+				met: false,
+				sampleSufficient: true
+			}
+		],
+		measured.outputs.map((o) => ({ ...o, sampleSufficient: false }))
+	])
+		assert.equal(aggregateLogisticsOutputs({ ...measured, outputs }).passed, false);
+	assert.equal(aggregateLogisticsOutputs({ ...measured, status: 'error' }).passed, false);
+	assert.equal(aggregateLogisticsOutputs({ ...measured, error: 'native failure' }).passed, false);
 });

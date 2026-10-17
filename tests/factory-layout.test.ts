@@ -496,3 +496,59 @@ test('logistics compilation refuses shortages and undersized blocks without redu
 		false
 	);
 });
+
+test('fluid-fed logistics arrays fit slow recipes without a single oversized machine row', async () => {
+	const native = z
+		.json()
+		.parse(JSON.parse(readFileSync('tests/fixtures/interpose/rocket-fuel-2.1.21.json', 'utf8')));
+	const input = factoryLayoutInput.parse({
+		force: 'player',
+		surface: 'vulcanus',
+		label: 'Rocket fuel 120/min',
+		width: 64,
+		height: 48,
+		inputs: [
+			{ item: 'iron-plate', perMinute: 120 },
+			{ item: 'kr-oxygen', type: 'fluid', perMinute: 6000 },
+			{ item: 'light-oil', type: 'fluid', perMinute: 3600 }
+		],
+		outputs: [{ item: 'rocket-fuel', perMinute: 120 }],
+		recipes: ['rocket-fuel'],
+		logistics: { requester: 'requester-chest', provider: 'passive-provider-chest' },
+		tiers: {
+			machine: 'kr-fuel-refinery',
+			belt: 'transport-belt',
+			underground: 'underground-belt',
+			splitter: 'splitter',
+			inserter: 'fast-inserter',
+			pole: 'medium-electric-pole',
+			pipe: 'pipe',
+			pipe_underground: 'pipe-to-ground'
+		}
+	});
+	const compiled = await compileFactoryLayout(input, native, modules);
+	assert.deepEqual(compiled.steps, [{ recipe: 'rocket-fuel', machines: 32, perMinute: 120 }]);
+	assert.equal(compiled.design.entities.filter((e) => e.name === 'kr-fuel-refinery').length, 32);
+	assert.deepEqual(
+		compiled.test.inputs.filter((p) => p.kind === 'fluid').map((p) => [p.name, p.perMinute]),
+		[
+			['light-oil', 3600],
+			['kr-oxygen', 6000]
+		]
+	);
+	assert.equal(
+		compiled.test.outputs.reduce((sum, p) => sum + p.perMinute, 0),
+		120
+	);
+	await assert.rejects(
+		compileFactoryLayout(
+			{
+				...input,
+				inputs: input.inputs.map((p) => (p.item === 'kr-oxygen' ? { ...p, perMinute: 5999 } : p))
+			},
+			native,
+			modules
+		),
+		/Insufficient declared fluid supply/
+	);
+});

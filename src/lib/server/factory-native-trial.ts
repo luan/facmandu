@@ -16,7 +16,7 @@ import packSource from './factory-layout-pack.lua?raw';
 import { recordCompiledFactoryTrial } from './factory-layout-status';
 import control from './factory-native-trial.lua?raw';
 import { luaString } from './factory-query-bundle';
-import { sandboxResultSchema } from './factory-sandbox';
+import { aggregateLogisticsOutputs, sandboxResultSchema } from './factory-sandbox';
 import { nativeProfileFingerprint, withNativeProfile } from './map-generation-native';
 import { ServerError } from './server-files';
 import { run } from './server-process';
@@ -147,7 +147,9 @@ export function testCompiledFactory(
 					if (!reporting || options.signal?.aborted) return;
 					void readFile(join(output, 'layout-progress.json'), 'utf8')
 						.then((text) => {
-							const native = sandboxResultSchema.parse(JSON.parse(text));
+							const native = input.request.logistics
+								? aggregateLogisticsOutputs(JSON.parse(text))
+								: sandboxResultSchema.parse(JSON.parse(text));
 							if (!reporting || options.signal?.aborted) return;
 							options.progress({
 								...native,
@@ -224,8 +226,11 @@ export function testCompiledFactory(
 						);
 					if ((await nativeProfileFingerprint(server)) !== fingerprint)
 						throw new ServerError(409, 'Game or mods changed during native qualification');
+					const tested = input.request.logistics
+						? aggregateLogisticsOutputs(observed.result)
+						: sandboxResultSchema.parse(observed.result);
 					return sandboxResultSchema.parse({
-						...z.record(z.string(), z.json()).parse(observed.result),
+						...tested,
 						id,
 						backend: 'headless',
 						contextMatched: true,
