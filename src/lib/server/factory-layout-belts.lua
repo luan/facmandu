@@ -1,6 +1,7 @@
 -- Place the planner's exact machines in shared belt rows; fluids are routed afterwards.
 local engine=require('engine.init')
 local entities,ports,sources,sinks,steps,rows,fluid_clearance,reservations={},{},{},{},{},{},{},{}
+local circuits={}
 local function add(name,x,y,settings)
  local e=settings or {};e.name=name;e.position={x=x,y=y};e.direction=e.direction or 0
  entities[#entities+1]=e;e.entity_number=#entities;return #entities
@@ -82,8 +83,8 @@ local function geometry(line,width)
  local outlet=loader and #products==1 and consumed[products[1].name] and 2 or 0
  local lead=belts.lead
  for _,pin in ipairs(pins) do
-  if pin.position.x < -w/2 then lead=math.max(lead,2) end
-  if pin.position.x > w/2 then outlet=math.max(outlet,2) end
+  if pin.position.x < -w/2 then lead=math.max(lead,recipe.disposal and recipe.disposal.gate and 4 or 2) end
+  if pin.position.x > w/2 then outlet=math.max(outlet,recipe.disposal and recipe.disposal.gate and 4 or 2) end
  end
  local columns=math.min(count,math.floor((width+gap-lead-outlet)/pitch))
  -- Split physical rows at lane capacity; never reduce the saved machine count.
@@ -194,8 +195,9 @@ for index,line in ipairs(pack.plan.lines) do if line.machines>0.000001 then
   for i=0,n-1 do
    local x=left+i*pitch
    local center={x=x+w/2,y=ym+h/2}
-   local settings={direction=recipe.direction or 4};if not pack.furnaces[line.machine] then settings.recipe=line.recipe end
-   add(line.machine,center.x,center.y,settings)
+   local settings,wire,connector,gate=options.machine_settings(line,pack)
+   local id=add(line.machine,center.x,center.y,settings)
+   if wire then circuits[#circuits+1]={entity=entities[id],reach=wire,connector=connector,gate=gate} end
    for _,p in ipairs(recipe.fluid_connections or {}) do reservations[#reservations+1]={fluid=p.name,x=math.floor(center.x+p.position.x),y=math.floor(center.y+p.position.y)} end
    local output_column=0
    local function transfer(input,amount,outer_arm,product,output_lane)
@@ -426,4 +428,4 @@ if #nets>0 then
  assert(job.result,job.errors and job.errors[1] and job.errors[1].message)
  for _,e in ipairs(job.result) do add(e.name,e.position.x,e.position.y,{direction=e.direction,type=e.type}) end
 end
-return {entities=entities,ports=ports,sources=sources,sinks=sinks,steps=steps,reservations=reservations}
+return {entities=entities,ports=ports,sources=sources,sinks=sinks,steps=steps,reservations=reservations,circuits=circuits}

@@ -22,6 +22,7 @@ end
 
 --- Does this entity need electricity? Machines, electric furnaces, electric drills and inserters.
 function power.needs(name, pack)
+  if pack.pumps and pack.pumps[name] then return true end
   if pack.loaders and pack.loaders[name] then return pack.loaders[name].electric or false end
   local m = pack.machines and pack.machines[name]
   if m then
@@ -48,7 +49,7 @@ local function types_of(names, pack)
   for _, name in ipairs(names) do
     local p = pack.poles and pack.poles[name]
     if p then
-      list[#list + 1] = { name = name, size = p.size[1], supply = p.supply, reach = p.reach }
+      list[#list + 1] = { name = name, size = p.size[1], supply = p.supply, reach = p.reach, circuit_reach=p.circuit_reach }
     end
   end
   table.sort(list, function(a, b)
@@ -97,6 +98,10 @@ local function centre(t, x, y)
 end
 
 local function supplies(t, c, box)
+  if box.circuit then
+    local r=math.min(t.circuit_reach or 0,box.circuit.reach)
+    return (c.x-box.circuit.x)^2+(c.y-box.circuit.y)^2<=r^2
+  end
   return box.x0 < c.x + t.supply and box.x1 > c.x - t.supply and box.y0 < c.y + t.supply and box.y1 > c.y - t.supply
 end
 
@@ -106,13 +111,15 @@ local function wired(a_reach, a, b_reach, b)
 end
 
 --- Poles for a layout. opts: {area = {{x0, y0}, {x1, y1}}, blocked = set of "x,y" (obstacles, ports'
---- fronts...), poles = names of the allowed types}. Poles already in the layout count as placed.
+--- fronts...), poles = names of the allowed types, circuits = {x,y,reach} wire targets}.
+--- Poles already in the layout count as placed.
 --- Returns { poles = the new poles (blueprint entities: name, position), wires = {{a, b}} where a and b
 --- are pole positions (the layout's poles and the new ones), unpowered = entities no pole reaches,
 --- missed = their boxes }.
 function power.cover(entities, pack, opts)
   local types = types_of(opts.poles or {}, pack)
   local taken, needs, fixed = survey(entities, pack)
+  for _,p in ipairs(opts.circuits or {}) do needs[#needs+1]={x0=p.x,y0=p.y,x1=p.x,y1=p.y,circuit=p} end
   for k in pairs(opts.blocked or {}) do
     taken[k] = true
   end
@@ -182,7 +189,7 @@ function power.cover(entities, pack, opts)
   -- the layout's own poles first (types not allowed now are still poles: take them as they are)
   for _, f in ipairs(fixed) do
     local p = pack.poles[f.name]
-    place({ name = f.name, size = p.size[1], supply = p.supply, reach = p.reach }, f.x, f.y, true)
+    place({ name = f.name, size = p.size[1], supply = p.supply, reach = p.reach, circuit_reach=p.circuit_reach }, f.x, f.y, true)
   end
   -- Coverage is fixed; only occupied tiles and connectivity change as poles are
   -- added. Keep the original type/y/x ordering for deterministic greedy ties.

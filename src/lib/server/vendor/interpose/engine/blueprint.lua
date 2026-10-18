@@ -23,6 +23,7 @@ local function kind_of(name, pack)
   end
   for _, k in ipairs({
     { "machines", "machine" },
+    { "pumps", "pump" },
     { "belts", "belt" },
     { "undergrounds", "underground" },
     { "splitters", "splitter" },

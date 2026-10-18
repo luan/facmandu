@@ -137,7 +137,8 @@ export function testCompiledFactory(
 						e.request_filters ||
 						e.bar ||
 						e.filters ||
-						e.output_priority
+						e.output_priority ||
+						e.control_behavior
 							? [
 									{
 										index: i + 1,
@@ -147,7 +148,8 @@ export function testCompiledFactory(
 										bar: e.bar,
 										filters: e.filters,
 										useFilters: e.use_filters,
-										outputPriority: e.output_priority
+										outputPriority: e.output_priority,
+										control: e.control_behavior
 									}
 								]
 							: []
@@ -178,8 +180,20 @@ export function testCompiledFactory(
 				let phase = 'Loading the matching game and mods in an isolated process.';
 				const started = Date.now();
 				let reporting = true;
+				const failed = new AbortController();
+				let nativeError: ServerError | undefined;
 				const progress = setInterval(() => {
 					if (!reporting || options.signal?.aborted) return;
+					// A failed fixture cannot recover by simulating the remaining ticks.
+					void readFile(join(output, 'layout-trial.json'), 'utf8')
+						.then((text) => {
+							const result = z.object({ error: z.string().optional() }).parse(JSON.parse(text));
+							if (result.error) {
+								nativeError = new ServerError(409, result.error);
+								failed.abort();
+							}
+						})
+						.catch(() => {});
 					void readFile(join(output, 'layout-progress.json'), 'utf8')
 						.then((text) => {
 							const native = input.request.logistics
@@ -240,12 +254,16 @@ export function testCompiledFactory(
 							'1'
 						],
 						{
-							signal: options.signal,
+							signal: options.signal
+								? AbortSignal.any([options.signal, failed.signal])
+								: failed.signal,
 							timeout: 180000,
 							killSignal: 'SIGKILL',
 							maxBuffer: 4 * 1024 * 1024
 						}
-					);
+					).catch((cause: unknown) => {
+						throw nativeError ?? cause;
+					});
 					const observed = z
 						.object({
 							pack: z.json().optional(),

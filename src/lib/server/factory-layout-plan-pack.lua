@@ -56,6 +56,10 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
   end
   return assert(best,'No fluid orientation leaves the solid transfer lanes clear: '..crafter.name)
  end
+ local function volume(box)
+  local ok,value=pcall(function() return box.get_volume() end)
+  return ok and value or box.volume
+ end
  local function ports(crafter,parts,kind,direction,reserved)
   assert(#parts==0 or (request.tiers.pipe and request.tiers.pipe_underground),'Saved fluid stages require pipe tiers')
   assert(crafter.tile_width==crafter.tile_height,'Native fluid cells require square machines: '..crafter.name)
@@ -72,7 +76,7 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
    local position
    for _,c in ipairs(connections(box,direction)) do position=c.position;if c.side then break end end
    assert(position,'Missing fluid connection: '..crafter.name)
-   result[#result+1]={name=part.name,amount=part.amount,position=position,temperature=part.temperature}
+   result[#result+1]={name=part.name,amount=part.amount,position=position,temperature=part.temperature,volume=volume(box)}
   end
   return result
  end
@@ -126,8 +130,14 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
   local reserved={}
   local fluid_inputs=ports(crafter,fluid_in,'input',direction,reserved)
   local fluid_outputs=ports(crafter,fluid_out,'output',direction,reserved)
+  local disposal
+  if crafter.type=='furnace' and #ingredients==0 and #results==0 and #fluid_in==1 then
+   local box=box_for(boxes_for(crafter,'input'),fluid_in[1],1)
+   local capacity=volume(box)
+   disposal={fluid=fluid_in[1].name,capacity=capacity,threshold=math.floor(capacity*.5),wire_reach=crafter.get_max_circuit_wire_distance()}
+  end
   pack.recipes[name]={category=category,time=recipe.energy,machine=crafter.name,ingredients=ingredients,results=results,
-   direction=direction,fluid_inputs=fluid_inputs,fluid_outputs=fluid_outputs,fluid_connections=reserved}
+   direction=direction,fluid_inputs=fluid_inputs,fluid_outputs=fluid_outputs,fluid_connections=reserved,disposal=disposal}
  end
  local solved=frozen_plan
  for _,line in ipairs(solved.lines) do
@@ -150,5 +160,54 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
  local lines={}
  for _,line in ipairs(solved.lines) do lines[#lines+1]={recipe=line.recipe,machine=line.machine,machines=line.machines,
   productionType=line.productionType,products=line.products,ingredients=line.ingredients} end
+ -- A fractional gas producer otherwise runs flat out into its disposal furnaces.
+ -- Regulate fluid-only producers from the most demanded output, before venting.
+ local vented,demand,drivers,consumers={},{},{},{}
+ for _,recipe in pairs(pack.recipes) do if recipe.disposal then vented[recipe.disposal.fluid]=true end end
+ for _,line in ipairs(lines) do if not pack.recipes[line.recipe].disposal then
+  for _,part in ipairs(line.ingredients) do if part.type=='fluid' then
+   demand[part.name]=(demand[part.name] or 0)+part.perMinute
+   local c=consumers[part.name] or {count=0};consumers[part.name]=c
+   c.count=c.count+math.ceil(line.machines-0.000000001);c.recipe=pack.recipes[line.recipe];c.machine=line.machine
+  end end
+ end end
+ for _,part in ipairs(solved.products) do if part.type=='fluid' then demand[part.name]=(demand[part.name] or 0)+part.perMinute end end
+ for _,line in ipairs(lines) do
+  local recipe=pack.recipes[line.recipe]
+  local solids=false;for _,part in ipairs(recipe.results) do if part.type=='item' then solids=true end end
+  local incoming={};for _,part in ipairs(recipe.fluid_inputs) do incoming[part.name]=true end
+  local driver,required
+  -- Read the normal consumer: producer output boxes empty into the pipes, and disposal buffers cannot return their stock.
+  if not solids then for _,part in ipairs(recipe.fluid_outputs) do if vented[part.name] and not incoming[part.name] and part.amount>0 and (demand[part.name] or 0)>0 then
+   local rate=demand[part.name]/part.amount
+   if not required or rate>required then driver,required=part,rate end
+  end end end
+  local consumer=driver and consumers[driver.name]
+  -- One consumer buffer is an honest demand signal. Multiple consumers need independent demand signals before this can generalize.
+  if consumer and consumer.count==1 then
+   local input
+   for _,part in ipairs(consumer.recipe.fluid_inputs) do if part.name==driver.name then input=part end end
+   recipe.regulation={fluid=driver.name,threshold=math.max(1,math.floor(math.min(input.amount*2,input.volume*.5))),
+    wire_reach=prototypes.entity[line.machine].get_max_circuit_wire_distance()}
+   for _,output in ipairs(recipe.fluid_outputs) do
+    local sink=consumers[output.name]
+    if sink and sink.count==1 then
+     for _,part in ipairs(sink.recipe.fluid_inputs) do if part.name==output.name then
+      drivers[output.name]=math.max(1,math.floor(math.min(part.amount*2,part.volume*.5)))
+     end end
+     sink.recipe.sensor={wire_reach=prototypes.entity[sink.machine].get_max_circuit_wire_distance()}
+    end
+   end
+  end
+ end
+ -- Gate every consumed co-product, not just the driving gas: a disposal buffer must not trap another required ingredient.
+ for _,recipe in pairs(pack.recipes) do if recipe.disposal and drivers[recipe.disposal.fluid] then
+  recipe.disposal.threshold=drivers[recipe.disposal.fluid]*2
+  local pump=entity('pump','pump')
+  assert(pump.tile_width==1 and pump.tile_height==2,'Fluid overflow gates require a one-by-two pump')
+  pack.pumps=pack.pumps or {}
+  pack.pumps.pump={size={1,2},wire_reach=pump.get_max_circuit_wire_distance()}
+  recipe.disposal.gate='pump'
+ end end
  pack.plan={status=solved.status,lines=lines,ingredients=solved.ingredients,products=solved.products,byproducts=solved.byproducts}
 end

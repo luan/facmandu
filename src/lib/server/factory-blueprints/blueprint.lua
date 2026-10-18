@@ -248,7 +248,7 @@ local function blueprint(request,territories)
   return {force=force.name,entities=entities,wire_connector_ids=defines.wire_connector_id,fluid_position_reference='Offsets from entity center. Four array entries correspond to entity directions 0,4,8,12. positions are ports inside the machine edge; adjacent_pipe_positions are the neighboring pipe centers, outside its footprint.'}
  end
  -- Native exports omit defaults, including include_hands=true in Factorio 2.1.21.
- local defaults={input_priority='none',output_priority='none',use_filters=false,filter_mode='whitelist',override_stack_size=0,circuit_set_filters=false,circuit_read_hand_contents=false,circuit_read_contents=false,circuit_set_stack_size=false,circuit_enabled=false,connect_to_logistic_network=false,include_hands=true,is_on=true,active=true,multiplier=1,compare_type='or',copy_count_from_input=true,quality='normal'}
+ local defaults={input_priority='none',output_priority='none',use_filters=false,filter_mode='whitelist',override_stack_size=0,circuit_set_filters=false,circuit_read_hand_contents=false,circuit_read_contents=false,read_contents=false,circuit_set_stack_size=false,circuit_enabled=false,connect_to_logistic_network=false,include_hands=true,is_on=true,active=true,multiplier=1,compare_type='or',copy_count_from_input=true,quality='normal'}
  local function difference(actual,wanted,path,key)
   if actual==nil then
    actual=defaults[key]

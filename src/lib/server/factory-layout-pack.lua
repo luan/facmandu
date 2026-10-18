@@ -140,7 +140,7 @@ return function(request,build_plan,inserter_rules)
   tiers.long_inserter='long-handed-inserter';pack.transport.long_inserter=tiers.long_inserter;add_inserter(tiers.long_inserter)
  end
  local pole=entity(tiers.pole,'electric-pole')
- pack.poles[pole.name]={size=size(pole),supply=pole.get_supply_area_distance(),reach=pole.get_max_wire_distance()}
+ pack.poles[pole.name]={size=size(pole),supply=pole.get_supply_area_distance(),reach=pole.get_max_wire_distance(),circuit_reach=pole.get_max_circuit_wire_distance()}
  if request.fixedPlan or request.nativePlan then
   assert(build_plan,'Native plan compiler is unavailable')(request,force,surface,entity,pack,crafters)
  else

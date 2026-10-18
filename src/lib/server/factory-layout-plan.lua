@@ -2,6 +2,7 @@ local engine=require('engine.init')
 local plan=assert(pack.plan,'Missing native production plan')
 local entities,ports,sources,sinks,inputs,steps={},{},{},{},{},{}
 local demand,available,requested,reserved={},{},{},{}
+local circuits={}
 local function key(kind,name) return kind..'/'..name end
 for _,port in ipairs(problem.inputs) do available[key('item',port.item)]=(available[key('item',port.item)] or 0)+port.perMinute end
 for _,port in ipairs(problem.fluid_inputs or {}) do available[key('fluid',port.item)]=(available[key('fluid',port.item)] or 0)+port.perMinute end
@@ -50,8 +51,9 @@ for _,line in ipairs(plan.lines) do if line.machines>0.000001 then
    for _,part in ipairs(recipe.ingredients) do ports[#ports+1]={entity=chest,item=part.name,kind='input',position=entities[chest].position,perMinute=rate(line.ingredients,'item',part.name)/count} end
    add(problem.tiers.inserter,left+cell.input_arm.x,top+cell.input_arm.y,{pickup_position=cell.input_settings.pickup_position,drop_position=cell.input_settings.drop_position})
   end
-  local settings={direction=recipe.direction or 4};if not pack.furnaces[line.machine] then settings.recipe=line.recipe end
-  add(line.machine,x,center,settings)
+  local settings,wire,connector,gate=options.machine_settings(line,pack)
+  local id=add(line.machine,x,center,settings)
+  if wire then circuits[#circuits+1]={entity=entities[id],reach=wire,connector=connector,gate=gate} end
   for _,p in ipairs(recipe.fluid_connections or {}) do reserved[#reserved+1]={fluid=p.name,x=math.floor(x+p.position.x),y=math.floor(center+p.position.y)} end
   local item_products={}
   for _,part in ipairs(recipe.results) do if part.type=='item' then
@@ -73,7 +75,21 @@ end end
 else
  local placed=beltPlan()
  entities,ports,sources,sinks,steps,reserved=placed.entities,placed.ports,placed.sources,placed.sinks,placed.steps,placed.reservations
+ circuits=placed.circuits
 end
+-- Gate the pipe before a disposal input: disabled furnaces still trap fluid in their one-way input buffers.
+for _,c in ipairs(circuits) do if c.gate then
+ local recipe=pack.recipes[c.gate];local d=recipe.disposal;local p=recipe.fluid_inputs[1]
+ local dx=p.position.x>0 and 1 or -1;local dy=0
+ if math.abs(p.position.y)>= (pack.furnaces[c.entity.name].size[2]/2) then dx=0;dy=p.position.y>0 and 1 or -1 end
+ local x,y=c.entity.position.x+p.position.x,c.entity.position.y+p.position.y
+ local id=add(d.gate,x+dx*.5,y+dy*.5,{direction=dx<0 and 4 or dx>0 and 12 or dy<0 and 8 or 0,
+  control_behavior={circuit_enabled=true,circuit_condition={first_signal={type='fluid',name=d.fluid},comparator='>',constant=d.threshold}}})
+ for _,sink in ipairs(sinks) do if sink.fluid==d.fluid and sink.position.x==x and sink.position.y==y then
+  sink.position={x=x+dx*2,y=y+dy*2};sink.access={x=math.floor(sink.position.x)+dx,y=math.floor(sink.position.y)+dy}
+ end end
+ c.entity=entities[id]
+end end
 for _,port in ipairs(problem.fluid_inputs or {}) do if demand[key('fluid',port.item)] then
  local d=({[0]={0,-1},[4]={1,0},[8]={0,1},[12]={-1,0}})[port.direction]
  sources[#sources+1]={fluid=port.item,position=port.position,direction=port.direction,external=true,perMinute=demand[key('fluid',port.item)],access={x=math.floor(port.position.x)+d[1],y=math.floor(port.position.y)+d[2]}}
@@ -122,11 +138,59 @@ if not problem.logistics then
 end
 local powered={}
 for _,e in ipairs(entities) do if not pack.pipes[e.name] then powered[#powered+1]=e end end
-local power=engine.power.cover(powered,pack,{area=problem.area,blocked=blocked,poles={problem.tiers.pole}})
+local circuit_needs={}
+for _,c in ipairs(circuits) do circuit_needs[#circuit_needs+1]={x=c.entity.position.x,y=c.entity.position.y,reach=c.reach} end
+local power=engine.power.cover(powered,pack,{area=problem.area,blocked=blocked,poles={problem.tiers.pole},circuits=circuit_needs})
 assert(power.unpowered==0 and not power.split,'Could not power the complete native plan')
 local poles,wires={},{}
 for _,p in ipairs(power.poles) do poles[p.position.x..','..p.position.y]=add(p.name,p.position.x,p.position.y) end
 for _,wire in ipairs(power.wires) do local a,b=wire[1],wire[2];wires[#wires+1]={assert(poles[a.x..','..a.y]),5,assert(poles[b.x..','..b.y]),5} end
+-- Red networks read local disposal buffers. Green carries normal-consumer demand between stages.
+local groups,green={},false
+for _,c in ipairs(circuits) do
+ local chosen,distance
+ for _,p in ipairs(power.poles) do
+  local reach=math.min(c.reach,pack.poles[p.name].circuit_reach or 0)
+  local d=(p.position.x-c.entity.position.x)^2+(p.position.y-c.entity.position.y)^2
+  if d<=reach^2 and (not distance or d<distance) then chosen,distance=p,d end
+ end
+ assert(chosen,'No circuit pole reaches the controlled machine')
+ local id=poles[chosen.position.x..','..chosen.position.y]
+ wires[#wires+1]={c.entity.entity_number,c.connector,id,c.connector}
+ local condition=c.entity.control_behavior.circuit_condition
+ if c.connector==2 then green=true end
+ if condition then
+  local k=(c.connector==2 and 'green' or id)..'/'..c.connector..'/'..condition.first_signal.name..'/'..condition.comparator
+  groups[k]=groups[k] or {conditions={},threshold=0}
+  local g=groups[k];g.conditions[#g.conditions+1]=condition
+  g.threshold=c.connector==2 and math.max(g.threshold,condition.constant) or g.threshold+condition.constant
+ end
+end
+for _,g in pairs(groups) do for _,condition in ipairs(g.conditions) do condition.constant=g.threshold end end
+if green then
+ -- Reuse the power tree when native circuit reach covers each hop.
+ local direct=true
+ for _,wire in ipairs(power.wires) do
+  local a,b=wire[1],wire[2]
+  local pa,pb=entities[poles[a.x..','..a.y]],entities[poles[b.x..','..b.y]]
+  local reach=math.min(pack.poles[pa.name].circuit_reach or 0,pack.poles[pb.name].circuit_reach or 0)
+  if (a.x-b.x)^2+(a.y-b.y)^2>reach^2 then direct=false;break end
+ end
+ if direct then
+  for _,wire in ipairs(power.wires) do local a,b=wire[1],wire[2];wires[#wires+1]={poles[a.x..','..a.y],2,poles[b.x..','..b.y],2} end
+ else
+  local circuit_pack={poles={}}
+  for name,p in pairs(pack.poles) do local copy={};for k,v in pairs(p) do copy[k]=v end;copy.reach=p.circuit_reach or 0;circuit_pack.poles[name]=copy end
+  local taken={}
+  for _,e in ipairs(engine.blueprint.load({entities=entities},pack).entities) do for _,tile in ipairs(e.tiles) do taken[engine.blueprint.tile_key(tile[1],tile[2])]=true end end
+  local joined,issues=engine.power.connect(power.poles,circuit_pack,{area=problem.area,blocked=taken,poles={problem.tiers.pole}})
+  assert(joined,'Cannot connect fluid demand circuits: '..tostring(issues and issues[1] and issues[1].message))
+  local added={}
+  for i,p in ipairs(joined.poles) do added[i]=add(p.name,p.position.x,p.position.y) end
+  local function endpoint(ref) local p=ref.existing and power.poles[ref.existing];return p and poles[p.position.x..','..p.position.y] or added[ref.new] end
+  for _,wire in ipairs(joined.wires) do wires[#wires+1]={endpoint(wire[1]),2,endpoint(wire[2]),2} end
+ end
+end
 assert(#entities<=problem.max_entities,'Native plan needs '..#entities..' entities; split the plan to stay within '..problem.max_entities)
 local tiles,occupied={},{ }
 for _,e in ipairs(entities) do

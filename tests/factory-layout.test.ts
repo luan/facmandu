@@ -1007,6 +1007,43 @@ test('pipe routing can cross unconnected ports of the same fluid without duplica
 	assert.equal(result.status, 0, result.stderr);
 });
 
+test('native gas feedback reads one normal consumer and never sums independent buffers', () => {
+	const result = spawnSync('lua', ['-'], {
+		encoding: 'utf8',
+		input: `
+ local capture=dofile('src/lib/server/factory-layout-plan-pack.lua')
+ local function machine(name,kind,input,output)
+  local m={name=name,type=kind,tile_width=3,tile_height=3,crafting_categories={chemistry=true},fluidbox_prototypes={},get_max_circuit_wire_distance=function() return 9 end}
+  for i,side in ipairs{input and 'input' or 'output',output and 'output' or 'input'} do
+   m.fluidbox_prototypes[i]={index=i,volume=1000,production_type=side,pipe_connections={{connection_type='normal',direction=side=='input' and 12 or 4,positions={{x=side=='input' and -1 or 1,y=0},{x=0,y=1},{x=1,y=0},{x=0,y=-1}}}}}
+  end
+  return m
+ end
+ local gas=machine('gas','assembling-machine',true,true)
+ local consumer=machine('consumer','assembling-machine',true,false)
+ local flare=machine('flare','furnace',true,false)
+ local pump={tile_width=1,tile_height=2,get_max_circuit_wire_distance=function() return 9 end}
+ local function fluid(name,n) return {type='fluid',name=name,amount=n} end
+ local function recipe(ingredients,products) return {enabled=true,energy=1,categories={'chemistry'},prototype={},ingredients=ingredients,products=products} end
+ local recipes={gas=recipe({fluid('water',10)},{fluid('chlorine',20)}),consumer=recipe({fluid('chlorine',50)},{{type='item',name='salt',amount=1}}),flare=recipe({fluid('chlorine',10)},{})}
+ prototypes={entity={gas=gas,consumer=consumer,flare=flare},fluid={water={default_temperature=15},chlorine={default_temperature=15}}}
+ local function part(name,rate) return {type='fluid',name=name,perMinute=rate} end
+ local plan={status='solved',ingredients={},products={},byproducts={},lines={{recipe='gas',machine='gas',machines=.1,ingredients={part('water',60)},products={part('chlorine',120)}},{recipe='consumer',machine='consumer',machines=.1,ingredients={part('chlorine',100)},products={}},{recipe='flare',machine='flare',machines=.1,ingredients={part('chlorine',20)},products={}}}}
+ local request={recipes={'gas','consumer','flare'},inputs={},outputs={},tiers={pipe='pipe',pipe_underground='pipe-to-ground'}}
+ local pack={machines={gas={},consumer={}},furnaces={flare={}},recipes={}}
+ capture(request,{recipes=recipes},{},function(name) assert(name=='pump');return pump end,pack,{},plan)
+ assert(pack.recipes.gas.regulation.fluid=='chlorine' and pack.recipes.gas.regulation.threshold==100)
+ assert(pack.recipes.consumer.sensor.wire_reach==9)
+ assert(pack.recipes.flare.disposal.threshold==200 and pack.recipes.flare.disposal.gate=='pump')
+ plan.lines[2].machines=2
+ capture(request,{recipes=recipes},{},function(name) assert(name=='pump');return pump end,pack,{},plan)
+ assert(not pack.recipes.gas.regulation and not pack.recipes.consumer.sensor,'Independent consumer buffers must not mask starvation')
+ assert(pack.recipes.flare.disposal.threshold==500)
+ `
+	});
+	assert.equal(result.status, 0, result.stderr);
+});
+
 test('saved electrolysis with solid ingredients rotates native fluid sockets away from belt lanes', () => {
 	const result = spawnSync('lua', ['-'], {
 		encoding: 'utf8',
@@ -1015,16 +1052,18 @@ test('saved electrolysis with solid ingredients rotates native fluid sockets awa
  -- The live five-tile electrolysis prototype: west inputs, east outputs at north rotation.
  for i,point in ipairs{{-2,-1},{-2,1},{2,-1},{2,1}} do
   local x,y=point[1],point[2]
-  machine.fluidbox_prototypes[i]={index=i,production_type=i<=2 and 'input' or 'output',pipe_connections={{connection_type='normal',direction=i<=2 and 12 or 4,positions={{x=x,y=y},{x=-y,y=x},{x=-x,y=-y},{x=y,y=-x}}}}}
+  machine.fluidbox_prototypes[i]={index=i,volume=1000,production_type=i<=2 and 'input' or 'output',pipe_connections={{connection_type='normal',direction=i<=2 and 12 or 4,positions={{x=x,y=y},{x=-y,y=x},{x=-x,y=-y},{x=y,y=-x}}}}}
  end
  local recipe={enabled=true,energy=1,categories={'chemistry'},prototype={},ingredients={{type='fluid',name='water',amount=10},{type='item',name='salt',amount=1}},products={{type='fluid',name='hydrogen',amount=5},{type='fluid',name='chlorine',amount=5}}}
  prototypes={entity={electrolyser=machine},fluid={water={default_temperature=15},hydrogen={default_temperature=15},chlorine={default_temperature=15}}}
- local plan={status='solved',lines={{recipe='electrolysis',machine='electrolyser',machines=1}},ingredients={{type='fluid',name='water',perMinute=600},{type='item',name='salt',perMinute=60}},byproducts={{type='fluid',name='chlorine',perMinute=300}}}
+ local plan={status='solved',products={{type='fluid',name='hydrogen',perMinute=300}},lines={{recipe='electrolysis',machine='electrolyser',machines=1,ingredients={{type='fluid',name='water',perMinute=600},{type='item',name='salt',perMinute=60}},products={{type='fluid',name='hydrogen',perMinute=300},{type='fluid',name='chlorine',perMinute=300}}}},ingredients={{type='fluid',name='water',perMinute=600},{type='item',name='salt',perMinute=60}},byproducts={{type='fluid',name='chlorine',perMinute=300}}}
  local request={recipes={'electrolysis'},inputs={{type='fluid',item='water',perMinute=600},{type='item',item='salt',perMinute=60}},outputs={{type='fluid',item='hydrogen'},{type='fluid',item='chlorine'}},tiers={pipe='pipe',pipe_underground='pipe-to-ground'}}
  local pack={machines={electrolyser={}},furnaces={},recipes={}}
  dofile('src/lib/server/factory-layout-plan-pack.lua')(request,{recipes={electrolysis=recipe}},{},nil,pack,{},plan)
  local captured=pack.recipes.electrolysis
  assert(captured.direction==0,'The native ports must rotate with the machine')
+ assert(captured.fluid_outputs[1].volume==1000,'Capture the native fluid capacity')
+ assert(not captured.regulation,'Do not throttle gas outputs that have no disposal stage')
  assert(captured.fluid_inputs[1].position.x==-3 and captured.fluid_inputs[1].position.y==-1)
  assert(captured.fluid_outputs[1].position.x==3 and captured.fluid_outputs[2].position.x==3)
  assert(#captured.fluid_connections==4,'Reserve the alternate water socket too')
@@ -1136,31 +1175,106 @@ test('two saved disposal stages using the same furnace retain their distinct flu
 	assert.equal(result.test.outputs.find((p) => p.name === 'kr-hydrogen-chloride')?.perMinute, 60);
 });
 
-test('the complete saved processing-unit plan routes every native stage within 100 by 100', async () => {
-	const fixture = JSON.parse(
-		readFileSync('tests/fixtures/interpose/saved-processing-units-belts-2.1.21.json', 'utf8')
-	);
-	const result = await compileFactoryLayout(
-		factoryLayoutInput.parse(fixture.request),
-		z.json().parse(fixture.pack),
-		modules
-	);
-	assert.equal(result.steps.length, 26);
-	assert.equal(
-		result.steps.reduce((n, step) => n + step.machines, 0),
-		102
-	);
-	assert.ok(
-		Math.abs(
-			(result.test.outputs.find((p) => p.name === 'processing-unit')?.perMinute ?? 0) - 120
-		) < 1e-6
-	);
-	assert.ok(result.design.entities.length > 2000);
-	assert.ok(result.design.entities.length <= 3000);
-	assert.ok(
-		result.design.entities.every(
-			(e) => e.position.x >= 0 && e.position.x < 100 && e.position.y >= 0 && e.position.y < 100
-		)
-	);
-	assert.ok(blueprintInputSchema.safeParse({ ...result.design, operation: 'create' }).success);
-});
+for (const circuitReach of [20.25, 15])
+	test(`the complete saved processing-unit plan routes with circuit reach ${circuitReach}`, async () => {
+		const fixture = JSON.parse(
+			readFileSync('tests/fixtures/interpose/saved-processing-units-belts-2.1.21.json', 'utf8')
+		);
+		fixture.pack.poles.substation.circuit_reach = circuitReach;
+		const result = await compileFactoryLayout(
+			factoryLayoutInput.parse(fixture.request),
+			z.json().parse(fixture.pack),
+			modules
+		);
+		assert.equal(result.steps.length, 26);
+		assert.equal(
+			result.steps.reduce((n, step) => n + step.machines, 0),
+			102
+		);
+		assert.ok(
+			Math.abs(
+				(result.test.outputs.find((p) => p.name === 'processing-unit')?.perMinute ?? 0) - 120
+			) < 1e-6
+		);
+		assert.ok(result.design.entities.length > 2000);
+		assert.ok(result.design.entities.length <= 3000);
+		assert.ok(
+			result.design.entities.every(
+				(e) => e.position.x >= 0 && e.position.x < 100 && e.position.y >= 0 && e.position.y < 100
+			)
+		);
+		assert.ok(blueprintInputSchema.safeParse({ ...result.design, operation: 'create' }).success);
+		const disposal = result.design.entities.filter((e) => e.name === 'kr-flare-stack');
+		assert.equal(disposal.length, 2);
+		const controls = result.design.entities.filter((e) => e.name === 'pump');
+		assert.equal(controls.length, 2);
+		assert.ok(disposal.every((e) => !e.control_behavior));
+		assert.deepEqual(
+			controls.map((e) => e?.control_behavior?.circuit_condition),
+			[
+				['kr-hydrogen', 200],
+				['kr-chlorine', 200]
+			].map(([name, constant]) => ({
+				first_signal: { type: 'fluid', name },
+				comparator: '>',
+				constant
+			}))
+		);
+		for (const entity of controls) {
+			assert.ok(entity);
+			assert.equal(entity.control_behavior?.read_contents ?? false, false);
+			assert.equal(entity.control_behavior?.circuit_enabled, true);
+			const index = result.design.entities.indexOf(entity) + 1;
+			const wire = result.design.wires.find(
+				([from, connector]) => from === index && connector === 2
+			);
+			assert.ok(wire, 'Each overflow pump must read the consumer circuit network');
+			const pole = result.design.entities[wire[2] - 1];
+			assert.equal(pole?.name, 'substation');
+			assert.ok(
+				pole &&
+					Math.hypot(pole.position.x - entity.position.x, pole.position.y - entity.position.y) <= 9
+			);
+		}
+		const electrolyser = result.design.entities.find((e) => e.name === 'kr-electrolysis-plant');
+		assert.ok(electrolyser);
+		assert.deepEqual(electrolyser.control_behavior?.circuit_condition, {
+			first_signal: { type: 'fluid', name: 'kr-chlorine' },
+			comparator: '<',
+			constant: 100
+		});
+		assert.equal(electrolyser.control_behavior?.read_contents, false);
+		const producer = result.design.entities.indexOf(electrolyser) + 1;
+		assert.ok(
+			result.design.wires.some(
+				([from, color, , targetColor]) => from === producer && color === 2 && targetColor === 2
+			),
+			'Production demand must use a separate network from disposal contents'
+		);
+		const consumer = result.design.entities.find((e) => e.recipe === 'kr-hydrogen-chloride');
+		assert.ok(consumer);
+		assert.equal(consumer.control_behavior?.read_contents, true);
+		assert.equal(consumer.control_behavior?.circuit_enabled, false);
+		assert.equal(consumer.control_behavior?.circuit_condition, undefined);
+		for (const [from, color, to] of result.design.wires)
+			if (color === 2) {
+				const a = result.design.entities[from - 1];
+				const b = result.design.entities[to - 1];
+				assert.ok(a && b);
+				const reach = a.name === 'substation' && b.name === 'substation' ? circuitReach : 9;
+				assert.ok(Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y) <= reach);
+			}
+		const reachable = new Set([producer]);
+		for (let pass = 0; pass < result.design.wires.length; pass++) {
+			for (const [from, color, to, targetColor] of result.design.wires) {
+				if (color === 2 && targetColor === 2 && (reachable.has(from) || reachable.has(to))) {
+					reachable.add(from);
+					reachable.add(to);
+				}
+			}
+		}
+		assert.ok(
+			reachable.has(result.design.entities.indexOf(consumer) + 1),
+			'The producer must read its normal consumer across stages'
+		);
+	});

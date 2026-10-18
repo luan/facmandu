@@ -1,4 +1,4 @@
--- Shared logistics-cell geometry. Vectors stay relative to north-facing arms.
+-- Shared machine settings and logistics-cell geometry. Vectors stay relative to north-facing arms.
 local options={}
 local function tile(v) return math.floor(v+0.5) end
 function options.arm(arm,chosen)
@@ -73,5 +73,21 @@ function options.product_settings(problem,pack,item)
   result.request_filters={sections={{index=1,filters={{index=1,type='item',name=item,quality='normal',comparator='=',count=0}}}}}
  end
  return result
+end
+function options.machine_settings(line,pack)
+ local recipe=pack.recipes[line.recipe]
+ local settings={direction=recipe.direction or 4}
+ if not pack.furnaces[line.machine] then settings.recipe=line.recipe end
+ if recipe.disposal and recipe.disposal.gate then return settings,pack.pumps[recipe.disposal.gate].wire_reach,2,line.recipe end
+ if recipe.regulation or recipe.disposal or recipe.sensor then
+  local d=recipe.regulation or recipe.disposal or recipe.sensor
+  assert(d.wire_reach>0,'Fluid control requires a circuit-capable machine: '..line.machine)
+  local remote=recipe.regulation
+  settings.control_behavior={read_contents=recipe.sensor~=nil or not remote,circuit_enabled=recipe.regulation~=nil or recipe.disposal~=nil}
+  if recipe.regulation or recipe.disposal then settings.control_behavior.circuit_condition={first_signal={type='fluid',name=d.fluid},comparator=recipe.regulation and '<' or '>',constant=d.threshold} end
+  if pack.furnaces[line.machine] then settings.control_behavior.include_in_crafting=false end
+  return settings,d.wire_reach,recipe.disposal and not remote and 1 or 2
+ end
+ return settings
 end
 return options

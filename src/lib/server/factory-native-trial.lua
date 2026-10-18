@@ -8,9 +8,20 @@ local function write(value)
  helpers.write_file('layout-trial.json',helpers.table_to_json(value),false)
 end
 local function diagnostics(job)
- local producers,fluids,connections,loaders={},{},{},{}
+ local producers,fluids,connections,loaders,controls={},{},{},{},{}
  local statuses={} for name,value in pairs(defines.entity_status) do statuses[value]=name end
  for _,e in ipairs(job.entities or {}) do if e.valid then
+  if e.type=='assembling-machine' or e.type=='furnace' or e.type=='pump' then
+   local b=e.get_control_behavior()
+   if b and (e.type=='pump' or b.circuit_enable_disable or b.circuit_read_contents) then
+    local condition=b.circuit_condition
+    local definition=condition and (condition.condition or condition)
+    local signal=definition and definition.first_signal
+    local network=(b.get_circuit_network(defines.wire_connector_id.circuit_red) or b.get_circuit_network(defines.wire_connector_id.circuit_green))
+    controls[#controls+1]={position=e.position,condition=condition,disabled=b.disabled,
+     signal=signal and network and network.get_signal(signal) or 0,fluids=e.get_fluid_contents()}
+   end
+  end
   if e.type=='assembling-machine' or e.type=='furnace' then
    local recipe=e.get_recipe()
    local key=e.name..'/'..(recipe and recipe.name or '')
@@ -42,7 +53,7 @@ local function diagnostics(job)
    for name,amount in pairs(e.get_fluid_contents()) do fluids[name]=(fluids[name] or 0)+amount end
   end
  end end
- return {tick=game.tick,producers=producers,storedFluids=fluids,connections=connections,loaders=loaders}
+ return {tick=game.tick,producers=producers,storedFluids=fluids,connections=connections,loaders=loaders,controls=controls}
 end
 local function verify_fluids(job,pack)
  local segments,networks={},{}
@@ -60,6 +71,10 @@ local function verify_fluids(job,pack)
     local name=target and expected[key(target.position)]
     if name and target.has_fluid_segment(port.target_fluidbox_index) then
      local id=target.get_fluid_segment_id(port.target_fluidbox_index)
+     if model.disposal and model.disposal.gate then
+      assert(target.type=='pump','Disposal input is missing its overflow gate')
+      for _,link in pairs(target.get_fluid_box_pipe_connections(port.target_fluidbox_index)) do if link.target and link.target~=e and link.target.has_fluid_segment(link.target_fluidbox_index) then id=link.target.get_fluid_segment_id(link.target_fluidbox_index) end end
+     end
      assert(not segments[id] or segments[id]==name,'Fluid network joins '..name..' to '..tostring(segments[id])..' at '..e.name)
      assert(not networks[name] or networks[name]==id,'Disconnected native '..name..' networks at '..e.name)
      networks[name]=id;segments[id]=name;connected[name]=true
@@ -67,6 +82,19 @@ local function verify_fluids(job,pack)
    end
   end
   for name in pairs(required) do assert(connected[name],'Missing native '..name..' connection at '..e.name) end
+ end end
+ for _,e in ipairs(job.entities or {}) do if e.valid and e.type=='pump' then
+  local condition=e.get_control_behavior().circuit_condition;condition=condition.condition or condition
+  local name=condition.first_signal.name
+  local forward=({[0]={0,-1},[4]={1,0},[8]={0,1},[12]={-1,0}})[e.direction]
+  local inlet,outlet=false,false
+  for _,link in pairs(e.get_fluid_box_pipe_connections(1)) do local target=link.target;if target then
+   local dot=(target.position.x-e.position.x)*forward[1]+(target.position.y-e.position.y)*forward[2]
+   if dot<0 and target.has_fluid_segment(link.target_fluidbox_index) then
+    inlet=networks[name]==target.get_fluid_segment_id(link.target_fluidbox_index)
+   elseif dot>0 and target.type=='furnace' then outlet=true end
+  end end
+  assert(inlet and outlet,'Overflow pump must connect the correct supply to its disposal furnace: '..name)
  end end
 end
 local function context()
@@ -115,6 +143,18 @@ events.on_event(defines.events.on_tick,function(e)
    local job=assert(storage.toby_trials.jobs[storage.job])
    for _,wanted in ipairs(payload.settings or {}) do
     local entity=assert(job.entities[wanted.index],'Missing configured entity')
+    if wanted.control then
+     local b=assert(entity.get_control_behavior(),'Missing native machine controls')
+     assert(wanted.control.read_contents==nil or b.circuit_read_contents==wanted.control.read_contents,'Native contents reading changed')
+     assert(b.circuit_enable_disable==wanted.control.circuit_enabled,'Native circuit enable control changed')
+     assert((b.get_circuit_network(defines.wire_connector_id.circuit_red) or b.get_circuit_network(defines.wire_connector_id.circuit_green)),'Native fluid-control circuit wire is missing')
+     local expected=wanted.control.circuit_condition
+     if expected then
+      local actual=b.circuit_condition
+      actual=actual.condition or actual
+      assert(actual.comparator==expected.comparator and actual.constant==expected.constant and actual.first_signal.name==expected.first_signal.name,'Native fluid-control condition changed')
+     end
+    end
     for _,pair in ipairs{{wanted.pickup,'pickup_position'},{wanted.drop,'drop_position'}} do if pair[1] then
      local actual=entity[pair[2]]
      assert(math.abs(actual.x-entity.position.x-pair[1].x)<0.000001 and math.abs(actual.y-entity.position.y-pair[1].y)<0.000001,'Native inserter geometry changed for '..entity.name..' '..wanted.index..' '..pair[2]..': expected '..pair[1].x..','..pair[1].y..', got '..(actual.x-entity.position.x)..','..(actual.y-entity.position.y))
