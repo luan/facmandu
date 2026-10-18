@@ -22,6 +22,7 @@ end
 
 --- Does this entity need electricity? Machines, electric furnaces, electric drills and inserters.
 function power.needs(name, pack)
+  if pack.loaders and pack.loaders[name] then return pack.loaders[name].electric or false end
   local m = pack.machines and pack.machines[name]
   if m then
     return not m.burner

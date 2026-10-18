@@ -381,12 +381,18 @@ function routing.nets(layout, problem, pack, base)
   local product_sources = {} -- item -> keys of the rows that make it, in order
   for _, row in ipairs(layout.rows) do
     local ob = row.output_belt
+    if ob then
     local k = key_of(row.item, row.copy)
     local label = "row " .. row.recipe .. (row.copy and (" (chain " .. row.copy .. ")") or "")
     sources[k] = { x = ob.x2 + 1, y = ob.y, dir = direction.EAST, from_x = ob.x2, from_y = ob.y, label = label }
     from_row[row.item] = true
     product_sources[row.item] = product_sources[row.item] or {}
     table.insert(product_sources[row.item], k)
+    end
+  end
+  for item,port in pairs(problem.item_headers or {}) do
+    local v=direction.vector(port.direction)
+    sources[item]={x=math.floor(port.position.x)+v.x,y=math.floor(port.position.y)+v.y,dir=port.direction,label="header "..item}
   end
 
   -- every place an item must go, in a fixed order
@@ -403,6 +409,7 @@ function routing.nets(layout, problem, pack, base)
   end
   -- where a row of chain `copy` gets an item: its own chain's row, or the shared input port
   local function source_key(item, copy)
+    if problem.item_headers and problem.item_headers[item] then return item end
     local k = key_of(item, copy)
     return sources[k] and k or item
   end

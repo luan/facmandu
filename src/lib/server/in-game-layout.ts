@@ -6,6 +6,7 @@ import { parseGameLayout } from '$lib/game-chat';
 import { db } from './db';
 import { type ManagedServer, managedServer } from './db/schema';
 import { designFactory } from './factory-layout';
+import { layoutFailureMessage } from './factory-layout-saved-plan';
 import { luaString } from './factory-query-bundle';
 import { subscribeLogs } from './server-logs';
 import { rconScript } from './server-rcon';
@@ -38,7 +39,11 @@ export async function receiveLayout(
 	try {
 		const pending = await nativeCall(server, 'read_request', args);
 		if (!pending) return;
-		const request = factoryLayoutInput.parse(pending);
+		// Remove 0.0.19's manual vectors until all servers have the automatic-geometry UI.
+		const { inserters: _legacyVectors, ...selection } = z
+			.record(z.string(), z.json())
+			.parse(pending);
+		const request = factoryLayoutInput.parse(selection);
 		if (request.player !== message.player) throw new Error('Layout player changed');
 		const result = await designFactory(server, request, {
 			name: message.player,
@@ -49,7 +54,7 @@ export async function receiveLayout(
 			.parse(result.artifact);
 		await nativeCall(server, 'complete', [...args, artifact]);
 	} catch (cause) {
-		const error = cause instanceof Error ? cause.message.slice(0, 500) : 'Layout failed';
+		const error = layoutFailureMessage(cause);
 		await nativeCall(server, 'complete', [...args, { error }]).catch(() => {});
 		console.error('In-game layout failed:', error);
 	}

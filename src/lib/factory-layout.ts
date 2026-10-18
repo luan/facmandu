@@ -60,7 +60,7 @@ export const factoryLayoutJobInput = z
 			machine: name,
 			crafters: z.array(name).max(8).optional(),
 			belt: name,
-			underground: name,
+			underground: name.optional(),
 			inserter: name,
 			pole: name,
 			pipe: name.optional(),
@@ -92,6 +92,12 @@ export const factoryLayoutJobInput = z
 		}))
 	}))
 	.superRefine((request, ctx) => {
+		if (!request.fixedPlan && !request.tiers.underground)
+			ctx.addIssue({
+				code: 'custom',
+				message: 'Choose an underground belt for this production job'
+			});
+
 		if (
 			!request.nativePlan &&
 			request.logistics &&
@@ -109,15 +115,6 @@ export const factoryLayoutJobInput = z
 			});
 		if (!request.fixedPlan && request.nativePlan && request.recipes.length > 24)
 			ctx.addIssue({ code: 'custom', message: 'Native plans support at most 24 selected recipes' });
-		if (
-			request.nativePlan &&
-			[...request.inputs, ...request.outputs].some((p) => p.type !== 'fluid') &&
-			!request.logistics
-		)
-			ctx.addIssue({
-				code: 'custom',
-				message: 'Native plan item supplies require requester/provider chests'
-			});
 		if (
 			(request.inputs.some((port) => port.type === 'fluid') ||
 				request.outputs.some((port) => port.type === 'fluid')) &&
@@ -167,7 +164,6 @@ export const factoryLayoutInput = z.strictObject({
 			spacing: z.enum(['compact', 'spacious']).default('compact')
 		})
 		.default({ shape: 'auto', spacing: 'compact' }),
-	inserters: z.strictObject({ input: arm.optional(), output: arm.optional() }).optional(),
 	logistics: z
 		.strictObject({
 			requester: name,
@@ -178,7 +174,7 @@ export const factoryLayoutInput = z.strictObject({
 		.optional(),
 	tiers: z.strictObject({
 		belt: name,
-		underground: name,
+		underground: name.optional(),
 		inserter: name,
 		pole: name,
 		pipe: name.optional(),

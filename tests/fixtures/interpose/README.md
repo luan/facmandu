@@ -15,3 +15,10 @@ isolated headless world using the matching full mod profile and declared supplie
 copy of Beast. Its ten chosen assemblers produce 900 gears/min. It includes native
 Smart Inserters research/settings, requester and storage chest prototypes, and the
 frozen planner calculation. No saved world or player inventory is included.
+
+`saved-rocket-belts-2.1.21.json` captures a solved six-stage plan and its live
+prototype geometry, researched Smart Inserters reach and AAI red loader tier.
+It preserves 61 selected machines, including the planner-selected EARS variant.
+That variant requires EARS research and harene-compatible flooring before construction; the fixture tests layout,
+not current research availability or live production. The current fluid
+service corridors require a larger block than 64×64.

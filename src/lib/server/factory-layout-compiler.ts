@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { blueprintDesignSchema } from '$lib/blueprints';
 import { type FactoryLayoutJob, factoryLayoutJobInput } from '$lib/factory-layout';
 import adapter from './factory-layout-adapter.lua?raw';
+import belts from './factory-layout-belts.lua?raw';
+import compression from './factory-layout-compress.lua?raw';
 import logistics from './factory-layout-logistics.lua?raw';
 import options from './factory-layout-options.lua?raw';
 import nativePlan from './factory-layout-plan.lua?raw';
@@ -13,6 +15,7 @@ import { ServerError } from './server-files';
 const resultSchema = z.object({
 	entities: blueprintDesignSchema.shape.entities,
 	wires: blueprintDesignSchema.shape.wires,
+	tiles: blueprintDesignSchema.shape.tiles,
 	inputs: z.array(
 		z.object({
 			item: z.string(),
@@ -52,7 +55,21 @@ export async function compileFactoryLayout(
 	modules: Record<string, string>,
 	signal?: AbortSignal
 ) {
-	const request = factoryLayoutJobInput.parse(input);
+	const transport = z
+		.object({
+			transport: z
+				.object({
+					underground: z.string(),
+					splitter: z.string().optional(),
+					long_inserter: z.string().optional()
+				})
+				.optional()
+		})
+		.parse(pack).transport;
+	const request = factoryLayoutJobInput.parse({
+		...input,
+		tiers: { ...input.tiers, ...transport }
+	});
 	const problem = {
 		logistics: request.logistics,
 		layout: request.layout,
@@ -65,10 +82,20 @@ export async function compileFactoryLayout(
 		],
 		inputs: request.inputs.filter((port) => port.type !== 'fluid'),
 		fluid_inputs: request.inputs.filter((port) => port.type === 'fluid'),
-		// Item routing must leave the fluid entry tiles available for pipes.
-		obstacles: request.inputs
-			.filter((port) => port.type === 'fluid')
-			.map((port) => ({ x: Math.floor(port.position.x), y: Math.floor(port.position.y) })),
+		// Keep a short approach clear too: reserving only the endpoint can seal it behind belts.
+		obstacles: [
+			...request.inputs.map((port) => ({ port, sign: 1 })),
+			...request.outputs.map((port) => ({ port, sign: -1 }))
+		]
+			.filter(({ port }) => port.type === 'fluid')
+			.flatMap(({ port, sign }) => {
+				const vectors = { 0: [0, -1], 4: [1, 0], 8: [0, 1], 12: [-1, 0] } as const;
+				const [x, y] = vectors[port.direction];
+				return [0, 1, 2].map((distance) => ({
+					x: Math.floor(port.position.x) + x * sign * distance,
+					y: Math.floor(port.position.y) + y * sign * distance
+				}));
+			}),
 		outputs: request.outputs.map((port) => ({ ...port, rate: port.perMinute / 60 })),
 		tiers: { ...request.tiers, poles: [request.tiers.pole] },
 		// Keep candidate search bounded; failure never lowers a player's requested rate.
@@ -104,7 +131,7 @@ export async function compileFactoryLayout(
 				.map(([name, body]) => `[ ${luaString(name)} ]=function()\n${body}\nend`)
 				.join(
 					',\n'
-				)}}\nlocal problem=${luaData(problem)}\nlocal pack=${luaData(pack)}\nlocal options=(function()\n${options}\nend)()\nlocal adapter=function()\nif problem.nativePlan then\n${nativePlan}\nend\nif problem.logistics then\n${logistics}\nend\n${adapter}\nend\n${source}`
+				)}}\nlocal problem=${luaData(problem)}\nlocal pack=${luaData(pack)}\nlocal options=(function()\n${options}\nend)()\nlocal compress=(function()\n${compression}\nend)()\nlocal beltPlan=function()\n${belts}\nend\nlocal adapter=function()\nif problem.nativePlan then\n${nativePlan}\nend\nif problem.logistics then\n${logistics}\nend\n${adapter}\nend\n${source}`
 		);
 	});
 	const reply = z
@@ -114,7 +141,7 @@ export async function compileFactoryLayout(
 		])
 		.parse(JSON.parse(raw));
 	if (!reply.ok) throw new ServerError(400, reply.error);
-	const { entities, wires, ...report } = reply.result;
+	const { entities, wires, tiles, ...report } = reply.result;
 	if (request.fixedPlan) {
 		const plan = z
 			.object({
@@ -205,7 +232,8 @@ export async function compileFactoryLayout(
 			force: request.force,
 			label: request.label,
 			entities,
-			wires
+			wires,
+			tiles
 		}),
 		...report,
 		test: {

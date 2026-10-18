@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
-import { blueprintArtifactSchema } from '$lib/blueprints';
+import { blueprintArtifactSchema, MAX_BLUEPRINT_ENTITIES } from '$lib/blueprints';
 import type { ManagedServer } from './db/schema';
 import { factoryBlueprint, readBlueprintDraft } from './factory-blueprints';
 import { recordCompiledFactoryTrial } from './factory-layout-status';
@@ -10,7 +10,7 @@ import { rconScript } from './server-rcon';
 
 const force = z.string().min(1).max(100);
 const endpoint = z.strictObject({
-	entity: z.number().int().min(1).max(1000),
+	entity: z.number().int().min(1).max(MAX_BLUEPRINT_ENTITIES),
 	kind: z.enum(['item', 'fluid']),
 	name: z.string().min(1).max(200),
 	perMinute: z.number().min(0.01).max(1000000),

@@ -86,7 +86,6 @@ export function resolveFactoryLayout(input: FactoryLayoutInput, value: unknown) 
 		width: input.width,
 		height: input.height,
 		layout: input.layout,
-		inserters: input.inserters,
 		logistics: input.logistics,
 		inputs: ports(plan.ingredients),
 		outputs: ports([...plan.products, ...plan.byproducts]),
@@ -111,4 +110,12 @@ export function resolveFactoryLayout(input: FactoryLayoutInput, value: unknown) 
 		}
 	});
 	return { job, plan: { ...plan, lines } };
+}
+
+export function layoutFailureMessage(cause: unknown) {
+	if (cause instanceof z.ZodError)
+		return [...new Set(cause.issues.map((issue) => issue.message))].join(' · ').slice(0, 500);
+	return cause instanceof Error
+		? cause.message.replace(/^.*?:\d+: /u, '').slice(0, 500)
+		: 'Could not generate this layout. Try again.';
 }

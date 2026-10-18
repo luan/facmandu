@@ -98,7 +98,7 @@ export function blueprintCommand(
 	if (input.operation === 'place' && input.expectedDesign !== design)
 		throw new ServerError(409, 'Blueprint changed; inspect placement again');
 	const encoded = JSON.stringify({ ...input, design, player });
-	if (Buffer.byteLength(encoded) > 128000) throw new ServerError(400, 'Blueprint is too large');
+	if (Buffer.byteLength(encoded) > 160000) throw new ServerError(400, 'Blueprint is too large');
 	let delimiter = '=';
 	while (encoded.includes(`]${delimiter}]`)) delimiter += '=';
 	return `/silent-command local request=helpers.json_to_table([${delimiter}[${encoded}]${delimiter}])

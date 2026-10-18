@@ -166,7 +166,7 @@ function M.start(a,warmupLimit,portLimit)
   local stack=inv[1]
   if stack.import_stack(a.blueprint)~=0 or not stack.is_blueprint then error('Native blueprint import failed',0) end
   local rows=stack.get_blueprint_entities() or {}
-  if #rows==0 or #rows>1000 then error('Test a production module with 1..1000 entities',0) end
+  if #rows==0 or #rows>2000 then error('Test a production module with 1..2000 entities',0) end
   local unlocked={}
   for _,recipe in pairs(real.recipes) do if recipe.enabled then for _,product in pairs(recipe.products) do if product.type=='item' then unlocked[product.name]=true end end end end
   local x1,y1,x2,y2=math.huge,math.huge,-math.huge,-math.huge
@@ -199,20 +199,41 @@ function M.start(a,warmupLimit,portLimit)
   for name in pairs(prototypes.surface_property) do lab.set_property(name,source.get_property(name)) end
   for _,f in pairs(game.forces) do f.set_surface_hidden(lab,true) end
   lab.request_to_generate_chunks({0,0},3);lab.force_generate_chunk_requests()
+  test.chart(lab,{{-128,-128},{128,128}})
   -- Keep blueprint coordinates: native cursor placement otherwise recenters it.
-  local ghost=stack.build_blueprint{surface=lab,force=test,position={0,0},build_mode=defines.build_mode.normal,skip_fog_of_war=false}
-  local delta
+  local ghost=stack.build_blueprint{surface=lab,force=test,position={0,0},build_mode=defines.build_mode.forced,skip_fog_of_war=false}
+  local delta,best_delta,best_count=nil,nil,-1
   local placed={}
   for _,e in pairs(ghost) do if e.valid and e.type=='entity-ghost' then placed[key(e.ghost_name,e.position)]=true end end
   for _,g in pairs(ghost) do
    if g.valid and g.type=='entity-ghost' and g.ghost_name==rows[1].name then
     local d={x=g.position.x-rows[1].position.x,y=g.position.y-rows[1].position.y}
-    local all=true
-    for _,e in ipairs(rows) do if not placed[key(e.name,{x=e.position.x+d.x,y=e.position.y+d.y})] then all=false;break end end
-    if all then delta=d;break end
+    local count=0
+    for _,e in ipairs(rows) do if placed[key(e.name,{x=e.position.x+d.x,y=e.position.y+d.y})] then count=count+1 end end
+    if count>best_count then best_count=count;best_delta=d end
+    if count==#rows then delta=d;break end
    end
   end
-  if not delta then error('Native blueprint could not be built completely in the test lab',0) end
+  local blueprint_tiles=stack.get_blueprint_tiles() or {}
+  if not delta and #blueprint_tiles>0 then delta=best_delta end
+  if not delta then
+   local missing={}
+   if best_delta then for i,e in ipairs(rows) do
+    local p={x=e.position.x+best_delta.x,y=e.position.y+best_delta.y}
+    if not placed[key(e.name,p)] and #missing<4 then missing[#missing+1]=i..' '..e.name..' ('..e.position.x..', '..e.position.y..')' end
+   end end
+   error('Native blueprint built '..math.max(0,best_count)..' of '..#rows..' entities. Missing: '..table.concat(missing,'; '),0)
+  end
+  assert(#blueprint_tiles<=1024,'Test at most 1024 floor tiles')
+  local floors={}
+  for _,tile in ipairs(blueprint_tiles) do
+   assert(tile.position.x>=x1 and tile.position.x<x2 and tile.position.y>=y1 and tile.position.y<y2,'Test floor must be inside the production block')
+   local p=prototypes.tile[tile.name];assert(p and p.can_be_part_of_blueprint,'Invalid test floor')
+   local available=false
+   for _,item in pairs(p.items_to_place_this or {}) do if unlocked[item.name] then available=true end end
+   assert(available,'Test floor is not unlocked: '..tile.name)
+   floors[#floors+1]={name=tile.name,position={x=tile.position.x+delta.x,y=tile.position.y+delta.y}}
+  end
   -- Native build gives us its exact translation before optionally cloning context.
   for _,e in pairs(ghost) do if e.valid then e.destroy() end end
   bounds={{bounds[1][1]+delta.x,bounds[1][2]+delta.y},{bounds[2][1]+delta.x,bounds[2][2]+delta.y}}
@@ -229,7 +250,8 @@ function M.start(a,warmupLimit,portLimit)
    for _,e in pairs(context) do if e.force~=real and e.force.name~='neutral' then error('Context contains entities owned by another force',0) end end
    source.clone_area{source_area=world,destination_area=bounds,destination_surface=lab,destination_force=test,clone_tiles=true,clone_entities=true,clone_decoratives=false,clear_destination_entities=true,expand_map=true}
   end
-  ghost=stack.build_blueprint{surface=lab,force=test,position={0,0},build_mode=defines.build_mode.normal,skip_fog_of_war=false,raise_built=true}
+  if #floors>0 then lab.set_tiles(floors) end
+  ghost=stack.build_blueprint{surface=lab,force=test,position={0,0},build_mode=defines.build_mode.forced,skip_fog_of_war=false,raise_built=true}
   for _,e in pairs(lab.find_entities_filtered{type='tile-ghost'}) do e.silent_revive{raise_revive=true} end
   for _,g in pairs(ghost) do if g.valid and g.type=='entity-ghost' then
    local _,e=g.silent_revive{raise_revive=true}

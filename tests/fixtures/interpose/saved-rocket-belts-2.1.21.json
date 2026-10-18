@@ -1,0 +1,701 @@
+{
+	"request": {
+		"force": "player",
+		"surface": "vulcanus",
+		"label": "[img=item/rocket-fuel] Rocket fuel",
+		"width": 100,
+		"height": 100,
+		"inputs": [
+			{
+				"item": "coal",
+				"type": "item",
+				"position": {
+					"x": 0.5,
+					"y": 0.5
+				},
+				"direction": 4,
+				"perMinute": 960
+			},
+			{
+				"item": "calcite",
+				"type": "item",
+				"position": {
+					"x": 0.5,
+					"y": 3.5
+				},
+				"direction": 4,
+				"perMinute": 232
+			},
+			{
+				"item": "iron-plate",
+				"type": "item",
+				"position": {
+					"x": 0.5,
+					"y": 6.5
+				},
+				"direction": 4,
+				"perMinute": 120
+			},
+			{
+				"item": "water",
+				"type": "fluid",
+				"temperature": 15,
+				"position": {
+					"x": 0.5,
+					"y": 9.5
+				},
+				"direction": 4,
+				"perMinute": 15000
+			},
+			{
+				"item": "sulfuric-acid",
+				"type": "fluid",
+				"temperature": 25,
+				"position": {
+					"x": 0.5,
+					"y": 12.5
+				},
+				"direction": 4,
+				"perMinute": 6399.999999999999
+			}
+		],
+		"outputs": [
+			{
+				"item": "rocket-fuel",
+				"type": "item",
+				"perMinute": 120,
+				"position": {
+					"x": 5.5,
+					"y": 99.5
+				},
+				"direction": 8
+			},
+			{
+				"item": "kr-hydrogen",
+				"type": "fluid",
+				"temperature": 25,
+				"perMinute": 9000.000000000002,
+				"position": {
+					"x": 8.5,
+					"y": 99.5
+				},
+				"direction": 8
+			}
+		],
+		"recipes": [
+			"rocket-fuel",
+			"heavy-oil-cracking",
+			"steam-condensation",
+			"acid-neutralisation",
+			"kr-water-separation",
+			"simple-coal-liquefaction"
+		],
+		"nativePlan": true,
+		"fixedPlan": true,
+		"layout": {
+			"shape": "square",
+			"spacing": "compact"
+		},
+		"tiers": {
+			"machine": "kr-fuel-refinery",
+			"crafters": ["chemical-plant", "harene-infused-kr-electrolysis-plant", "oil-refinery"],
+			"belt": "fast-transport-belt",
+			"underground": "fast-transport-belt",
+			"inserter": "bulk-inserter",
+			"pole": "substation",
+			"pipe": "pipe",
+			"pipe_underground": "pipe-to-ground"
+		}
+	},
+	"pack": {
+		"recipes": {
+			"rocket-fuel": {
+				"category": "kr-fuel-refinery",
+				"time": 16,
+				"machine": "kr-fuel-refinery",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "iron-plate",
+						"amount": 1
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "rocket-fuel",
+						"amount": 1
+					}
+				],
+				"fluid_inputs": [
+					{
+						"name": "light-oil",
+						"amount": 30,
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					},
+					{
+						"name": "kr-oxygen",
+						"amount": 50,
+						"position": {
+							"x": 2,
+							"y": 1
+						}
+					}
+				],
+				"fluid_outputs": {}
+			},
+			"heavy-oil-cracking": {
+				"category": "chemistry",
+				"time": 2,
+				"machine": "chemical-plant",
+				"ingredients": {},
+				"results": [
+					{
+						"type": "fluid",
+						"name": "light-oil",
+						"amount": 30
+					}
+				],
+				"fluid_inputs": [
+					{
+						"name": "water",
+						"amount": 30,
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					},
+					{
+						"name": "heavy-oil",
+						"amount": 40,
+						"position": {
+							"x": 2,
+							"y": 1
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "light-oil",
+						"amount": 30,
+						"position": {
+							"x": -2,
+							"y": -1
+						}
+					}
+				]
+			},
+			"steam-condensation": {
+				"category": "chemistry",
+				"time": 1,
+				"machine": "chemical-plant",
+				"ingredients": {},
+				"results": [
+					{
+						"type": "fluid",
+						"name": "water",
+						"amount": 90
+					}
+				],
+				"fluid_inputs": [
+					{
+						"name": "steam",
+						"amount": 1000,
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "water",
+						"amount": 90,
+						"position": {
+							"x": -2,
+							"y": -1
+						}
+					}
+				]
+			},
+			"acid-neutralisation": {
+				"category": "chemistry",
+				"time": 0.5,
+				"machine": "chemical-plant",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "calcite",
+						"amount": 1
+					}
+				],
+				"results": [
+					{
+						"type": "fluid",
+						"name": "steam",
+						"amount": 1000
+					}
+				],
+				"fluid_inputs": [
+					{
+						"name": "sulfuric-acid",
+						"amount": 100,
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "steam",
+						"amount": 1000,
+						"position": {
+							"x": -2,
+							"y": -1
+						},
+						"temperature": 500
+					}
+				]
+			},
+			"kr-water-separation": {
+				"category": "kr-electrolysis",
+				"time": 3,
+				"machine": "harene-infused-kr-electrolysis-plant",
+				"ingredients": {},
+				"results": [
+					{
+						"type": "fluid",
+						"name": "kr-oxygen",
+						"amount": 20
+					},
+					{
+						"type": "fluid",
+						"name": "kr-hydrogen",
+						"amount": 30
+					}
+				],
+				"fluid_inputs": [
+					{
+						"name": "water",
+						"amount": 50,
+						"position": {
+							"x": 1,
+							"y": -3
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "kr-oxygen",
+						"amount": 20,
+						"position": {
+							"x": 1,
+							"y": 3
+						}
+					},
+					{
+						"name": "kr-hydrogen",
+						"amount": 30,
+						"position": {
+							"x": -1,
+							"y": 3
+						}
+					}
+				]
+			},
+			"simple-coal-liquefaction": {
+				"category": "oil-processing",
+				"time": 5,
+				"machine": "oil-refinery",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "coal",
+						"amount": 10
+					},
+					{
+						"type": "item",
+						"name": "calcite",
+						"amount": 2
+					}
+				],
+				"results": [
+					{
+						"type": "fluid",
+						"name": "heavy-oil",
+						"amount": 50
+					}
+				],
+				"fluid_inputs": [
+					{
+						"name": "sulfuric-acid",
+						"amount": 25,
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "heavy-oil",
+						"amount": 50,
+						"position": {
+							"x": 3,
+							"y": -2
+						}
+					}
+				]
+			}
+		},
+		"machines": {
+			"kr-fuel-refinery": {
+				"crafting_speed": 1,
+				"categories": ["kr-fuel-refinery"],
+				"size": [3, 3],
+				"flooring": {}
+			},
+			"chemical-plant": {
+				"crafting_speed": 1,
+				"categories": ["chemical-plant-only", "chemistry"],
+				"size": [3, 3],
+				"flooring": {}
+			},
+			"harene-infused-kr-electrolysis-plant": {
+				"crafting_speed": 1,
+				"categories": ["kr-electrolysis"],
+				"size": [5, 5],
+				"flooring": [
+					{
+						"name": "haronite-plate",
+						"area": {
+							"left_top": {
+								"y": -2.296875,
+								"x": -2.296875
+							},
+							"right_bottom": {
+								"y": 2.296875,
+								"x": 2.296875
+							}
+						}
+					}
+				]
+			},
+			"oil-refinery": {
+				"crafting_speed": 1,
+				"categories": ["oil-processing"],
+				"size": [5, 5],
+				"flooring": {}
+			}
+		},
+		"belts": {
+			"fast-transport-belt": {
+				"items_per_second": 30,
+				"speed": 0.0625,
+				"size": [1, 1]
+			}
+		},
+		"undergrounds": {
+			"fast-underground-belt": {
+				"max_distance": 11,
+				"speed": 0.0625,
+				"size": [1, 1]
+			}
+		},
+		"splitters": {
+			"fast-splitter": {
+				"speed": 0.0625,
+				"size": [2, 1]
+			}
+		},
+		"inserters": {
+			"bulk-inserter": {
+				"pickup_position": [0, -1],
+				"insert_position": [0, 1.2],
+				"rotation_speed": 0.08,
+				"extension_speed": 0.4,
+				"size": [1, 1],
+				"custom": {
+					"range": 3,
+					"cross": true,
+					"diagonal": true,
+					"all": true,
+					"offsets": true
+				}
+			}
+		},
+		"furnaces": {},
+		"poles": {
+			"substation": {
+				"size": [2, 2],
+				"supply": 10,
+				"reach": 20.25
+			}
+		},
+		"fuels": {},
+		"drills": {},
+		"resources": {},
+		"pipes": {
+			"pipe": {},
+			"pipe-to-ground": {
+				"underground": 20
+			}
+		},
+		"transport": {
+			"underground": "fast-underground-belt",
+			"splitter": "fast-splitter",
+			"long_inserter": "bulk-inserter"
+		},
+		"loaders": {
+			"aai-fast-loader": {
+				"size": [1, 1],
+				"items_per_second": 30,
+				"electric": false
+			}
+		},
+		"plan": {
+			"status": "solved",
+			"lines": [
+				{
+					"recipe": "rocket-fuel",
+					"machine": "kr-fuel-refinery",
+					"machines": 32,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "rocket-fuel",
+							"type": "item",
+							"perMinute": 120
+						}
+					],
+					"ingredients": [
+						{
+							"name": "iron-plate",
+							"type": "item",
+							"perMinute": 120
+						},
+						{
+							"name": "kr-oxygen",
+							"type": "fluid",
+							"perMinute": 6000
+						},
+						{
+							"name": "light-oil",
+							"type": "fluid",
+							"perMinute": 3600
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 8266666.666666668,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "heavy-oil-cracking",
+					"machine": "chemical-plant",
+					"machines": 4,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "light-oil",
+							"type": "fluid",
+							"temperature": 25,
+							"perMinute": 3600
+						}
+					],
+					"ingredients": [
+						{
+							"name": "heavy-oil",
+							"type": "fluid",
+							"perMinute": 4800
+						},
+						{
+							"name": "water",
+							"type": "fluid",
+							"perMinute": 3600
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 868000,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "steam-condensation",
+					"machine": "chemical-plant",
+					"machines": 0.6666666666666665,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "water",
+							"type": "fluid",
+							"temperature": 15,
+							"perMinute": 3599.999999999999
+						}
+					],
+					"ingredients": [
+						{
+							"name": "steam",
+							"type": "fluid",
+							"perMinute": 39999.99999999999
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 144666.66666666663,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "acid-neutralisation",
+					"machine": "chemical-plant",
+					"machines": 0.33333333333333326,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "steam",
+							"type": "fluid",
+							"temperature": 500,
+							"perMinute": 39999.99999999999
+						}
+					],
+					"ingredients": [
+						{
+							"name": "calcite",
+							"type": "item",
+							"perMinute": 39.99999999999999
+						},
+						{
+							"name": "sulfuric-acid",
+							"type": "fluid",
+							"perMinute": 3999.9999999999995
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 72333.33333333331,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-water-separation",
+					"machine": "harene-infused-kr-electrolysis-plant",
+					"machines": 15.000000000000002,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "kr-oxygen",
+							"type": "fluid",
+							"temperature": 25,
+							"perMinute": 6000
+						}
+					],
+					"ingredients": [
+						{
+							"name": "water",
+							"type": "fluid",
+							"perMinute": 15000
+						}
+					]
+				},
+				{
+					"recipe": "simple-coal-liquefaction",
+					"machine": "oil-refinery",
+					"machines": 8,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "heavy-oil",
+							"type": "fluid",
+							"temperature": 25,
+							"perMinute": 4800
+						}
+					],
+					"ingredients": [
+						{
+							"name": "coal",
+							"type": "item",
+							"perMinute": 960
+						},
+						{
+							"name": "calcite",
+							"type": "item",
+							"perMinute": 192
+						},
+						{
+							"name": "sulfuric-acid",
+							"type": "fluid",
+							"perMinute": 2400
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 3472000,
+							"unit": "W"
+						}
+					]
+				}
+			],
+			"ingredients": [
+				{
+					"name": "coal",
+					"type": "item",
+					"perMinute": 960
+				},
+				{
+					"name": "calcite",
+					"type": "item",
+					"perMinute": 232
+				},
+				{
+					"name": "iron-plate",
+					"type": "item",
+					"perMinute": 120
+				},
+				{
+					"name": "water",
+					"type": "fluid",
+					"temperature": 15,
+					"perMinute": 15000
+				},
+				{
+					"name": "sulfuric-acid",
+					"type": "fluid",
+					"temperature": 25,
+					"perMinute": 6399.999999999999
+				},
+				{
+					"name": "custom-electric-power",
+					"type": "entity",
+					"amount": 12823666.666666668,
+					"unit": "W"
+				}
+			],
+			"products": [
+				{
+					"name": "rocket-fuel",
+					"type": "item",
+					"perMinute": 120
+				}
+			],
+			"byproducts": [
+				{
+					"name": "kr-hydrogen",
+					"type": "fluid",
+					"temperature": 25,
+					"perMinute": 9000.000000000002
+				}
+			]
+		}
+	}
+}

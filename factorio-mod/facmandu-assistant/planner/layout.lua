@@ -18,7 +18,7 @@ local function workspace(player,id)
  if not force[id] then
   local count=0;for _ in pairs(force) do count=count+1 end
   assert(count<32,'This force already has 32 layout workspaces')
-  force[id]={id=id,force=player.force.index,settings={width=64,height=64,layout={shape='auto',spacing='compact'},
+  force[id]={id=id,force=player.force.index,settings={width=100,height=100,layout={shape='auto',spacing='compact'},
    tiers={belt='transport-belt',underground='underground-belt',splitter='splitter',inserter='inserter',pole='medium-electric-pole',pipe='pipe',pipe_underground='pipe-to-ground'},
    transport='belts',requestSeconds=30,outputSlots=4},status='idle'}
  end
@@ -44,18 +44,29 @@ local function fresh(player,w)
  local ok,p=pcall(remote.call,'facmandu-toby-planner','plan_status',player.force.name,player.name,w.id)
  return ok and p.revision==w.revision and p.status=='solved' and p.valid
 end
+local function visible_error(message)
+ if type(message)~='string' then return message end
+ if message:sub(1,1)=='[' then
+  local ok,issues=pcall(helpers.json_to_table,message)
+  if ok and type(issues)=='table' then
+   local descriptions={};for _,issue in ipairs(issues) do if type(issue.message)=='string' then descriptions[#descriptions+1]=issue.message end end
+   if #descriptions>0 then return table.concat(descriptions,' · ') end
+  end
+ end
+ return message
+end
 local function refresh(player)
  local w,v=current(player);local r=v and v.refs
  if not r or not r.frame.valid or not r.status or not r.status.valid then return end
  local ready=w.status=='ready' and w.blueprint and w.blueprintRevision==w.revision and fresh(player,w)
  local dirty=v.dirty
  local elapsed=math.floor((game.tick-(w.started or game.tick))/60)
- local status=v.error or w.error or (w.status=='queued' and (elapsed>15 and 'Waiting for the Facmandu layout service…' or 'Queued…'))
+ local status=visible_error(v.error or w.error) or (w.status=='queued' and (elapsed>15 and 'Waiting for the Facmandu layout service…' or 'Queued…'))
   or (w.status=='compiling' and 'Laying out the saved plan…') or (ready and 'Blueprint ready') or 'Configure the layout, then generate a blueprint.'
  if w.status=='ready' and w.blueprint and not ready then status='Plan changed · Generate a new layout' end
  if dirty then status='Settings changed · Generate to update the preview' end
- if v.error then status=v.error end
- r.robots.visible=r.transport.selected_index==2;r.arms.visible=r.custom.state
+ if v.error then status=visible_error(v.error) end
+ r.robots.visible=r.transport.selected_index==2
  r.status.caption=status;r.elapsed.caption=(w.status=='queued' or w.status=='compiling') and (elapsed..'s') or ''
  r.generate.enabled=w.status~='queued' and w.status~='compiling'
  r.take.enabled=not not (ready and not dirty);r.inspect.enabled=r.take.enabled
@@ -114,9 +125,15 @@ function M.open(index,id)
  end end
  text(left,'Machines',280,'bold_label')
  local list=left.add{type='table',column_count=2}
+ local unlocked={}
+ for _,recipe in pairs(player.force.recipes) do if recipe.enabled then
+  for _,product in pairs(recipe.products) do if product.type=='item' then unlocked[product.name]=true end end
+ end end
  for _,line in ipairs(plan.lines) do if line.active~=false and line.machines>0.000001 then
   list.add{type='sprite-button',sprite='entity/'..line.machine,style='slot_button',tooltip=prototypes.entity[line.machine].localised_name,tags={toby_layout='pedia',kind='entity',prototype=line.machine}}
-  text(list,{'',math.ceil(line.machines-0.000000001),' × ',prototypes.entity[line.machine].localised_name,'\n',prototypes.recipe[line.recipe].localised_name},228)
+  local available=false
+  for _,item in pairs(prototypes.entity[line.machine].items_to_place_this or {}) do if unlocked[item.name] then available=true;break end end
+  text(list,{'',math.ceil(line.machines-0.000000001),' × ',prototypes.entity[line.machine].localised_name,'\n',prototypes.recipe[line.recipe].localised_name,available and '' or '\nRequires research'},228)
  end end
  left.add{type='line'}
  text(left,'Block',280,'bold_label')
@@ -128,7 +145,7 @@ function M.open(index,id)
  r.transport=choice(grid,'Solids',{'Belts','Logistic chests'},settings.transport=='robots' and 2 or 1)
  left.add{type='line'};text(left,'Transport',280,'bold_label')
  local tiers=left.add{type='table',column_count=2};r.tiers={}
- for _,row in ipairs{{'belt','Belt','transport-belt'},{'underground','Underground','underground-belt'},{'splitter','Splitter','splitter'},{'inserter','Inserter','inserter'},{'pole','Power pole','electric-pole'},{'pipe','Pipe','pipe'},{'pipe_underground','Underground pipe','pipe-to-ground'}} do
+ for _,row in ipairs{{'belt','Belt tier','transport-belt'},{'inserter','Inserter','inserter'},{'pole','Power pole','electric-pole'},{'pipe','Pipe','pipe'},{'pipe_underground','Underground pipe','pipe-to-ground'}} do
   local value=settings.tiers[row[1]];if not prototypes.entity[value] then value=nil end
   r.tiers[row[1]]=selector(tiers,row[2],value,row[3])
  end
@@ -139,16 +156,6 @@ function M.open(index,id)
  text(robot_grid,'Output slots',124);r.slots=numeric(robot_grid,'slots',settings.outputSlots)
  text(robots,'Requires a connected logistic network and robots.',280)
  left.add{type='line'}
- r.custom=left.add{type='checkbox',caption='Custom inserter positions',state=settings.inserters~=nil,tags=tagged('dirty')}
- local arms=left.add{type='table',column_count=3};r.arms=arms;r.vectors={};arms.visible=r.custom.state
- text(arms,'North-facing arm',124);text(arms,'X',60);text(arms,'Y',60)
- for _,row in ipairs{{'input','pickup','Input pickup',0,-1},{'input','drop','Input drop',0,1},{'output','pickup','Output pickup',0,-1},{'output','drop','Output drop',0,1}} do
-  text(arms,row[3],124);local value=settings.inserters and settings.inserters[row[1]] and settings.inserters[row[1]][row[2]] or {x=row[4],y=row[5]}
-  local fields={};for _,axis in ipairs{'x','y'} do
-   fields[axis]=arms.add{type='textfield',text=tostring(value[axis]),numeric=true,allow_decimal=true,allow_negative=true,tags=tagged('dirty')};fields[axis].style.width=60
-  end
-  r.vectors[row[1]]=r.vectors[row[1]] or {};r.vectors[row[1]][row[2]]=fields
- end
  local right=body.add{type='frame',direction='vertical',style='inside_deep_frame'};right.style.horizontally_stretchable=true;right.style.vertically_stretchable=true
  local tools=right.add{type='flow',direction='horizontal'}
  r.summary=text(tools,'No blueprint yet',width-490,'bold_label')
@@ -163,7 +170,7 @@ function M.open(index,id)
  local pan=right.add{type='flow',direction='horizontal'}
  for _,b in ipairs{{'pan-left','←'},{'pan-up','↑'},{'pan-down','↓'},{'pan-right','→'}} do pan.add{type='button',caption=b[2],style='toby_planner_button_frame_tool',tags=tagged(b[1])} end
  text(right,'Blueprint preview · No world placement',width-405)
- local status=frame.add{type='flow',direction='horizontal'};r.status=text(status,'',width-120);r.elapsed=text(status,'',60)
+ local status=frame.add{type='flow',direction='horizontal'};r.status=text(status,'',width-120);r.status.style.maximal_height=64;r.elapsed=text(status,'',60)
  local footer=frame.add{type='flow',direction='horizontal'}
  r.generate=footer.add{type='button',caption='Generate layout',style='toby_planner_button_green',tags=tagged('generate')}
  r.cancel=footer.add{type='button',caption='Cancel',tags=tagged('cancel')}
@@ -181,13 +188,7 @@ local function settings_from(r)
   transport=r.transport.selected_index==2 and 'robots' or 'belts',requestSeconds=number(r.seconds,1,300),outputSlots=number(r.slots,1,48),tiers={}}
  assert(settings.width%1==0 and settings.height%1==0 and settings.requestSeconds%1==0 and settings.outputSlots%1==0,'Use whole tile, buffer and slot counts')
  for name,field in pairs(r.tiers) do settings.tiers[name]=field.elem_value end
- assert(settings.tiers.belt and settings.tiers.underground and settings.tiers.inserter and settings.tiers.pole,'Choose transport tiers and a power pole')
- if r.custom.state then
-  settings.inserters={}
-  for side,positions in pairs(r.vectors) do settings.inserters[side]={}
-   for kind,fields in pairs(positions) do settings.inserters[side][kind]={x=number(fields.x,-64,64),y=number(fields.y,-64,64)} end
-  end
- end
+ assert(settings.tiers.belt and settings.tiers.inserter and settings.tiers.pole,'Choose a belt tier, inserter and power pole')
  return settings
 end
 local function announce(player,w)
@@ -212,7 +213,7 @@ function M.read_request(player_name,id,plan_id)
  if plan.revision~=w.revision then w.status='failed';w.error='Plan changed · Generate a new layout';return nil end
  local s=w.settings;w.status='compiling';w.heartbeat=game.tick
  local result={force=player.force.name,player=player.name,reference=plan.reference,expectedRevision=w.revision,
-  width=s.width,height=s.height,layout=s.layout,tiers=s.tiers,inserters=s.inserters}
+  width=s.width,height=s.height,layout=s.layout,tiers=s.tiers}
  if s.transport=='robots' then result.logistics={requester='requester-chest',provider='storage-chest',requestSeconds=s.requestSeconds,outputSlots=s.outputSlots} end
  return result
 end
@@ -227,13 +228,24 @@ local function preview(player,w,stack)
   surface.show_clouds=false;surface.always_day=true
  end
  -- Surface.clear removes chunks asynchronously; reuse terrain and remove only old preview ghosts.
- for _,entity in pairs(surface.find_entities_filtered{type='entity-ghost'}) do entity.destroy() end
+ for _,entity in pairs(surface.find_entities_filtered{type={'entity-ghost','tile-ghost'}}) do entity.destroy() end
  surface.request_to_generate_chunks({0,0},4);surface.force_generate_chunk_requests()
  local tiles={};for y=-64,64 do for x=-64,64 do tiles[#tiles+1]={name='lab-dark-1',position={x,y}} end end;surface.set_tiles(tiles)
  local entities=stack.get_blueprint_entities();assert(entities and #entities>0,'Blueprint has no entities')
   -- Only ghosts exist here. No inventory, production, power or research is created.
  local ghosts=stack.build_blueprint{surface=surface,force=player.force,position={0,0},force_build=true,skip_fog_of_war=true}
- assert(#ghosts==#entities,'Could not preview every blueprint entity')
+ local floors=stack.get_blueprint_tiles() or {}
+ if #floors>0 then
+  local first=entities[1];local anchor
+  for _,g in pairs(ghosts) do if g.valid and g.type=='entity-ghost' and g.ghost_name==first.name then anchor=g.position;break end end
+  assert(anchor,'Could not position the blueprint floor')
+  local placed={};for _,tile in ipairs(floors) do placed[#placed+1]={name=tile.name,position={x=tile.position.x+anchor.x-first.position.x,y=tile.position.y+anchor.y-first.position.y}} end
+  for _,g in pairs(ghosts) do if g.valid then g.destroy() end end
+  surface.set_tiles(placed)
+  ghosts=stack.build_blueprint{surface=surface,force=player.force,position={0,0},force_build=true,skip_fog_of_war=false}
+ end
+ local count=0;for _,g in pairs(ghosts) do if g.valid and g.type=='entity-ghost' then count=count+1 end end
+ assert(count==#entities,'Could not preview every blueprint entity')
  player.force.chart(surface,{{-128,-128},{128,128}})
  local box=surface.find_entities_filtered{type='entity-ghost'}
  local left,top,right,bottom=math.huge,math.huge,-math.huge,-math.huge
@@ -296,7 +308,7 @@ end
 local function dirty(event)
  local e=event.element;if not e or not e.valid or e.tags.toby_layout~='dirty' then return end
  local player=game.get_player(event.player_index);local _,v=current(player)
- if v and v.refs then v.error=nil;v.dirty=true;v.refs.robots.visible=v.refs.transport.selected_index==2;v.refs.arms.visible=v.refs.custom.state;refresh(player) end
+ if v and v.refs then v.error=nil;v.dirty=true;v.refs.robots.visible=v.refs.transport.selected_index==2;refresh(player) end
 end
 events.on_event(defines.events.on_gui_click,click)
 for _,event in ipairs{defines.events.on_gui_text_changed,defines.events.on_gui_selection_state_changed,defines.events.on_gui_checked_state_changed,defines.events.on_gui_elem_changed} do events.on_event(event,dirty) end

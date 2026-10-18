@@ -14,7 +14,14 @@ function options.arm(arm,chosen)
  end
 function options.cell(w,h,problem,pack,fluid)
  local arm=assert(pack.inserters[problem.tiers.inserter])
- local input,ins=options.arm(arm,problem.inserters and problem.inserters.input);local output,outs=options.arm(arm,problem.inserters and problem.inserters.output)
+ local input_profile=problem.inserters and problem.inserters.input
+ local output_profile=problem.inserters and problem.inserters.output
+ if arm.custom and arm.custom.cross and arm.custom.range>=1 then
+  -- A quarter-turn reaches the same machine with less chest clearance than straight arms.
+  input_profile=input_profile or {pickup={x=-1,y=0},drop={x=0,y=1}}
+  output_profile=output_profile or {pickup={x=0,y=-1},drop={x=1,y=0}}
+ end
+ local input,ins=options.arm(arm,input_profile);local output,outs=options.arm(arm,output_profile)
  local function attach(v)
   local x,y=tile(v.x),tile(v.y)
   assert(x~=0 or y~=0,'Inserter vector must reach another tile')

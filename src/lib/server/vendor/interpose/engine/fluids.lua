@@ -45,7 +45,7 @@ function fluids.load(raw, pack)
   local function err(code, message, hint)
     errs[#errs + 1] = issues.new(code, message, hint)
   end
-  local p = { kind = "fluid", inputs = {}, outputs = {}, area = raw.area, obstacles = raw.obstacles or {} }
+  local p = { kind = "fluid", inputs = {}, outputs = {}, area = raw.area, obstacles = raw.obstacles or {}, priority=raw.priority or {} }
   local t = raw.tiers or {}
   p.tiers = { pipe = t.pipe or "pipe", underground = t.underground or "pipe-to-ground" }
   if not (pack.pipes and pack.pipes[p.tiers.pipe]) then
@@ -63,9 +63,11 @@ function fluids.load(raw, pack)
   if type(raw.area) ~= "table" then
     err("bad-area", "a fluid problem needs an area", "add area: [[x1, y1], [x2, y2]]")
   end
+  local occupied={} for _,tile in ipairs(p.obstacles) do occupied[key(tile.x,tile.y)]=true end
   local fluids_in = {}
   for _, list in ipairs({ { raw.inputs, p.inputs }, { raw.outputs, p.outputs } }) do
     for _, port in ipairs(list[1] or {}) do
+      if occupied[key(math.floor(port.position.x),math.floor(port.position.y))] then err("blocked-port","A fluid port overlaps an occupied tile","Keep machine fluid ports clear") end
       list[2][#list[2] + 1] = {
         fluid = port.fluid,
         x = math.floor(port.position.x),
@@ -73,6 +75,7 @@ function fluids.load(raw, pack)
         dir = port.direction or 0,
         position = port.position,
         direction = port.direction or 0,
+        access=port.access,
       }
     end
   end
@@ -115,14 +118,16 @@ end
 --- Route the pipes. Returns entities (blueprint entities without entity_number) or nil, issues.
 function fluids.route(p)
   local a = p.area
-  local blocked = {}
+  local blocked,access = {},{}
+  for _,list in ipairs{p.inputs,p.outputs} do for _,port in ipairs(list) do if port.access then access[key(port.access.x,port.access.y)]=port.fluid end end end
   for _, t in ipairs(p.obstacles) do
     blocked[key(t.x, t.y)] = true
   end
   -- placed pieces by tile: {kind = "pipe" | "ug", dir (ug: open side), fluid}
-  local placed = {}
+  local placed,connected = {},{}
   local entities = {}
   local ug_rows, ug_columns = {}, {} -- sorted committed endpoints by axis
+  local row_spans,column_spans={},{}
   local function remember(index, axis, position)
     local list = index[axis] or {}
     list[#list + 1] = position
@@ -158,8 +163,10 @@ function fluids.route(p)
   end
   -- may a piece of `fluid` stand on (x, y)? `open`: the directions it has a connection on (a pipe:
   -- all four). It must not face, or be faced by, a piece of another fluid.
-  local function free(x, y)
-    return inside(x, y) and not blocked[key(x, y)] and not placed[key(x, y)]
+  local function free(x, y, fluid)
+    local piece=placed[key(x,y)]
+    -- Same-fluid ports are part of the pipe network, even before their own turn.
+    return inside(x, y) and not blocked[key(x, y)] and (not access[key(x,y)] or access[key(x,y)]==fluid) and (not piece or fluid and piece.kind=='pipe' and piece.fluid==fluid and not (connected[fluid] and connected[fluid][key(x,y)]))
   end
   local function safe(x, y, fluid, open, extra)
     for _, d in ipairs(DIRS) do
@@ -196,35 +203,40 @@ function fluids.route(p)
     return true
   end
   local function lands_between_pair(x, y, axis_vertical, route_ugs)
-    -- a new pipe-to-ground on the axis of an existing pair, between its ends
-    local list = axis_vertical and ug_columns[x] or ug_rows[y]
-    local lowest, highest = list and list[1], list and list[#list]
-    for _, u in ipairs(route_ugs) do
-      if (axis_vertical and u.dir % 8 == 0 and u.x == x) or (not axis_vertical and u.dir % 8 == 4 and u.y == y) then
-        local position = axis_vertical and u.y or u.x
-        lowest = math.min(lowest or position, position)
-        highest = math.max(highest or position, position)
+    local coordinate=axis_vertical and y or x
+    local spans=(axis_vertical and column_spans[x] or row_spans[y]) or {}
+    -- Only actual paired spans are occupied; the gaps between separate pairs stay usable.
+    local lo,hi=1,#spans
+    while lo<=hi do
+      local mid=math.floor((lo+hi)/2);local span=spans[mid]
+      if coordinate<=span[1] then hi=mid-1
+      elseif coordinate>=span[2] then lo=mid+1
+      else return true end
+    end
+    for i=1,#route_ugs,2 do
+      local a,b=route_ugs[i],route_ugs[i+1]
+      if b and ((axis_vertical and a.x==x and b.x==x) or (not axis_vertical and a.y==y and b.y==y)) then
+        local first,last=axis_vertical and a.y or a.x,axis_vertical and b.y or b.x
+        if coordinate>math.min(first,last) and coordinate<math.max(first,last) then return true end
       end
     end
-    local position = axis_vertical and y or x
-    return lowest ~= nil and lowest < position and position < highest
+    return false
   end
 
   -- every output, in a fixed order: sorted by fluid, then position
   local order = {}
-  for _, o in ipairs(p.outputs) do
-    order[#order + 1] = o
-  end
+  for _, o in ipairs(p.outputs) do order[#order+1]=o end
   table.sort(order, function(u, v)
     if u.fluid ~= v.fluid then
-      return u.fluid < v.fluid
+      local a,b=p.priority[u.fluid] or math.huge,p.priority[v.fluid] or math.huge
+      return a<b or a==b and u.fluid<v.fluid
     end
     if u.y ~= v.y then
       return u.y < v.y
     end
     return u.x < v.x
   end)
-  local connected = {} -- tiles joined to a fluid's input, per fluid
+  -- Track every tile joined to a fluid input; already-connected tiles seed the search once.
   for _, inp in ipairs(p.inputs) do
     connected[inp.fluid] = connected[inp.fluid] or {}
     connected[inp.fluid][key(inp.x, inp.y)] = { x = inp.x, y = inp.y }
@@ -232,7 +244,7 @@ function fluids.route(p)
   for _, o in ipairs(order) do
     local F = o.fluid
     -- already joined (an output next to the network)?
-    local done_already = false
+    local done_already = connected[F][key(o.x,o.y)]~=nil
     for _, d in ipairs(DIRS) do
       local v = vec(d)
       local n = connected[F][key(o.x + v.x, o.y + v.y)]
@@ -269,6 +281,7 @@ function fluids.route(p)
           break
         end
         -- reached: the current piece faces the output, which faces it back (a pipe)
+        if cur.x==o.x and cur.y==o.y then found=cur;break end
         local dx, dy = o.x - cur.x, o.y - cur.y
         if math.abs(dx) + math.abs(dy) == 1 then
           local d = (dx == 1 and direction.EAST)
@@ -297,7 +310,7 @@ function fluids.route(p)
         for _, d in ipairs(dirs) do
           local v = vec(d)
           local tx, ty = cur.x + v.x, cur.y + v.y
-          if free(tx, ty) and not pending[key(tx, ty)] then
+          if free(tx, ty, F) and not pending[key(tx, ty)] then
             -- a pipe on (tx, ty)
             local id = "p" .. key(tx, ty)
             if not seen[id] and safe(tx, ty, F, ALL) then
@@ -308,7 +321,7 @@ function fluids.route(p)
             end
             -- a pipe-to-ground pair: entry on (tx, ty) open towards cur, exit k tiles on, open onwards
             local entry_open = { [back(d)] = true }
-            if safe(tx, ty, F, entry_open) and not lands_between_pair(tx, ty, v.x == 0, route_ugs) then
+            if not placed[key(tx,ty)] and safe(tx, ty, F, entry_open) and not lands_between_pair(tx, ty, v.x == 0, route_ugs) then
               for k = 2, p.reach do
                 local ex, ey = tx + v.x * k, ty + v.y * k
                 if not inside(ex, ey) then
@@ -316,7 +329,8 @@ function fluids.route(p)
                 end
                 local eid = "u" .. key(tx, ty) .. ">" .. key(ex, ey)
                 if
-                  free(ex, ey)
+                  free(ex, ey, F)
+                  and not placed[key(ex,ey)]
                   and not pending[key(ex, ey)]
                   and not seen[eid]
                   and safe(ex, ey, F, { [d] = true })
@@ -361,11 +375,18 @@ function fluids.route(p)
       end
       for _, step in ipairs(chain) do
         if step.kind == "pipe" then
-          put(step.x, step.y, { kind = "pipe", fluid = F })
+          if not placed[key(step.x,step.y)] then put(step.x, step.y, { kind = "pipe", fluid = F }) end
           connected[F][key(step.x, step.y)] = { x = step.x, y = step.y }
         else
           put(step.x, step.y, { kind = "ug", dir = back(step.dir), fluid = F })
           put(step.ex, step.ey, { kind = "ug", dir = step.dir, fluid = F })
+          local vertical=step.x==step.ex
+          local index=vertical and column_spans or row_spans
+          local axis=vertical and step.x or step.y
+          local first,last=vertical and step.y or step.x,vertical and step.ey or step.ex
+          local spans=index[axis] or {};index[axis]=spans
+          spans[#spans+1]={math.min(first,last),math.max(first,last)}
+          table.sort(spans,function(a,b) return a[1]<b[1] end)
           connected[F][key(step.x, step.y)] = { x = step.x, y = step.y }
           connected[F][key(step.ex, step.ey)] = { x = step.ex, y = step.ey }
         end

@@ -14,13 +14,13 @@ return function(request,build_plan,inserter_rules)
   local names={} for name in pairs(set or {}) do if name~='parameters' then names[#names+1]=name end end
   table.sort(names) return names
  end
- local function entity(name,kind)
+ local function entity(name,kind,planned)
   local p=assert(prototypes.entity[name],'Unknown entity: '..tostring(name))
   assert(p.type==kind,'Incompatible entity tier: '..name)
   assert(not p.has_flag('not-blueprintable'),'Entity is not blueprintable: '..name)
   local available=false
   for _,item in pairs(p.items_to_place_this or {}) do if unlocked[item.name] then available=true end end
-  assert(available or force.get_entity_count(name)>0,'Entity is not unlocked: '..name)
+  assert(available or force.get_entity_count(name)>0 or planned and #(p.items_to_place_this or {})>0,'Entity is not unlocked: '..name)
   for _,condition in pairs(p.surface_conditions or {}) do
    local value=surface.get_property(condition.property)
    assert(not (condition.min and value<condition.min or condition.max and value>condition.max),'Entity cannot run on this surface: '..name)
@@ -28,6 +28,31 @@ return function(request,build_plan,inserter_rules)
   return p
  end
  local tiers=request.tiers
+ local belt=entity(tiers.belt,'transport-belt')
+ -- Follow the native underground relation; match splitters to the same researched belt family.
+ local underground=belt.related_underground_belt
+ assert(underground,'This belt tier has no underground belt')
+ tiers.underground=entity(underground.name,'underground-belt').name
+ local preferred=belt.name:gsub('transport%-belt','splitter')
+ local candidates={}
+ for _,p in pairs(prototypes.get_entity_filtered{{filter='type',type='splitter'}}) do
+  if p.belt_speed==belt.belt_speed and p.tile_width==2 and p.tile_height==1 and pcall(entity,p.name,'splitter') then candidates[#candidates+1]=p.name end
+ end
+ table.sort(candidates,function(a,b)
+  if a==preferred or b==preferred then return a==preferred end
+  local function score(name) local n=0 while name:sub(n+1,n+1)==belt.name:sub(n+1,n+1) and n<#name and n<#belt.name do n=n+1 end return n end
+  local x,y=score(a),score(b);return x>y or x==y and a<b
+ end)
+ tiers.splitter=candidates[1]
+ pack.transport={underground=tiers.underground,splitter=tiers.splitter}
+ pack.loaders={}
+ -- One-tile direct loaders are qualified here. Fluid-fuelled loaders need a supplied lubricant network first.
+ for _,p in pairs(prototypes.get_entity_filtered{{filter='type',type='loader-1x1'}}) do
+  local lubricated=p.name:match('^aai%-') and settings.startup['aai-loaders-mode'] and settings.startup['aai-loaders-mode'].value~='expensive'
+  if not lubricated and p.tile_width==1 and p.tile_height==1 and p.belt_speed==belt.belt_speed and pcall(entity,p.name,'loader-1x1') then
+   pack.loaders[p.name]={size=size(p),items_per_second=p.belt_speed*480,electric=p.electric_energy_source_prototype~=nil}
+  end
+ end
  if request.logistics then
   pack.chests={}
   for _,row in ipairs{{request.logistics.requester,'requester'},{request.logistics.provider,'passive-provider'}} do
@@ -40,16 +65,37 @@ return function(request,build_plan,inserter_rules)
   end
  end
  local crafters={}
+ local function flooring(p)
+  local function fits(tile)
+   for _,rule in pairs(p.tile_buildability_rules or {}) do
+    local required=not next(rule.required_tiles.layers or {})
+    for layer in pairs(rule.required_tiles.layers or {}) do if tile.collision_mask.layers[layer] then required=true end end
+    for layer in pairs(rule.colliding_tiles.layers or {}) do if tile.collision_mask.layers[layer] then return false end end
+    if not required then return false end
+   end
+   return true
+  end
+  if fits(prototypes.tile['lab-dark-1']) then return {} end
+  local candidates={}
+  for name,tile in pairs(prototypes.tile) do if tile.can_be_part_of_blueprint and #(tile.items_to_place_this or {})>0 and fits(tile) then
+   local researched=false
+   for _,item in pairs(tile.items_to_place_this) do if unlocked[item.name] then researched=true end end
+   candidates[#candidates+1]={name=name,researched=researched}
+  end end
+  table.sort(candidates,function(a,b) if a.researched~=b.researched then return a.researched end return a.name<b.name end)
+  assert(candidates[1],'No blueprintable floor satisfies '..p.name)
+  return {{name=candidates[1].name,area=p.collision_box}}
+ end
  local function add_crafter(p)
   if pack.machines[p.name] or pack.furnaces[p.name] then return end
   if p.type=='furnace' then
-   local f=entity(p.name,'furnace');assert(f.electric_energy_source_prototype,'Factory compiler requires electric furnaces')
-   pack.furnaces[p.name]={crafting_speed=f.get_crafting_speed(),categories=keys(f.crafting_categories),size=size(f)}
+   local f=entity(p.name,'furnace',request.fixedPlan);assert(f.electric_energy_source_prototype,'Factory compiler requires electric furnaces')
+   pack.furnaces[p.name]={crafting_speed=f.get_crafting_speed(),categories=keys(f.crafting_categories),size=size(f),flooring=flooring(f)}
   else
-   p=entity(p.name,'assembling-machine')
+   p=entity(p.name,'assembling-machine',request.fixedPlan)
    assert(not p.burner_prototype and (p.electric_energy_source_prototype or p.void_energy_source_prototype),'Factory compiler requires electric or void-powered crafting machines')
    crafters[#crafters+1]=p
-   pack.machines[p.name]={crafting_speed=p.get_crafting_speed(),categories=keys(p.crafting_categories),size=size(p)}
+   pack.machines[p.name]={crafting_speed=p.get_crafting_speed(),categories=keys(p.crafting_categories),size=size(p),flooring=flooring(p)}
   end
  end
  add_crafter(assert(prototypes.entity[tiers.machine],'Saved machine is missing'))
@@ -68,9 +114,8 @@ return function(request,build_plan,inserter_rules)
  if tiers.furnace then
   local f=entity(tiers.furnace,'furnace')
   assert(f.electric_energy_source_prototype,'Factory compiler requires electric furnaces')
-  pack.furnaces[f.name]={crafting_speed=f.get_crafting_speed(),categories=keys(f.crafting_categories),size=size(f)}
+  pack.furnaces[f.name]={crafting_speed=f.get_crafting_speed(),categories=keys(f.crafting_categories),size=size(f),flooring=flooring(f)}
  end
- local belt=entity(tiers.belt,'transport-belt')
  pack.belts[belt.name]={items_per_second=belt.belt_speed*480,speed=belt.belt_speed,size=size(belt)}
  local underground=entity(tiers.underground,'underground-belt')
  assert(underground.belt_speed==belt.belt_speed,'Belt and underground speeds must match')
@@ -80,12 +125,19 @@ return function(request,build_plan,inserter_rules)
   assert(s.belt_speed==belt.belt_speed,'Belt and splitter speeds must match')
   pack.splitters[s.name]={speed=s.belt_speed,size=size(s)}
  end
- for _,name in ipairs({tiers.inserter,tiers.long_inserter}) do
+ local function add_inserter(name)
   local i=entity(name,'inserter')
   assert(i.electric_energy_source_prototype,'Factory compiler requires electric inserters')
   local pickup,drop=i.inserter_pickup_position,i.inserter_drop_position
   pack.inserters[name]={pickup_position={pickup.x or pickup[1],pickup.y or pickup[2]},insert_position={drop.x or drop[1],drop.y or drop[2]},rotation_speed=i.get_inserter_rotation_speed(),extension_speed=i.get_inserter_extension_speed(),size=size(i)}
-  if request.inserters then pack.inserters[name].custom=inserter_rules and inserter_rules.profile(force,i) end
+  pack.inserters[name].custom=inserter_rules and inserter_rules.profile(force,i)
+ end
+ for _,name in ipairs({tiers.inserter,tiers.long_inserter}) do add_inserter(name) end
+ local primary=pack.inserters[tiers.inserter]
+ if primary.custom and primary.custom.cross and primary.custom.range>=2 then
+  tiers.long_inserter=tiers.inserter;pack.transport.long_inserter=tiers.inserter
+ elseif not tiers.long_inserter and pcall(entity,'long-handed-inserter','inserter') then
+  tiers.long_inserter='long-handed-inserter';pack.transport.long_inserter=tiers.long_inserter;add_inserter(tiers.long_inserter)
  end
  local pole=entity(tiers.pole,'electric-pole')
  pack.poles[pole.name]={size=size(pole),supply=pole.get_supply_area_distance(),reach=pole.get_max_wire_distance()}

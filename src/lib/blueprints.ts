@@ -4,7 +4,7 @@ import { factoryImagePendingSchema, factoryImageSchema } from './factory-images'
 const name = z.string().min(1).max(200);
 // A connected mine-to-bus expansion can exceed 200 entities. Keep one bounded
 // blueprint; increase this only after native placement and rendering benchmarks.
-export const MAX_BLUEPRINT_ENTITIES = 1000;
+export const MAX_BLUEPRINT_ENTITIES = 2000;
 const coordinate = z.number().min(-10000).max(10000).multipleOf(0.5);
 const vector = z.strictObject({ x: z.number().min(-64).max(64), y: z.number().min(-64).max(64) });
 const wire = z.tuple([

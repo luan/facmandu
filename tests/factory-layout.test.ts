@@ -9,7 +9,10 @@ import {
 	factoryLayoutInput as savedLayoutInput
 } from '../src/lib/factory-layout';
 import { compileFactoryLayout } from '../src/lib/server/factory-layout-compiler';
-import { resolveFactoryLayout } from '../src/lib/server/factory-layout-saved-plan';
+import {
+	layoutFailureMessage,
+	resolveFactoryLayout
+} from '../src/lib/server/factory-layout-saved-plan';
 
 const directory = 'src/lib/server/vendor/interpose/';
 const modules = Object.fromEntries(
@@ -686,7 +689,7 @@ test('native fluid plans compile all production and disposal stages within a bou
 	);
 });
 
-test('saved layouts preserve planner machine counts across shape, spacing and custom logistics', async () => {
+test('saved layouts preserve planner machine counts across shape, spacing and automatic inserter geometry', async () => {
 	const snapshot = {
 		reference: 'toby://plan/1/42',
 		revision: 7,
@@ -730,10 +733,6 @@ test('saved layouts preserve planner machine counts across shape, spacing and cu
 			provider: 'storage-chest',
 			requestSeconds: 45,
 			outputSlots: 2
-		},
-		inserters: {
-			input: { pickup: { x: -1, y: 0 }, drop: { x: 0, y: 1 } },
-			output: { pickup: { x: 0, y: -1 }, drop: { x: 1, y: 0 } }
 		}
 	};
 	const native = JSON.parse(readFileSync('tests/fixtures/interpose/options-2.1.21.json', 'utf8'));
@@ -796,7 +795,6 @@ test('saved layouts preserve planner machine counts across shape, spacing and cu
 		width: 32,
 		height: 32,
 		logistics: undefined,
-		inserters: undefined,
 		layout: { shape: 'square', spacing: 'spacious' }
 	});
 	const belt = resolveFactoryLayout(beltSelection, lowPlan);
@@ -828,14 +826,135 @@ test('saved layouts preserve planner machine counts across shape, spacing and cu
 	const { job, plan } = resolveFactoryLayout(savedLayoutInput.parse(settings), snapshot);
 	const unqualified = structuredClone(native);
 	delete unqualified.inserters['fast-inserter'].custom;
-	await assert.rejects(
-		compileFactoryLayout(job, z.json().parse({ ...unqualified, plan }), modules),
-		/qualified custom reach/
+	const standard = await compileFactoryLayout(
+		job,
+		z.json().parse({ ...unqualified, plan }),
+		modules
+	);
+	assert.ok(
+		standard.design.entities
+			.filter((e) => e.name === 'fast-inserter')
+			.every((e) => !e.pickup_position && !e.drop_position)
 	);
 	const beyond = structuredClone(job);
 	beyond.inserters = { input: { pickup: { x: -64, y: 0 }, drop: { x: 0, y: 1 } } };
 	await assert.rejects(
 		compileFactoryLayout(beyond, z.json().parse({ ...native, plan }), modules),
 		/researched reach/
+	);
+});
+
+test('saved mixed-fluid plans use belts, loaders and researched inserter reach without changing the planner', async () => {
+	const fixture = JSON.parse(
+		readFileSync('tests/fixtures/interpose/saved-rocket-belts-2.1.21.json', 'utf8')
+	);
+	const request = factoryLayoutInput.parse(fixture.request);
+	const before = JSON.stringify(fixture.pack.plan);
+	const result = await compileFactoryLayout(request, z.json().parse(fixture.pack), modules);
+	assert.equal(JSON.stringify(fixture.pack.plan), before);
+	assert.deepEqual(
+		result.steps.map((s) => [s.recipe, s.machines]),
+		[
+			['rocket-fuel', 32],
+			['heavy-oil-cracking', 4],
+			['steam-condensation', 1],
+			['acid-neutralisation', 1],
+			['kr-water-separation', 15],
+			['simple-coal-liquefaction', 8]
+		]
+	);
+	assert.ok(result.design.entities.some((e) => e.name === 'aai-fast-loader'));
+	assert.ok(
+		result.design.entities
+			.filter((e) => e.name === 'aai-fast-loader')
+			.every((e) => e.type === 'output')
+	);
+	assert.equal(result.design.tiles.length, 375);
+	assert.ok(result.design.tiles.every((tile) => tile.name === 'haronite-plate'));
+	assert.ok(!result.design.entities.some((e) => e.name.includes('chest')));
+	assert.ok(
+		result.design.entities
+			.filter((e) => e.name.includes('belt') || e.name.includes('splitter'))
+			.every((e) => e.name.startsWith('fast-'))
+	);
+	assert.ok(
+		result.design.entities.some(
+			(e) =>
+				e.name === 'bulk-inserter' && e.pickup_position?.y === -2 && (e.drop_position?.y ?? 0) >= 2
+		)
+	);
+	for (const e of result.design.entities) {
+		for (const p of [e.pickup_position, e.drop_position])
+			if (p) assert.ok(Number.isInteger(p.x * 256) && Number.isInteger(p.y * 256));
+	}
+	assert.equal(result.test.inputs.find((p) => p.name === 'coal')?.perMinute, 960);
+	assert.equal(result.test.inputs.find((p) => p.name === 'water')?.perMinute, 15000);
+	assert.deepEqual(result.test.outputs.map((p) => p.name).sort(), ['kr-hydrogen', 'rocket-fuel']);
+	assert.equal(result.test.outputs.find((p) => p.name === 'rocket-fuel')?.perMinute, 120);
+	assert.ok(result.design.entities.length <= 2000);
+	const positions = new Set<string>();
+	for (const e of result.design.entities) {
+		assert.ok(
+			e.position.x >= 0 &&
+				e.position.x < request.width &&
+				e.position.y >= 0 &&
+				e.position.y < request.height
+		);
+		const key = `${e.position.x},${e.position.y}`;
+		assert.ok(!positions.has(key), `${e.name} overlaps ${key}`);
+		positions.add(key);
+	}
+	await assert.rejects(
+		compileFactoryLayout(
+			factoryLayoutInput.parse({
+				...request,
+				width: 64,
+				height: 64,
+				outputs: request.outputs.map(({ position, direction, ...p }) => p)
+			}),
+			z.json().parse(fixture.pack),
+			modules
+		),
+		/complete saved plan needs/
+	);
+	const standard = structuredClone(fixture.pack);
+	delete standard.inserters['bulk-inserter'].custom;
+	await assert.rejects(
+		compileFactoryLayout(request, z.json().parse(standard), modules),
+		/researched adjustable reach or a long-handed inserter/
+	);
+});
+
+test('pipe routing can cross unconnected ports of the same fluid without duplicating them', () => {
+	const result = spawnSync('lua', ['-'], {
+		encoding: 'utf8',
+		input: `
+ package.path='src/lib/server/vendor/interpose/?.lua;'..package.path
+ local fluids=require('engine.fluids')
+ local allowed={}
+ for x=0,7 do allowed[x..',8']=true end
+ for y=1,8 do allowed['7,'..y]=true end
+ local obstacles={}
+ for x=0,8 do for y=0,9 do if not allowed[x..','..y] then obstacles[#obstacles+1]={x=x,y=y} end end end
+ local outputs={}
+ for _,y in ipairs{1,3,4,5} do outputs[#outputs+1]={fluid='water',position={x=7.5,y=y+.5}} end
+ local pack={pipes={pipe={},['pipe-to-ground']={underground=2}}}
+ local result,errors=fluids.solve({area={{0,0},{9,10}},inputs={{fluid='water',position={x=.5,y=8.5}}},outputs=outputs,obstacles=obstacles,tiers={pipe='pipe',underground='pipe-to-ground'}},pack)
+ assert(result,errors and errors[1] and errors[1].message)
+ assert(result.report.ok)
+ `
+	});
+	assert.equal(result.status, 0, result.stderr);
+});
+
+test('layout errors contain readable messages instead of validation JSON or Lua stack prefixes', () => {
+	const invalid = factoryLayoutInput.safeParse({});
+	assert.ok(!invalid.success);
+	const message = layoutFailureMessage(invalid.error);
+	assert.ok(message.length > 0 && message.length <= 500);
+	assert.ok(!message.startsWith('[') && !message.includes('"code"') && !message.includes('"path"'));
+	assert.equal(
+		layoutFailureMessage(new Error('stdin:123: Enlarge the factory block')),
+		'Enlarge the factory block'
 	);
 });

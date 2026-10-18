@@ -615,7 +615,7 @@ function rows.place(plan, problem, pack)
         entity(ents, tiers.inserter, left + c + 0.5, yi_in + 0.5, direction.NORTH, rows.INPUT_SETTINGS)
       end
       for _, c in ipairs(r.cols_long) do
-        entity(ents, tiers.long_inserter, left + c + 0.5, yi_in + 0.5, direction.NORTH, rows.INPUT_SETTINGS)
+        entity(ents, tiers.long_inserter, left + c + 0.5, yi_in + 0.5, direction.NORTH, rows.LONG_INPUT_SETTINGS)
       end
       -- a furnace picks its recipe from what it gets
       local extra = not r.step.furnace and { recipe = r.step.recipe } or nil

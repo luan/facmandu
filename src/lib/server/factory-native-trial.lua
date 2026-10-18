@@ -8,7 +8,7 @@ local function write(value)
  helpers.write_file('layout-trial.json',helpers.table_to_json(value),false)
 end
 local function diagnostics(job)
- local producers,fluids={},{}
+ local producers,fluids,connections,loaders={},{},{},{}
  local statuses={} for name,value in pairs(defines.entity_status) do statuses[value]=name end
  for _,e in ipairs(job.entities or {}) do if e.valid then
   if e.type=='assembling-machine' or e.type=='furnace' then
@@ -19,12 +19,30 @@ local function diagnostics(job)
    row.minSpeed=math.min(row.minSpeed,e.crafting_speed);row.maxSpeed=math.max(row.maxSpeed,e.crafting_speed)
    local status=statuses[e.status] or tostring(e.status);row.statuses[status]=(row.statuses[status] or 0)+1
    producers[key]=row
+   if not connections[key] then
+    local boxes={}
+    for index=1,e.fluids_count do
+     local filter=e.get_fluid_filter(index)
+     local neighbors={}
+     for _,p in pairs(e.get_fluid_box_pipe_connections(index) or {}) do
+      neighbors[#neighbors+1]={position=p.position,target=p.target and p.target.position}
+     end
+     boxes[#boxes+1]={filter=filter and filter.name,segment=e.has_fluid_segment(index) and e.get_fluid_segment_id(index) or nil,fluid=e.get_fluid(index),neighbors=neighbors}
+    end
+    connections[key]={position=e.position,boxes=boxes}
+   end
+
+  end
+  if e.type=='loader-1x1' and #loaders<8 then
+   local contents={}
+   for i=1,2 do contents[i]=e.get_transport_line(i).get_contents() end
+   loaders[#loaders+1]={name=e.name,position=e.position,direction=e.direction,mode=e.loader_type,container=e.loader_container and e.loader_container.name,status=statuses[e.status],contents=contents}
   end
   if e.type=='assembling-machine' or e.type=='furnace' or e.type=='pipe' or e.type=='pipe-to-ground' then
    for name,amount in pairs(e.get_fluid_contents()) do fluids[name]=(fluids[name] or 0)+amount end
   end
  end end
- return {tick=game.tick,producers=producers,storedFluids=fluids}
+ return {tick=game.tick,producers=producers,storedFluids=fluids,connections=connections,loaders=loaders}
 end
 local function context()
  local c=payload.context
@@ -74,7 +92,7 @@ events.on_event(defines.events.on_tick,function(e)
     local entity=assert(job.entities[wanted.index],'Missing configured entity')
     for _,pair in ipairs{{wanted.pickup,'pickup_position'},{wanted.drop,'drop_position'}} do if pair[1] then
      local actual=entity[pair[2]]
-     assert(math.abs(actual.x-entity.position.x-pair[1].x)<0.000001 and math.abs(actual.y-entity.position.y-pair[1].y)<0.000001,'Native inserter geometry changed')
+     assert(math.abs(actual.x-entity.position.x-pair[1].x)<0.000001 and math.abs(actual.y-entity.position.y-pair[1].y)<0.000001,'Native inserter geometry changed for '..entity.name..' '..wanted.index..' '..pair[2]..': expected '..pair[1].x..','..pair[1].y..', got '..(actual.x-entity.position.x)..','..(actual.y-entity.position.y))
     end end
     if wanted.requests and entity.type=='logistic-container' and entity.prototype.logistic_mode=='storage' then
      local actual=entity.storage_filter
@@ -93,6 +111,7 @@ events.on_event(defines.events.on_tick,function(e)
     if wanted.bar then assert(entity.get_inventory(defines.inventory.chest).get_bar()==wanted.bar+1,'Native inventory limit changed') end
    end
    storage.settings_verified=true
+   helpers.write_file('layout-geometry.json',helpers.table_to_json(diagnostics(job)),false)
    helpers.write_file('layout-progress.json',helpers.table_to_json(started),false)
   elseif e.tick%60==0 then
    local job=storage.toby_trials.jobs[storage.job]

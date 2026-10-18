@@ -17,6 +17,7 @@ local function run()
  local frame=assert(player.gui.screen['toby-layout-frame'])
  assert(not player.gui.screen.toby_planner_frame_main_dialog.visible)
  local refs=storage.layouts.viewers[player.index].refs
+ assert(refs.tiers.belt and not refs.tiers.underground and not refs.tiers.splitter and not refs.custom,'Layout exposes individual belt parts or manual inserter geometry')
  refs.width.text='101';refs.height.text='64'
  script.get_event_handler(defines.events.on_gui_text_changed){name=defines.events.on_gui_text_changed,player_index=player.index,element=refs.width,tick=game.tick}
  click(player,refs.generate)
@@ -25,6 +26,10 @@ local function run()
  assert(remote.call(ui,'open',player.index,plan.planId) and refs.width.text=='73','Reopen replaced the draft')
  local id=remote.call(ui,'generate',player.index)
  local w=storage.layouts.forces[player.force.index][plan.planId]
+ assert(w.settings.inserters==nil and w.settings.tiers.underground==nil and w.settings.tiers.splitter==nil)
+ remote.call(ui,'complete',player.name,id,plan.planId,{error='[{"code":"custom","message":"Choose a larger block","path":[]}]'})
+ assert(refs.status.caption=='Choose a larger block','Validation JSON leaked into the layout UI')
+ id=remote.call(ui,'generate',player.index)
  assert(w.settings.width==73 and w.revision==original.revision)
  assert(not refs.take.enabled and refs.cancel.visible)
  -- Offline benchmark players cannot claim work, even with a real request ID.

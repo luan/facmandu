@@ -1,11 +1,20 @@
 local engine = require('engine.init')
 local fraction = engine.fraction
 if problem.layout.spacing=='spacious' then engine.rows.GAP=engine.rows.GAP+3;engine.rows.MACHINE_GAP=1 end
+local arm=assert(pack.inserters[problem.tiers.inserter])
 if problem.inserters then
- local arm=assert(pack.inserters[problem.tiers.inserter])
  local _,input=options.arm(arm,problem.inserters.input)
  local _,output=options.arm(arm,problem.inserters.output)
  engine.rows.INPUT_SETTINGS=input;engine.rows.OUTPUT_SETTINGS=output
+elseif arm.custom and arm.custom.cross and arm.custom.range>=1 then
+ local vectors={pickup={x=0,y=-1},drop={x=0,y=1+(arm.custom.offsets and 51/256 or 0)}}
+ local _,settings=options.arm(arm,vectors)
+ engine.rows.INPUT_SETTINGS=settings;engine.rows.OUTPUT_SETTINGS=settings
+ if arm.custom.range>=2 then
+  problem.tiers.long_inserter=problem.tiers.inserter
+  local _,long=options.arm(arm,{pickup={x=0,y=-2},drop={x=0,y=2+(arm.custom.offsets and 51/256 or 0)}})
+  engine.rows.LONG_INPUT_SETTINGS=long
+ end
 end
 local solver=require('engine.solve')
 if problem.layout.shape=='tall' then solver.TURNS={'rot90','rot270'}
