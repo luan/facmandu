@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { inflateSync } from 'node:zlib';
 import { z } from 'zod';
-import type { BlueprintArtifact } from '$lib/blueprints';
+import { type BlueprintArtifact, MAX_BLUEPRINT_ENTITIES } from '$lib/blueprints';
 import type { FactoryLayoutJob } from '$lib/factory-layout';
 import events from '../../../factorio-mod/facmandu-assistant/events.lua?raw';
 import robotTrial from '../../../factorio-mod/facmandu-assistant/robot-trial.lua?raw';
@@ -161,11 +161,13 @@ export function testCompiledFactory(
 					writeFile(join(driver, 'robot-trial.lua'), robotTrial),
 					writeFile(
 						join(driver, 'sandbox.lua'),
-						// Large pipe networks need a longer rate-limited startup in the
-						// private worker. The multiplayer mod keeps its existing limits.
+						// The private worker accepts larger, slower-starting factories.
+						// Keep multiplayer entity and warmup limits unchanged.
 						sandbox
 							.replaceAll('facmandu-toby-sandbox', 'facmandu-layout-sandbox')
 							.replace('number(warmupLimit,0,120)', 'number(warmupLimit,0,300)')
+							.replace('#rows>2000', `#rows>${MAX_BLUEPRINT_ENTITIES}`)
+							.replace('1..2000 entities', `1..${MAX_BLUEPRINT_ENTITIES} entities`)
 					),
 					writeFile(join(driver, 'pack.lua'), packSource),
 					writeFile(join(driver, 'plan-pack.lua'), planPackSource),

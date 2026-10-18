@@ -61,7 +61,12 @@ local function geometry(line,width)
  local pitch=w+gap
  local count=math.ceil(line.machines-1e-9)
  local outlet=loader and #products==1 and consumed[products[1].name] and 2 or 0
- local columns=math.min(count,math.floor((width+gap-belts.lead-outlet)/pitch))
+ local lead=belts.lead
+ for _,pin in ipairs(pins) do
+  if pin.position.x < -w/2 then lead=math.max(lead,2) end
+  if pin.position.x > w/2 then outlet=math.max(outlet,2) end
+ end
+ local columns=math.min(count,math.floor((width+gap-lead-outlet)/pitch))
  -- Split physical rows at lane capacity; never reduce the saved machine count.
  for _,part in ipairs(recipe.ingredients) do
   local lane=(#recipe.ingredients==1 or belts.alone[part.name]) and belt_capacity or belt_capacity/2
@@ -75,7 +80,7 @@ local function geometry(line,width)
  local row_height=h+overhead+row_gap
  local boundary=1;for _,pin in ipairs(pins) do if math.abs(pin.position.y)>=h/2 then boundary=2 end end
  return {recipe=recipe,w=w,h=h,products=products,belts=belts,outer=outer,has_in=has_in,has_out=has_out,count=count,
-  pitch=pitch,columns=columns,row_height=row_height,width=columns*pitch-gap+belts.lead+outlet,
+  pitch=pitch,columns=columns,row_height=row_height,lead=lead,width=columns*pitch-gap+lead+outlet,
   height=math.ceil(count/columns)*row_height-row_gap+boundary}
 end
 local selected,best_score,bounds_height,minimum_height
@@ -86,7 +91,7 @@ for width=1,problem.area[2][1]-10 do
   local s=geometry(line,width)
   if not s then valid=false;break end
   if x+s.width>8+width then x=8;y=y+shelf_height;shelf_height=0 end
-  s.left=x+s.belts.lead;s.top=y;specs[index]=s
+  s.left=x+s.lead;s.top=y;specs[index]=s
   x=x+s.width+3;shelf_height=math.max(shelf_height,s.height);used=math.max(used,x-11)
  end end
  local height=y+shelf_height
@@ -115,7 +120,7 @@ if not selected then
     local s=entry.spec;local shelf
     for _,candidate in ipairs(shelves) do if candidate.x+s.width<=8+width then shelf=candidate;break end end
     if not shelf then shelf={x=8,y=y,height=s.height};shelves[#shelves+1]=shelf;y=y+s.height end
-    s.left=shelf.x+s.belts.lead;s.top=shelf.y
+    s.left=shelf.x+s.lead;s.top=shelf.y
     shelf.x=shelf.x+s.width+3;used=math.max(used,shelf.x-11)
    end
    minimum_height=math.min(minimum_height or y,y)
@@ -220,6 +225,7 @@ for index,line in ipairs(pack.plan.lines) do if line.machines>0.000001 then
     local dy=math.abs(p.position.y)>=h/2 and (p.position.y>0 and 1 or -1) or 0
     list[#list+1]={fluid=p.name,position=pos,direction=0,access={x=math.floor(pos.x)+dx,y=math.floor(pos.y)+dy}}
     for distance=0,1 do fluid_clearance[#fluid_clearance+1]={x=math.floor(pos.x)+dx*distance,y=math.floor(pos.y)+dy*distance} end
+    for _,side in ipairs{-1,1} do fluid_clearance[#fluid_clearance+1]={x=math.floor(pos.x)+dx-dy*side,y=math.floor(pos.y)+dy+dx*side} end
    end
    for _,p in ipairs(recipe.fluid_inputs or {}) do fluid_port(p,sinks) end
    for _,p in ipairs(recipe.fluid_outputs or {}) do fluid_port(p,sources) end
@@ -391,6 +397,9 @@ for _,p in ipairs(problem.outputs) do if buses[p.item] then nets[#nets+1]=buses[
 if #nets>0 then
  problem.phase='belt routing'
   engine.routing.GREEDY_ORDERS=1;engine.routing.NEGOTIATION_ROUNDS=12
+ -- Large dependency graphs need a greedier bounded search, rather than spending
+ -- the whole worker budget on the first obstructed link.
+ if #nets>32 then item_problem.max_route_expansions=3000;item_problem.heuristic_weight=4;engine.routing.NEGOTIATION_ROUNDS=16 end
  local job=engine.routing.route_new(nets,entities,item_problem,pack,engine.routing.new_counter(100000))
  while not job.done do engine.routing.route_step(job,pack,2000) end
  assert(job.result,job.errors and job.errors[1] and job.errors[1].message)

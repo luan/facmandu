@@ -35,6 +35,8 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
   return result
  end
  local function orientation(crafter,inputs,outputs,allow_ends)
+  -- Native exports discard rotation when the recipe has no active fluidboxes.
+  if #inputs==0 and #outputs==0 then return 0 end
   -- Rotate the machine, not its recipe: electrolysers expose lateral ports facing
   -- north, while foundries and chemical plants do so facing east.
   local best,score

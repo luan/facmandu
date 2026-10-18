@@ -127,7 +127,7 @@ assert(power.unpowered==0 and not power.split,'Could not power the complete nati
 local poles,wires={},{}
 for _,p in ipairs(power.poles) do poles[p.position.x..','..p.position.y]=add(p.name,p.position.x,p.position.y) end
 for _,wire in ipairs(power.wires) do local a,b=wire[1],wire[2];wires[#wires+1]={assert(poles[a.x..','..a.y]),5,assert(poles[b.x..','..b.y]),5} end
-assert(#entities<=2000,'Native plan needs '..#entities..' entities; split the plan to stay within 2000')
+assert(#entities<=problem.max_entities,'Native plan needs '..#entities..' entities; split the plan to stay within '..problem.max_entities)
 local tiles,occupied={},{ }
 for _,e in ipairs(entities) do
  local machine=pack.machines[e.name] or pack.furnaces[e.name]

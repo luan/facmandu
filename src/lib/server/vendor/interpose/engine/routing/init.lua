@@ -433,9 +433,19 @@ function routing.nets(layout, problem, pack, base)
     local k = key_of(item, copy)
     return sources[k] and k or item
   end
+  local base_world
   local function consume(row,item,label,goals,reserve)
     if row.supplies and row.supplies[item] then
-      for _,route in ipairs(row.supplies[item]) do demand(route.source,item,label,route.goals,{},false,route.priority) end
+      for _,route in ipairs(row.supplies[item]) do
+        base_world=base_world or build_world(base,pack,problem.obstacles)
+        local approaches={}
+        for _,goal in ipairs(route.goals) do for d in pairs(goal.dirs) do
+          local v=direction.vector(d);local x,y=goal.x-v.x,goal.y-v.y
+          if not base_world.occupied[key(x,y)] and x>=problem.area[1][1] and x<problem.area[2][1] and y>=problem.area[1][2] and y<problem.area[2][2] then approaches[key(x,y)]={x=x,y=y} end
+        end end
+        local critical={};for _,tile in pairs(approaches) do critical[#critical+1]=tile end
+        demand(route.source,item,label,route.goals,#critical==1 and critical or {},false,route.priority)
+      end
     else demand(source_key(item,row),item,label,goals,reserve) end
   end
   for _, row in ipairs(layout.rows) do

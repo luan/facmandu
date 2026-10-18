@@ -1033,6 +1033,9 @@ test('saved electrolysis with solid ingredients rotates native fluid sockets awa
  recipe.prototype.get_product_amount=function(index,productivity) assert(productivity==0);return index==1 and 2.5 or 5 end
  dofile('src/lib/server/factory-layout-plan-pack.lua')(request,{recipes={electrolysis=recipe}},{},nil,pack,{},plan)
  assert(pack.recipes.electrolysis.results[1].amount==2.5,'Use the native expected yield for random recipe outputs')
+ recipe.ingredients={{type='item',name='salt',amount=1}};recipe.products={{type='item',name='salt',amount=1}};recipe.prototype={}
+ dofile('src/lib/server/factory-layout-plan-pack.lua')(request,{recipes={electrolysis=recipe}},{},nil,pack,{},plan)
+ assert(pack.recipes.electrolysis.direction==0,'Dry recipes must keep the rotation that native export retains')
  `
 	});
 	assert.equal(result.status, 0, result.stderr);
@@ -1131,4 +1134,33 @@ test('two saved disposal stages using the same furnace retain their distinct flu
 		]
 	);
 	assert.equal(result.test.outputs.find((p) => p.name === 'kr-hydrogen-chloride')?.perMinute, 60);
+});
+
+test('the complete saved processing-unit plan routes every native stage within 100 by 100', async () => {
+	const fixture = JSON.parse(
+		readFileSync('tests/fixtures/interpose/saved-processing-units-belts-2.1.21.json', 'utf8')
+	);
+	const result = await compileFactoryLayout(
+		factoryLayoutInput.parse(fixture.request),
+		z.json().parse(fixture.pack),
+		modules
+	);
+	assert.equal(result.steps.length, 26);
+	assert.equal(
+		result.steps.reduce((n, step) => n + step.machines, 0),
+		102
+	);
+	assert.ok(
+		Math.abs(
+			(result.test.outputs.find((p) => p.name === 'processing-unit')?.perMinute ?? 0) - 120
+		) < 1e-6
+	);
+	assert.ok(result.design.entities.length > 2000);
+	assert.ok(result.design.entities.length <= 3000);
+	assert.ok(
+		result.design.entities.every(
+			(e) => e.position.x >= 0 && e.position.x < 100 && e.position.y >= 0 && e.position.y < 100
+		)
+	);
+	assert.ok(blueprintInputSchema.safeParse({ ...result.design, operation: 'create' }).success);
 });

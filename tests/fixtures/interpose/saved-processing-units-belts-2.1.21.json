@@ -1,0 +1,2486 @@
+{
+	"request": {
+		"force": "player",
+		"surface": "vulcanus",
+		"label": "blue circuits",
+		"width": 100,
+		"height": 100,
+		"inputs": [
+			{
+				"item": "coal",
+				"type": "item",
+				"perMinute": 809.9999999999983,
+				"position": {
+					"x": 0.5,
+					"y": 0.5
+				},
+				"direction": 4
+			},
+			{
+				"item": "calcite",
+				"type": "item",
+				"perMinute": 256.87317333333243,
+				"position": {
+					"x": 0.5,
+					"y": 3.5
+				},
+				"direction": 4
+			},
+			{
+				"item": "lava",
+				"type": "fluid",
+				"temperature": 1500,
+				"perMinute": 14871.719999999998,
+				"position": {
+					"x": 0.5,
+					"y": 6.5
+				},
+				"direction": 4
+			},
+			{
+				"item": "sulfuric-acid",
+				"type": "fluid",
+				"temperature": 25,
+				"perMinute": 9913.573333333276,
+				"position": {
+					"x": 0.5,
+					"y": 9.5
+				},
+				"direction": 4
+			}
+		],
+		"outputs": [
+			{
+				"item": "processing-unit",
+				"type": "item",
+				"perMinute": 119.99999999999979
+			}
+		],
+		"recipes": [
+			"processing-unit",
+			"advanced-circuit",
+			"electronic-circuit",
+			"kr-electronic-components",
+			"kr-silicon",
+			"kr-glass",
+			"kr-quartz",
+			"kr-casting-rare-metals",
+			"kr-hydrogen-chloride",
+			"kr-water-electrolysis",
+			"kr-sand",
+			"plastic-bar",
+			"light-oil-cracking",
+			"heavy-oil-cracking",
+			"simple-coal-liquefaction",
+			"steam-condensation",
+			"acid-neutralisation",
+			"casting-copper-cable",
+			"casting-iron",
+			"molten-copper-from-lava",
+			"molten-iron-from-lava",
+			"kr-molten-rare-metals-from-lava",
+			"kr-burn-kr-hydrogen",
+			"kr-filter-rare-metal-ore-from-dirty-water",
+			"kr-molten-rare-metals",
+			"kr-burn-kr-chlorine"
+		],
+		"nativePlan": true,
+		"fixedPlan": true,
+		"layout": {
+			"shape": "square",
+			"spacing": "compact"
+		},
+		"tiers": {
+			"machine": "assembling-machine-2",
+			"crafters": [
+				"electric-furnace",
+				"kr-filtration-plant",
+				"foundry",
+				"chemical-plant",
+				"kr-electrolysis-plant",
+				"kr-crusher",
+				"oil-refinery",
+				"kr-flare-stack"
+			],
+			"belt": "fast-transport-belt",
+			"inserter": "bulk-inserter",
+			"pole": "substation",
+			"pipe": "pipe",
+			"pipe_underground": "pipe-to-ground"
+		}
+	},
+	"pack": {
+		"recipes": {
+			"processing-unit": {
+				"category": "crafting-with-fluid",
+				"time": 12,
+				"machine": "assembling-machine-2",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "kr-rare-metals",
+						"amount": 3
+					},
+					{
+						"type": "item",
+						"name": "advanced-circuit",
+						"amount": 6
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "processing-unit",
+						"amount": 2
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "sulfuric-acid",
+						"amount": 10,
+						"position": {
+							"x": 2,
+							"y": 0
+						}
+					}
+				],
+				"fluid_outputs": {},
+				"fluid_connections": [
+					{
+						"name": "sulfuric-acid",
+						"position": {
+							"x": 2,
+							"y": 0
+						}
+					}
+				]
+			},
+			"advanced-circuit": {
+				"category": "crafting",
+				"time": 4,
+				"machine": "assembling-machine-2",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "copper-cable",
+						"amount": 4
+					},
+					{
+						"type": "item",
+						"name": "electronic-circuit",
+						"amount": 4
+					},
+					{
+						"type": "item",
+						"name": "kr-electronic-components",
+						"amount": 2
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "advanced-circuit",
+						"amount": 2
+					}
+				],
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"electronic-circuit": {
+				"category": "crafting",
+				"time": 2,
+				"machine": "assembling-machine-2",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "iron-plate",
+						"amount": 2
+					},
+					{
+						"type": "item",
+						"name": "copper-cable",
+						"amount": 4
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "electronic-circuit",
+						"amount": 2
+					}
+				],
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"kr-electronic-components": {
+				"category": "crafting",
+				"time": 4,
+				"machine": "assembling-machine-2",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "kr-glass",
+						"amount": 2
+					},
+					{
+						"type": "item",
+						"name": "kr-silicon",
+						"amount": 2
+					},
+					{
+						"type": "item",
+						"name": "plastic-bar",
+						"amount": 2
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "kr-electronic-components",
+						"amount": 4
+					}
+				],
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"kr-silicon": {
+				"category": "smelting",
+				"time": 16,
+				"machine": "electric-furnace",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "kr-quartz",
+						"amount": 18
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "kr-silicon",
+						"amount": 9
+					}
+				],
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"kr-glass": {
+				"category": "smelting",
+				"time": 16,
+				"machine": "electric-furnace",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "kr-sand",
+						"amount": 16
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "kr-glass",
+						"amount": 8
+					}
+				],
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"kr-quartz": {
+				"category": "kr-fluid-filtration",
+				"time": 2.1,
+				"machine": "kr-filtration-plant",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "kr-sand",
+						"amount": 10
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "kr-quartz",
+						"amount": 6
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "water",
+						"amount": 10,
+						"position": {
+							"x": 4,
+							"y": 0
+						}
+					}
+				],
+				"fluid_outputs": {},
+				"fluid_connections": [
+					{
+						"name": "water",
+						"position": {
+							"x": 4,
+							"y": 0
+						}
+					}
+				]
+			},
+			"kr-casting-rare-metals": {
+				"category": "metallurgy",
+				"time": 1.6,
+				"machine": "foundry",
+				"ingredients": {},
+				"results": [
+					{
+						"type": "item",
+						"name": "kr-rare-metals",
+						"amount": 1.5
+					},
+					{
+						"type": "fluid",
+						"name": "kr-dirty-water",
+						"amount": 5
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "kr-molten-rare-metals",
+						"amount": 10,
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					},
+					{
+						"name": "water",
+						"amount": 10,
+						"position": {
+							"x": -3,
+							"y": 1
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "kr-dirty-water",
+						"amount": 5,
+						"position": {
+							"x": 3,
+							"y": -1
+						}
+					}
+				],
+				"fluid_connections": [
+					{
+						"name": "kr-molten-rare-metals",
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					},
+					{
+						"name": "water",
+						"position": {
+							"x": -3,
+							"y": 1
+						}
+					},
+					{
+						"name": "kr-dirty-water",
+						"position": {
+							"x": 3,
+							"y": -1
+						}
+					},
+					{
+						"name": "kr-dirty-water",
+						"position": {
+							"x": 3,
+							"y": 1
+						}
+					}
+				]
+			},
+			"kr-hydrogen-chloride": {
+				"category": "chemistry",
+				"time": 5,
+				"machine": "chemical-plant",
+				"ingredients": {},
+				"results": [
+					{
+						"type": "fluid",
+						"name": "kr-hydrogen-chloride",
+						"amount": 50
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "kr-chlorine",
+						"amount": 50,
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					},
+					{
+						"name": "kr-hydrogen",
+						"amount": 50,
+						"position": {
+							"x": 2,
+							"y": 1
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "kr-hydrogen-chloride",
+						"amount": 50,
+						"position": {
+							"x": -2,
+							"y": -1
+						}
+					}
+				],
+				"fluid_connections": [
+					{
+						"name": "kr-chlorine",
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					},
+					{
+						"name": "kr-hydrogen",
+						"position": {
+							"x": 2,
+							"y": 1
+						}
+					},
+					{
+						"name": "kr-hydrogen-chloride",
+						"position": {
+							"x": -2,
+							"y": -1
+						}
+					},
+					{
+						"name": "kr-hydrogen-chloride",
+						"position": {
+							"x": -2,
+							"y": 1
+						}
+					}
+				]
+			},
+			"kr-water-electrolysis": {
+				"category": "kr-electrolysis",
+				"time": 3,
+				"machine": "kr-electrolysis-plant",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "kr-sand",
+						"amount": 10
+					}
+				],
+				"results": [
+					{
+						"type": "fluid",
+						"name": "kr-chlorine",
+						"amount": 20
+					},
+					{
+						"type": "fluid",
+						"name": "kr-hydrogen",
+						"amount": 30
+					}
+				],
+				"direction": 0,
+				"fluid_inputs": [
+					{
+						"name": "water",
+						"amount": 40,
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "kr-chlorine",
+						"amount": 20,
+						"position": {
+							"x": 3,
+							"y": -1
+						}
+					},
+					{
+						"name": "kr-hydrogen",
+						"amount": 30,
+						"position": {
+							"x": 3,
+							"y": 1
+						}
+					}
+				],
+				"fluid_connections": [
+					{
+						"name": "water",
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					},
+					{
+						"name": "water",
+						"position": {
+							"x": -3,
+							"y": 1
+						}
+					},
+					{
+						"name": "kr-chlorine",
+						"position": {
+							"x": 3,
+							"y": -1
+						}
+					},
+					{
+						"name": "kr-hydrogen",
+						"position": {
+							"x": 3,
+							"y": 1
+						}
+					}
+				]
+			},
+			"kr-sand": {
+				"category": "kr-crushing",
+				"time": 1,
+				"machine": "kr-crusher",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "stone",
+						"amount": 3
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "kr-sand",
+						"amount": 7.5
+					}
+				],
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"plastic-bar": {
+				"category": "chemistry",
+				"time": 1,
+				"machine": "chemical-plant",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "coal",
+						"amount": 1
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "plastic-bar",
+						"amount": 2
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "petroleum-gas",
+						"amount": 20,
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					}
+				],
+				"fluid_outputs": {},
+				"fluid_connections": [
+					{
+						"name": "petroleum-gas",
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					},
+					{
+						"name": "petroleum-gas",
+						"position": {
+							"x": 2,
+							"y": 1
+						}
+					}
+				]
+			},
+			"light-oil-cracking": {
+				"category": "chemistry",
+				"time": 2,
+				"machine": "chemical-plant",
+				"ingredients": {},
+				"results": [
+					{
+						"type": "fluid",
+						"name": "petroleum-gas",
+						"amount": 20
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "water",
+						"amount": 30,
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					},
+					{
+						"name": "light-oil",
+						"amount": 30,
+						"position": {
+							"x": 2,
+							"y": 1
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "petroleum-gas",
+						"amount": 20,
+						"position": {
+							"x": -2,
+							"y": -1
+						}
+					}
+				],
+				"fluid_connections": [
+					{
+						"name": "water",
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					},
+					{
+						"name": "light-oil",
+						"position": {
+							"x": 2,
+							"y": 1
+						}
+					},
+					{
+						"name": "petroleum-gas",
+						"position": {
+							"x": -2,
+							"y": -1
+						}
+					},
+					{
+						"name": "petroleum-gas",
+						"position": {
+							"x": -2,
+							"y": 1
+						}
+					}
+				]
+			},
+			"heavy-oil-cracking": {
+				"category": "chemistry",
+				"time": 2,
+				"machine": "chemical-plant",
+				"ingredients": {},
+				"results": [
+					{
+						"type": "fluid",
+						"name": "light-oil",
+						"amount": 30
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "water",
+						"amount": 30,
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					},
+					{
+						"name": "heavy-oil",
+						"amount": 40,
+						"position": {
+							"x": 2,
+							"y": 1
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "light-oil",
+						"amount": 30,
+						"position": {
+							"x": -2,
+							"y": -1
+						}
+					}
+				],
+				"fluid_connections": [
+					{
+						"name": "water",
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					},
+					{
+						"name": "heavy-oil",
+						"position": {
+							"x": 2,
+							"y": 1
+						}
+					},
+					{
+						"name": "light-oil",
+						"position": {
+							"x": -2,
+							"y": -1
+						}
+					},
+					{
+						"name": "light-oil",
+						"position": {
+							"x": -2,
+							"y": 1
+						}
+					}
+				]
+			},
+			"simple-coal-liquefaction": {
+				"category": "oil-processing",
+				"time": 5,
+				"machine": "oil-refinery",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "coal",
+						"amount": 10
+					},
+					{
+						"type": "item",
+						"name": "calcite",
+						"amount": 2
+					}
+				],
+				"results": [
+					{
+						"type": "fluid",
+						"name": "heavy-oil",
+						"amount": 50
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "sulfuric-acid",
+						"amount": 25,
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "heavy-oil",
+						"amount": 50,
+						"position": {
+							"x": 3,
+							"y": -2
+						}
+					}
+				],
+				"fluid_connections": [
+					{
+						"name": "sulfuric-acid",
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					},
+					{
+						"name": "sulfuric-acid",
+						"position": {
+							"x": -3,
+							"y": 1
+						}
+					},
+					{
+						"name": "heavy-oil",
+						"position": {
+							"x": 3,
+							"y": -2
+						}
+					},
+					{
+						"name": "heavy-oil",
+						"position": {
+							"x": 3,
+							"y": 0
+						}
+					},
+					{
+						"name": "heavy-oil",
+						"position": {
+							"x": 3,
+							"y": 2
+						}
+					}
+				]
+			},
+			"steam-condensation": {
+				"category": "chemistry",
+				"time": 1,
+				"machine": "chemical-plant",
+				"ingredients": {},
+				"results": [
+					{
+						"type": "fluid",
+						"name": "water",
+						"amount": 90
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "steam",
+						"amount": 1000,
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "water",
+						"amount": 90,
+						"position": {
+							"x": -2,
+							"y": -1
+						}
+					}
+				],
+				"fluid_connections": [
+					{
+						"name": "steam",
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					},
+					{
+						"name": "steam",
+						"position": {
+							"x": 2,
+							"y": 1
+						}
+					},
+					{
+						"name": "water",
+						"position": {
+							"x": -2,
+							"y": -1
+						}
+					},
+					{
+						"name": "water",
+						"position": {
+							"x": -2,
+							"y": 1
+						}
+					}
+				]
+			},
+			"acid-neutralisation": {
+				"category": "chemistry",
+				"time": 0.5,
+				"machine": "chemical-plant",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "calcite",
+						"amount": 1
+					}
+				],
+				"results": [
+					{
+						"type": "fluid",
+						"name": "steam",
+						"amount": 1000
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "sulfuric-acid",
+						"amount": 100,
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "steam",
+						"amount": 1000,
+						"position": {
+							"x": -2,
+							"y": -1
+						},
+						"temperature": 500
+					}
+				],
+				"fluid_connections": [
+					{
+						"name": "sulfuric-acid",
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					},
+					{
+						"name": "sulfuric-acid",
+						"position": {
+							"x": 2,
+							"y": 1
+						}
+					},
+					{
+						"name": "steam",
+						"position": {
+							"x": -2,
+							"y": -1
+						}
+					},
+					{
+						"name": "steam",
+						"position": {
+							"x": -2,
+							"y": 1
+						}
+					}
+				]
+			},
+			"casting-copper-cable": {
+				"category": "metallurgy",
+				"time": 1,
+				"machine": "foundry",
+				"ingredients": {},
+				"results": [
+					{
+						"type": "item",
+						"name": "copper-cable",
+						"amount": 3
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "molten-copper",
+						"amount": 5,
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					}
+				],
+				"fluid_outputs": {},
+				"fluid_connections": [
+					{
+						"name": "molten-copper",
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					},
+					{
+						"name": "molten-copper",
+						"position": {
+							"x": -3,
+							"y": 1
+						}
+					}
+				]
+			},
+			"casting-iron": {
+				"category": "metallurgy",
+				"time": 3.2,
+				"machine": "foundry",
+				"ingredients": {},
+				"results": [
+					{
+						"type": "item",
+						"name": "iron-plate",
+						"amount": 3
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "molten-iron",
+						"amount": 20,
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					}
+				],
+				"fluid_outputs": {},
+				"fluid_connections": [
+					{
+						"name": "molten-iron",
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					},
+					{
+						"name": "molten-iron",
+						"position": {
+							"x": -3,
+							"y": 1
+						}
+					}
+				]
+			},
+			"molten-copper-from-lava": {
+				"category": "metallurgy",
+				"time": 16,
+				"machine": "foundry",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "calcite",
+						"amount": 1
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "stone",
+						"amount": 22.5
+					},
+					{
+						"type": "fluid",
+						"name": "molten-copper",
+						"amount": 375
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "lava",
+						"amount": 500,
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "molten-copper",
+						"amount": 375,
+						"position": {
+							"x": 3,
+							"y": -1
+						}
+					}
+				],
+				"fluid_connections": [
+					{
+						"name": "lava",
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					},
+					{
+						"name": "lava",
+						"position": {
+							"x": -3,
+							"y": 1
+						}
+					},
+					{
+						"name": "molten-copper",
+						"position": {
+							"x": 3,
+							"y": -1
+						}
+					},
+					{
+						"name": "molten-copper",
+						"position": {
+							"x": 3,
+							"y": 1
+						}
+					}
+				]
+			},
+			"molten-iron-from-lava": {
+				"category": "metallurgy",
+				"time": 16,
+				"machine": "foundry",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "calcite",
+						"amount": 1
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "stone",
+						"amount": 15
+					},
+					{
+						"type": "fluid",
+						"name": "molten-iron",
+						"amount": 375
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "lava",
+						"amount": 500,
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "molten-iron",
+						"amount": 375,
+						"position": {
+							"x": 3,
+							"y": -1
+						}
+					}
+				],
+				"fluid_connections": [
+					{
+						"name": "lava",
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					},
+					{
+						"name": "lava",
+						"position": {
+							"x": -3,
+							"y": 1
+						}
+					},
+					{
+						"name": "molten-iron",
+						"position": {
+							"x": 3,
+							"y": -1
+						}
+					},
+					{
+						"name": "molten-iron",
+						"position": {
+							"x": 3,
+							"y": 1
+						}
+					}
+				]
+			},
+			"kr-molten-rare-metals-from-lava": {
+				"category": "metallurgy",
+				"time": 16,
+				"machine": "foundry",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "calcite",
+						"amount": 2
+					}
+				],
+				"results": [
+					{
+						"type": "fluid",
+						"name": "kr-molten-rare-metals",
+						"amount": 150
+					},
+					{
+						"type": "fluid",
+						"name": "molten-iron",
+						"amount": 30
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "lava",
+						"amount": 500,
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					},
+					{
+						"name": "kr-hydrogen-chloride",
+						"amount": 10,
+						"position": {
+							"x": -3,
+							"y": 1
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "kr-molten-rare-metals",
+						"amount": 150,
+						"position": {
+							"x": 3,
+							"y": -1
+						}
+					},
+					{
+						"name": "molten-iron",
+						"amount": 30,
+						"position": {
+							"x": 3,
+							"y": 1
+						}
+					}
+				],
+				"fluid_connections": [
+					{
+						"name": "lava",
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					},
+					{
+						"name": "kr-hydrogen-chloride",
+						"position": {
+							"x": -3,
+							"y": 1
+						}
+					},
+					{
+						"name": "kr-molten-rare-metals",
+						"position": {
+							"x": 3,
+							"y": -1
+						}
+					},
+					{
+						"name": "molten-iron",
+						"position": {
+							"x": 3,
+							"y": 1
+						}
+					}
+				]
+			},
+			"kr-burn-kr-hydrogen": {
+				"category": "kr-fuel-burning",
+				"time": 2,
+				"machine": "kr-flare-stack",
+				"ingredients": {},
+				"results": {},
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "kr-hydrogen",
+						"amount": 100,
+						"position": {
+							"x": -1.5,
+							"y": 0.5
+						}
+					}
+				],
+				"fluid_outputs": {},
+				"fluid_connections": [
+					{
+						"name": "kr-hydrogen",
+						"position": {
+							"x": -1.5,
+							"y": 0.5
+						}
+					}
+				]
+			},
+			"kr-filter-rare-metal-ore-from-dirty-water": {
+				"category": "kr-fluid-filtration",
+				"time": 2,
+				"machine": "kr-filtration-plant",
+				"ingredients": {},
+				"results": [
+					{
+						"type": "item",
+						"name": "stone",
+						"amount": 0.3
+					},
+					{
+						"type": "item",
+						"name": "kr-rare-metal-ore",
+						"amount": 0.05
+					},
+					{
+						"type": "fluid",
+						"name": "water",
+						"amount": 100
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "kr-dirty-water",
+						"amount": 100,
+						"position": {
+							"x": 4,
+							"y": 0
+						}
+					}
+				],
+				"fluid_outputs": [
+					{
+						"name": "water",
+						"amount": 100,
+						"position": {
+							"x": -4,
+							"y": 0
+						}
+					}
+				],
+				"fluid_connections": [
+					{
+						"name": "kr-dirty-water",
+						"position": {
+							"x": 4,
+							"y": 0
+						}
+					},
+					{
+						"name": "water",
+						"position": {
+							"x": -4,
+							"y": 0
+						}
+					}
+				]
+			},
+			"kr-molten-rare-metals": {
+				"category": "metallurgy",
+				"time": 32,
+				"machine": "foundry",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "kr-rare-metal-ore",
+						"amount": 50
+					},
+					{
+						"type": "item",
+						"name": "calcite",
+						"amount": 2
+					}
+				],
+				"results": [
+					{
+						"type": "fluid",
+						"name": "kr-molten-rare-metals",
+						"amount": 450
+					}
+				],
+				"direction": 4,
+				"fluid_inputs": {},
+				"fluid_outputs": [
+					{
+						"name": "kr-molten-rare-metals",
+						"amount": 450,
+						"position": {
+							"x": 3,
+							"y": -1
+						}
+					}
+				],
+				"fluid_connections": [
+					{
+						"name": "kr-molten-rare-metals",
+						"position": {
+							"x": 3,
+							"y": -1
+						}
+					},
+					{
+						"name": "kr-molten-rare-metals",
+						"position": {
+							"x": 3,
+							"y": 1
+						}
+					}
+				]
+			},
+			"kr-burn-kr-chlorine": {
+				"category": "kr-fuel-burning",
+				"time": 2,
+				"machine": "kr-flare-stack",
+				"ingredients": {},
+				"results": {},
+				"direction": 4,
+				"fluid_inputs": [
+					{
+						"name": "kr-chlorine",
+						"amount": 100,
+						"position": {
+							"x": -1.5,
+							"y": 0.5
+						}
+					}
+				],
+				"fluid_outputs": {},
+				"fluid_connections": [
+					{
+						"name": "kr-chlorine",
+						"position": {
+							"x": -1.5,
+							"y": 0.5
+						}
+					}
+				]
+			}
+		},
+		"machines": {
+			"assembling-machine-2": {
+				"crafting_speed": 0.75,
+				"categories": ["advanced-crafting", "crafting", "crafting-with-fluid"],
+				"size": [3, 3],
+				"flooring": {}
+			},
+			"electric-furnace": {
+				"crafting_speed": 2,
+				"categories": ["smelting"],
+				"size": [3, 3],
+				"flooring": {}
+			},
+			"kr-filtration-plant": {
+				"crafting_speed": 1,
+				"categories": ["kr-fluid-filtration"],
+				"size": [7, 7],
+				"flooring": {}
+			},
+			"foundry": {
+				"crafting_speed": 4,
+				"categories": ["metallurgy"],
+				"size": [5, 5],
+				"flooring": {}
+			},
+			"chemical-plant": {
+				"crafting_speed": 1,
+				"categories": ["chemical-plant-only", "chemistry"],
+				"size": [3, 3],
+				"flooring": {}
+			},
+			"kr-electrolysis-plant": {
+				"crafting_speed": 1,
+				"categories": ["kr-electrolysis"],
+				"size": [5, 5],
+				"flooring": {}
+			},
+			"oil-refinery": {
+				"crafting_speed": 1,
+				"categories": ["oil-processing"],
+				"size": [5, 5],
+				"flooring": {}
+			}
+		},
+		"belts": {
+			"fast-transport-belt": {
+				"items_per_second": 30,
+				"speed": 0.0625,
+				"size": [1, 1]
+			}
+		},
+		"undergrounds": {
+			"fast-underground-belt": {
+				"max_distance": 11,
+				"speed": 0.0625,
+				"size": [1, 1]
+			}
+		},
+		"splitters": {
+			"fast-splitter": {
+				"speed": 0.0625,
+				"size": [2, 1]
+			}
+		},
+		"inserters": {
+			"bulk-inserter": {
+				"pickup_position": [0, -1],
+				"insert_position": [0, 1.2],
+				"rotation_speed": 0.08,
+				"extension_speed": 0.4,
+				"filter_count": 5,
+				"stack_size": 5,
+				"size": [1, 1],
+				"custom": {
+					"range": 3,
+					"cross": true,
+					"diagonal": true,
+					"all": true,
+					"offsets": true
+				}
+			}
+		},
+		"furnaces": {
+			"kr-crusher": {
+				"crafting_speed": 1,
+				"categories": ["kr-crushing", "kr-void-crushing"],
+				"size": [7, 7],
+				"flooring": {}
+			},
+			"kr-flare-stack": {
+				"crafting_speed": 1,
+				"categories": ["kr-fuel-burning"],
+				"size": [2, 2],
+				"flooring": {}
+			}
+		},
+		"poles": {
+			"substation": {
+				"size": [2, 2],
+				"supply": 10,
+				"reach": 20.25
+			}
+		},
+		"fuels": {},
+		"drills": {},
+		"resources": {},
+		"pipes": {
+			"pipe": {},
+			"pipe-to-ground": {
+				"underground": 20
+			}
+		},
+		"transport": {
+			"underground": "fast-underground-belt",
+			"splitter": "fast-splitter",
+			"long_inserter": "bulk-inserter"
+		},
+		"loaders": {
+			"aai-fast-loader": {
+				"size": [1, 1],
+				"items_per_second": 30,
+				"electric": false
+			}
+		},
+		"plan": {
+			"status": "solved",
+			"lines": [
+				{
+					"recipe": "processing-unit",
+					"machine": "assembling-machine-2",
+					"machines": 15.999999999999968,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "processing-unit",
+							"type": "item",
+							"perMinute": 119.99999999999976
+						}
+					],
+					"ingredients": [
+						{
+							"name": "advanced-circuit",
+							"type": "item",
+							"perMinute": 359.99999999999926
+						},
+						{
+							"name": "kr-rare-metals",
+							"type": "item",
+							"perMinute": 179.99999999999963
+						},
+						{
+							"name": "sulfuric-acid",
+							"type": "fluid",
+							"perMinute": 599.9999999999989
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 2066666.6666666628,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "advanced-circuit",
+					"machine": "assembling-machine-2",
+					"machines": 15.999999999999968,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "advanced-circuit",
+							"type": "item",
+							"perMinute": 359.99999999999926
+						}
+					],
+					"ingredients": [
+						{
+							"name": "copper-cable",
+							"type": "item",
+							"perMinute": 719.9999999999985
+						},
+						{
+							"name": "electronic-circuit",
+							"type": "item",
+							"perMinute": 719.9999999999985
+						},
+						{
+							"name": "kr-electronic-components",
+							"type": "item",
+							"perMinute": 359.99999999999926
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 2066666.6666666628,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "electronic-circuit",
+					"machine": "assembling-machine-2",
+					"machines": 15.999999999999964,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "electronic-circuit",
+							"type": "item",
+							"perMinute": 719.9999999999984
+						}
+					],
+					"ingredients": [
+						{
+							"name": "copper-cable",
+							"type": "item",
+							"perMinute": 1439.9999999999968
+						},
+						{
+							"name": "iron-plate",
+							"type": "item",
+							"perMinute": 719.9999999999984
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 2066666.6666666623,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-electronic-components",
+					"machine": "assembling-machine-2",
+					"machines": 7.999999999999984,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "kr-electronic-components",
+							"type": "item",
+							"perMinute": 359.99999999999926
+						}
+					],
+					"ingredients": [
+						{
+							"name": "kr-glass",
+							"type": "item",
+							"perMinute": 179.99999999999963
+						},
+						{
+							"name": "plastic-bar",
+							"type": "item",
+							"perMinute": 179.99999999999963
+						},
+						{
+							"name": "kr-silicon",
+							"type": "item",
+							"perMinute": 179.99999999999963
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 1033333.3333333314,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-silicon",
+					"machine": "electric-furnace",
+					"machines": 2.6666666666666656,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "kr-silicon",
+							"type": "item",
+							"perMinute": 179.99999999999991
+						}
+					],
+					"ingredients": [
+						{
+							"name": "kr-quartz",
+							"type": "item",
+							"perMinute": 359.99999999999983
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 551111.1111111109,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-glass",
+					"machine": "electric-furnace",
+					"machines": 2.9999999999999933,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "kr-glass",
+							"type": "item",
+							"perMinute": 179.9999999999996
+						}
+					],
+					"ingredients": [
+						{
+							"name": "kr-sand",
+							"type": "item",
+							"perMinute": 359.9999999999992
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 619999.9999999986,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-quartz",
+					"machine": "kr-filtration-plant",
+					"machines": 2.0999999999999948,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "kr-quartz",
+							"type": "item",
+							"perMinute": 359.99999999999903
+						}
+					],
+					"ingredients": [
+						{
+							"name": "kr-sand",
+							"type": "item",
+							"perMinute": 599.9999999999985
+						},
+						{
+							"name": "water",
+							"type": "fluid",
+							"perMinute": 599.9999999999985
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 1084999.9999999974,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-casting-rare-metals",
+					"machine": "foundry",
+					"machines": 0.7999999999999983,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "kr-rare-metals",
+							"type": "item",
+							"perMinute": 179.9999999999996
+						},
+						{
+							"name": "kr-dirty-water",
+							"type": "fluid",
+							"temperature": 25,
+							"perMinute": 599.9999999999987
+						}
+					],
+					"ingredients": [
+						{
+							"name": "kr-molten-rare-metals",
+							"type": "fluid",
+							"perMinute": 1199.9999999999975
+						},
+						{
+							"name": "water",
+							"type": "fluid",
+							"perMinute": 1199.9999999999975
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 2066666.6666666623,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-hydrogen-chloride",
+					"machine": "chemical-plant",
+					"machines": 0.13303333333333325,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "kr-hydrogen-chloride",
+							"type": "fluid",
+							"temperature": 25,
+							"perMinute": 79.81999999999995
+						}
+					],
+					"ingredients": [
+						{
+							"name": "kr-chlorine",
+							"type": "fluid",
+							"perMinute": 79.81999999999995
+						},
+						{
+							"name": "kr-hydrogen",
+							"type": "fluid",
+							"perMinute": 79.81999999999995
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 28868.233333333315,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-water-electrolysis",
+					"machine": "kr-electrolysis-plant",
+					"machines": 0.2027700000000315,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "kr-hydrogen",
+							"type": "fluid",
+							"temperature": 25,
+							"perMinute": 121.6620000000189
+						},
+						{
+							"name": "kr-chlorine",
+							"type": "fluid",
+							"temperature": 25,
+							"perMinute": 81.1080000000126
+						}
+					],
+					"ingredients": [
+						{
+							"name": "kr-sand",
+							"type": "item",
+							"perMinute": 40.5540000000063
+						},
+						{
+							"name": "water",
+							"type": "fluid",
+							"perMinute": 162.2160000000252
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 78573.37500001221,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-sand",
+					"machine": "kr-crusher",
+					"machines": 2.223453333333332,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "kr-sand",
+							"type": "item",
+							"perMinute": 1000.5539999999995
+						}
+					],
+					"ingredients": [
+						{
+							"name": "stone",
+							"type": "item",
+							"perMinute": 400.2215999999998
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 516952.89999999973,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "plastic-bar",
+					"machine": "chemical-plant",
+					"machines": 1.4999999999999967,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "plastic-bar",
+							"type": "item",
+							"perMinute": 179.9999999999996
+						}
+					],
+					"ingredients": [
+						{
+							"name": "coal",
+							"type": "item",
+							"perMinute": 89.9999999999998
+						},
+						{
+							"name": "petroleum-gas",
+							"type": "fluid",
+							"perMinute": 1799.999999999996
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 325499.9999999993,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "light-oil-cracking",
+					"machine": "chemical-plant",
+					"machines": 2.9999999999999942,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "petroleum-gas",
+							"type": "fluid",
+							"temperature": 25,
+							"perMinute": 1799.9999999999966
+						}
+					],
+					"ingredients": [
+						{
+							"name": "water",
+							"type": "fluid",
+							"perMinute": 2699.999999999995
+						},
+						{
+							"name": "light-oil",
+							"type": "fluid",
+							"perMinute": 2699.999999999995
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 650999.9999999987,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "heavy-oil-cracking",
+					"machine": "chemical-plant",
+					"machines": 2.9999999999999942,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "light-oil",
+							"type": "fluid",
+							"temperature": 25,
+							"perMinute": 2699.999999999995
+						}
+					],
+					"ingredients": [
+						{
+							"name": "heavy-oil",
+							"type": "fluid",
+							"perMinute": 3599.999999999993
+						},
+						{
+							"name": "water",
+							"type": "fluid",
+							"perMinute": 2699.999999999995
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 650999.9999999987,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "simple-coal-liquefaction",
+					"machine": "oil-refinery",
+					"machines": 5.999999999999985,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "heavy-oil",
+							"type": "fluid",
+							"temperature": 25,
+							"perMinute": 3599.999999999991
+						}
+					],
+					"ingredients": [
+						{
+							"name": "coal",
+							"type": "item",
+							"perMinute": 719.9999999999982
+						},
+						{
+							"name": "calcite",
+							"type": "item",
+							"perMinute": 143.99999999999966
+						},
+						{
+							"name": "sulfuric-acid",
+							"type": "fluid",
+							"perMinute": 1799.9999999999955
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 2603999.9999999935,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "steam-condensation",
+					"machine": "chemical-plant",
+					"machines": 1.2522622222222115,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "water",
+							"type": "fluid",
+							"temperature": 15,
+							"perMinute": 6762.215999999942
+						}
+					],
+					"ingredients": [
+						{
+							"name": "steam",
+							"type": "fluid",
+							"perMinute": 75135.73333333268
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 271740.9022222199,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "acid-neutralisation",
+					"machine": "chemical-plant",
+					"machines": 0.626131111111107,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "steam",
+							"type": "fluid",
+							"temperature": 500,
+							"perMinute": 75135.73333333284
+						}
+					],
+					"ingredients": [
+						{
+							"name": "calcite",
+							"type": "item",
+							"perMinute": 75.13573333333284
+						},
+						{
+							"name": "sulfuric-acid",
+							"type": "fluid",
+							"perMinute": 7513.573333333284
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 135870.45111111022,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "casting-copper-cable",
+					"machine": "foundry",
+					"machines": 2.9999999999999933,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "copper-cable",
+							"type": "item",
+							"perMinute": 2159.9999999999955
+						}
+					],
+					"ingredients": [
+						{
+							"name": "molten-copper",
+							"type": "fluid",
+							"perMinute": 3599.999999999992
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 7749999.999999983,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "casting-iron",
+					"machine": "foundry",
+					"machines": 3.1999999999999926,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "iron-plate",
+							"type": "item",
+							"perMinute": 719.9999999999983
+						}
+					],
+					"ingredients": [
+						{
+							"name": "molten-iron",
+							"type": "fluid",
+							"perMinute": 4799.999999999989
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 8266666.666666648,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "molten-copper-from-lava",
+					"machine": "foundry",
+					"machines": 0.6399999999999992,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "stone",
+							"type": "item",
+							"perMinute": 215.99999999999974
+						},
+						{
+							"name": "molten-copper",
+							"type": "fluid",
+							"temperature": 1100,
+							"perMinute": 3599.999999999996
+						}
+					],
+					"ingredients": [
+						{
+							"name": "calcite",
+							"type": "item",
+							"perMinute": 9.599999999999989
+						},
+						{
+							"name": "lava",
+							"type": "fluid",
+							"perMinute": 4799.999999999994
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 1653333.3333333314,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "molten-iron-from-lava",
+					"machine": "foundry",
+					"machines": 0.8107626666666661,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "stone",
+							"type": "item",
+							"perMinute": 182.42159999999987
+						},
+						{
+							"name": "molten-iron",
+							"type": "fluid",
+							"temperature": 1500,
+							"perMinute": 4560.539999999996
+						}
+					],
+					"ingredients": [
+						{
+							"name": "calcite",
+							"type": "item",
+							"perMinute": 12.161439999999992
+						},
+						{
+							"name": "lava",
+							"type": "fluid",
+							"perMinute": 6080.719999999996
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 2094470.2222222209,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-molten-rare-metals-from-lava",
+					"machine": "foundry",
+					"machines": 0.532133333333333,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "kr-molten-rare-metals",
+							"type": "fluid",
+							"temperature": 1800,
+							"perMinute": 1197.2999999999993
+						},
+						{
+							"name": "molten-iron",
+							"type": "fluid",
+							"temperature": 1500,
+							"perMinute": 239.45999999999984
+						}
+					],
+					"ingredients": [
+						{
+							"name": "calcite",
+							"type": "item",
+							"perMinute": 15.96399999999999
+						},
+						{
+							"name": "lava",
+							"type": "fluid",
+							"perMinute": 3990.9999999999973
+						},
+						{
+							"name": "kr-hydrogen-chloride",
+							"type": "fluid",
+							"perMinute": 79.81999999999995
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 1374677.777777777,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-burn-kr-hydrogen",
+					"machine": "kr-flare-stack",
+					"machines": 0.013947333333341971,
+					"productionType": "consume",
+					"products": {},
+					"ingredients": [
+						{
+							"name": "kr-hydrogen",
+							"type": "fluid",
+							"perMinute": 41.84200000002591
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 1441.224444445337,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-filter-rare-metal-ore-from-dirty-water",
+					"machine": "kr-filtration-plant",
+					"machines": 0.20000000000002852,
+					"productionType": "consume",
+					"products": [
+						{
+							"name": "stone",
+							"type": "item",
+							"perMinute": 1.8000000000002565
+						},
+						{
+							"name": "kr-rare-metal-ore",
+							"type": "item",
+							"perMinute": 0.30000000000004273
+						},
+						{
+							"name": "water",
+							"type": "fluid",
+							"temperature": 15,
+							"perMinute": 600.0000000000855
+						}
+					],
+					"ingredients": [
+						{
+							"name": "kr-dirty-water",
+							"type": "fluid",
+							"perMinute": 600.0000000000855
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 103333.33333334807,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-molten-rare-metals",
+					"machine": "foundry",
+					"machines": 0.0007999999999996233,
+					"productionType": "consume",
+					"products": [
+						{
+							"name": "kr-molten-rare-metals",
+							"type": "fluid",
+							"temperature": 1800,
+							"perMinute": 2.699999999998729
+						}
+					],
+					"ingredients": [
+						{
+							"name": "kr-rare-metal-ore",
+							"type": "item",
+							"perMinute": 0.2999999999998588
+						},
+						{
+							"name": "calcite",
+							"type": "item",
+							"perMinute": 0.01199999999999435
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 2066.6666666656943,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-burn-kr-chlorine",
+					"machine": "kr-flare-stack",
+					"machines": 0.0004293333333378064,
+					"productionType": "consume",
+					"products": {},
+					"ingredients": [
+						{
+							"name": "kr-chlorine",
+							"type": "fluid",
+							"perMinute": 1.288000000013419
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 44.36444444490666,
+							"unit": "W"
+						}
+					]
+				}
+			],
+			"ingredients": [
+				{
+					"name": "coal",
+					"type": "item",
+					"perMinute": 809.9999999999983
+				},
+				{
+					"name": "calcite",
+					"type": "item",
+					"perMinute": 256.87317333333243
+				},
+				{
+					"name": "lava",
+					"type": "fluid",
+					"temperature": 1500,
+					"perMinute": 14871.719999999998
+				},
+				{
+					"name": "sulfuric-acid",
+					"type": "fluid",
+					"temperature": 25,
+					"perMinute": 9913.573333333276
+				},
+				{
+					"name": "custom-electric-power",
+					"type": "entity",
+					"amount": 38065650.56166663,
+					"unit": "W"
+				}
+			],
+			"products": [
+				{
+					"name": "processing-unit",
+					"type": "item",
+					"perMinute": 119.99999999999979
+				}
+			],
+			"byproducts": {}
+		}
+	}
+}

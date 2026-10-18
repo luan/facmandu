@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { z } from 'zod';
-import { blueprintDesignSchema } from '$lib/blueprints';
+import { blueprintDesignSchema, MAX_BLUEPRINT_ENTITIES } from '$lib/blueprints';
 import { type FactoryLayoutJob, factoryLayoutJobInput } from '$lib/factory-layout';
 import adapter from './factory-layout-adapter.lua?raw';
 import belts from './factory-layout-belts.lua?raw';
@@ -71,6 +71,7 @@ export async function compileFactoryLayout(
 		tiers: { ...input.tiers, ...transport }
 	});
 	const problem = {
+		max_entities: MAX_BLUEPRINT_ENTITIES,
 		logistics: request.logistics,
 		layout: request.layout,
 		inserters: request.inserters,
@@ -112,7 +113,7 @@ export async function compileFactoryLayout(
 		child.on('error', reject);
 		child.stdout.on('data', (chunk: Buffer) => {
 			output += chunk.toString();
-			if (Buffer.byteLength(output) > 192000) child.kill('SIGKILL');
+			if (Buffer.byteLength(output) > 320000) child.kill('SIGKILL');
 		});
 		child.on('close', (code) => {
 			clearTimeout(deadline);

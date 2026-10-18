@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { inflateSync } from 'node:zlib';
 import { z } from 'zod';
 import {
 	type BlueprintRequest,
@@ -98,7 +99,7 @@ export function blueprintCommand(
 	if (input.operation === 'place' && input.expectedDesign !== design)
 		throw new ServerError(409, 'Blueprint changed; inspect placement again');
 	const encoded = JSON.stringify({ ...input, design, player });
-	if (Buffer.byteLength(encoded) > 160000) throw new ServerError(400, 'Blueprint is too large');
+	if (Buffer.byteLength(encoded) > 240000) throw new ServerError(400, 'Blueprint is too large');
 	let delimiter = '=';
 	while (encoded.includes(`]${delimiter}]`)) delimiter += '=';
 	return `/silent-command local request=helpers.json_to_table([${delimiter}[${encoded}]${delimiter}])
@@ -112,7 +113,8 @@ end)())
 end)
 if inventory and inventory.valid then inventory.destroy() end
 local reply=helpers.table_to_json(ok and {ok=true,result=result} or {ok=false,error=tostring(result):match("^[^\\n]*")})
-if #reply>196608 then reply='{"ok":false,"error":"Blueprint result too large"}' end
+if #reply>245760 then reply=helpers.table_to_json({compressed=helpers.encode_string(reply)}) end
+if #reply>245760 then reply='{"ok":false,"error":"Blueprint result too large"}' end
 rcon.print(reply)`;
 }
 const replySchema = z.discriminatedUnion('ok', [
@@ -208,6 +210,13 @@ export async function factoryBlueprint(
 	let decoded: unknown;
 	try {
 		decoded = JSON.parse(raw.trim());
+		const envelope = z.object({ compressed: z.string().max(245760) }).safeParse(decoded);
+		if (envelope.success)
+			decoded = JSON.parse(
+				inflateSync(Buffer.from(envelope.data.compressed, 'base64'), {
+					maxOutputLength: 1024 * 1024
+				}).toString('utf8')
+			);
 	} catch {
 		throw new ServerError(502, 'The server did not return a blueprint result');
 	}
