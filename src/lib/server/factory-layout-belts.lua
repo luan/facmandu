@@ -60,7 +60,8 @@ local function geometry(line,width)
  local row_gap=clearance('y',h+overhead,problem.layout.spacing=='spacious' and 2 or (#pins>1 and 2 or 0))
  local pitch=w+gap
  local count=math.ceil(line.machines-1e-9)
- local columns=math.min(count,math.floor((width+gap-belts.lead)/pitch))
+ local outlet=loader and #products==1 and consumed[products[1].name] and 2 or 0
+ local columns=math.min(count,math.floor((width+gap-belts.lead-outlet)/pitch))
  -- Split physical rows at lane capacity; never reduce the saved machine count.
  for _,part in ipairs(recipe.ingredients) do
   local lane=(#recipe.ingredients==1 or belts.alone[part.name]) and belt_capacity or belt_capacity/2
@@ -74,7 +75,7 @@ local function geometry(line,width)
  local row_height=h+overhead+row_gap
  local boundary=1;for _,pin in ipairs(pins) do if math.abs(pin.position.y)>=h/2 then boundary=2 end end
  return {recipe=recipe,w=w,h=h,products=products,belts=belts,outer=outer,has_in=has_in,has_out=has_out,count=count,
-  pitch=pitch,columns=columns,row_height=row_height,width=columns*pitch-gap+belts.lead,
+  pitch=pitch,columns=columns,row_height=row_height,width=columns*pitch-gap+belts.lead+outlet,
   height=math.ceil(count/columns)*row_height-row_gap+boundary}
 end
 local selected,best_score,bounds_height,minimum_height
@@ -270,13 +271,13 @@ end
 local junctions=0
 local names={} for name in pairs(internal) do names[#names+1]=name end;table.sort(names)
 for _,item in ipairs(names) do
- local supply,consumers={},{}
+ local supply,consumers,edges={},{},{}
  for _,row in ipairs(rows) do
-  if row.item==item and row.output_belt then supply[#supply+1]={source=item..'#'..row.copy,left=row.product_rate} end
+  if row.item==item and row.output_belt then supply[#supply+1]={source=item..'#'..row.copy,left=row.product_rate,degree=0} end
   local needed=row.ingredient_rates and row.ingredient_rates[item]
   if needed and needed>1e-6 then consumers[#consumers+1]={row=row,needed=needed} end
  end
- for _,port in ipairs(problem.inputs) do if port.item==item then supply[#supply+1]={source=item,left=port.perMinute} end end
+ for _,port in ipairs(problem.inputs) do if port.item==item then supply[#supply+1]={source=item,left=port.perMinute,degree=0} end end
  table.sort(consumers,function(a,b) return a.needed>b.needed or a.needed==b.needed and a.row.copy<b.row.copy end)
  local next_source=1
  for _,consumer in ipairs(consumers) do
@@ -299,11 +300,16 @@ for _,item in ipairs(names) do
    if right then goals[#goals+1]={x=belt.x1,y=belt.y,dirs={[4]=true}} end
    for x=belt.x1,last do goals[#goals+1]={x=x,y=belt.y,dirs={[right and 0 or 8]=true}} end
    local remaining=lane
-   local feeds={}
+   local target={degree=0}
+   local feeds,feed_edges={},{}
    while remaining>1e-6 do
     local source=assert(supply[next_source],'Native plan has no '..item..' supply for '..row.recipe)
     local amount=math.min(source.left,remaining)
-    if amount>1e-6 then feeds[#feeds+1]=source.source end
+    if amount>1e-6 then
+     local edge={source=source,target=target}
+     source.degree=source.degree+1;target.degree=target.degree+1
+     edges[#edges+1]=edge;feed_edges[#feed_edges+1]=edge;feeds[#feeds+1]=source.source
+    end
     source.left=source.left-amount;remaining=remaining-amount
     if source.left<=1e-6 then next_source=next_source+1 end
    end
@@ -318,14 +324,29 @@ for _,item in ipairs(names) do
     source=item..'#merge'..junctions
     local tail=x+#feeds-1
     item_problem.link_sources[source]={x=tail+1,y=y,dir=4,from_x=tail,from_y=y,label='merge '..item..' '..junctions}
-    item_problem.outputs[#item_problem.outputs+1]={item=item,sources=feeds,merge_lane=true,position={x=x+.5,y=y+.5},direction=4}
+    item_problem.outputs[#item_problem.outputs+1]={item=item,sources=feeds,source_edges=feed_edges,merge_lane=true,position={x=x+.5,y=y+.5},direction=4}
    end
-   row.supplies[item][#row.supplies[item]+1]={source=source,goals=goals}
+   row.supplies[item][#row.supplies[item]+1]={source=source,goals=goals,edge=#feed_edges==1 and feed_edges[1] or nil}
    needed=needed-lane
    assert(needed<=1e-6 or both,'The '..item..' ingredient exceeds one allocated belt lane')
    right=false
   end
  end
+ -- Interval allocation forms a forest. Serve leaf demands and scarce supplies
+ -- first; geographic priorities can starve a branch that needs only the remainder.
+ for rank=1,#edges do
+  local chosen
+  for _,edge in ipairs(edges) do if not edge.rank and (edge.source.degree==1 or edge.target.degree==1) then chosen=edge;break end end
+  assert(chosen,'Intermediate flow needs a qualified balancing junction: '..item)
+  chosen.rank=rank;chosen.source.degree=chosen.source.degree-1;chosen.target.degree=chosen.target.degree-1
+ end
+ for _,row in ipairs(rows) do for _,route in ipairs(row.supplies and row.supplies[item] or {}) do if route.edge then route.priority=route.edge.rank;route.edge=nil end end end
+ for _,out in ipairs(item_problem.outputs) do if out.item==item and out.source_edges then
+  table.sort(out.source_edges,function(a,b) return a.rank<b.rank end)
+  out.sources={};out.source_priority={}
+  for _,edge in ipairs(out.source_edges) do out.sources[#out.sources+1]=edge.source.source;out.source_priority[edge.source.source]=edge.rank end
+  out.source_edges=nil
+ end end
  -- Only surplus producers may also feed a declared output of this intermediate.
  for _,out in ipairs(item_problem.outputs) do if out.item==item and not out.sources then
   out.sources={};out.source_rates={};local needed=out.perMinute

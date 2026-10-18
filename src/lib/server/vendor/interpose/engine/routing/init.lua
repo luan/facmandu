@@ -416,12 +416,12 @@ function routing.nets(layout, problem, pack, base)
   -- every place an item must go, in a fixed order
   local demands, items, by_item = {}, {}, {}
   -- src: the source's key (an item, or item#copy for a chain's own row)
-  local function demand(src, item, sink_label, goals, reserve, port)
+  local function demand(src, item, sink_label, goals, reserve, port, priority)
     if not by_item[src] then
       by_item[src] = {}
       items[#items + 1] = src
     end
-    local d = { item = item, sink = sink_label, goals = goals, reserve = reserve, port = port }
+    local d = { item = item, sink = sink_label, goals = goals, reserve = reserve, port = port, priority=priority }
     demands[#demands + 1] = d
     table.insert(by_item[src], d)
   end
@@ -435,7 +435,7 @@ function routing.nets(layout, problem, pack, base)
   end
   local function consume(row,item,label,goals,reserve)
     if row.supplies and row.supplies[item] then
-      for _,route in ipairs(row.supplies[item]) do demand(route.source,item,label,route.goals,{}) end
+      for _,route in ipairs(row.supplies[item]) do demand(route.source,item,label,route.goals,{},false,route.priority) end
     else demand(source_key(item,row),item,label,goals,reserve) end
   end
   for _, row in ipairs(layout.rows) do
@@ -520,9 +520,10 @@ function routing.nets(layout, problem, pack, base)
     elseif out.merge_lane then
       -- All producers side-load the same lane before it becomes an ingredient.
       -- Keeping both lanes here could contaminate a later mixed-item belt.
-      local goals={}
-      for offset=0,#keys-1 do goals[#goals+1]={x=math.floor(out.position.x)+offset,y=math.floor(out.position.y),dirs={[direction.NORTH]=true}} end
-      for _,source in ipairs(keys) do demand(source,out.item,'the merge for '..out.item,goals,{}) end
+      for j,source in ipairs(keys) do
+        local goal={x=math.floor(out.position.x)+j-1,y=math.floor(out.position.y),dirs={[direction.NORTH]=true}}
+        demand(source,out.item,'the merge for '..out.item,{goal},{},false,out.source_priority[source])
+      end
     elseif #keys == 1 then
       demand(
         keys[1],
@@ -554,6 +555,15 @@ function routing.nets(layout, problem, pack, base)
         end
       end
       local length = math.max(counts[1],counts[2])
+      local uses={} for _,branch in ipairs(branches) do uses[branch.source]=(uses[branch.source] or 0)+1 end
+      -- Through traffic wins over side-loading. Fully assigned producers go
+      -- upstream; a producer split between lanes fills only their remainders.
+      for side=1,2 do
+        local column=counts[side]
+        for _,shared in ipairs{false,true} do for _,branch in ipairs(branches) do
+          if branch.side==side and (uses[branch.source]>1)==shared then branch.column=column;column=column-1 end
+        end end
+      end
       local a = problem.area
       for i = 1, length do
         local cx, cy = tx - v.x * i, ty - v.y * i
@@ -655,7 +665,7 @@ function routing.nets(layout, problem, pack, base)
       local placed, side
       local to_port = false
       for _, d in ipairs(list) do
-        to_port = to_port or d.port or false
+        to_port = to_port or d.port or d.priority~=nil or false
       end
       for _, s in ipairs(sides) do
         placed = fan.place(src, #list, s, placer(src), problem.tiers.splitter, to_port or problem.prioritise_inputs and not from_row[list[1].item])
@@ -685,6 +695,7 @@ function routing.nets(layout, problem, pack, base)
           if (p.port or false) ~= (q.port or false) then
             return q.port or false
           end
+          if p.priority and q.priority and p.priority~=q.priority then return p.priority<q.priority end
           local ap, aq = across(p) * side, across(q) * side
           if ap ~= aq then
             return ap < aq
