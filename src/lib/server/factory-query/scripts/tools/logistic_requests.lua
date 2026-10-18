@@ -63,8 +63,10 @@ local function inspect(a)
    capacity.additional_normal_bays=math.ceil(math.max(0,slots-capacity.current_slots)/capacity.normal_cargo_bay_slots)
   end
  end
+ local construction_requests
+ if entity.type=='space-platform-hub' then construction_requests=entity.request_missing_construction_materials end
  local next_page=start+#rows
- return {found=true,force=force.name,surface=surface.name,name=entity.name,unit_number=entity.unit_number,x=entity.position.x,y=entity.position.y,supports_requests=true,total_sections=sections.sections_count,matching_sections=#matched,shown_sections=#rows,section_offset=start,next_section_offset=next_page<#matched and next_page or nil,truncated=next_page<#matched,sections=rows,cargo_capacity=capacity,request_missing_construction_materials=entity.type=='space-platform-hub' and entity.request_missing_construction_materials or nil}
+ return {found=true,force=force.name,surface=surface.name,name=entity.name,unit_number=entity.unit_number,x=entity.position.x,y=entity.position.y,supports_requests=true,total_sections=sections.sections_count,matching_sections=#matched,shown_sections=#rows,section_offset=start,next_section_offset=next_page<#matched and next_page or nil,truncated=next_page<#matched,sections=rows,cargo_capacity=capacity,request_missing_construction_materials=construction_requests}
 end
 M.functions={inspect_logistic_requests=inspect}
 return M

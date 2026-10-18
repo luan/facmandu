@@ -541,7 +541,10 @@ test('platform request inspection distinguishes automatic sections and reports i
  local force={name='player'}
  local hub={valid=true,name='space-platform-hub',type='space-platform-hub',unit_number=12,force=force,position={x=0,y=0},request_missing_construction_materials=true,get_logistic_sections=function() return sections end}
  local surface={valid=true,name='platform-1',find_entities_filtered=function() return {hub} end}
- prototypes={entity={['space-platform-hub']={}}};game={forces={player=force},surfaces={['platform-1']=surface}}
+ hub.quality='normal';hub.prototype={get_inventory_size=function() return 80 end};hub.get_inventory=function() return {} end
+ defines={inventory={hub_main=1}}
+ helpers={table_to_json=function() return '[]' end}
+ prototypes={item={foundation={stack_size=50},card={stack_size=100}},entity={['space-platform-hub']={}}};game={forces={player=force},surfaces={['platform-1']=surface}}
  local result=require('scripts.tools.logistic_requests').functions.inspect_logistic_requests{force='player',surface='platform-1',x=0,y=0,unit_number=12}
  assert(not result.sections[1].manual and result.sections[2].manual)
  assert(result.sections[2].filters[1].import_from=='nauvis' and result.request_missing_construction_materials)
