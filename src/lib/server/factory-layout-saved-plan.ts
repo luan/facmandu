@@ -82,7 +82,7 @@ export function resolveFactoryLayout(input: FactoryLayoutInput, value: unknown) 
 	const job = factoryLayoutJobInput.parse({
 		force: input.force,
 		surface: plan.surface,
-		label: input.label ?? plan.name,
+		label: input.label?.trim() || plan.name.trim() || 'Factory layout',
 		width: input.width,
 		height: input.height,
 		layout: input.layout,

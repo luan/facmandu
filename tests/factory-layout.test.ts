@@ -823,6 +823,11 @@ test('saved layouts preserve planner machine counts across shape, spacing and au
 		() => resolveFactoryLayout(savedLayoutInput.parse(settings), { ...snapshot, force: 'enemy' }),
 		/another force/
 	);
+	for (const name of ['', '   '])
+		assert.equal(
+			resolveFactoryLayout(savedLayoutInput.parse(settings), { ...snapshot, name }).job.label,
+			'Factory layout'
+		);
 	const { job, plan } = resolveFactoryLayout(savedLayoutInput.parse(settings), snapshot);
 	const unqualified = structuredClone(native);
 	delete unqualified.inserters['fast-inserter'].custom;
