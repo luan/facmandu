@@ -17,6 +17,25 @@ local consumed={}
 for _,line in ipairs(pack.plan.lines) do for _,p in ipairs(line.ingredients) do if p.type=='item' then consumed[p.name]=true end end end
 local made={}
 for _,line in ipairs(pack.plan.lines) do for _,p in ipairs(line.products) do if p.type=='item' then made[p.name]=true end end end
+-- A recycled ingredient must seed its own supply cycle before bulk buffers fill.
+local producers,upstream={},{}
+for _,line in ipairs(pack.plan.lines) do for _,p in ipairs(line.products) do if p.type~='entity' and p.perMinute>1e-6 then
+ local k=p.type..'/'..p.name;producers[k]=producers[k] or {};producers[k][line.recipe]=true
+end end end
+for _,line in ipairs(pack.plan.lines) do
+ local deps=upstream[line.recipe] or {};upstream[line.recipe]=deps
+ for _,p in ipairs(line.ingredients) do for recipe in pairs(producers[p.type..'/'..p.name] or {}) do deps[recipe]=true end end
+end
+local function depends(recipe,target,seen)
+ if recipe==target then return true end
+ if seen[recipe] then return false end;seen[recipe]=true
+ for dependency in pairs(upstream[recipe] or {}) do if depends(dependency,target,seen) then return true end end
+ return false
+end
+local function closes_cycle(item,consumer)
+ for producer in pairs(producers['item/'..item] or {}) do if depends(producer,consumer,{}) then return true end end
+ return false
+end
 local function belts_for(line,recipe)
  -- A high-volume ingredient gets both lanes; adjustable reach serves the second belt.
  if #recipe.ingredients==2 then
@@ -257,7 +276,9 @@ if product_count==1 then
   end
  end end
 end
-local item_problem={area=problem.area,tiers=problem.tiers,inputs=problem.inputs,outputs={},obstacles=problem.obstacles,item_headers={},link_sources={},prioritise_inputs=true,max_route_expansions=8000,heuristic_weight=2}
+-- Raw supplies share capacity while their branches fill; priority splitters can
+-- starve a small prerequisite behind minutes of buffers in a bulk consumer.
+local item_problem={area=problem.area,tiers=problem.tiers,inputs=problem.inputs,outputs={},obstacles=problem.obstacles,item_headers={},link_sources={},max_route_expansions=8000,heuristic_weight=2}
 for _,p in ipairs(problem.inputs) do
  assert(p.perMinute<=belt_capacity+1e-6,'The '..p.item..' input exceeds the selected belt capacity')
  local id=add(problem.tiers.belt,p.position.x,p.position.y,{direction=p.direction})
@@ -330,9 +351,9 @@ for _,item in ipairs(names) do
     source=item..'#merge'..junctions
     local tail=x+#feeds-1
     item_problem.link_sources[source]={x=tail+1,y=y,dir=4,from_x=tail,from_y=y,label='merge '..item..' '..junctions}
-    item_problem.outputs[#item_problem.outputs+1]={item=item,sources=feeds,source_edges=feed_edges,merge_lane=true,position={x=x+.5,y=y+.5},direction=4}
+    item_problem.outputs[#item_problem.outputs+1]={item=item,sources=feeds,source_edges=feed_edges,merge_lane=true,bootstrap_rate=closes_cycle(item,row.recipe) and lane or nil,position={x=x+.5,y=y+.5},direction=4}
    end
-   row.supplies[item][#row.supplies[item]+1]={source=source,goals=goals,edge=#feed_edges==1 and feed_edges[1] or nil}
+   row.supplies[item][#row.supplies[item]+1]={source=source,goals=goals,bootstrap_rate=closes_cycle(item,row.recipe) and lane or nil,edge=#feed_edges==1 and feed_edges[1] or nil}
    needed=needed-lane
    assert(needed<=1e-6 or both,'The '..item..' ingredient exceeds one allocated belt lane')
    right=false

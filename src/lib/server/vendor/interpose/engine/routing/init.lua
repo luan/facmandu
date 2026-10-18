@@ -416,12 +416,12 @@ function routing.nets(layout, problem, pack, base)
   -- every place an item must go, in a fixed order
   local demands, items, by_item = {}, {}, {}
   -- src: the source's key (an item, or item#copy for a chain's own row)
-  local function demand(src, item, sink_label, goals, reserve, port, priority)
+  local function demand(src, item, sink_label, goals, reserve, port, priority, bootstrap_rate)
     if not by_item[src] then
       by_item[src] = {}
       items[#items + 1] = src
     end
-    local d = { item = item, sink = sink_label, goals = goals, reserve = reserve, port = port, priority=priority }
+    local d = { item = item, sink = sink_label, goals = goals, reserve = reserve, port = port, priority=priority, bootstrap_rate=bootstrap_rate }
     demands[#demands + 1] = d
     table.insert(by_item[src], d)
   end
@@ -444,7 +444,7 @@ function routing.nets(layout, problem, pack, base)
           if not base_world.occupied[key(x,y)] and x>=problem.area[1][1] and x<problem.area[2][1] and y>=problem.area[1][2] and y<problem.area[2][2] then approaches[key(x,y)]={x=x,y=y} end
         end end
         local critical={};for _,tile in pairs(approaches) do critical[#critical+1]=tile end
-        demand(route.source,item,label,route.goals,#critical==1 and critical or {},false,route.priority)
+        demand(route.source,item,label,route.goals,#critical==1 and critical or {},false,route.priority,route.bootstrap_rate)
       end
     else demand(source_key(item,row),item,label,goals,reserve) end
   end
@@ -532,7 +532,7 @@ function routing.nets(layout, problem, pack, base)
       -- Keeping both lanes here could contaminate a later mixed-item belt.
       for j,source in ipairs(keys) do
         local goal={x=math.floor(out.position.x)+j-1,y=math.floor(out.position.y),dirs={[direction.NORTH]=true}}
-        demand(source,out.item,'the merge for '..out.item,{goal},{},false,out.source_priority[source])
+        demand(source,out.item,'the merge for '..out.item,{goal},{},false,out.source_priority[source],out.bootstrap_rate)
       end
     elseif #keys == 1 then
       demand(
@@ -715,6 +715,13 @@ function routing.nets(layout, problem, pack, base)
         for i, d in ipairs(sorted) do
           net_of[d] = placed.outputs[i]
         end
+        -- Keep routed outlets fixed; only steer startup toward a recycled feed.
+        local bootstrap
+        for i,d in ipairs(sorted) do if d.bootstrap_rate and (not bootstrap or d.bootstrap_rate<sorted[bootstrap].bootstrap_rate) then bootstrap=i end end
+        if bootstrap then for j,e in ipairs(placed.entities) do
+          local outer=j<bootstrap
+          e.output_priority=(side==1)==outer and "right" or "left"
+        end end
         for _, e in ipairs(placed.entities) do
           splitters[#splitters + 1] = e
         end
