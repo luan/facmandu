@@ -37,7 +37,8 @@ local function geometry(line,width)
  assert(outer==0 or reach,'This recipe needs researched adjustable reach or a long-handed inserter: '..line.recipe)
  local has_in,has_out=#recipe.ingredients>0,#products>0
  local overhead=(has_in and 2+outer or 0)+(has_out and 2 or 0)
- local pins={} for _,list in ipairs{recipe.fluid_inputs or {},recipe.fluid_outputs or {}} do for _,pin in ipairs(list) do pins[#pins+1]=pin end end
+ local pins=recipe.fluid_connections or {}
+ if #pins==0 then for _,list in ipairs{recipe.fluid_inputs or {},recipe.fluid_outputs or {}} do for _,pin in ipairs(list) do pins[#pins+1]=pin end end end
  local function clearance(axis,base,minimum)
   for gap=minimum,minimum+6 do
    local fits=true
@@ -116,7 +117,7 @@ for index,line in ipairs(pack.plan.lines) do if line.machines>0.000001 then
   for i=0,n-1 do
    local x=left+i*pitch
    local center={x=x+w/2,y=ym+h/2}
-   local settings={direction=4};if not pack.furnaces[line.machine] then settings.recipe=line.recipe end
+   local settings={direction=recipe.direction or 4};if not pack.furnaces[line.machine] then settings.recipe=line.recipe end
    add(line.machine,center.x,center.y,settings)
    local function transfer(input,amount,outer_arm)
     local cap=(arm.stack_size or 1)*arm.rotation_speed*60*.6*60

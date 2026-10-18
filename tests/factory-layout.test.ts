@@ -874,6 +874,11 @@ test('saved mixed-fluid plans use belts, loaders and researched inserter reach w
 			.filter((e) => e.name === 'aai-fast-loader')
 			.every((e) => e.type === 'output')
 	);
+	assert.ok(
+		result.design.entities
+			.filter((e) => e.name === 'harene-infused-kr-electrolysis-plant')
+			.every((e) => e.direction === 0)
+	);
 	assert.equal(result.design.tiles.length, 375);
 	assert.ok(result.design.tiles.every((tile) => tile.name === 'haronite-plate'));
 	assert.ok(!result.design.entities.some((e) => e.name.includes('chest')));
@@ -947,6 +952,56 @@ test('pipe routing can cross unconnected ports of the same fluid without duplica
  local result,errors=fluids.solve({area={{0,0},{9,10}},inputs={{fluid='water',position={x=.5,y=8.5}}},outputs=outputs,obstacles=obstacles,tiers={pipe='pipe',underground='pipe-to-ground'}},pack)
  assert(result,errors and errors[1] and errors[1].message)
  assert(result.report.ok)
+ `
+	});
+	assert.equal(result.status, 0, result.stderr);
+});
+
+test('saved electrolysis with solid ingredients rotates native fluid sockets away from belt lanes', () => {
+	const result = spawnSync('lua', ['-'], {
+		encoding: 'utf8',
+		input: `
+ local machine={name='electrolyser',tile_width=5,tile_height=5,crafting_categories={chemistry=true},fluidbox_prototypes={}}
+ -- The live five-tile electrolysis prototype: west inputs, east outputs at north rotation.
+ for i,point in ipairs{{-2,-1},{-2,1},{2,-1},{2,1}} do
+  local x,y=point[1],point[2]
+  machine.fluidbox_prototypes[i]={index=i,production_type=i<=2 and 'input' or 'output',pipe_connections={{connection_type='normal',direction=i<=2 and 12 or 4,positions={{x=x,y=y},{x=-y,y=x},{x=-x,y=-y},{x=y,y=-x}}}}}
+ end
+ local recipe={enabled=true,energy=1,categories={'chemistry'},prototype={},ingredients={{type='fluid',name='water',amount=10},{type='item',name='salt',amount=1}},products={{type='fluid',name='hydrogen',amount=5},{type='fluid',name='chlorine',amount=5}}}
+ prototypes={entity={electrolyser=machine},fluid={water={default_temperature=15},hydrogen={default_temperature=15},chlorine={default_temperature=15}}}
+ local plan={status='solved',lines={{recipe='electrolysis',machine='electrolyser',machines=1}},ingredients={{type='fluid',name='water',perMinute=600},{type='item',name='salt',perMinute=60}},byproducts={{type='fluid',name='chlorine',perMinute=300}}}
+ local request={recipes={'electrolysis'},inputs={{type='fluid',item='water',perMinute=600},{type='item',item='salt',perMinute=60}},outputs={{type='fluid',item='hydrogen'},{type='fluid',item='chlorine'}},tiers={pipe='pipe',pipe_underground='pipe-to-ground'}}
+ local pack={machines={electrolyser={}},furnaces={},recipes={}}
+ dofile('src/lib/server/factory-layout-plan-pack.lua')(request,{recipes={electrolysis=recipe}},{},nil,pack,{},plan)
+ local captured=pack.recipes.electrolysis
+ assert(captured.direction==0,'The native ports must rotate with the machine')
+ assert(captured.fluid_inputs[1].position.x==-3 and captured.fluid_inputs[1].position.y==-1)
+ assert(captured.fluid_outputs[1].position.x==3 and captured.fluid_outputs[2].position.x==3)
+ assert(#captured.fluid_connections==4,'Reserve the alternate water socket too')
+ assert(plan.lines[1].machine=='electrolyser' and plan.lines[1].machines==1,'Do not replace the saved machine')
+ recipe.products[1]={type='fluid',name='hydrogen',amount_min=1,amount_max=9,independent_probability=.5}
+ recipe.prototype.get_product_amount=function(index,productivity) assert(productivity==0);return index==1 and 2.5 or 5 end
+ dofile('src/lib/server/factory-layout-plan-pack.lua')(request,{recipes={electrolysis=recipe}},{},nil,pack,{},plan)
+ assert(pack.recipes.electrolysis.results[1].amount==2.5,'Use the native expected yield for random recipe outputs')
+ `
+	});
+	assert.equal(result.status, 0, result.stderr);
+});
+
+test('fluid routes respect alternate machine sockets before their pipes are placed', () => {
+	const result = spawnSync('lua', ['-'], {
+		encoding: 'utf8',
+		input: `
+ package.path='src/lib/server/vendor/interpose/?.lua;'..package.path
+ local fluids=require('engine.fluids')
+ local pack={pipes={pipe={},['pipe-to-ground']={underground=8}}}
+ local request={area={{0,0},{12,12}},inputs={{fluid='acid',position={x=.5,y=5.5}}},outputs={{fluid='acid',position={x=10.5,y=5.5}}},reservations={{fluid='water',x=5,y=5}},tiers={pipe='pipe',underground='pipe-to-ground'}}
+ local result,errors=fluids.solve(request,pack)
+ assert(result,errors and errors[1] and errors[1].message)
+ for _,e in ipairs(result.blueprint.blueprint.entities) do assert(e.position.x~=5.5 or e.position.y~=5.5,'Acid occupied the alternate water socket') end
+ request.outputs[1].position={x=5.5,y=5.5}
+ local conflict,errors=fluids.solve(request,pack)
+ assert(not conflict and errors[1].code=='fluid-ports-overlap','A declared pipe cannot use another fluid socket')
  `
 	});
 	assert.equal(result.status, 0, result.stderr);

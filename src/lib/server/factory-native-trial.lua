@@ -25,7 +25,7 @@ local function diagnostics(job)
      local filter=e.get_fluid_filter(index)
      local neighbors={}
      for _,p in pairs(e.get_fluid_box_pipe_connections(index) or {}) do
-      neighbors[#neighbors+1]={position=p.position,target=p.target and p.target.position}
+      neighbors[#neighbors+1]={position=p.position,target=p.target and p.target.position,segment=p.target and p.target.has_fluid_segment(p.target_fluidbox_index) and p.target.get_fluid_segment_id(p.target_fluidbox_index) or nil,fluid=p.target and p.target.has_fluid_segment(p.target_fluidbox_index) and p.target.get_fluid_segment_fluid(p.target_fluidbox_index) or nil}
      end
      boxes[#boxes+1]={filter=filter and filter.name,segment=e.has_fluid_segment(index) and e.get_fluid_segment_id(index) or nil,fluid=e.get_fluid(index),neighbors=neighbors}
     end
@@ -43,6 +43,30 @@ local function diagnostics(job)
   end
  end end
  return {tick=game.tick,producers=producers,storedFluids=fluids,connections=connections,loaders=loaders}
+end
+local function verify_fluids(job,pack)
+ local segments={}
+ local function key(p) return math.floor(p.x)..','..math.floor(p.y) end
+ for _,e in ipairs(job.entities or {}) do if e.valid and (e.type=='assembling-machine' or e.type=='furnace') then
+  local recipe=e.get_recipe();local model=recipe and pack.recipes[recipe.name]
+  local expected,required,connected={},{},{}
+  for _,port in ipairs(model and model.fluid_connections or {}) do expected[key{x=e.position.x+port.position.x,y=e.position.y+port.position.y}]=port.name end
+  for _,list in ipairs{model and model.fluid_inputs or {},model and model.fluid_outputs or {}} do
+   for _,port in ipairs(list) do required[port.name]=true end
+  end
+  for index=1,e.fluids_count do
+   for _,port in pairs(e.get_fluid_box_pipe_connections(index) or {}) do
+    local target=port.target
+    local name=target and expected[key(target.position)]
+    if name and target.has_fluid_segment(port.target_fluidbox_index) then
+     local id=target.get_fluid_segment_id(port.target_fluidbox_index)
+     assert(not segments[id] or segments[id]==name,'Fluid network joins '..name..' to '..tostring(segments[id])..' at '..e.name)
+     segments[id]=name;connected[name]=true
+    end
+   end
+  end
+  for name in pairs(required) do assert(connected[name],'Missing native '..name..' connection at '..e.name) end
+ end end
 end
 local function context()
  local c=payload.context
@@ -110,6 +134,7 @@ events.on_event(defines.events.on_tick,function(e)
     end
     if wanted.bar then assert(entity.get_inventory(defines.inventory.chest).get_bar()==wanted.bar+1,'Native inventory limit changed') end
    end
+   verify_fluids(job,storage.pack)
    storage.settings_verified=true
    helpers.write_file('layout-geometry.json',helpers.table_to_json(diagnostics(job)),false)
    helpers.write_file('layout-progress.json',helpers.table_to_json(started),false)

@@ -13,26 +13,63 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
    temperatures[part.name]=temperature
   end end
  end
- local function ports(crafter,parts,kind,allow_ends)
-  assert(#parts==0 or (request.tiers.pipe and request.tiers.pipe_underground),'Saved fluid stages require pipe tiers')
-  assert(crafter.tile_width==crafter.tile_height,'Native fluid cells require square machines: '..crafter.name)
+ local offsets={[0]={0,-1},[4]={1,0},[8]={0,1},[12]={-1,0}}
+ local function boxes_for(crafter,kind)
   local boxes={}
   for _,box in pairs(crafter.fluidbox_prototypes or {}) do if box.production_type==kind then boxes[#boxes+1]=box end end
   table.sort(boxes,function(a,b) return a.index<b.index end)
+  return boxes
+ end
+ local function box_for(boxes,part,index)
+  local box=boxes[part.index or index]
+  for _,candidate in ipairs(boxes) do if candidate.filter and candidate.filter.name==part.name then box=candidate;break end end
+  return box
+ end
+ local function connections(box,direction)
   local result={}
-  local offsets={[0]={0,-1},[4]={1,0},[8]={0,1},[12]={-1,0}}
-  for i,part in ipairs(parts) do
-   local box=boxes[part.index or i]
-   for _,candidate in ipairs(boxes) do if candidate.filter and candidate.filter.name==part.name then box=candidate;break end end
-   assert(box,'Missing '..kind..' fluid port: '..crafter.name)
-   assert(not box.filter or box.filter.name==part.name,'Fluid filter does not match '..part.name)
-   local position
-   for _,connection in pairs(box.pipe_connections or {}) do
-    local p=connection.connection_type=='normal' and connection.positions[2]
-    local out=offsets[((connection.direction or 0)+4)%16]
-    if p and out and (out[2]==0 or allow_ends) then position={x=(p.x or p[1])+out[1],y=(p.y or p[2])+out[2]};break end
+  for _,connection in pairs(box.pipe_connections or {}) do
+   local p=connection.connection_type=='normal' and connection.positions[direction/4+1]
+   local out=offsets[((connection.direction or 0)+direction)%16]
+   if p and out then result[#result+1]={position={x=(p.x or p[1])+out[1],y=(p.y or p[2])+out[2]},side=out[2]==0} end
+  end
+  return result
+ end
+ local function orientation(crafter,inputs,outputs,allow_ends)
+  -- Rotate the machine, not its recipe: electrolysers expose lateral ports facing
+  -- north, while foundries and chemical plants do so facing east.
+  local best,score
+  for _,direction in ipairs{4,0,8,12} do
+   local valid,sides=true,0
+   for _,entry in ipairs{{inputs,'input'},{outputs,'output'}} do
+    local boxes=boxes_for(crafter,entry[2])
+    for i,part in ipairs(entry[1]) do
+     local box=box_for(boxes,part,i)
+     local found,lateral=false,false
+     for _,c in ipairs(box and connections(box,direction) or {}) do found=true;lateral=lateral or c.side end
+     if not found or not lateral and not allow_ends then valid=false end
+     if lateral then sides=sides+1 end
+    end
    end
-   assert(position,'No side fluid connection fits '..crafter.name)
+   if valid and (not score or sides>score) then best,score=direction,sides end
+  end
+  return assert(best,'No fluid orientation leaves the solid transfer lanes clear: '..crafter.name)
+ end
+ local function ports(crafter,parts,kind,direction,reserved)
+  assert(#parts==0 or (request.tiers.pipe and request.tiers.pipe_underground),'Saved fluid stages require pipe tiers')
+  assert(crafter.tile_width==crafter.tile_height,'Native fluid cells require square machines: '..crafter.name)
+  local boxes=boxes_for(crafter,kind)
+  local result={}
+  for i,part in ipairs(parts) do
+   local box=assert(box_for(boxes,part,i),'Missing '..kind..' fluid port: '..crafter.name)
+   assert(not box.filter or box.filter.name==part.name,'Fluid filter does not match '..part.name)
+   -- A single recipe fluid can merge several native fluidboxes. Reserve every
+   -- active connector, including the alternate socket we do not pipe explicitly.
+   for _,candidate in ipairs(boxes) do if candidate==box or #parts==1 and (not candidate.filter or candidate.filter.name==part.name) then
+    for _,c in ipairs(connections(candidate,direction)) do reserved[#reserved+1]={name=part.name,position=c.position} end
+   end end
+   local position
+   for _,c in ipairs(connections(box,direction)) do position=c.position;if c.side then break end end
+   assert(position,'Missing fluid connection: '..crafter.name)
    result[#result+1]={name=part.name,amount=part.amount,position=position,temperature=part.temperature}
   end
   return result
@@ -67,8 +104,14 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
   local effect=crafter.effect_receiver and crafter.effect_receiver.base_effect
   local productivity=math.min((recipe.productivity_bonus or 0)+(effect and effect.productivity or 0),p.maximum_productivity or math.huge)
   for i,part in ipairs(recipe.products) do
-   assert((part.independent_probability or part.probability or 1)==1 and part.amount,'Probabilistic recipes need a separate qualified template: '..name)
-   local amount=p.get_product_amount and p.get_product_amount(i,productivity) or part.amount+math.max(0,part.amount-(part.ignored_by_productivity or 0))*productivity
+   -- Factorio supplies the same expected product amount used by the planner,
+   -- including random yields and productivity. Layout never changes the plan.
+   local amount
+   if p.get_product_amount then amount=p.get_product_amount(i,productivity)
+   else
+    assert(part.amount and (part.independent_probability or part.probability or 1)==1,'Native expected product amount is unavailable: '..name)
+    amount=part.amount+math.max(0,part.amount-(part.ignored_by_productivity or 0))*productivity
+   end
    local product={type=part.type,name=part.name,amount=amount}
    results[#results+1]=product
    if part.type=='fluid' then fluid_out[#fluid_out+1]={name=part.name,amount=amount,index=part.fluidbox_index,temperature=part.temperature} end
@@ -77,8 +120,12 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
   for _,part in ipairs(results) do if part.type=='item' then allow_ends=false end end
   local category
   for _,c in ipairs(recipe.categories) do if crafter.crafting_categories[c] then category=c;break end end
+  local direction=orientation(crafter,fluid_in,fluid_out,allow_ends)
+  local reserved={}
+  local fluid_inputs=ports(crafter,fluid_in,'input',direction,reserved)
+  local fluid_outputs=ports(crafter,fluid_out,'output',direction,reserved)
   pack.recipes[name]={category=category,time=recipe.energy,machine=crafter.name,ingredients=ingredients,results=results,
-   fluid_inputs=ports(crafter,fluid_in,'input',allow_ends),fluid_outputs=ports(crafter,fluid_out,'output',allow_ends)}
+   direction=direction,fluid_inputs=fluid_inputs,fluid_outputs=fluid_outputs,fluid_connections=reserved}
  end
  local solved=frozen_plan
  for _,line in ipairs(solved.lines) do

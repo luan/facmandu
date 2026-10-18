@@ -45,7 +45,7 @@ function fluids.load(raw, pack)
   local function err(code, message, hint)
     errs[#errs + 1] = issues.new(code, message, hint)
   end
-  local p = { kind = "fluid", inputs = {}, outputs = {}, area = raw.area, obstacles = raw.obstacles or {}, priority=raw.priority or {} }
+  local p = { kind = "fluid", inputs = {}, outputs = {}, area = raw.area, obstacles = raw.obstacles or {}, priority=raw.priority or {}, reservations=raw.reservations or {} }
   local t = raw.tiers or {}
   p.tiers = { pipe = t.pipe or "pipe", underground = t.underground or "pipe-to-ground" }
   if not (pack.pipes and pack.pipes[p.tiers.pipe]) then
@@ -101,6 +101,16 @@ function fluids.load(raw, pack)
       end
     end
   end
+  local reserved={}
+  for _,port in ipairs(p.reservations) do
+    local k=key(port.x,port.y)
+    if reserved[k] and reserved[k]~=port.fluid then err('fluid-ports-overlap','Machine fluid sockets overlap at '..k,'Leave room for every native socket') end
+    reserved[k]=port.fluid
+  end
+  for _,port in ipairs(all) do
+    local owner=reserved[key(port.x,port.y)]
+    if owner and owner~=port.fluid then err('fluid-ports-overlap','A '..port.fluid..' pipe touches a '..owner..' machine socket','Keep alternate machine sockets clear') end
+  end
   if #p.outputs == 0 then
     err("missing-output", "a fluid problem needs an output", "add an output with a fluid")
   end
@@ -119,6 +129,7 @@ end
 function fluids.route(p)
   local a = p.area
   local blocked,access = {},{}
+  for _,port in ipairs(p.reservations) do access[key(port.x,port.y)]=port.fluid end
   for _,list in ipairs{p.inputs,p.outputs} do for _,port in ipairs(list) do if port.access then access[key(port.access.x,port.access.y)]=port.fluid end end end
   for _, t in ipairs(p.obstacles) do
     blocked[key(t.x, t.y)] = true

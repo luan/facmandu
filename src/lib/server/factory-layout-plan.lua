@@ -50,7 +50,7 @@ for _,line in ipairs(plan.lines) do if line.machines>0.000001 then
    for _,part in ipairs(recipe.ingredients) do ports[#ports+1]={entity=chest,item=part.name,kind='input',position=entities[chest].position,perMinute=rate(line.ingredients,'item',part.name)/count} end
    add(problem.tiers.inserter,left+cell.input_arm.x,top+cell.input_arm.y,{pickup_position=cell.input_settings.pickup_position,drop_position=cell.input_settings.drop_position})
   end
-  local settings={direction=4};if not pack.furnaces[line.machine] then settings.recipe=line.recipe end
+  local settings={direction=recipe.direction or 4};if not pack.furnaces[line.machine] then settings.recipe=line.recipe end
   add(line.machine,x,center,settings)
   local item_products={}
   for _,part in ipairs(recipe.results) do if part.type=='item' then
@@ -95,9 +95,15 @@ local model,errors=engine.blueprint.load({entities=entities},pack)
 assert(#errors==0,'Invalid native plan machine geometry')
 local obstacles={}
 for _,e in ipairs(model.entities) do for _,tile in ipairs(e.tiles) do obstacles[#obstacles+1]={x=tile[1],y=tile[2]} end end
+local reserved={}
+for _,e in ipairs(entities) do
+ local recipe=e.recipe and pack.recipes[e.recipe]
+ if not recipe and pack.furnaces[e.name] then for _,line in ipairs(plan.lines) do if line.machine==e.name then recipe=pack.recipes[line.recipe];break end end end
+ for _,p in ipairs(recipe and recipe.fluid_connections or {}) do reserved[#reserved+1]={fluid=p.name,x=math.floor(e.position.x+p.position.x),y=math.floor(e.position.y+p.position.y)} end
+end
 local pipes,blocked={},{}
 if #sinks>0 then
-local routed,issues=engine.fluids.solve({kind='fluid',area=problem.area,inputs=roots,outputs=sinks,obstacles=obstacles,priority=priority,
+local routed,issues=engine.fluids.solve({kind='fluid',area=problem.area,inputs=roots,outputs=sinks,obstacles=obstacles,priority=priority,reservations=reserved,
  tiers={pipe=problem.tiers.pipe,underground=problem.tiers.pipe_underground}},pack)
 assert(routed,'Native plan fluid routing failed: '..tostring(issues and issues[1] and issues[1].message))
 for _,e in ipairs(routed.blueprint.blueprint.entities) do

@@ -127,6 +127,7 @@
 						"amount": 1
 					}
 				],
+				"direction": 4,
 				"fluid_inputs": [
 					{
 						"name": "light-oil",
@@ -145,7 +146,23 @@
 						}
 					}
 				],
-				"fluid_outputs": {}
+				"fluid_outputs": {},
+				"fluid_connections": [
+					{
+						"name": "light-oil",
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					},
+					{
+						"name": "kr-oxygen",
+						"position": {
+							"x": 2,
+							"y": 1
+						}
+					}
+				]
 			},
 			"heavy-oil-cracking": {
 				"category": "chemistry",
@@ -159,6 +176,7 @@
 						"amount": 30
 					}
 				],
+				"direction": 4,
 				"fluid_inputs": [
 					{
 						"name": "water",
@@ -186,6 +204,36 @@
 							"y": -1
 						}
 					}
+				],
+				"fluid_connections": [
+					{
+						"name": "water",
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					},
+					{
+						"name": "heavy-oil",
+						"position": {
+							"x": 2,
+							"y": 1
+						}
+					},
+					{
+						"name": "light-oil",
+						"position": {
+							"x": -2,
+							"y": -1
+						}
+					},
+					{
+						"name": "light-oil",
+						"position": {
+							"x": -2,
+							"y": 1
+						}
+					}
 				]
 			},
 			"steam-condensation": {
@@ -200,6 +248,7 @@
 						"amount": 90
 					}
 				],
+				"direction": 4,
 				"fluid_inputs": [
 					{
 						"name": "steam",
@@ -217,6 +266,36 @@
 						"position": {
 							"x": -2,
 							"y": -1
+						}
+					}
+				],
+				"fluid_connections": [
+					{
+						"name": "steam",
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					},
+					{
+						"name": "steam",
+						"position": {
+							"x": 2,
+							"y": 1
+						}
+					},
+					{
+						"name": "water",
+						"position": {
+							"x": -2,
+							"y": -1
+						}
+					},
+					{
+						"name": "water",
+						"position": {
+							"x": -2,
+							"y": 1
 						}
 					}
 				]
@@ -239,6 +318,7 @@
 						"amount": 1000
 					}
 				],
+				"direction": 4,
 				"fluid_inputs": [
 					{
 						"name": "sulfuric-acid",
@@ -259,6 +339,36 @@
 						},
 						"temperature": 500
 					}
+				],
+				"fluid_connections": [
+					{
+						"name": "sulfuric-acid",
+						"position": {
+							"x": 2,
+							"y": -1
+						}
+					},
+					{
+						"name": "sulfuric-acid",
+						"position": {
+							"x": 2,
+							"y": 1
+						}
+					},
+					{
+						"name": "steam",
+						"position": {
+							"x": -2,
+							"y": -1
+						}
+					},
+					{
+						"name": "steam",
+						"position": {
+							"x": -2,
+							"y": 1
+						}
+					}
 				]
 			},
 			"kr-water-separation": {
@@ -278,13 +388,14 @@
 						"amount": 30
 					}
 				],
+				"direction": 0,
 				"fluid_inputs": [
 					{
 						"name": "water",
 						"amount": 50,
 						"position": {
-							"x": 1,
-							"y": -3
+							"x": -3,
+							"y": -1
 						}
 					}
 				],
@@ -293,16 +404,46 @@
 						"name": "kr-oxygen",
 						"amount": 20,
 						"position": {
-							"x": 1,
-							"y": 3
+							"x": 3,
+							"y": -1
 						}
 					},
 					{
 						"name": "kr-hydrogen",
 						"amount": 30,
 						"position": {
-							"x": -1,
-							"y": 3
+							"x": 3,
+							"y": 1
+						}
+					}
+				],
+				"fluid_connections": [
+					{
+						"name": "water",
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					},
+					{
+						"name": "water",
+						"position": {
+							"x": -3,
+							"y": 1
+						}
+					},
+					{
+						"name": "kr-oxygen",
+						"position": {
+							"x": 3,
+							"y": -1
+						}
+					},
+					{
+						"name": "kr-hydrogen",
+						"position": {
+							"x": 3,
+							"y": 1
 						}
 					}
 				]
@@ -330,6 +471,7 @@
 						"amount": 50
 					}
 				],
+				"direction": 4,
 				"fluid_inputs": [
 					{
 						"name": "sulfuric-acid",
@@ -347,6 +489,43 @@
 						"position": {
 							"x": 3,
 							"y": -2
+						}
+					}
+				],
+				"fluid_connections": [
+					{
+						"name": "sulfuric-acid",
+						"position": {
+							"x": -3,
+							"y": -1
+						}
+					},
+					{
+						"name": "sulfuric-acid",
+						"position": {
+							"x": -3,
+							"y": 1
+						}
+					},
+					{
+						"name": "heavy-oil",
+						"position": {
+							"x": 3,
+							"y": -2
+						}
+					},
+					{
+						"name": "heavy-oil",
+						"position": {
+							"x": 3,
+							"y": 0
+						}
+					},
+					{
+						"name": "heavy-oil",
+						"position": {
+							"x": 3,
+							"y": 2
 						}
 					}
 				]
