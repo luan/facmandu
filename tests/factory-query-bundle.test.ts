@@ -388,3 +388,53 @@ test('production surveys preserve useful independent readings and never guess an
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 	lua.lua_close(state);
 });
+
+test('named logistic requests remain complete beyond section and filter pages, including cargo totals', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ local sections={}
+ prototypes={item={},entity={['cargo-bay']={get_inventory_size_bonus=function() return 20 end}}}
+ for i=1,10 do
+  local filters={}
+  for j=1,(i==9 and 75 or 2) do
+   local name='item-'..j;prototypes.item[name]={stack_size=50}
+   filters[j]={index=j,value={name=name,type='item',quality='normal',comparator='='},min=101,max=101}
+  end
+  sections[i]={index=i,group=i==9 and 'Fulgora Starter' or 'Other '..i,active=true,is_manual=true,multiplier=i==9 and 2 or 1,filters=filters}
+ end
+ sections[9].filters[2].value.name='item-1'
+ local entity={valid=true,name='space-platform-hub',type='space-platform-hub',unit_number=10,position={x=0,y=0},quality='normal',prototype={get_inventory_size=function() return 19 end}}
+ entity.get_logistic_sections=function() return {sections=sections,sections_count=#sections} end
+ entity.get_inventory=function() local inv={} for i=1,139 do inv[i]=true end;return inv end
+ local surface={valid=true,name='platform-2',find_entities_filtered=function() return {entity} end}
+ game={forces={player={name='player'}},surfaces={['platform-2']=surface}}
+ defines={inventory={hub_main=1}}
+ helpers={table_to_json=function() return '[]' end}
+ ${factoryBundle(sources, ['scripts.tools.logistic_requests'])}
+ local function read(extra)
+  local args={force='player',surface='platform-2',x=0,y=0}
+  for k,v in pairs(extra or {}) do args[k]=v end
+  return functions.inspect_logistic_requests(args)
+ end
+ local first=read()
+ assert(first.total_sections==10 and first.shown_sections==4 and first.truncated and first.next_section_offset==4)
+ assert(read{section_offset=4}.sections[1].index==5)
+ local named=read{group='fulgora starter'}
+ assert(named.matching_sections==1 and #named.sections==1 and named.sections[1].index==9 and not named.truncated)
+ local row=named.sections[1]
+ assert(row.total_filters==75 and #row.filters==50 and row.next_filter_offset==50 and row.truncated)
+ assert(row.cargo.complete and row.cargo.requested_slots==374,'Aggregate duplicate item/quality requests before rounding whole stacks')
+ assert(named.cargo_capacity.normal_bays_required==18 and named.cargo_capacity.additional_normal_bays==12)
+ local rest=read{section_index=9,filter_offset=row.next_filter_offset}.sections[1]
+ assert(#rest.filters==25 and rest.filters[1].index==51 and not rest.truncated and not rest.next_filter_offset)
+ assert(rest.cargo.requested_slots==row.cargo.requested_slots,'Cargo totals must include every filter on every detail page')
+ sections[9].active=false;assert(read{group='Fulgora Starter'}.sections[1].cargo.requested_slots==374)
+ assert(read{group='missing'}.matching_sections==0)
+ assert(not pcall(read,{section_offset=-1}))
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
