@@ -4,6 +4,7 @@ local build=require('pack')
 local build_plan=require('plan-pack')
 local inserter_rules=require('inserter-rules')
 local payload=helpers.json_to_table(require('request'))
+local startup=require('startup')
 local function write(value)
  helpers.write_file('layout-trial.json',helpers.table_to_json(value),false)
 end
@@ -138,9 +139,14 @@ events.on_event(defines.events.on_tick,function(e)
    local trial=payload.test
    trial.blueprint=payload.blueprint;trial.designId=payload.designId;trial.idempotencyKey=payload.designId
    trial.anchor=payload.anchor
+   if payload.startupSeconds then trial.warmupSeconds=0 end
    local started=sandbox.start(trial,300,256)
    storage.job=started.id
    local job=assert(storage.toby_trials.jobs[storage.job])
+   if payload.startupSeconds then
+    storage.startup={history={},deadline=job.startTick+payload.startupSeconds*60,sampleTicks=job.endTick-job.sampleStart}
+    job.endTick=storage.startup.deadline+storage.startup.sampleTicks
+   end
    for _,wanted in ipairs(payload.settings or {}) do
     local entity=assert(job.entities[wanted.index],'Missing configured entity')
     if wanted.control then
@@ -186,6 +192,15 @@ events.on_event(defines.events.on_tick,function(e)
    helpers.write_file('layout-progress.json',helpers.table_to_json(started),false)
   elseif e.tick%60==0 then
    local job=storage.toby_trials.jobs[storage.job]
+   local rates
+   if storage.startup then
+    local ready;ready,rates=startup(storage.startup.history,game.tick,job.outputs,payload.request.logistics~=nil)
+    if ready or game.tick>=storage.startup.deadline then
+     job.sampleStart=game.tick;job.warmup=game.tick-job.startTick;job.endTick=game.tick+storage.startup.sampleTicks
+     for _,p in ipairs(job.outputs) do p.delivered=0 end
+     storage.startup=nil
+    end
+   end
    if job and job.entities and ((game.tick>=job.sampleStart and game.tick<job.sampleStart+60) or game.tick>=job.endTick-60) then
     storage.diagnostics=storage.diagnostics or {}
     storage.diagnostics[#storage.diagnostics+1]=diagnostics(job)
@@ -194,7 +209,10 @@ events.on_event(defines.events.on_tick,function(e)
    if result.status~='running' then
     result.diagnostics=storage.diagnostics;result.settingsVerified=storage.settings_verified
     write({pack=storage.pack,result=result});storage.finished=true
-   else helpers.write_file('layout-progress.json',helpers.table_to_json(result),false) end
+   else
+    if payload.startupSeconds then result.phase=storage.startup and 'startup' or 'measurement';result.outputs=storage.startup and rates or nil end
+    helpers.write_file('layout-progress.json',helpers.table_to_json(result),false)
+   end
   end
  end)
  if not ok then

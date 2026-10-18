@@ -920,6 +920,17 @@ test('headless validation shows preparation progress and separates real time fro
 	assert.equal(running.title, 'Factory simulation');
 	assert.deepEqual(running.cards[0]?.metrics, [{ label: 'Real seconds elapsed', value: '14' }]);
 	assert.ok(running.cards[0]?.notes.includes('Loading the matching game and mods.'));
+	const starting = view('test_blueprint', {
+		backend: 'headless',
+		status: 'running',
+		phase: 'startup',
+		outputs: [
+			{ name: 'processing-unit', kind: 'item', perMinute: 78, targetPerMinute: 120, met: false }
+		]
+	});
+	assert.deepEqual(starting.tables[0]?.rows, [['Processing unit', '78', '120', 'Starting']]);
+	assert.equal(starting.cards[0]?.tone, 'muted');
+
 	const done = view('test_blueprint', {
 		backend: 'headless',
 		status: 'done',

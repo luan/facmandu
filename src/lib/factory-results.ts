@@ -1097,7 +1097,15 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 					humanName(row.name),
 					display(row.perMinute),
 					display(row.targetPerMinute),
-					row.sampleSufficient === false ? 'Longer sample needed' : row.met ? 'Met' : 'Below target'
+					data.status === 'running'
+						? data.phase === 'startup'
+							? 'Starting'
+							: 'Measuring'
+						: row.sampleSufficient === false
+							? 'Longer sample needed'
+							: row.met
+								? 'Met'
+								: 'Below target'
 				]),
 				prototypes: rows(data.outputs).map((row) => [
 					prototype(row.kind === 'fluid' ? 'fluid' : 'item', row.name),

@@ -19,6 +19,7 @@ import { recordCompiledFactoryTrial } from './factory-layout-status';
 import control from './factory-native-trial.lua?raw';
 import { luaString } from './factory-query-bundle';
 import { aggregateLogisticsOutputs, sandboxResultSchema } from './factory-sandbox';
+import startup from './factory-trial-startup.lua?raw';
 import { nativeProfileFingerprint, withNativeProfile } from './map-generation-native';
 import { ServerError } from './server-files';
 import { run } from './server-process';
@@ -73,6 +74,11 @@ export function testCompiledFactory(
 	},
 	options: { signal?: AbortSignal; progress: (value: TrialResult) => void }
 ) {
+	// Fluid chains can spend minutes filling recycling loops. Measure once delivery stabilizes.
+	const startupSeconds = input.test.warmupSeconds >= 300 ? 1800 : undefined;
+	const benchmarkSeconds = startupSeconds
+		? startupSeconds + 120
+		: input.test.warmupSeconds + input.test.seconds;
 	const designId = input.artifact.designId;
 	if (!designId) throw new ServerError(400, 'Native validation requires a saved factory design');
 	const id = `headless-${randomUUID()}`;
@@ -123,6 +129,7 @@ export function testCompiledFactory(
 				};
 				const payload = {
 					request: input.request,
+					startupSeconds,
 					plan:
 						input.request.fixedPlan || input.request.nativePlan
 							? z.object({ plan: z.json() }).parse(input.pack).plan
@@ -159,6 +166,7 @@ export function testCompiledFactory(
 				await Promise.all([
 					writeFile(join(driver, 'info.json'), JSON.stringify(info)),
 					writeFile(join(driver, 'control.lua'), control),
+					writeFile(join(driver, 'startup.lua'), startup),
 					writeFile(join(driver, 'events.lua'), events),
 					writeFile(join(driver, 'robot-trial.lua'), robotTrial),
 					writeFile(
@@ -180,17 +188,28 @@ export function testCompiledFactory(
 				let phase = 'Loading the matching game and mods in an isolated process.';
 				const started = Date.now();
 				let reporting = true;
-				const failed = new AbortController();
+				const stop = new AbortController();
 				let nativeError: ServerError | undefined;
+				let completed = false;
 				const progress = setInterval(() => {
 					if (!reporting || options.signal?.aborted) return;
-					// A failed fixture cannot recover by simulating the remaining ticks.
+					// Stop the private simulator as soon as a receipt is written, including early failures.
 					void readFile(join(output, 'layout-trial.json'), 'utf8')
 						.then((text) => {
-							const result = z.object({ error: z.string().optional() }).parse(JSON.parse(text));
+							const result = z
+								.object({
+									error: z.string().optional(),
+									result: z
+										.object({ status: z.enum(['running', 'done', 'error', 'cancelled']) })
+										.optional()
+								})
+								.parse(JSON.parse(text));
 							if (result.error) {
 								nativeError = new ServerError(409, result.error);
-								failed.abort();
+								stop.abort();
+							} else if (result.result && result.result.status !== 'running') {
+								completed = true;
+								stop.abort();
 							}
 						})
 						.catch(() => {});
@@ -207,10 +226,16 @@ export function testCompiledFactory(
 								note:
 									native.phase === 'context'
 										? 'Preparing the factory simulation.'
-										: typeof native.elapsedTicks === 'number' &&
-												native.elapsedTicks < input.test.warmupSeconds * 60
-											? 'Filling belts and machine buffers in the simulator.'
-											: 'Measuring factory output.'
+										: native.phase === 'startup'
+											? native.outputs?.[0]
+												? `Factory startup: ${native.outputs[0].perMinute.toFixed(1)} / ${native.outputs[0].targetPerMinute.toFixed(1)} per minute delivered.`
+												: 'Starting the factory.'
+											: native.phase === 'measurement'
+												? 'Measuring sustained factory output.'
+												: typeof native.elapsedTicks === 'number' &&
+														native.elapsedTicks < input.test.warmupSeconds * 60
+													? 'Filling belts and machine buffers in the simulator.'
+													: 'Measuring factory output.'
 							});
 						})
 						.catch(() => {
@@ -233,7 +258,7 @@ export function testCompiledFactory(
 						const temporary = join(directory, 'fixture.zip');
 						await run(binary, [...args, '--threads', '2', '--create', temporary], {
 							signal: options.signal,
-							timeout: 180000,
+							timeout: startupSeconds ? 360000 : 180000,
 							killSignal: 'SIGKILL',
 							maxBuffer: 4 * 1024 * 1024
 						});
@@ -249,19 +274,18 @@ export function testCompiledFactory(
 							'--benchmark',
 							ready,
 							'--benchmark-ticks',
-							String((input.test.warmupSeconds + input.test.seconds) * 60 + 120),
+							String(benchmarkSeconds * 60 + 120),
 							'--benchmark-runs',
 							'1'
 						],
 						{
-							signal: options.signal
-								? AbortSignal.any([options.signal, failed.signal])
-								: failed.signal,
-							timeout: 180000,
+							signal: options.signal ? AbortSignal.any([options.signal, stop.signal]) : stop.signal,
+							timeout: startupSeconds ? 360000 : 180000,
 							killSignal: 'SIGKILL',
 							maxBuffer: 4 * 1024 * 1024
 						}
 					).catch((cause: unknown) => {
+						if (completed && !options.signal?.aborted) return;
 						throw nativeError ?? cause;
 					});
 					const observed = z
