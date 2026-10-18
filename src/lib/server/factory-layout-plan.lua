@@ -108,6 +108,33 @@ local roots={}
 local names={} for name in pairs(headers) do names[#names+1]=name end;table.sort(names)
 for _,name in ipairs(names) do roots[#roots+1]=headers[name] end
 for _,port in ipairs(joins) do sinks[#sinks+1]={fluid=port.fluid,position=port.position,direction=port.direction,access=port.access} end
+if pack.buffer_fluids then
+ local model=engine.blueprint.load({entities=entities},pack)
+ local taken={}
+ for _,e in ipairs(model.entities) do for _,tile in ipairs(e.tiles) do taken[engine.blueprint.tile_key(tile[1],tile[2])]=true end end
+ for _,list in ipairs{sources,sinks} do for _,port in ipairs(list) do taken[engine.blueprint.tile_key(math.floor(port.position.x),math.floor(port.position.y))]=true end end
+ for _,port in ipairs(reserved) do taken[engine.blueprint.tile_key(port.x,port.y)]=true end
+ local tank=pack.tanks['storage-tank'];local w,h=table.unpack(tank.size)
+ for _,fluid in ipairs(pack.buffer_fluids) do
+  local root=headers[fluid];local best,score
+  for y=2,problem.area[2][2]-h-2 do for x=2,problem.area[2][1]-w-2 do
+   local free=true
+   for dx=-2,w+1 do for dy=-2,h+1 do if taken[engine.blueprint.tile_key(x+dx,y+dy)] then free=false end end end
+   if free then for _,socket in ipairs(tank.connections) do
+    local px,py=x+w/2+socket.x,y+h/2+socket.y
+    local distance=math.abs(px-root.position.x)+math.abs(py-root.position.y)
+    if not score or distance<score then best={x=x,y=y,socket=socket};score=distance end
+   end end
+  end end
+  assert(best,'No room for the '..fluid..' co-product buffer')
+  local x,y=best.x+w/2,best.y+h/2
+  add('storage-tank',x,y)
+  for dx=-1,w do for dy=-1,h do taken[engine.blueprint.tile_key(best.x+dx,best.y+dy)]=true end end
+  for _,socket in ipairs(tank.connections) do reserved[#reserved+1]={fluid=fluid,x=math.floor(x+socket.x),y=math.floor(y+socket.y)} end
+  local p=best.socket;local dx=math.abs(p.x)>=w/2 and (p.x>0 and 1 or -1) or 0;local dy=dx==0 and (p.y>0 and 1 or -1) or 0
+  sinks[#sinks+1]={fluid=fluid,position={x=x+p.x,y=y+p.y},direction=0,access={x=math.floor(x+p.x)+dx,y=math.floor(y+p.y)+dy}}
+ end
+end
 local model,errors=engine.blueprint.load({entities=entities},pack)
 assert(#errors==0,'Invalid native plan machine geometry')
 local obstacles={}

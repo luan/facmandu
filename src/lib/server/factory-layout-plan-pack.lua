@@ -209,5 +209,21 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
   pack.pumps.pump={size={1,2},wire_reach=pump.get_max_circuit_wire_distance()}
   recipe.disposal.gate='pump'
  end end
+ -- Buffer entry-stage fluid co-products so their internally used solids can start the downstream factory.
+ local used,buffered,external={},{},{}
+ for _,part in ipairs(solved.ingredients) do external[part.type..'/'..part.name]=true end
+ for _,line in ipairs(lines) do for _,part in ipairs(line.ingredients) do if part.type=='item' and part.perMinute>0.000001 then used[part.name]=true end end end
+ for _,line in ipairs(lines) do if line.machines>0.000001 then local recipe=pack.recipes[line.recipe]
+  local entry=true;for _,part in ipairs(line.ingredients) do if part.type~='entity' and not external[part.type..'/'..part.name] then entry=false end end
+  local solid=false;for _,part in ipairs(recipe.results) do if part.type=='item' and used[part.name] then solid=true end end
+  if entry and solid then for _,part in ipairs(recipe.fluid_outputs) do buffered[part.name]=true end end
+ end end
+ if next(buffered) then
+  local tank=entity('storage-tank','storage-tank')
+  local sockets={}
+  for _,box in pairs(tank.fluidbox_prototypes) do for _,port in ipairs(connections(box,0)) do sockets[#sockets+1]=port.position end end
+  pack.tanks={['storage-tank']={size={tank.tile_width,tank.tile_height},connections=sockets}}
+  pack.buffer_fluids={};for name in pairs(buffered) do pack.buffer_fluids[#pack.buffer_fluids+1]=name end;table.sort(pack.buffer_fluids)
+ end
  pack.plan={status=solved.status,lines=lines,ingredients=solved.ingredients,products=solved.products,byproducts=solved.byproducts}
 end

@@ -2549,6 +2549,30 @@
 				"size": [1, 2],
 				"wire_reach": 9
 			}
-		}
+		},
+		"tanks": {
+			"storage-tank": {
+				"size": [3, 3],
+				"connections": [
+					{
+						"x": -1,
+						"y": -2
+					},
+					{
+						"x": 2,
+						"y": 1
+					},
+					{
+						"x": 1,
+						"y": 2
+					},
+					{
+						"x": -2,
+						"y": -1
+					}
+				]
+			}
+		},
+		"buffer_fluids": ["molten-copper", "molten-iron"]
 	}
 }

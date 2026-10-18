@@ -24,6 +24,7 @@ local function kind_of(name, pack)
   for _, k in ipairs({
     { "machines", "machine" },
     { "pumps", "pump" },
+    { "tanks", "tank" },
     { "belts", "belt" },
     { "undergrounds", "underground" },
     { "splitters", "splitter" },

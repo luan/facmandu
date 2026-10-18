@@ -1187,6 +1187,7 @@ for (const circuitReach of [20.25, 15])
 			modules
 		);
 		assert.equal(result.steps.length, 26);
+		assert.equal(result.design.entities.filter((e) => e.name === 'storage-tank').length, 2);
 		assert.equal(
 			result.steps.reduce((n, step) => n + step.machines, 0),
 			102
