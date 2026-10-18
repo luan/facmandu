@@ -45,7 +45,7 @@ local function diagnostics(job)
  return {tick=game.tick,producers=producers,storedFluids=fluids,connections=connections,loaders=loaders}
 end
 local function verify_fluids(job,pack)
- local segments={}
+ local segments,networks={},{}
  local function key(p) return math.floor(p.x)..','..math.floor(p.y) end
  for _,e in ipairs(job.entities or {}) do if e.valid and (e.type=='assembling-machine' or e.type=='furnace') then
   local recipe=e.get_recipe();local model=recipe and pack.recipes[recipe.name]
@@ -61,7 +61,8 @@ local function verify_fluids(job,pack)
     if name and target.has_fluid_segment(port.target_fluidbox_index) then
      local id=target.get_fluid_segment_id(port.target_fluidbox_index)
      assert(not segments[id] or segments[id]==name,'Fluid network joins '..name..' to '..tostring(segments[id])..' at '..e.name)
-     segments[id]=name;connected[name]=true
+     assert(not networks[name] or networks[name]==id,'Disconnected native '..name..' networks at '..e.name)
+     networks[name]=id;segments[id]=name;connected[name]=true
     end
    end
   end
@@ -131,6 +132,11 @@ events.on_event(defines.events.on_tick,function(e)
        assert(got and got.value and got.value.name==filter.name and (got.min or 0)==filter.count,'Native logistic filter changed')
       end
      end
+    end
+    if wanted.outputPriority then assert(entity.splitter_output_priority==wanted.outputPriority,'Native splitter priority changed') end
+    if wanted.filters then
+     assert(entity.use_filters==wanted.useFilters,'Native inserter filter mode changed')
+     for _,filter in ipairs(wanted.filters) do local actual=entity.get_filter(filter.index);assert(actual and actual.name==filter.name,'Native inserter filter changed') end
     end
     if wanted.bar then assert(entity.get_inventory(defines.inventory.chest).get_bar()==wanted.bar+1,'Native inventory limit changed') end
    end

@@ -1,0 +1,143 @@
+{
+	"request": {
+		"force": "player",
+		"surface": "nauvis",
+		"label": "Glass",
+		"width": 100,
+		"height": 100,
+		"inputs": [
+			{
+				"item": "stone",
+				"type": "item",
+				"perMinute": 1440,
+				"position": { "x": 0.5, "y": 0.5 },
+				"direction": 4
+			}
+		],
+		"outputs": [
+			{
+				"item": "kr-glass",
+				"type": "item",
+				"perMinute": 1800,
+				"position": { "x": 5.5, "y": 99.5 },
+				"direction": 8
+			}
+		],
+		"recipes": ["kr-glass", "kr-sand"],
+		"nativePlan": true,
+		"fixedPlan": true,
+		"layout": { "shape": "square", "spacing": "compact" },
+		"tiers": {
+			"machine": "electric-furnace",
+			"crafters": ["kr-crusher"],
+			"belt": "fast-transport-belt",
+			"inserter": "bulk-inserter",
+			"pole": "substation",
+			"pipe": "pipe",
+			"pipe_underground": "pipe-to-ground"
+		}
+	},
+	"pack": {
+		"recipes": {
+			"kr-glass": {
+				"category": "smelting",
+				"time": 16,
+				"machine": "electric-furnace",
+				"ingredients": [{ "type": "item", "name": "kr-sand", "amount": 16 }],
+				"results": [{ "type": "item", "name": "kr-glass", "amount": 8 }],
+				"direction": 4,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"kr-sand": {
+				"category": "kr-crushing",
+				"time": 1,
+				"machine": "kr-crusher",
+				"ingredients": [{ "type": "item", "name": "stone", "amount": 3 }],
+				"results": [{ "type": "item", "name": "kr-sand", "amount": 7.5 }],
+				"direction": 4,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			}
+		},
+		"machines": {
+			"electric-furnace": {
+				"crafting_speed": 2,
+				"categories": ["smelting"],
+				"size": [3, 3],
+				"flooring": {}
+			}
+		},
+		"belts": { "fast-transport-belt": { "items_per_second": 30, "speed": 0.0625, "size": [1, 1] } },
+		"undergrounds": {
+			"fast-underground-belt": { "max_distance": 11, "speed": 0.0625, "size": [1, 1] }
+		},
+		"splitters": { "fast-splitter": { "speed": 0.0625, "size": [2, 1] } },
+		"inserters": {
+			"bulk-inserter": {
+				"pickup_position": [0, -1],
+				"insert_position": [0, 1.2],
+				"rotation_speed": 0.08,
+				"extension_speed": 0.4,
+				"filter_count": 5,
+				"size": [1, 1],
+				"custom": { "range": 3, "cross": true, "diagonal": true, "all": true, "offsets": true },
+				"stack_size": 5
+			}
+		},
+		"furnaces": {
+			"kr-crusher": {
+				"crafting_speed": 1,
+				"categories": ["kr-crushing", "kr-void-crushing"],
+				"size": [7, 7],
+				"flooring": {}
+			}
+		},
+		"poles": { "substation": { "size": [2, 2], "supply": 10, "reach": 20.25 } },
+		"fuels": {},
+		"drills": {},
+		"resources": {},
+		"pipes": { "pipe": {}, "pipe-to-ground": { "underground": 20 } },
+		"transport": {
+			"underground": "fast-underground-belt",
+			"splitter": "fast-splitter",
+			"long_inserter": "bulk-inserter"
+		},
+		"loaders": { "aai-fast-loader": { "size": [1, 1], "items_per_second": 30, "electric": false } },
+		"plan": {
+			"status": "solved",
+			"lines": [
+				{
+					"recipe": "kr-glass",
+					"machine": "electric-furnace",
+					"machines": 30,
+					"productionType": "produce",
+					"products": [{ "name": "kr-glass", "type": "item", "perMinute": 1800 }],
+					"ingredients": [
+						{ "name": "kr-sand", "type": "item", "perMinute": 3600 },
+						{ "name": "custom-electric-power", "type": "entity", "amount": 1550000, "unit": "W" }
+					]
+				},
+				{
+					"recipe": "kr-sand",
+					"machine": "kr-crusher",
+					"machines": 8,
+					"productionType": "produce",
+					"products": [{ "name": "kr-sand", "type": "item", "perMinute": 3600 }],
+					"ingredients": [
+						{ "name": "stone", "type": "item", "perMinute": 1440 },
+						{ "name": "custom-electric-power", "type": "entity", "amount": 465000, "unit": "W" }
+					]
+				}
+			],
+			"ingredients": [
+				{ "name": "stone", "type": "item", "perMinute": 1440 },
+				{ "name": "custom-electric-power", "type": "entity", "amount": 2015000, "unit": "W" }
+			],
+			"products": [{ "name": "kr-glass", "type": "item", "perMinute": 1800 }],
+			"byproducts": {}
+		}
+	}
+}

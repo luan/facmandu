@@ -1,0 +1,114 @@
+{
+	"request": {
+		"force": "player",
+		"surface": "vulcanus",
+		"label": "Three-ingredient circuit row",
+		"width": 100,
+		"height": 32,
+		"nativePlan": true,
+		"fixedPlan": true,
+		"recipes": ["advanced-circuit"],
+		"inputs": [
+			{ "item": "copper-cable", "type": "item", "perMinute": 719.9999999999985 },
+			{ "item": "electronic-circuit", "type": "item", "perMinute": 719.9999999999985 },
+			{ "item": "kr-electronic-components", "type": "item", "perMinute": 359.99999999999926 }
+		],
+		"outputs": [{ "item": "advanced-circuit", "type": "item", "perMinute": 359.99999999999926 }],
+		"tiers": {
+			"machine": "assembling-machine-2",
+			"belt": "fast-transport-belt",
+			"inserter": "bulk-inserter",
+			"pole": "substation",
+			"pipe": "pipe",
+			"pipe_underground": "pipe-to-ground"
+		}
+	},
+	"pack": {
+		"recipes": {
+			"advanced-circuit": {
+				"category": "crafting",
+				"time": 4,
+				"machine": "assembling-machine-2",
+				"ingredients": [
+					{ "type": "item", "name": "copper-cable", "amount": 4 },
+					{ "type": "item", "name": "electronic-circuit", "amount": 4 },
+					{ "type": "item", "name": "kr-electronic-components", "amount": 2 }
+				],
+				"results": [{ "type": "item", "name": "advanced-circuit", "amount": 2 }],
+				"direction": 4,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			}
+		},
+		"machines": {
+			"assembling-machine-2": {
+				"crafting_speed": 0.75,
+				"categories": ["advanced-crafting", "crafting", "crafting-with-fluid"],
+				"size": [3, 3],
+				"flooring": {}
+			}
+		},
+		"belts": { "fast-transport-belt": { "items_per_second": 30, "speed": 0.0625, "size": [1, 1] } },
+		"undergrounds": {
+			"fast-underground-belt": { "max_distance": 11, "speed": 0.0625, "size": [1, 1] }
+		},
+		"splitters": { "fast-splitter": { "speed": 0.0625, "size": [2, 1] } },
+		"inserters": {
+			"bulk-inserter": {
+				"pickup_position": [0, -1],
+				"insert_position": [0, 1.2],
+				"rotation_speed": 0.08,
+				"extension_speed": 0.4,
+				"filter_count": 5,
+				"size": [1, 1],
+				"custom": { "range": 3, "cross": true, "diagonal": true, "all": true, "offsets": true },
+				"stack_size": 5
+			}
+		},
+		"furnaces": {},
+		"poles": { "substation": { "size": [2, 2], "supply": 10, "reach": 20.25 } },
+		"fuels": {},
+		"drills": {},
+		"resources": {},
+		"pipes": { "pipe": {}, "pipe-to-ground": { "underground": 20 } },
+		"transport": {
+			"underground": "fast-underground-belt",
+			"splitter": "fast-splitter",
+			"long_inserter": "bulk-inserter"
+		},
+		"loaders": { "aai-fast-loader": { "size": [1, 1], "items_per_second": 30, "electric": false } },
+		"plan": {
+			"status": "solved",
+			"lines": [
+				{
+					"recipe": "advanced-circuit",
+					"machine": "assembling-machine-2",
+					"machines": 15.999999999999968,
+					"productionType": "produce",
+					"products": [
+						{ "name": "advanced-circuit", "type": "item", "perMinute": 359.99999999999926 }
+					],
+					"ingredients": [
+						{ "name": "copper-cable", "type": "item", "perMinute": 719.9999999999985 },
+						{ "name": "electronic-circuit", "type": "item", "perMinute": 719.9999999999985 },
+						{ "name": "kr-electronic-components", "type": "item", "perMinute": 359.99999999999926 },
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 2066666.6666666628,
+							"unit": "W"
+						}
+					]
+				}
+			],
+			"ingredients": [
+				{ "name": "copper-cable", "type": "item", "perMinute": 719.9999999999985 },
+				{ "name": "electronic-circuit", "type": "item", "perMinute": 719.9999999999985 },
+				{ "name": "kr-electronic-components", "type": "item", "perMinute": 359.99999999999926 }
+			],
+			"products": [{ "name": "advanced-circuit", "type": "item", "perMinute": 359.99999999999926 }],
+			"byproducts": []
+		}
+	}
+}

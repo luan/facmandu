@@ -1,0 +1,121 @@
+{
+	"request": {
+		"force": "player",
+		"surface": "vulcanus",
+		"label": "Filtered rare-metal byproducts",
+		"width": 32,
+		"height": 32,
+		"nativePlan": true,
+		"fixedPlan": true,
+		"recipes": ["kr-filter-rare-metal-ore-from-dirty-water"],
+		"inputs": [{ "item": "kr-dirty-water", "type": "fluid", "perMinute": 600.0000000000855 }],
+		"outputs": [
+			{ "item": "stone", "type": "item", "perMinute": 1.8000000000002565 },
+			{ "item": "kr-rare-metal-ore", "type": "item", "perMinute": 0.30000000000004273 },
+			{ "item": "water", "type": "fluid", "perMinute": 600.0000000000855 }
+		],
+		"tiers": {
+			"machine": "kr-filtration-plant",
+			"belt": "fast-transport-belt",
+			"inserter": "bulk-inserter",
+			"pole": "substation",
+			"pipe": "pipe",
+			"pipe_underground": "pipe-to-ground"
+		}
+	},
+	"pack": {
+		"recipes": {
+			"kr-filter-rare-metal-ore-from-dirty-water": {
+				"category": "kr-fluid-filtration",
+				"time": 2,
+				"machine": "kr-filtration-plant",
+				"ingredients": {},
+				"results": [
+					{ "type": "item", "name": "stone", "amount": 0.3 },
+					{ "type": "item", "name": "kr-rare-metal-ore", "amount": 0.05 },
+					{ "type": "fluid", "name": "water", "amount": 100 }
+				],
+				"direction": 4,
+				"fluid_inputs": [
+					{ "name": "kr-dirty-water", "amount": 100, "position": { "x": 4, "y": 0 } }
+				],
+				"fluid_outputs": [{ "name": "water", "amount": 100, "position": { "x": -4, "y": 0 } }],
+				"fluid_connections": [
+					{ "name": "kr-dirty-water", "position": { "x": 4, "y": 0 } },
+					{ "name": "water", "position": { "x": -4, "y": 0 } }
+				]
+			}
+		},
+		"machines": {
+			"kr-filtration-plant": {
+				"crafting_speed": 1,
+				"categories": ["kr-fluid-filtration"],
+				"size": [7, 7],
+				"flooring": {}
+			}
+		},
+		"belts": { "fast-transport-belt": { "items_per_second": 30, "speed": 0.0625, "size": [1, 1] } },
+		"undergrounds": {
+			"fast-underground-belt": { "max_distance": 11, "speed": 0.0625, "size": [1, 1] }
+		},
+		"splitters": { "fast-splitter": { "speed": 0.0625, "size": [2, 1] } },
+		"inserters": {
+			"bulk-inserter": {
+				"pickup_position": [0, -1],
+				"insert_position": [0, 1.2],
+				"rotation_speed": 0.08,
+				"extension_speed": 0.4,
+				"filter_count": 5,
+				"size": [1, 1],
+				"custom": { "range": 3, "cross": true, "diagonal": true, "all": true, "offsets": true },
+				"stack_size": 5
+			}
+		},
+		"furnaces": {},
+		"poles": { "substation": { "size": [2, 2], "supply": 10, "reach": 20.25 } },
+		"fuels": {},
+		"drills": {},
+		"resources": {},
+		"pipes": { "pipe": {}, "pipe-to-ground": { "underground": 20 } },
+		"transport": {
+			"underground": "fast-underground-belt",
+			"splitter": "fast-splitter",
+			"long_inserter": "bulk-inserter"
+		},
+		"loaders": { "aai-fast-loader": { "size": [1, 1], "items_per_second": 30, "electric": false } },
+		"plan": {
+			"status": "solved",
+			"lines": [
+				{
+					"recipe": "kr-filter-rare-metal-ore-from-dirty-water",
+					"machine": "kr-filtration-plant",
+					"machines": 0.20000000000002852,
+					"productionType": "consume",
+					"products": [
+						{ "name": "stone", "type": "item", "perMinute": 1.8000000000002565 },
+						{ "name": "kr-rare-metal-ore", "type": "item", "perMinute": 0.30000000000004273 },
+						{ "name": "water", "type": "fluid", "temperature": 15, "perMinute": 600.0000000000855 }
+					],
+					"ingredients": [
+						{ "name": "kr-dirty-water", "type": "fluid", "perMinute": 600.0000000000855 },
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 103333.33333334807,
+							"unit": "W"
+						}
+					]
+				}
+			],
+			"ingredients": [
+				{ "name": "kr-dirty-water", "type": "fluid", "perMinute": 600.0000000000855 }
+			],
+			"products": [
+				{ "name": "stone", "type": "item", "perMinute": 1.8000000000002565 },
+				{ "name": "kr-rare-metal-ore", "type": "item", "perMinute": 0.30000000000004273 },
+				{ "name": "water", "type": "fluid", "temperature": 15, "perMinute": 600.0000000000855 }
+			],
+			"byproducts": []
+		}
+	}
+}

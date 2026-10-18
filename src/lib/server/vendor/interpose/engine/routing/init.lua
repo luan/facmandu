@@ -138,6 +138,7 @@ end
 -- extra cost of a tile / tunnel used by other nets (negotiated congestion); plain data, see negotiate
 local function soft_tile(soft, nets_count, x, y)
   local k = key(x, y)
+  if soft.tiles[k] then return soft.tiles[k] end
   local c = soft.history[k] or 0
   for j = 1, nets_count do
     local u = soft.usage[j]
@@ -145,11 +146,14 @@ local function soft_tile(soft, nets_count, x, y)
       c = c + soft.present
     end
   end
+  soft.tiles[k]=c
   return c
 end
 
 local function soft_tunnel(soft, nets_count, x, y, axis)
   local k = key(x, y)
+  local cached=soft.tunnels[k]
+  if cached and cached[axis] then return cached[axis] end
   local c = 0
   for j = 1, nets_count do
     local u = soft.usage[j]
@@ -157,6 +161,7 @@ local function soft_tunnel(soft, nets_count, x, y, axis)
       c = c + soft.present
     end
   end
+  soft.tunnels[k]=cached or {};soft.tunnels[k][axis]=c
   return c
 end
 
@@ -184,19 +189,26 @@ end
 
 function routing.search_step(s, world, area, opts, counter, budget)
   local start, goals = s.start, s.goals
-  local goal_at = {}
-  for _, g in ipairs(goals) do
-    goal_at[key(g.x, g.y)] = g
+  local goal_at = s.goal_at or {}
+  for _, g in ipairs(s.goal_at and {} or goals) do
+    local k=key(g.x,g.y)
+    local target=goal_at[k] or {dirs={}};goal_at[k]=target
+    for d,allowed in pairs(g.dirs) do if allowed then target.dirs[d]=true end end
   end
+  s.goal_at=goal_at
+  s.distances=s.distances or {}
   local function is_goal(x, y, d)
     local g = goal_at[key(x, y)]
     return g and g.dirs[d]
   end
   local function h(x, y)
+    local k=key(x,y)
+    if s.distances[k] then return s.distances[k] end
     local best = math.huge
     for _, g in ipairs(goals) do
       best = math.min(best, math.abs(g.x - x) + math.abs(g.y - y))
     end
+    s.distances[k]=best
     return best
   end
   local function inside(x, y)
@@ -245,6 +257,10 @@ function routing.search_step(s, world, area, opts, counter, budget)
     return not on_path(node, x, y)
   end
   local soft, nets_count = opts.soft, opts.nets_count
+  if soft then
+    s.soft_tiles=s.soft_tiles or {};s.soft_tunnels=s.soft_tunnels or {}
+    soft.tiles,soft.tunnels=s.soft_tiles,s.soft_tunnels
+  end
 
   local open, best_g = s.open, s.best_g
   local used = 0
@@ -257,7 +273,7 @@ function routing.search_step(s, world, area, opts, counter, budget)
     used = used + 1
     s.expansions = s.expansions + 1
     counter.spent = counter.spent + 1
-    if s.expansions > routing.MAX_EXPANSIONS or over_limit(counter) then
+    if s.expansions > (opts.max_expansions or routing.MAX_EXPANSIONS) or over_limit(counter) then
       s.done, s.result = true, nil
       return used
     end
@@ -275,7 +291,7 @@ function routing.search_step(s, world, area, opts, counter, budget)
       s.open, s.best_g = nil, nil -- let the search's memory go
       return used
     end
-    if placeable(node.x, node.y, node) then
+    if node.g==best_g[state_key(node.x,node.y,node.dir)] and placeable(node.x, node.y, node) then
       local node_k = key(node.x, node.y)
       local successors = {}
       -- a belt on this tile, straight or turning
@@ -341,7 +357,7 @@ function routing.search_step(s, world, area, opts, counter, budget)
         local sk = state_key(sc.x, sc.y, sc.dir)
         if not best_g[sk] or child.g < best_g[sk] then
           best_g[sk] = child.g
-          open:push(child.g + h(sc.x, sc.y), child)
+          open:push(child.g + h(sc.x, sc.y)*(opts.heuristic_weight or 1), child)
         end
       end
     end
@@ -384,7 +400,7 @@ function routing.nets(layout, problem, pack, base)
     if ob then
     local k = key_of(row.item, row.copy)
     local label = "row " .. row.recipe .. (row.copy and (" (chain " .. row.copy .. ")") or "")
-    sources[k] = { x = ob.x2 + 1, y = ob.y, dir = direction.EAST, from_x = ob.x2, from_y = ob.y, label = label }
+    sources[k] = { x = ob.x2 + 1, y = ob.y, dir = direction.EAST, from_x = ob.x2, from_y = ob.y, label = label,rate=row.product_rate }
     from_row[row.item] = true
     product_sources[row.item] = product_sources[row.item] or {}
     table.insert(product_sources[row.item], k)
@@ -394,6 +410,8 @@ function routing.nets(layout, problem, pack, base)
     local v=direction.vector(port.direction)
     sources[item]={x=math.floor(port.position.x)+v.x,y=math.floor(port.position.y)+v.y,dir=port.direction,label="header "..item}
   end
+
+  for name,source in pairs(problem.link_sources or {}) do sources[name]=source end
 
   -- every place an item must go, in a fixed order
   local demands, items, by_item = {}, {}, {}
@@ -408,10 +426,17 @@ function routing.nets(layout, problem, pack, base)
     table.insert(by_item[src], d)
   end
   -- where a row of chain `copy` gets an item: its own chain's row, or the shared input port
-  local function source_key(item, copy)
+  local function source_key(item, row)
+    if row.source_keys and row.source_keys[item] then return row.source_keys[item] end
+    local copy=row.copy
     if problem.item_headers and problem.item_headers[item] then return item end
     local k = key_of(item, copy)
     return sources[k] and k or item
+  end
+  local function consume(row,item,label,goals,reserve)
+    if row.supplies and row.supplies[item] then
+      for _,route in ipairs(row.supplies[item]) do demand(route.source,item,label,route.goals,{}) end
+    else demand(source_key(item,row),item,label,goals,reserve) end
   end
   for _, row in ipairs(layout.rows) do
     local ib = row.input_belt
@@ -427,7 +452,7 @@ function routing.nets(layout, problem, pack, base)
       return a < b
     end)
     for i, item in ipairs(ings) do
-      if not sources[source_key(item, row.copy)] then
+      if not (row.supplies and row.supplies[item]) and not sources[source_key(item, row)] then
         errors[#errors + 1] = issues.new(
           "missing-input",
           "nothing supplies " .. item .. " for row " .. row.recipe,
@@ -454,7 +479,7 @@ function routing.nets(layout, problem, pack, base)
             reserve[#reserve + 1] = { x = x, y = ib.y - 1 }
           end
         end
-        demand(source_key(item, row.copy), item, "row " .. row.recipe, goals, reserve)
+        consume(row,item,"row " .. row.recipe,goals,reserve)
       end
     end
     -- a second (outer) input belt: one ingredient from behind, maybe one side-loaded from above,
@@ -462,15 +487,15 @@ function routing.nets(layout, problem, pack, base)
     local ob = row.outer_belt
     if ob then
       for _, item in ipairs({ row.outer_behind, row.outer_side or false }) do
-        if item and not sources[source_key(item, row.copy)] then
+        if item and not (row.supplies and row.supplies[item]) and not sources[source_key(item, row)] then
           errors[#errors + 1] = issues.new(
             "missing-input",
             "nothing supplies " .. item .. " for row " .. row.recipe,
             "add an input port for " .. item
           )
         elseif item == row.outer_behind then
-          demand(
-            source_key(item, row.copy),
+          consume(
+            row,
             item,
             "row " .. row.recipe .. " (outer belt)",
             { { x = ob.x1, y = ob.y, dirs = { [direction.EAST] = true } } },
@@ -482,16 +507,22 @@ function routing.nets(layout, problem, pack, base)
             goals[#goals + 1] = { x = x, y = ob.y, dirs = { [direction.SOUTH] = true } }
             reserve[#reserve + 1] = { x = x, y = ob.y - 1 }
           end
-          demand(source_key(item, row.copy), item, "row " .. row.recipe .. " (outer belt)", goals, reserve)
+          consume(row,item,"row " .. row.recipe .. " (outer belt)",goals,reserve)
         end
       end
     end
   end
   local collector = {} -- M12: belts that join three or more chains in front of the output port
   for _, out in ipairs(problem.outputs or { problem.output }) do
-    local keys = product_sources[out.item] or (sources[out.item] and { out.item }) or {}
+    local keys = out.sources or product_sources[out.item] or (sources[out.item] and { out.item }) or {}
     if #keys == 0 then
       errors[#errors + 1] = issues.new("internal", "no row makes the output item " .. out.item, "please report this")
+    elseif out.merge_lane then
+      -- All producers side-load the same lane before it becomes an ingredient.
+      -- Keeping both lanes here could contaminate a later mixed-item belt.
+      local goals={}
+      for offset=0,#keys-1 do goals[#goals+1]={x=math.floor(out.position.x)+offset,y=math.floor(out.position.y),dirs={[direction.NORTH]=true}} end
+      for _,source in ipairs(keys) do demand(source,out.item,'the merge for '..out.item,goals,{}) end
     elseif #keys == 1 then
       demand(
         keys[1],
@@ -507,7 +538,22 @@ function routing.nets(layout, problem, pack, base)
       local d = out.direction
       local v = direction.vector(d)
       local tx, ty = math.floor(out.position.x), math.floor(out.position.y)
-      local length = math.ceil(#keys / 2)
+      local branches,counts={}, {0,0}
+      local rated=true
+      for _,k in ipairs(keys) do if not (out.source_rates and out.source_rates[k] or sources[k].rate) then rated=false end end
+      local remaining={pack.belts[problem.tiers.belt].items_per_second*30,pack.belts[problem.tiers.belt].items_per_second*30}
+      for j,k in ipairs(keys) do
+        local amount=rated and (out.source_rates and out.source_rates[k] or sources[k].rate) or 1
+        while amount>1e-6 do
+          local side=rated and (remaining[1]>=remaining[2] and 1 or 2) or (j%2==1 and 1 or 2)
+          local moved=rated and math.min(amount,remaining[side]) or amount
+          assert(moved>1e-6,'Output producer rows exceed the selected belt capacity')
+          counts[side]=counts[side]+1
+          branches[#branches+1]={source=k,side=side,column=counts[side]}
+          remaining[side]=remaining[side]-moved;amount=amount-moved
+        end
+      end
+      local length = math.max(counts[1],counts[2])
       local a = problem.area
       for i = 1, length do
         local cx, cy = tx - v.x * i, ty - v.y * i
@@ -522,11 +568,10 @@ function routing.nets(layout, problem, pack, base)
         collector[#collector + 1] =
           { name = problem.tiers.belt, position = { x = cx + 0.5, y = cy + 0.5 }, direction = d }
       end
-      for j, k in ipairs(keys) do
-        local i = math.ceil(j / 2)
-        local cx, cy = tx - v.x * i, ty - v.y * i
-        local dirs = j % 2 == 1 and { [left(d)] = true } or { [right(d)] = true }
-        demand(k, out.item, "the collector for " .. out.item .. " (chain " .. j .. ")", {
+      for j, branch in ipairs(branches) do
+        local cx, cy = tx - v.x * branch.column, ty - v.y * branch.column
+        local dirs = branch.side == 1 and { [left(d)] = true } or { [right(d)] = true }
+        demand(branch.source, out.item, "the collector for " .. out.item .. " (chain " .. j .. ")", {
           { x = cx, y = cy, dirs = dirs },
         }, {}, true)
       end
@@ -613,7 +658,7 @@ function routing.nets(layout, problem, pack, base)
         to_port = to_port or d.port or false
       end
       for _, s in ipairs(sides) do
-        placed = fan.place(src, #list, s, placer(src), problem.tiers.splitter, to_port)
+        placed = fan.place(src, #list, s, placer(src), problem.tiers.splitter, to_port or problem.prioritise_inputs and not from_row[list[1].item])
         if placed then
           side = s
           break
@@ -807,6 +852,8 @@ function routing.route_new(nets, base_entities, problem, pack, counter)
     underground = problem.tiers.underground,
     reserved = {},
     nets_count = #nets,
+    max_expansions=problem.max_route_expansions,
+    heuristic_weight=problem.heuristic_weight,
   }
   for i, net in ipairs(nets) do
     for _, t in ipairs(net.reserve or {}) do
@@ -891,9 +938,12 @@ function routing.route_step(st, pack, budget)
         else
           st.last_failed = nets[i].label
           st.world, st.all = nil, nil
-          if st.tried >= routing.GREEDY_ORDERS or not next_permutation(st.order) then
-            st.phase = "negotiate"
-          end
+          if st.tried >= routing.GREEDY_ORDERS then st.phase = "negotiate"
+          elseif st.idx>1 then
+            -- Rip up around the blocked connection instead of permuting unrelated
+            -- connections at the end of the order and repeating the same failure.
+            table.remove(st.order,st.idx);table.insert(st.order,1,i)
+          elseif not next_permutation(st.order) then st.phase = "negotiate" end
         end
       end
     else

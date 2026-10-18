@@ -248,7 +248,7 @@ local function blueprint(request,territories)
   return {force=force.name,entities=entities,wire_connector_ids=defines.wire_connector_id,fluid_position_reference='Offsets from entity center. Four array entries correspond to entity directions 0,4,8,12. positions are ports inside the machine edge; adjacent_pipe_positions are the neighboring pipe centers, outside its footprint.'}
  end
  -- Native exports omit defaults, including include_hands=true in Factorio 2.1.21.
- local defaults={use_filters=false,filter_mode='whitelist',override_stack_size=0,circuit_set_filters=false,circuit_read_hand_contents=false,circuit_read_contents=false,circuit_set_stack_size=false,circuit_enabled=false,connect_to_logistic_network=false,include_hands=true,is_on=true,active=true,multiplier=1,compare_type='or',copy_count_from_input=true,quality='normal'}
+ local defaults={input_priority='none',output_priority='none',use_filters=false,filter_mode='whitelist',override_stack_size=0,circuit_set_filters=false,circuit_read_hand_contents=false,circuit_read_contents=false,circuit_set_stack_size=false,circuit_enabled=false,connect_to_logistic_network=false,include_hands=true,is_on=true,active=true,multiplier=1,compare_type='or',copy_count_from_input=true,quality='normal'}
  local function difference(actual,wanted,path,key)
   if actual==nil then
    actual=defaults[key]
@@ -262,7 +262,7 @@ local function blueprint(request,territories)
   for k,v in pairs(wanted) do local mismatch=difference(actual[k],v,path..'.'..k,k);if mismatch then return mismatch end end
  end
  local function contains(actual,wanted) return difference(actual,wanted,'','')==nil end
- local settings={'filters','use_filters','filter_mode','pickup_position','drop_position','override_stack_size','control_behavior','chunk-filter','request_filters','bar'}
+ local settings={'input_priority','output_priority','filters','use_filters','filter_mode','pickup_position','drop_position','override_stack_size','control_behavior','chunk-filter','request_filters','bar'}
  local entities,preview,boxes,warnings,collisions,alignments={},{},{},{},{},{}
  local warned={}
  local function warn(text) if not warned[text] then warnings[#warnings+1]=text;warned[text]=true end end
@@ -303,6 +303,7 @@ local function blueprint(request,territories)
   if e.type and not directional_type then error('Entity '..i..' '..e.name..': input/output type is only valid for underground belts and loaders. Clear the retained setting using program: design.entities['..i..'].type=nil; return design',0) end
   if directional_type and not e.type then error('Entity '..i..' '..e.name..': specify type="input" or type="output" for this underground belt or loader',0) end
   if (e.pickup_position or e.drop_position or e.use_filters~=nil or e.filter_mode or e.override_stack_size) and p.type~='inserter' then error('Inserter settings require an inserter',0) end
+  if (e.input_priority or e.output_priority) and p.type~='splitter' then error('Belt priorities require a splitter',0) end
   if e.request_filters and (p.type~='logistic-container' or p.logistic_mode~='requester' and p.logistic_mode~='buffer' and p.logistic_mode~='storage') then error('Logistic sections require a requester, buffer or storage chest',0) end
   if e.bar and p.type~='container' and p.type~='logistic-container' then error('Inventory limits require a chest',0) end
   local reach=custom_inserter_range(force,p)

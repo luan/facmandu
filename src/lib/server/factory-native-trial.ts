@@ -132,14 +132,22 @@ export function testCompiledFactory(
 					blueprint: input.artifact.blueprint,
 					designId,
 					settings: input.artifact.entities.flatMap((e, i) =>
-						e.pickup_position || e.drop_position || e.request_filters || e.bar
+						e.pickup_position ||
+						e.drop_position ||
+						e.request_filters ||
+						e.bar ||
+						e.filters ||
+						e.output_priority
 							? [
 									{
 										index: i + 1,
 										pickup: e.pickup_position,
 										drop: e.drop_position,
 										requests: e.request_filters,
-										bar: e.bar
+										bar: e.bar,
+										filters: e.filters,
+										useFilters: e.use_filters,
+										outputPriority: e.output_priority
 									}
 								]
 							: []

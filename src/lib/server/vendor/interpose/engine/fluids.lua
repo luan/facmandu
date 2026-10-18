@@ -128,9 +128,12 @@ end
 --- Route the pipes. Returns entities (blueprint entities without entity_number) or nil, issues.
 function fluids.route(p)
   local a = p.area
-  local blocked,access = {},{}
+  local blocked,access,escapes = {},{},{}
   for _,port in ipairs(p.reservations) do access[key(port.x,port.y)]=port.fluid end
-  for _,list in ipairs{p.inputs,p.outputs} do for _,port in ipairs(list) do if port.access then access[key(port.access.x,port.access.y)]=port.fluid end end end
+  for _,list in ipairs{p.inputs,p.outputs} do for _,port in ipairs(list) do if port.access then
+    access[key(port.access.x,port.access.y)]=port.fluid
+    escapes[key(port.access.x,port.access.y)]={fluid=port.fluid,axis=port.access.x==port.x and 0 or 4}
+  end end end
   for _, t in ipairs(p.obstacles) do
     blocked[key(t.x, t.y)] = true
   end
@@ -204,7 +207,16 @@ function fluids.route(p)
     end
     return list and list[lo] ~= nil and list[lo] < last
   end
-  local function ug_line_clear(x1, y1, x2, y2, route_ugs)
+  local function ug_line_clear(x1, y1, x2, y2, route_ugs, fluid)
+    -- A different fluid's tunnel must not prevent this socket from placing
+    -- its own underground entrance on the same axis later.
+    local dx,dy=x1==x2 and 0 or (x2>x1 and 1 or -1),y1==y2 and 0 or (y2>y1 and 1 or -1)
+    local x,y=x1+dx,y1+dy
+    while x~=x2 or y~=y2 do
+      local escape=escapes[key(x,y)]
+      if escape and escape.fluid~=fluid and escape.axis==(dx==0 and 0 or 4) then return false end
+      x,y=x+dx,y+dy
+    end
     if x1 == x2 and between(ug_columns[x1], math.min(y1, y2), math.max(y1, y2)) then return false end
     if y1 == y2 and between(ug_rows[y1], math.min(x1, x2), math.max(x1, x2)) then return false end
     for _, u in ipairs(route_ugs) do
@@ -270,18 +282,22 @@ function fluids.route(p)
       local open = heap.new()
       local parent = {}
       local seen = {}
-      local function h(x, y)
-        return math.abs(x - o.x) + math.abs(y - o.y)
+      -- Start at the unconnected socket: its short escape is more constrained
+      -- than the growing header. Join any compatible tile of that header.
+      local network={} for _,t in pairs(connected[F]) do network[#network+1]=t end
+      local distances={}
+      local function h(x,y)
+        local k=key(x,y);local distance=distances[k]
+        if not distance then
+          distance=math.huge
+          for _,t in ipairs(network) do distance=math.min(distance,math.abs(x-t.x)+math.abs(y-t.y)) end
+          distances[k]=distance
+        end
+        return distance
       end
-      local starts = {}
-      for _, t in pairs(connected[F]) do starts[#starts + 1] = t end
-      table.sort(starts, function(u, v) return u.y < v.y or (u.y == v.y and u.x < v.x) end)
-      for _, t in ipairs(starts) do
-        local piece = placed[key(t.x, t.y)]
-        local id = "s" .. key(t.x, t.y)
-        parent[id] = { start = true }
-        heap.push(open, h(t.x, t.y), { id = id, x = t.x, y = t.y, g = 0, piece = piece })
-      end
+      local id='s'..key(o.x,o.y)
+      parent[id]={start=true}
+      heap.push(open,h(o.x,o.y),{id=id,x=o.x,y=o.y,g=0,piece=placed[key(o.x,o.y)]})
       local found
       local expansions = 0
       while not heap.empty(open) do
@@ -291,19 +307,13 @@ function fluids.route(p)
         if expansions > 200000 then
           break
         end
-        -- reached: the current piece faces the output, which faces it back (a pipe)
-        if cur.x==o.x and cur.y==o.y then found=cur;break end
-        local dx, dy = o.x - cur.x, o.y - cur.y
-        if math.abs(dx) + math.abs(dy) == 1 then
-          local d = (dx == 1 and direction.EAST)
-            or (dx == -1 and direction.WEST)
-            or (dy == 1 and direction.SOUTH)
-            or direction.NORTH
-          if faces(cur.piece, d) then
-            found = cur
-            break
-          end
+        for _,d in ipairs(DIRS) do
+          local v=vec(d)
+          local neighbor=connected[F][key(cur.x+v.x,cur.y+v.y)]
+          local piece=neighbor and placed[key(neighbor.x,neighbor.y)]
+          if piece and faces(cur.piece,d) and faces(piece,back(d)) then found=cur;break end
         end
+        if found then break end
         -- Search paths are not committed yet; their own endpoints must stay occupied too.
         local pending, route_ugs = {}, {}
         local ancestor = cur.id
@@ -345,7 +355,7 @@ function fluids.route(p)
                   and not pending[key(ex, ey)]
                   and not seen[eid]
                   and safe(ex, ey, F, { [d] = true })
-                  and ug_line_clear(tx, ty, ex, ey, route_ugs)
+                  and ug_line_clear(tx, ty, ex, ey, route_ugs, F)
                   and not lands_between_pair(ex, ey, v.x == 0, route_ugs)
                 then
                   seen[eid] = true

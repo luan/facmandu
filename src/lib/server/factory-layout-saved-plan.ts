@@ -91,16 +91,7 @@ export function resolveFactoryLayout(input: FactoryLayoutInput, value: unknown) 
 		outputs: ports([...plan.products, ...plan.byproducts]),
 		recipes: Object.keys(machines),
 		fixedPlan: true,
-		nativePlan:
-			!!input.logistics ||
-			[...plan.products, ...plan.byproducts].some((p) => p.type === 'fluid') ||
-			lines.some(
-				(line) =>
-					Array.isArray(line.products) &&
-					line.products.some(
-						(p) => typeof p === 'object' && p !== null && 'type' in p && p.type === 'fluid'
-					)
-			),
+		nativePlan: true,
 		tiers: {
 			...input.tiers,
 			machine: first.machine,

@@ -1,7 +1,7 @@
 local engine=require('engine.init')
 local plan=assert(pack.plan,'Missing native production plan')
 local entities,ports,sources,sinks,inputs,steps={},{},{},{},{},{}
-local demand,available,requested={},{},{}
+local demand,available,requested,reserved={},{},{},{}
 local function key(kind,name) return kind..'/'..name end
 for _,port in ipairs(problem.inputs) do available[key('item',port.item)]=(available[key('item',port.item)] or 0)+port.perMinute end
 for _,port in ipairs(problem.fluid_inputs or {}) do available[key('fluid',port.item)]=(available[key('fluid',port.item)] or 0)+port.perMinute end
@@ -52,6 +52,7 @@ for _,line in ipairs(plan.lines) do if line.machines>0.000001 then
   end
   local settings={direction=recipe.direction or 4};if not pack.furnaces[line.machine] then settings.recipe=line.recipe end
   add(line.machine,x,center,settings)
+  for _,p in ipairs(recipe.fluid_connections or {}) do reserved[#reserved+1]={fluid=p.name,x=math.floor(x+p.position.x),y=math.floor(center+p.position.y)} end
   local item_products={}
   for _,part in ipairs(recipe.results) do if part.type=='item' then
    assert(requested[key('item',part.name)],'Internal item intermediates need a separate belt or logistics stage: '..part.name)
@@ -71,7 +72,7 @@ for _,line in ipairs(plan.lines) do if line.machines>0.000001 then
 end end
 else
  local placed=beltPlan()
- entities,ports,sources,sinks,steps=placed.entities,placed.ports,placed.sources,placed.sinks,placed.steps
+ entities,ports,sources,sinks,steps,reserved=placed.entities,placed.ports,placed.sources,placed.sinks,placed.steps,placed.reservations
 end
 for _,port in ipairs(problem.fluid_inputs or {}) do if demand[key('fluid',port.item)] then
  local d=({[0]={0,-1},[4]={1,0},[8]={0,1},[12]={-1,0}})[port.direction]
@@ -95,14 +96,9 @@ local model,errors=engine.blueprint.load({entities=entities},pack)
 assert(#errors==0,'Invalid native plan machine geometry')
 local obstacles={}
 for _,e in ipairs(model.entities) do for _,tile in ipairs(e.tiles) do obstacles[#obstacles+1]={x=tile[1],y=tile[2]} end end
-local reserved={}
-for _,e in ipairs(entities) do
- local recipe=e.recipe and pack.recipes[e.recipe]
- if not recipe and pack.furnaces[e.name] then for _,line in ipairs(plan.lines) do if line.machine==e.name then recipe=pack.recipes[line.recipe];break end end end
- for _,p in ipairs(recipe and recipe.fluid_connections or {}) do reserved[#reserved+1]={fluid=p.name,x=math.floor(e.position.x+p.position.x),y=math.floor(e.position.y+p.position.y)} end
-end
 local pipes,blocked={},{}
 if #sinks>0 then
+problem.phase='fluid routing'
 local routed,issues=engine.fluids.solve({kind='fluid',area=problem.area,inputs=roots,outputs=sinks,obstacles=obstacles,priority=priority,reservations=reserved,
  tiers={pipe=problem.tiers.pipe,underground=problem.tiers.pipe_underground}},pack)
 assert(routed,'Native plan fluid routing failed: '..tostring(issues and issues[1] and issues[1].message))

@@ -129,7 +129,7 @@ return function(request,build_plan,inserter_rules)
   local i=entity(name,'inserter')
   assert(i.electric_energy_source_prototype,'Factory compiler requires electric inserters')
   local pickup,drop=i.inserter_pickup_position,i.inserter_drop_position
-  pack.inserters[name]={pickup_position={pickup.x or pickup[1],pickup.y or pickup[2]},insert_position={drop.x or drop[1],drop.y or drop[2]},rotation_speed=i.get_inserter_rotation_speed(),extension_speed=i.get_inserter_extension_speed(),size=size(i)}
+  pack.inserters[name]={pickup_position={pickup.x or pickup[1],pickup.y or pickup[2]},insert_position={drop.x or drop[1],drop.y or drop[2]},rotation_speed=i.get_inserter_rotation_speed(),extension_speed=i.get_inserter_extension_speed(),filter_count=i.filter_count,stack_size=1+(i.inserter_stack_size_bonus or 0)+(i.uses_inserter_stack_size_bonus~=false and ((i.bulk and force.bulk_inserter_capacity_bonus or force.inserter_stack_size_bonus) or 0) or 0),size=size(i)}
   pack.inserters[name].custom=inserter_rules and inserter_rules.profile(force,i)
  end
  for _,name in ipairs({tiers.inserter,tiers.long_inserter}) do add_inserter(name) end

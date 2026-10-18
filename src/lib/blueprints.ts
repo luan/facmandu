@@ -19,6 +19,8 @@ export const blueprintEntitySchema = z.strictObject({
 	direction: z.literal([0, 4, 8, 12]).default(0),
 	recipe: name.optional(),
 	type: z.enum(['input', 'output']).optional(),
+	input_priority: z.enum(['left', 'right', 'none']).optional(),
+	output_priority: z.enum(['left', 'right', 'none']).optional(),
 	filters: z
 		.array(
 			z.strictObject({

@@ -798,6 +798,7 @@ test('saved layouts preserve planner machine counts across shape, spacing and au
 		layout: { shape: 'square', spacing: 'spacious' }
 	});
 	const belt = resolveFactoryLayout(beltSelection, lowPlan);
+	assert.equal(belt.job.nativePlan, true);
 	const result = await compileFactoryLayout(
 		belt.job,
 		z.json().parse({ ...native, plan: belt.plan }),
@@ -935,6 +936,55 @@ test('saved mixed-fluid plans use belts, loaders and researched inserter reach w
 	);
 });
 
+test('three-ingredient saved rows leave an approach to both inner belt lanes', async () => {
+	const fixture = JSON.parse(
+		readFileSync('tests/fixtures/interpose/saved-three-input-belts-2.1.21.json', 'utf8')
+	);
+	const result = await compileFactoryLayout(
+		factoryLayoutInput.parse(fixture.request),
+		z.json().parse(fixture.pack),
+		modules
+	);
+	assert.deepEqual(
+		result.steps.map((s) => [s.recipe, s.machines]),
+		[['advanced-circuit', 16]]
+	);
+	assert.deepEqual(result.test.inputs.map((p) => p.name).sort(), [
+		'copper-cable',
+		'electronic-circuit',
+		'kr-electronic-components'
+	]);
+	assert.ok(Math.abs((result.test.outputs[0]?.perMinute ?? 0) - 360) < 1e-6);
+});
+
+test('saved filtration separates both solid products with native inserter filters', async () => {
+	const fixture = JSON.parse(
+		readFileSync('tests/fixtures/interpose/saved-filtration-belts-2.1.21.json', 'utf8')
+	);
+	const request = factoryLayoutInput.parse(fixture.request);
+	const result = await compileFactoryLayout(request, z.json().parse(fixture.pack), modules);
+	assert.deepEqual(
+		result.steps.map((s) => [s.recipe, s.machines]),
+		[['kr-filter-rare-metal-ore-from-dirty-water', 1]]
+	);
+	assert.deepEqual(
+		result.design.entities
+			.filter((e) => e.use_filters)
+			.flatMap((e) => e.filters?.map((f) => f.name) ?? [])
+			.sort(),
+		['kr-rare-metal-ore', 'stone']
+	);
+	assert.ok(
+		result.design.entities.some((e) => e.use_filters && e.drop_position?.y === 2 + 51 / 256)
+	);
+	assert.ok(!result.design.entities.some((e) => e.name.includes('loader')));
+	assert.deepEqual(result.test.outputs.map((p) => p.name).sort(), [
+		'kr-rare-metal-ore',
+		'stone',
+		'water'
+	]);
+});
+
 test('pipe routing can cross unconnected ports of the same fluid without duplicating them', () => {
 	const result = spawnSync('lua', ['-'], {
 		encoding: 'utf8',
@@ -1017,4 +1067,68 @@ test('layout errors contain readable messages instead of validation JSON or Lua 
 		layoutFailureMessage(new Error('stdin:123: Enlarge the factory block')),
 		'Enlarge the factory block'
 	);
+});
+
+test('saved glass keeps every machine and splits internal sand across red-belt rows with substations', async () => {
+	const fixture = JSON.parse(
+		readFileSync('tests/fixtures/interpose/saved-glass-belts-2.1.21.json', 'utf8')
+	);
+	const result = await compileFactoryLayout(
+		factoryLayoutInput.parse(fixture.request),
+		z.json().parse(fixture.pack),
+		modules
+	);
+	assert.deepEqual(
+		result.steps.map((s) => [s.recipe, s.machines]),
+		[
+			['kr-glass', 30],
+			['kr-sand', 8]
+		]
+	);
+	assert.equal(result.test.outputs[0]?.perMinute, 1800);
+	assert.ok(result.design.entities.some((e) => e.name === 'substation'));
+	assert.ok(
+		result.design.entities
+			.filter((e) => e.name.includes('transport-belt'))
+			.every((e) => e.name === 'fast-transport-belt')
+	);
+	assert.equal(result.test.inputs.find((p) => p.name === 'stone')?.perMinute, 1440);
+});
+
+test('belt routing accepts every valid direction when goals share a tile', () => {
+	const result = spawnSync('lua', ['-'], {
+		encoding: 'utf8',
+		input: `
+ package.path='src/lib/server/vendor/interpose/?.lua;'..package.path
+ local routing=require('engine.routing.init')
+ local pack={belts={belt={size={1,1}}},undergrounds={ug={size={1,1},max_distance=4}}}
+ local obstacles={} for x=0,6 do for _,y in ipairs{0,2} do obstacles[#obstacles+1]={x=x,y=y} end end
+ local base={{name='belt',position={x=.5,y=1.5},direction=4},{name='belt',position={x=5.5,y=1.5},direction=4}}
+ local net={label='corridor',from={x=1,y=1,dir=4,from_x=0,from_y=1},goals={{x=5,y=1,dirs={[4]=true}},{x=5,y=1,dirs={[0]=true}}}}
+ local result,errors=routing.route({net},base,{area={{0,0},{7,3}},tiers={belt='belt',underground='ug'},obstacles=obstacles},pack)
+ assert(result,errors and errors[1] and errors[1].message)
+ `
+	});
+	assert.equal(result.status, 0, result.stderr);
+});
+
+test('two saved disposal stages using the same furnace retain their distinct fluid sockets', async () => {
+	const fixture = JSON.parse(
+		readFileSync('tests/fixtures/interpose/saved-gas-disposal-2.1.21.json', 'utf8')
+	);
+	const result = await compileFactoryLayout(
+		factoryLayoutInput.parse(fixture.request),
+		z.json().parse(fixture.pack),
+		modules
+	);
+	assert.deepEqual(
+		result.steps.map((s) => [s.recipe, s.machines]),
+		[
+			['kr-water-electrolysis', 1],
+			['kr-hydrogen-chloride', 1],
+			['kr-burn-kr-hydrogen', 1],
+			['kr-burn-kr-chlorine', 1]
+		]
+	);
+	assert.equal(result.test.outputs.find((p) => p.name === 'kr-hydrogen-chloride')?.perMinute, 60);
 });

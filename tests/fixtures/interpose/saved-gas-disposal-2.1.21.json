@@ -1,0 +1,202 @@
+{
+	"request": {
+		"force": "player",
+		"surface": "vulcanus",
+		"label": "Separate gas disposal",
+		"width": 48,
+		"height": 48,
+		"fixedPlan": true,
+		"nativePlan": true,
+		"recipes": [
+			"kr-water-electrolysis",
+			"kr-hydrogen-chloride",
+			"kr-burn-kr-hydrogen",
+			"kr-burn-kr-chlorine"
+		],
+		"inputs": [
+			{ "item": "kr-sand", "type": "item", "perMinute": 40 },
+			{ "item": "water", "type": "fluid", "perMinute": 160 }
+		],
+		"outputs": [{ "item": "kr-hydrogen-chloride", "type": "fluid", "perMinute": 60 }],
+		"tiers": {
+			"machine": "kr-electrolysis-plant",
+			"crafters": ["chemical-plant", "kr-flare-stack"],
+			"belt": "fast-transport-belt",
+			"inserter": "bulk-inserter",
+			"pole": "substation",
+			"pipe": "pipe",
+			"pipe_underground": "pipe-to-ground"
+		}
+	},
+	"pack": {
+		"recipes": {
+			"kr-water-electrolysis": {
+				"category": "kr-electrolysis",
+				"time": 3,
+				"machine": "kr-electrolysis-plant",
+				"ingredients": [{ "type": "item", "name": "kr-sand", "amount": 10 }],
+				"results": [
+					{ "type": "fluid", "name": "kr-chlorine", "amount": 20 },
+					{ "type": "fluid", "name": "kr-hydrogen", "amount": 30 }
+				],
+				"direction": 0,
+				"fluid_inputs": [{ "name": "water", "amount": 40, "position": { "x": -3, "y": -1 } }],
+				"fluid_outputs": [
+					{ "name": "kr-chlorine", "amount": 20, "position": { "x": 3, "y": -1 } },
+					{ "name": "kr-hydrogen", "amount": 30, "position": { "x": 3, "y": 1 } }
+				],
+				"fluid_connections": [
+					{ "name": "water", "position": { "x": -3, "y": -1 } },
+					{ "name": "water", "position": { "x": -3, "y": 1 } },
+					{ "name": "kr-chlorine", "position": { "x": 3, "y": -1 } },
+					{ "name": "kr-hydrogen", "position": { "x": 3, "y": 1 } }
+				]
+			},
+			"kr-hydrogen-chloride": {
+				"category": "chemistry",
+				"time": 5,
+				"machine": "chemical-plant",
+				"ingredients": {},
+				"results": [{ "type": "fluid", "name": "kr-hydrogen-chloride", "amount": 50 }],
+				"direction": 4,
+				"fluid_inputs": [
+					{ "name": "kr-chlorine", "amount": 50, "position": { "x": 2, "y": -1 } },
+					{ "name": "kr-hydrogen", "amount": 50, "position": { "x": 2, "y": 1 } }
+				],
+				"fluid_outputs": [
+					{ "name": "kr-hydrogen-chloride", "amount": 50, "position": { "x": -2, "y": -1 } }
+				],
+				"fluid_connections": [
+					{ "name": "kr-chlorine", "position": { "x": 2, "y": -1 } },
+					{ "name": "kr-hydrogen", "position": { "x": 2, "y": 1 } },
+					{ "name": "kr-hydrogen-chloride", "position": { "x": -2, "y": -1 } },
+					{ "name": "kr-hydrogen-chloride", "position": { "x": -2, "y": 1 } }
+				]
+			},
+			"kr-burn-kr-hydrogen": {
+				"category": "kr-fuel-burning",
+				"time": 2,
+				"machine": "kr-flare-stack",
+				"ingredients": {},
+				"results": {},
+				"direction": 4,
+				"fluid_inputs": [
+					{ "name": "kr-hydrogen", "amount": 100, "position": { "x": -1.5, "y": 0.5 } }
+				],
+				"fluid_outputs": {},
+				"fluid_connections": [{ "name": "kr-hydrogen", "position": { "x": -1.5, "y": 0.5 } }]
+			},
+			"kr-burn-kr-chlorine": {
+				"category": "kr-fuel-burning",
+				"time": 2,
+				"machine": "kr-flare-stack",
+				"ingredients": {},
+				"results": {},
+				"direction": 4,
+				"fluid_inputs": [
+					{ "name": "kr-chlorine", "amount": 100, "position": { "x": -1.5, "y": 0.5 } }
+				],
+				"fluid_outputs": {},
+				"fluid_connections": [{ "name": "kr-chlorine", "position": { "x": -1.5, "y": 0.5 } }]
+			}
+		},
+		"machines": {
+			"chemical-plant": {
+				"crafting_speed": 1,
+				"categories": ["chemical-plant-only", "chemistry"],
+				"size": [3, 3],
+				"flooring": {}
+			},
+			"kr-electrolysis-plant": {
+				"crafting_speed": 1,
+				"categories": ["kr-electrolysis"],
+				"size": [5, 5],
+				"flooring": {}
+			}
+		},
+		"belts": { "fast-transport-belt": { "items_per_second": 30, "speed": 0.0625, "size": [1, 1] } },
+		"undergrounds": {
+			"fast-underground-belt": { "max_distance": 11, "speed": 0.0625, "size": [1, 1] }
+		},
+		"splitters": { "fast-splitter": { "speed": 0.0625, "size": [2, 1] } },
+		"inserters": {
+			"bulk-inserter": {
+				"pickup_position": [0, -1],
+				"insert_position": [0, 1.2],
+				"rotation_speed": 0.08,
+				"extension_speed": 0.4,
+				"filter_count": 5,
+				"stack_size": 5,
+				"size": [1, 1],
+				"custom": { "range": 3, "cross": true, "diagonal": true, "all": true, "offsets": true }
+			}
+		},
+		"furnaces": {
+			"kr-flare-stack": {
+				"crafting_speed": 1,
+				"categories": ["kr-fuel-burning"],
+				"size": [2, 2],
+				"flooring": {}
+			}
+		},
+		"poles": { "substation": { "size": [2, 2], "supply": 10, "reach": 20.25 } },
+		"fuels": {},
+		"drills": {},
+		"resources": {},
+		"pipes": { "pipe": {}, "pipe-to-ground": { "underground": 20 } },
+		"transport": {
+			"underground": "fast-underground-belt",
+			"splitter": "fast-splitter",
+			"long_inserter": "bulk-inserter"
+		},
+		"loaders": { "aai-fast-loader": { "size": [1, 1], "items_per_second": 30, "electric": false } },
+		"plan": {
+			"status": "solved",
+			"lines": [
+				{
+					"recipe": "kr-water-electrolysis",
+					"machine": "kr-electrolysis-plant",
+					"machines": 0.2,
+					"ingredients": [
+						{ "type": "item", "name": "kr-sand", "perMinute": 40 },
+						{ "type": "fluid", "name": "water", "perMinute": 160 }
+					],
+					"products": [
+						{ "type": "fluid", "name": "kr-chlorine", "perMinute": 80 },
+						{ "type": "fluid", "name": "kr-hydrogen", "perMinute": 120 }
+					]
+				},
+				{
+					"recipe": "kr-hydrogen-chloride",
+					"machine": "chemical-plant",
+					"machines": 0.1,
+					"ingredients": [
+						{ "type": "fluid", "name": "kr-chlorine", "perMinute": 60.0 },
+						{ "type": "fluid", "name": "kr-hydrogen", "perMinute": 60.0 }
+					],
+					"products": [{ "type": "fluid", "name": "kr-hydrogen-chloride", "perMinute": 60.0 }]
+				},
+				{
+					"recipe": "kr-burn-kr-hydrogen",
+					"machine": "kr-flare-stack",
+					"machines": 0.02,
+					"ingredients": [{ "type": "fluid", "name": "kr-hydrogen", "perMinute": 60.0 }],
+					"products": []
+				},
+				{
+					"recipe": "kr-burn-kr-chlorine",
+					"machine": "kr-flare-stack",
+					"machines": 0.006666666666666667,
+					"ingredients": [{ "type": "fluid", "name": "kr-chlorine", "perMinute": 20.0 }],
+					"products": []
+				}
+			],
+			"ingredients": [
+				{ "type": "item", "name": "kr-sand", "perMinute": 40 },
+				{ "type": "fluid", "name": "water", "perMinute": 160 }
+			],
+			"products": [{ "type": "fluid", "name": "kr-hydrogen-chloride", "perMinute": 60 }],
+			"byproducts": []
+		}
+	}
+}
