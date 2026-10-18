@@ -486,9 +486,13 @@ local function open_picker_dialog(player, modal_data)
     modal_data.timescale = preferences.timescale
     modal_data.belts_or_lanes = preferences.belts_or_lanes
     modal_data.belt_stack = preferences.belt_stack
-    local search_tags = modal_data.modal_elements.search_textfield.tags
-    search_tags.on_gui_confirmed = "picker_search"
-    modal_data.modal_elements.search_textfield.tags = search_tags
+    -- Editing an existing product deliberately omits the item search field.
+    local searchfield = modal_data.modal_elements.search_textfield
+    if searchfield then
+        local search_tags = searchfield.tags
+        search_tags.on_gui_confirmed = "picker_search"
+        searchfield.tags = search_tags
+    end
 
     if modal_data.supply_draft and modal_data.supply_index then
         local category = modal_data.supply_target == "input" and "inputs" or "products"
@@ -785,7 +789,9 @@ listeners.global = {
     apply_item_filter = apply_item_filter,
     confirm_picker_search = function(player)
         local modal = lib.globals.modal_data(player)
-        local search = modal.modal_elements.search_textfield.text
+        local searchfield = modal.modal_elements.search_textfield
+        if not searchfield then return false end
+        local search = searchfield.text
         if search == "" or search == modal.last_search_selection then return false end
         modal_dialog.run_search(player)
         local match, count = nil, 0
