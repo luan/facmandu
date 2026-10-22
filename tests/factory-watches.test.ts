@@ -32,7 +32,7 @@ const operators = new Set(['alice', 'bob']);
 let stopped = false;
 let queryCount = 0;
 const researchProgress = 0.1;
-mock.module('../src/lib/server/db', () => ({ db }));
+mock.module('../src/lib/server/db', () => ({ db, userHasModlistAccess: async () => false }));
 mock.module('../src/lib/server/servers', () => ({
 	canManageServer: (id: string) => operators.has(id),
 	requireServer: async (id: string, serverId: string) => {
