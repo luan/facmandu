@@ -1357,3 +1357,227 @@ for (const transport of ['belts', 'robots'] as const)
 			);
 		}
 	});
+
+// A real two-stage plan keeps copper cable inside the factory; only plates cross its boundary.
+const mixedTransportPack = JSON.parse(
+	readFileSync('tests/fixtures/interpose/base-2.1.21.json', 'utf8')
+);
+mixedTransportPack.pipes = {};
+mixedTransportPack.inserters['fast-inserter'].rotation_speed = 0.08;
+mixedTransportPack.inserters['fast-inserter'].stack_size = 5;
+mixedTransportPack.chests = {
+	'requester-chest': { size: [1, 1], mode: 'requester', capacity: 48 },
+	'storage-chest': { size: [1, 1], mode: 'storage', capacity: 48 },
+	'buffer-chest': { size: [1, 1], mode: 'buffer', capacity: 48 }
+};
+mixedTransportPack.inserters['fast-inserter'].custom = {
+	range: 3,
+	cross: true,
+	diagonal: true,
+	all: true,
+	offsets: true
+};
+const itemRate = (name: string, perMinute: number) => ({ type: 'item', name, perMinute });
+mixedTransportPack.plan = {
+	status: 'solved',
+	ingredients: [itemRate('iron-plate', 90), itemRate('copper-plate', 135)],
+	products: [itemRate('electronic-circuit', 90)],
+	byproducts: [],
+	lines: [
+		{
+			recipe: 'copper-cable',
+			machine: 'assembling-machine-2',
+			machines: 2,
+			ingredients: [itemRate('copper-plate', 135)],
+			products: [itemRate('copper-cable', 270)]
+		},
+		{
+			recipe: 'electronic-circuit',
+			machine: 'assembling-machine-2',
+			machines: 1,
+			ingredients: [itemRate('iron-plate', 90), itemRate('copper-cable', 270)],
+			products: [itemRate('electronic-circuit', 90)]
+		}
+	]
+};
+for (const inputs of ['belts', 'requester-chests'] as const)
+	for (const intermediates of ['belts', 'buffer-chests'] as const)
+		for (const outputs of ['belts', 'storage-chests'] as const)
+			test(`independent solid transport: ${inputs} / ${intermediates} / ${outputs}`, async () => {
+				const transport = { inputs, intermediates, outputs };
+				const job = factoryLayoutInput.parse({
+					...request,
+					width: 64,
+					height: 64,
+					nativePlan: true,
+					fixedPlan: true,
+					inputs: request.inputs.map(({ item, perMinute }) => ({ item, perMinute })),
+					outputs: [{ item: 'electronic-circuit', perMinute: 90 }],
+					transport,
+					logistics: {
+						requester: 'requester-chest',
+						provider: 'storage-chest',
+						buffer: 'buffer-chest'
+					}
+				});
+				const result = await compileFactoryLayout(job, z.json().parse(mixedTransportPack), modules);
+				assert.equal(
+					result.steps.reduce((sum, s) => sum + s.machines, 0),
+					3
+				);
+				assert.ok(
+					blueprintInputSchema.safeParse({ ...result.design, operation: 'create' }).success
+				);
+				assert.ok(
+					result.test.inputs.every((p) => p.name === 'iron-plate' || p.name === 'copper-plate')
+				);
+				for (const port of result.test.inputs) {
+					assert.equal(
+						result.design.entities[port.entity - 1]?.name,
+						inputs === 'belts' ? 'transport-belt' : 'requester-chest'
+					);
+				}
+				for (const port of result.test.outputs) {
+					const entity = result.design.entities[port.entity - 1];
+					assert.equal(entity?.name, outputs === 'belts' ? 'transport-belt' : 'storage-chest');
+					if (outputs === 'storage-chests')
+						assert.equal(
+							entity?.request_filters?.sections[0]?.filters[0]?.name,
+							'electronic-circuit'
+						);
+				}
+
+				const reachableTiles = new Set<string>();
+				for (const e of result.design.entities) {
+					const model =
+						mixedTransportPack.machines[e.name] ??
+						mixedTransportPack.chests[e.name] ??
+						mixedTransportPack.belts[e.name] ??
+						mixedTransportPack.undergrounds[e.name] ??
+						mixedTransportPack.splitters[e.name];
+					if (!model) continue;
+					const [width, height] = model.size;
+					for (let x = Math.floor(e.position.x - width / 2); x < e.position.x + width / 2; x++)
+						for (let y = Math.floor(e.position.y - height / 2); y < e.position.y + height / 2; y++)
+							reachableTiles.add(`${x},${y}`);
+				}
+				for (const e of result.design.entities.filter((e) => e.name === 'fast-inserter')) {
+					for (const [custom, normal] of [
+						[e.pickup_position, [-0, -1]],
+						[e.drop_position, [0, 1.2]]
+					] as const) {
+						let [x, y] = custom ? [custom.x, custom.y] : normal;
+						if (!custom) for (let turn = 0; turn < (e.direction ?? 0); turn += 4) [x, y] = [-y, x];
+						assert.ok(
+							reachableTiles.has(`${Math.floor(e.position.x + x)},${Math.floor(e.position.y + y)}`),
+							'Every inserter must pick up from and drop into a machine, chest or belt'
+						);
+					}
+				}
+				const buffers = result.design.entities.filter((e) => e.name === 'buffer-chest');
+				assert.equal(buffers.length > 0, intermediates === 'buffer-chests');
+				if (intermediates === 'buffer-chests') {
+					assert.ok(
+						result.design.entities
+							.filter((e) => e.name === 'requester-chest')
+							.every((e) => e.request_filters?.request_from_buffers === true)
+					);
+				}
+				assert.ok(
+					result.design.entities.every(
+						(e) => e.position.x >= 0 && e.position.y >= 0 && e.position.x < 64 && e.position.y < 64
+					)
+				);
+			});
+
+test('compact buffer cells use less space without changing production or transport', async () => {
+	const job = factoryLayoutInput.parse({
+		...request,
+		width: 64,
+		height: 64,
+		nativePlan: true,
+		fixedPlan: true,
+		inputs: request.inputs.map(({ item, perMinute }) => ({ item, perMinute })),
+		outputs: [{ item: 'electronic-circuit', perMinute: 90 }],
+		transport: {
+			inputs: 'requester-chests',
+			intermediates: 'buffer-chests',
+			outputs: 'storage-chests'
+		},
+		logistics: { requester: 'requester-chest', provider: 'storage-chest', buffer: 'buffer-chest' }
+	});
+	const compact = await compileFactoryLayout(job, z.json().parse(mixedTransportPack), modules);
+	const spacious = await compileFactoryLayout(
+		{ ...job, layout: { ...job.layout, spacing: 'spacious' } },
+		z.json().parse(mixedTransportPack),
+		modules
+	);
+	assert.deepEqual(compact.steps, spacious.steps);
+	const area = (result: typeof compact) => {
+		const machines = result.design.entities.filter((e) => e.name === 'assembling-machine-2');
+		return (
+			(Math.max(...machines.map((e) => e.position.x)) -
+				Math.min(...machines.map((e) => e.position.x)) +
+				3) *
+			(Math.max(...machines.map((e) => e.position.y)) -
+				Math.min(...machines.map((e) => e.position.y)) +
+				3)
+		);
+	};
+	assert.ok(area(compact) < area(spacious));
+});
+
+for (const intermediates of ['belts', 'buffer-chests'] as const)
+	test(`complete blue-circuit plan with requester inputs, ${intermediates} inside and storage outputs`, async () => {
+		const fixture = JSON.parse(
+			readFileSync('tests/fixtures/interpose/saved-processing-units-60-2.1.21.json', 'utf8')
+		);
+		fixture.pack.chests['buffer-chest'] = { size: [1, 1], mode: 'buffer', capacity: 48 };
+		const request = factoryLayoutInput.parse({
+			...fixture.request,
+			layout: { shape: 'square', spacing: 'compact' },
+			transport: { inputs: 'requester-chests', intermediates, outputs: 'storage-chests' },
+			logistics: { requester: 'requester-chest', provider: 'storage-chest', buffer: 'buffer-chest' }
+		});
+		const result = await compileFactoryLayout(request, z.json().parse(fixture.pack), modules);
+		assert.equal(result.steps.length, 26);
+		assert.equal(
+			result.steps.reduce((sum, s) => sum + s.machines, 0),
+			60
+		);
+		for (const input of result.test.inputs)
+			if (input.kind === 'item')
+				assert.equal(result.design.entities[input.entity - 1]?.name, 'requester-chest');
+		for (const output of result.test.outputs)
+			if (output.kind === 'item')
+				assert.equal(result.design.entities[output.entity - 1]?.name, 'storage-chest');
+		if (intermediates === 'belts')
+			for (const output of result.test.outputs) {
+				const chest = result.design.entities[output.entity - 1];
+				assert.ok(chest);
+				assert.ok(
+					result.design.entities.some(
+						(e) =>
+							e.name === 'aai-fast-loader' &&
+							e.type === 'input' &&
+							e.direction === 8 &&
+							e.position.x === chest.position.x &&
+							e.position.y === chest.position.y - 1
+					)
+				);
+				assert.ok(
+					result.design.entities.some(
+						(e) =>
+							e.name === 'fast-transport-belt' &&
+							e.direction === 8 &&
+							e.position.x === chest.position.x &&
+							e.position.y === chest.position.y - 2
+					),
+					'Loader intake must receive from a straight belt, never a side feed'
+				);
+			}
+
+		assert.ok(result.test.inputs.every((p) => request.inputs.some((q) => q.item === p.name)));
+		assert.ok(Math.abs(result.test.outputs.reduce((sum, p) => sum + p.perMinute, 0) - 60) < 1e-6);
+		assert.ok(blueprintInputSchema.safeParse({ ...result.design, operation: 'create' }).success);
+	});

@@ -5,6 +5,7 @@ import { type FactoryLayoutJob, factoryLayoutJobInput } from '$lib/factory-layou
 import adapter from './factory-layout-adapter.lua?raw';
 import belts from './factory-layout-belts.lua?raw';
 import compression from './factory-layout-compress.lua?raw';
+import interfaces from './factory-layout-interfaces.lua?raw';
 import logistics from './factory-layout-logistics.lua?raw';
 import options from './factory-layout-options.lua?raw';
 import nativePlan from './factory-layout-plan.lua?raw';
@@ -73,6 +74,7 @@ export async function compileFactoryLayout(
 	const problem = {
 		max_entities: MAX_BLUEPRINT_ENTITIES,
 		logistics: request.logistics,
+		transport: request.transport,
 		layout: request.layout,
 		inserters: request.inserters,
 		nativePlan: request.nativePlan,
@@ -132,7 +134,7 @@ export async function compileFactoryLayout(
 				.map(([name, body]) => `[ ${luaString(name)} ]=function()\n${body}\nend`)
 				.join(
 					',\n'
-				)}}\nlocal problem=${luaData(problem)}\nlocal pack=${luaData(pack)}\nlocal options=(function()\n${options}\nend)()\nlocal compress=(function()\n${compression}\nend)()\nlocal beltPlan=function()\n${belts}\nend\nlocal adapter=function()\nif problem.nativePlan then\n${nativePlan}\nend\nif problem.logistics then\n${logistics}\nend\n${adapter}\nend\n${source}`
+				)}}\nlocal problem=${luaData(problem)}\nlocal pack=${luaData(pack)}\nlocal options=(function()\n${options}\nend)()\nlocal interfaces=(function()\n${interfaces}\nend)()\nlocal compress=(function()\n${compression}\nend)()\nlocal beltPlan=function()\n${belts}\nend\nlocal adapter=function()\nif problem.nativePlan then\n${nativePlan}\nend\nif problem.logistics then\n${logistics}\nend\n${adapter}\nend\n${source}`
 		);
 	});
 	const reply = z

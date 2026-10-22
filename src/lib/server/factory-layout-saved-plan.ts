@@ -87,6 +87,7 @@ export function resolveFactoryLayout(input: FactoryLayoutInput, value: unknown) 
 		height: input.height,
 		layout: input.layout,
 		logistics: input.logistics,
+		transport: input.transport,
 		inputs: ports(plan.ingredients),
 		outputs: ports([...plan.products, ...plan.byproducts]),
 		recipes: Object.keys(machines),

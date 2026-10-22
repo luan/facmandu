@@ -206,6 +206,7 @@ events.on_event(defines.events.on_tick,function(e)
      assert(name==wanted.requests.sections[1].filters[1].name,'Native storage filter changed')
     elseif wanted.requests then
      local sections=assert(entity.get_logistic_sections(),'Missing native logistic sections')
+     if wanted.requests.request_from_buffers~=nil then assert(entity.request_from_buffers==wanted.requests.request_from_buffers,'Native buffer request setting changed') end
      for _,section in ipairs(wanted.requests.sections) do
       local actual=assert(sections.get_section(section.index),'Missing native logistic section')
       for _,filter in ipairs(section.filters) do
@@ -228,6 +229,12 @@ events.on_event(defines.events.on_tick,function(e)
   elseif e.tick%60==0 then
    local job=storage.toby_trials.jobs[storage.job]
    local rates
+   if not storage.loaders_verified and job and job.entities and game.tick>=job.startTick+60 then
+    for _,entity in ipairs(job.entities) do if entity.type=='loader-1x1' then
+     assert(entity.loader_container and entity.loader_container.valid,'Loader is not connected to its machine or chest at '..entity.position.x..','..entity.position.y)
+    end end
+    storage.loaders_verified=true
+   end
    if storage.provided_logistics and not storage.logistics_verified and job and job.entities and game.tick>=job.startTick+300 then verify_logistics(job);storage.logistics_verified=true end
    if storage.startup then
     local ready;ready,rates=startup(storage.startup.history,game.tick,job.outputs,payload.request.logistics~=nil)

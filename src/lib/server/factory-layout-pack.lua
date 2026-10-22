@@ -55,7 +55,9 @@ return function(request,build_plan,inserter_rules)
  end
  if request.logistics then
   pack.chests={}
-  for _,row in ipairs{{request.logistics.requester,'requester'},{request.logistics.provider,'passive-provider'}} do
+  local chests={{request.logistics.requester,'requester'},{request.logistics.provider,'passive-provider'}}
+  if request.transport and request.transport.intermediates=='buffer-chests' then chests[#chests+1]={assert(request.logistics.buffer,'Choose an internal buffer chest'),'buffer'} end
+  for _,row in ipairs(chests) do
    local p=entity(row[1],'logistic-container')
    assert(p.logistic_mode==row[2] or (row[2]=='passive-provider' and p.logistic_mode=='storage'),'Select a '..row[2]..' or filtered storage chest: '..row[1])
    assert(p.tile_width==1 and p.tile_height==1,'Logistics cells require one-tile chests')

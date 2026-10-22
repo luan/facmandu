@@ -50,6 +50,7 @@ export const blueprintEntitySchema = z.strictObject({
 	override_stack_size: z.number().int().min(0).max(255).optional(),
 	request_filters: z
 		.strictObject({
+			request_from_buffers: z.boolean().optional(),
 			sections: z
 				.array(
 					z.strictObject({

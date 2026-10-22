@@ -103,21 +103,23 @@ local function geometry(line,width)
   pitch=pitch,columns=columns,row_height=row_height,lead=lead,width=columns*pitch-gap+lead+outlet,
   height=math.ceil(count/columns)*row_height-row_gap+boundary}
 end
+local margin=problem.margin or 8
+local bottom=problem.bottom or 1
 local selected,best_score,bounds_height,minimum_height
-for width=1,problem.area[2][1]-10 do
- local x,y,shelf_height,used,valid=8,2,0,0,true
+for width=1,problem.area[2][1]-margin-2 do
+ local x,y,shelf_height,used,valid=margin,2,0,0,true
  local specs={}
  for index,line in ipairs(pack.plan.lines) do if line.machines>1e-6 then
   local s=geometry(line,width)
   if not s then valid=false;break end
-  if x+s.width>8+width then x=8;y=y+shelf_height;shelf_height=0 end
+  if x+s.width>margin+width then x=margin;y=y+shelf_height;shelf_height=0 end
   s.left=x+s.lead;s.top=y;specs[index]=s
-  x=x+s.width+3;shelf_height=math.max(shelf_height,s.height);used=math.max(used,x-11)
+  x=x+s.width+3;shelf_height=math.max(shelf_height,s.height);used=math.max(used,x-margin-3)
  end end
  local height=y+shelf_height
  if valid then
   minimum_height=not minimum_height and height or math.min(minimum_height,height)
-  if height<=problem.area[2][2]-1 then
+  if height<=problem.area[2][2]-bottom then
    local shape=problem.layout.shape
    local score=shape=='tall' and used*1000+height or shape=='wide' and height*1000+used or math.abs(used-height)*1000+used*height
    if not best_score or score<best_score then selected,best_score,bounds_height=specs,score,height end
@@ -126,7 +128,7 @@ for width=1,problem.area[2][1]-10 do
 end
 if not selected then
  -- Fill earlier shelves with the small service stages before rejecting the block.
- for width=1,problem.area[2][1]-10 do
+ for width=1,problem.area[2][1]-margin-2 do
   local specs,ordered={},{}
   for index,line in ipairs(pack.plan.lines) do if line.machines>1e-6 then
    local spec=geometry(line,width)
@@ -138,13 +140,13 @@ if not selected then
    local shelves,y,used={},2,0
    for _,entry in ipairs(ordered) do
     local s=entry.spec;local shelf
-    for _,candidate in ipairs(shelves) do if candidate.x+s.width<=8+width then shelf=candidate;break end end
-    if not shelf then shelf={x=8,y=y,height=s.height};shelves[#shelves+1]=shelf;y=y+s.height end
+    for _,candidate in ipairs(shelves) do if candidate.x+s.width<=margin+width then shelf=candidate;break end end
+    if not shelf then shelf={x=margin,y=y,height=s.height};shelves[#shelves+1]=shelf;y=y+s.height end
     s.left=shelf.x+s.lead;s.top=shelf.y
-    shelf.x=shelf.x+s.width+3;used=math.max(used,shelf.x-11)
+    shelf.x=shelf.x+s.width+3;used=math.max(used,shelf.x-margin-3)
    end
    minimum_height=math.min(minimum_height or y,y)
-   if y<=problem.area[2][2]-1 then
+   if y<=problem.area[2][2]-bottom then
     local shape=problem.layout.shape
     local score=shape=='tall' and used*1000+y or shape=='wide' and y*1000+used or math.abs(used-y)*1000+used*y
     if not best_score or score<best_score then selected,best_score,bounds_height=specs,score,y end

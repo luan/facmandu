@@ -25,6 +25,11 @@ local function run()
  local frame=assert(player.gui.screen['toby-layout-frame'])
  assert(not player.gui.screen.toby_planner_frame_main_dialog.visible)
  local refs=storage.layouts.viewers[player.index].refs
+ assert(refs.inputs.selected_index==2 and refs.intermediates.selected_index==1 and refs.outputs.selected_index==2,'Separate transport defaults are missing')
+ assert(refs.robots.visible,'Requester input settings are hidden')
+ refs.intermediates.selected_index=2
+ script.get_event_handler(defines.events.on_gui_selection_state_changed){name=defines.events.on_gui_selection_state_changed,player_index=player.index,element=refs.intermediates,tick=game.tick}
+ assert(storage.layouts.viewers[player.index].dirty,'Transport edit did not invalidate the preview')
  assert(refs.tiers.belt and not refs.tiers.underground and not refs.tiers.splitter and not refs.custom,'Layout exposes individual belt parts or manual inserter geometry')
  refs.width.text='101';refs.height.text='64'
  script.get_event_handler(defines.events.on_gui_text_changed){name=defines.events.on_gui_text_changed,player_index=player.index,element=refs.width,tick=game.tick}
@@ -34,6 +39,7 @@ local function run()
  assert(remote.call(ui,'open',player.index,plan.planId) and refs.width.text=='73','Reopen replaced the draft')
  local id=remote.call(ui,'generate',player.index)
  local w=storage.layouts.forces[player.force.index][plan.planId]
+ assert(w.settings.transport.inputs=='requester-chests' and w.settings.transport.intermediates=='buffer-chests' and w.settings.transport.outputs=='storage-chests','Transport choices were coupled')
  assert(w.settings.inserters==nil and w.settings.tiers.underground==nil and w.settings.tiers.splitter==nil)
  remote.call(ui,'complete',player.name,id,plan.planId,{error='[{"code":"custom","message":"Choose a larger block","path":[]}]'})
  assert(refs.status.caption=='Choose a larger block','Validation JSON leaked into the layout UI')
@@ -68,6 +74,11 @@ local function run()
  click(player,refs.generate);assert(w.status=='queued')
  click(player,refs.cancel);assert(w.status=='cancelled')
  assert(not remote.call(ui,'complete',player.name,w.requestId,plan.planId,artifact),'Cancelled work was accepted')
+ -- Upgrade an old persisted view without duplicate GUI roots.
+ storage.layouts.viewers[player.index].version=nil
+ w.settings.transport='robots'
+ remote.call(ui,'open',player.index,plan.planId);refs=storage.layouts.viewers[player.index].refs
+ assert(refs.intermediates.selected_index==2 and not refs.take.enabled,'Legacy layout was not safely migrated')
  -- Opening a second layout removes the previous root; closing returns to its plan.
  for _=1,3 do click(player,find(refs.frame,'back'));remote.call(ui,'open',player.index,plan.planId);refs=storage.layouts.viewers[player.index].refs end
  return {passed=true,version=script.active_mods['facmandu-assistant'],previewEntities=#artifact.entities,

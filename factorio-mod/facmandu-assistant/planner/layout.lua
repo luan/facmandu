@@ -5,6 +5,11 @@ local M={}
 local PREFIX='toby-layout-'
 local shapes={'auto','wide','tall','square'}
 local spacings={'compact','spacious'}
+local transport_modes={inputs={'belts','requester-chests'},intermediates={'belts','buffer-chests'},outputs={'belts','storage-chests'}}
+local VIEW_VERSION=2
+local function uses_robots(r)
+ return r.inputs.selected_index==2 or r.intermediates.selected_index==2 or r.outputs.selected_index==2
+end
 local function state()
  storage.layouts=storage.layouts or {forces={},viewers={},sequence=0}
  return storage.layouts
@@ -20,9 +25,16 @@ local function workspace(player,id)
   assert(count<32,'This force already has 32 layout workspaces')
   force[id]={id=id,force=player.force.index,settings={width=100,height=100,layout={shape='auto',spacing='compact'},
    tiers={belt='transport-belt',underground='underground-belt',splitter='splitter',inserter='inserter',pole='medium-electric-pole',pipe='pipe',pipe_underground='pipe-to-ground'},
-   transport='belts',requestSeconds=30,outputSlots=4},status='idle'}
+   transport={inputs='requester-chests',intermediates='belts',outputs='storage-chests'},requestSeconds=30,outputSlots=4},status='idle'}
  end
- return force[id]
+ local w=force[id]
+ if type(w.settings.transport)~='table' then
+  local robots=w.settings.transport=='robots'
+  w.settings.transport={inputs=robots and 'requester-chests' or 'belts',intermediates=robots and 'buffer-chests' or 'belts',outputs=robots and 'storage-chests' or 'belts'}
+  -- The new buffer mode has different chest settings; the old preview needs regeneration.
+  w.blueprintRevision=nil
+ end
+ return w
 end
 local function current(player)
  local v=state().viewers[player.index]
@@ -57,7 +69,7 @@ local function visible_error(message)
 end
 local function refresh(player)
  local w,v=current(player);local r=v and v.refs
- if not r or not r.frame.valid or not r.status or not r.status.valid then return end
+ if not v or v.version~=VIEW_VERSION or not r or not r.frame.valid or not r.status or not r.status.valid then return end
  local ready=w.status=='ready' and w.blueprint and w.blueprintRevision==w.revision and fresh(player,w)
  local dirty=v.dirty
  local elapsed=math.floor((game.tick-(w.started or game.tick))/60)
@@ -66,7 +78,7 @@ local function refresh(player)
  if w.status=='ready' and w.blueprint and not ready then status='Plan changed · Generate a new layout' end
  if dirty then status='Settings changed · Generate to update the preview' end
  if v.error then status=visible_error(v.error) end
- r.robots.visible=r.transport.selected_index==2
+ r.robots.visible=uses_robots(r)
  r.status.caption=status;r.elapsed.caption=(w.status=='queued' or w.status=='compiling') and (elapsed..'s') or ''
  r.generate.enabled=w.status~='queued' and w.status~='compiling'
  r.take.enabled=not not (ready and not dirty);r.inspect.enabled=r.take.enabled
@@ -97,7 +109,7 @@ function M.open(index,id)
  local old=s.viewers[player.index]
  local main=player.gui.screen.toby_planner_frame_main_dialog;if main then main.visible=false end
  -- Reopening does not reset local unsubmitted settings or keyboard focus.
- if old and old.id==id and old.force==player.force.index and old.refs and old.refs.frame.valid then
+ if old and old.version==VIEW_VERSION and old.id==id and old.force==player.force.index and old.refs and old.refs.frame.valid then
   old.refs.frame.visible=true;player.opened=old.refs.frame;refresh(player);return true
  end
  close(player)
@@ -114,7 +126,7 @@ function M.open(index,id)
  text(nav,'Machines and rates come from the saved plan.',width-240)
  local body=frame.add{type='flow',direction='horizontal'};body.style.vertically_stretchable=true;body.style.horizontal_spacing=12
  local left=body.add{type='scroll-pane',direction='vertical',horizontal_scroll_policy='never'};left.style.width=320;left.style.vertically_stretchable=true
- local r={frame=frame};s.viewers[player.index]={force=player.force.index,id=id,refs=r,dirty=false}
+ local r={frame=frame};s.viewers[player.index]={version=VIEW_VERSION,force=player.force.index,id=id,refs=r,dirty=false}
  local settings=w.settings
  text(left,'Targets / min',280,'bold_label')
  local targets=left.add{type='table',column_count=2}
@@ -142,15 +154,20 @@ function M.open(index,id)
  local grid=left.add{type='table',column_count=2}
  r.shape=choice(grid,'Shape',{'Auto','Wide','Tall','Square'},index_of(shapes,settings.layout.shape))
  r.spacing=choice(grid,'Spacing',{'Compact','Spacious'},index_of(spacings,settings.layout.spacing))
- r.transport=choice(grid,'Solids',{'Belts','Logistic chests'},settings.transport=='robots' and 2 or 1)
+ r.inputs=choice(grid,'Inputs',{'Belts','Requester chests'},index_of(transport_modes.inputs,settings.transport.inputs))
+ r.intermediates=choice(grid,'Internal',{'Belts','Buffer chests'},index_of(transport_modes.intermediates,settings.transport.intermediates))
+ r.outputs=choice(grid,'Outputs',{'Belts','Storage chests'},index_of(transport_modes.outputs,settings.transport.outputs))
+ r.inputs.tooltip='How raw ingredients enter the block.'
+ r.intermediates.tooltip='How items move between machines. Buffer chests supply blue requester chests through robots.'
+ r.outputs.tooltip='Where finished products leave the block. Storage chests are filtered to their product.'
  left.add{type='line'};text(left,'Transport',280,'bold_label')
  local tiers=left.add{type='table',column_count=2};r.tiers={}
  for _,row in ipairs{{'belt','Belt tier','transport-belt'},{'inserter','Inserter','inserter'},{'pole','Power pole','electric-pole'},{'pipe','Pipe','pipe'},{'pipe_underground','Underground pipe','pipe-to-ground'}} do
   local value=settings.tiers[row[1]];if not prototypes.entity[value] then value=nil end
   r.tiers[row[1]]=selector(tiers,row[2],value,row[3])
  end
- local robots=left.add{type='flow',direction='vertical'};r.robots=robots;robots.visible=r.transport.selected_index==2
- text(robots,'Requester → filtered storage',280,'bold_label')
+ local robots=left.add{type='flow',direction='vertical'};r.robots=robots;robots.visible=uses_robots(r)
+ text(robots,'Logistic network',280,'bold_label')
  local robot_grid=robots.add{type='table',column_count=2}
  text(robot_grid,'Request buffer',124);r.seconds=numeric(robot_grid,'seconds',settings.requestSeconds)
  text(robot_grid,'Output slots',124);r.slots=numeric(robot_grid,'slots',settings.outputSlots)
@@ -185,7 +202,7 @@ local function number(field,min,max)
 end
 local function settings_from(r)
  local settings={width=number(r.width,8,100),height=number(r.height,8,100),layout={shape=shapes[r.shape.selected_index],spacing=spacings[r.spacing.selected_index]},
-  transport=r.transport.selected_index==2 and 'robots' or 'belts',requestSeconds=number(r.seconds,1,300),outputSlots=number(r.slots,1,48),tiers={}}
+  transport={inputs=transport_modes.inputs[r.inputs.selected_index],intermediates=transport_modes.intermediates[r.intermediates.selected_index],outputs=transport_modes.outputs[r.outputs.selected_index]},requestSeconds=number(r.seconds,1,300),outputSlots=number(r.slots,1,48),tiers={}}
  assert(settings.width%1==0 and settings.height%1==0 and settings.requestSeconds%1==0 and settings.outputSlots%1==0,'Use whole tile, buffer and slot counts')
  for name,field in pairs(r.tiers) do settings.tiers[name]=field.elem_value end
  assert(settings.tiers.belt and settings.tiers.inserter and settings.tiers.pole,'Choose a belt tier, inserter and power pole')
@@ -213,8 +230,10 @@ function M.read_request(player_name,id,plan_id)
  if plan.revision~=w.revision then w.status='failed';w.error='Plan changed · Generate a new layout';return nil end
  local s=w.settings;w.status='compiling';w.heartbeat=game.tick
  local result={force=player.force.name,player=player.name,reference=plan.reference,expectedRevision=w.revision,
-  width=s.width,height=s.height,layout=s.layout,tiers=s.tiers}
- if s.transport=='robots' then result.logistics={requester='requester-chest',provider='storage-chest',requestSeconds=s.requestSeconds,outputSlots=s.outputSlots} end
+  width=s.width,height=s.height,layout=s.layout,tiers=s.tiers,transport=s.transport}
+ if s.transport.inputs~='belts' or s.transport.intermediates~='belts' or s.transport.outputs~='belts' then
+  result.logistics={requester='requester-chest',provider='storage-chest',buffer=s.transport.intermediates=='buffer-chests' and 'buffer-chest' or nil,requestSeconds=s.requestSeconds,outputSlots=s.outputSlots}
+ end
  return result
 end
 local function preview(player,w,stack)
@@ -308,7 +327,7 @@ end
 local function dirty(event)
  local e=event.element;if not e or not e.valid or e.tags.toby_layout~='dirty' then return end
  local player=game.get_player(event.player_index);local _,v=current(player)
- if v and v.refs then v.error=nil;v.dirty=true;v.refs.robots.visible=v.refs.transport.selected_index==2;refresh(player) end
+ if v and v.refs then v.error=nil;v.dirty=true;refresh(player) end
 end
 events.on_event(defines.events.on_gui_click,click)
 for _,event in ipairs{defines.events.on_gui_text_changed,defines.events.on_gui_selection_state_changed,defines.events.on_gui_checked_state_changed,defines.events.on_gui_elem_changed} do events.on_event(event,dirty) end

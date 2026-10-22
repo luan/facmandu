@@ -27,6 +27,19 @@ const port = z.strictObject({
 	perMinute: z.number().min(0.01).max(60000)
 });
 
+const transport = z.strictObject({
+	inputs: z.enum(['belts', 'requester-chests']),
+	intermediates: z.enum(['belts', 'buffer-chests']),
+	outputs: z.enum(['belts', 'storage-chests'])
+});
+const logistics = z.strictObject({
+	requester: name,
+	provider: name,
+	buffer: name.optional(),
+	requestSeconds: z.number().int().min(1).max(300).default(30),
+	outputSlots: z.number().int().min(1).max(48).default(4)
+});
+
 // Internal prototype job. Public layout requests below identify a saved plan revision.
 // Platforms and modules need qualified templates before enabling them.
 export const factoryLayoutJobInput = z
@@ -48,14 +61,8 @@ export const factoryLayoutJobInput = z
 			})
 			.default({ shape: 'auto', spacing: 'compact' }),
 		inserters: z.strictObject({ input: arm.optional(), output: arm.optional() }).optional(),
-		logistics: z
-			.strictObject({
-				requester: name,
-				provider: name,
-				requestSeconds: z.number().int().min(1).max(300).default(30),
-				outputSlots: z.number().int().min(1).max(48).default(4)
-			})
-			.optional(),
+		logistics: logistics.optional(),
+		transport: transport.optional(),
 		tiers: z.strictObject({
 			machine: name,
 			crafters: z.array(name).max(8).optional(),
@@ -92,6 +99,22 @@ export const factoryLayoutJobInput = z
 		}))
 	}))
 	.superRefine((request, ctx) => {
+		if (
+			request.transport &&
+			(request.transport.inputs !== 'belts' ||
+				request.transport.outputs !== 'belts' ||
+				request.transport.intermediates !== 'belts') &&
+			!request.logistics
+		)
+			ctx.addIssue({
+				code: 'custom',
+				message: 'Choose requester and storage chest tiers for this transport setup'
+			});
+		if (request.transport?.intermediates === 'buffer-chests' && !request.logistics?.buffer)
+			ctx.addIssue({
+				code: 'custom',
+				message: 'Choose a buffer chest tier for internal transport'
+			});
 		if (!request.fixedPlan && !request.tiers.underground)
 			ctx.addIssue({
 				code: 'custom',
@@ -164,14 +187,8 @@ export const factoryLayoutInput = z.strictObject({
 			spacing: z.enum(['compact', 'spacious']).default('compact')
 		})
 		.default({ shape: 'auto', spacing: 'compact' }),
-	logistics: z
-		.strictObject({
-			requester: name,
-			provider: name,
-			requestSeconds: z.number().int().min(1).max(300).default(30),
-			outputSlots: z.number().int().min(1).max(48).default(4)
-		})
-		.optional(),
+	logistics: logistics.optional(),
+	transport: transport.optional(),
 	tiers: z.strictObject({
 		belt: name,
 		underground: name.optional(),

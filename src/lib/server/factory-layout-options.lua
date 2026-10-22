@@ -35,7 +35,8 @@ function options.cell(w,h,problem,pack,fluid)
  local oc={x=oa.x+tile(output.drop.x),y=oa.y+tile(output.drop.y)}
  local points={ia,oa,ic,oc}
  local occupied={}
- local left,top,right,bottom=0,-2,w,h+2
+ local tight=problem.transport and problem.layout.spacing=='compact' and not fluid
+ local left,top,right,bottom=0,tight and 0 or -2,w,tight and h or h+2
  for _,p in ipairs(points) do
   assert(not (p.x>0 and p.x<w and p.y>0 and p.y<h),'Inserter profile intersects its machine')
   local k=p.x..','..p.y;assert(not occupied[k],'Inserter profiles overlap a chest or another arm');occupied[k]=true
@@ -43,10 +44,10 @@ function options.cell(w,h,problem,pack,fluid)
   top=math.min(top,p.y-0.5);bottom=math.max(bottom,p.y+0.5)
  end
  local spacious=problem.layout.spacing=='spacious'
- local padding=fluid and 3 or 1
+ local padding=fluid and 3 or tight and 0 or 1
  local dx,dy=padding-left,-top
  for _,p in ipairs(points) do p.x=p.x+dx;p.y=p.y+dy end
- return {width=right-left+padding*2+(spacious and 1 or 0),height=bottom-top+1+(spacious and 3 or 0),
+ return {width=right-left+padding*2+(spacious and 1 or 0),height=bottom-top+(tight and 0 or 1)+(spacious and 3 or 0),
   machine={x=w/2+dx,y=h/2+dy},input_arm=ia,output_arm=oa,input_chest=ic,output_chest=oc,input_settings=ins,output_settings=outs}
 end
 function options.columns(count,width,height,available_width,available_height,shape)
@@ -66,10 +67,11 @@ function options.columns(count,width,height,available_width,available_height,sha
  assert(math.ceil(count/columns)*height<=available_height,'The requested logistics cells do not fit this layout shape; enlarge the block without reducing production')
  return columns
 end
-function options.product_settings(problem,pack,item)
+function options.product_settings(problem,pack,item,provider)
+ provider=provider or problem.logistics.provider
  local result={}
- if problem.logistics.outputSlots~=(pack.chests[problem.logistics.provider].capacity or 48) then result.bar=problem.logistics.outputSlots end
- if pack.chests[problem.logistics.provider].mode=='storage' then
+ if problem.logistics.outputSlots~=(pack.chests[provider].capacity or 48) then result.bar=problem.logistics.outputSlots end
+ if pack.chests[provider].mode=='storage' then
   result.request_filters={sections={{index=1,filters={{index=1,type='item',name=item,quality='normal',comparator='=',count=0}}}}}
  end
  return result

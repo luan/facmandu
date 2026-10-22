@@ -1,6 +1,6 @@
 # [WIP] Toby
 
-Work in progress, version **0.0.17**. Requires Factorio **2.1.21 or later**. Includes production planning, blueprint books and a companion drone. Toby chat connects through a Facmandu-managed server.
+Work in progress, version **0.0.21**. Requires Factorio **2.1.21 or later**. Includes production planning, blueprint books and a companion drone. Toby chat connects through a Facmandu-managed server.
 
 Click the **Toby icon** above the game view or use its game shortcut, or press **Ctrl+Shift+T**, to open the side panel. **New chat** starts a separate conversation without stopping an existing run. **Chat** shows recent messages, **Activity** shows completed tool outcomes, errors and current work. **Design** shows the latest validated working draft or final blueprint, with warnings and construction costs. Inspections are labeled separately. Tab scroll positions survive progress updates. Status, elapsed time and tool results update while Toby works. Switch conversations while a run continues, or use **Steer** to add instructions. Press **Enter** to send or steer. Closing the panel keeps your typed draft. Shortcuts are configurable in Factorio’s Controls settings.
 
@@ -36,7 +36,7 @@ Each conversation keeps its own unfinished message. Switching chats, progress up
 
 Open a production plan, then choose **Layout** in its toolbar. The planner owns recipes, machines and rates. Layout uses that saved revision and never edits its production settings.
 
-Choose the block size, shape, spacing and transport tiers. **Logistic chests** uses blue requester inputs and filtered yellow storage outputs; configure the request buffer and usable output slots. Custom inserter pickup/drop vectors use the installed inserter mod's researched capabilities.
+Choose the block size, shape, spacing and transport tiers. Set **Inputs**, **Internal** and **Outputs** independently: raw ingredients arrive on belts or in blue requester chests; intermediate items move on belts or through green buffer chests; finished products leave on belts or enter filtered yellow storage chests. Requesters receiving intermediates are configured to request from buffers. Configure the request buffer and usable output slots. **Compact** removes unused space around dry production cells while retaining fluid corridors. Custom inserter pickup/drop vectors use the installed inserter mod's researched capabilities.
 
 **Generate layout** runs the layout engine through Facmandu, without an AI turn. The preview uses native entity ghosts on a hidden preview surface, so modded graphics match the game and no machines or items are created in the factory. Pan, zoom, open the native blueprint editor, or take the blueprint to place ghosts. Generated layouts are saved with the force's Toby books. Settings and saved layouts survive save/reload. Editing the production plan makes the old layout stale until regenerated.
 

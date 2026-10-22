@@ -1,5 +1,7 @@
 local engine=require('engine.init')
 local plan=assert(pack.plan,'Missing native production plan')
+local robot_cells=problem.logistics and (not problem.transport or problem.transport.intermediates=='buffer-chests')
+local boundary=interfaces.prepare(problem,pack,robot_cells,options)
 local entities,ports,sources,sinks,inputs,steps={},{},{},{},{},{}
 local demand,available,requested,reserved={},{},{},{}
 local circuits={}
@@ -21,7 +23,7 @@ local function rate(parts,kind,name)
  for _,part in ipairs(parts) do if part.type==kind and part.name==name then return part.perMinute end end
  return 0
 end
-if problem.logistics then
+if robot_cells then
 local consumed,produced={},{}
 for _,line in ipairs(plan.lines) do
  for _,part in ipairs(line.ingredients) do if part.type=='item' then consumed[part.name]=(consumed[part.name] or 0)+part.perMinute end end
@@ -42,14 +44,14 @@ if not internal then
  local y=2
  for index,line in ipairs(plan.lines) do if cells[index] then
   local entry=cells[index];local count=math.ceil(line.machines-1e-9);local cell=entry.cell
-  local columns=options.columns(count,cell.width,cell.height,problem.area[2][1]-4,problem.area[2][2]-y-2,problem.layout.shape)
-  for i=1,count do entry.positions[i]={x=((i-1)%columns)*cell.width,y=y+math.floor((i-1)/columns)*cell.height} end
+  local columns=options.columns(count,cell.width,cell.height,problem.area[2][1]-4-boundary.left,problem.area[2][2]-y-boundary.bottom,problem.layout.shape)
+  for i=1,count do entry.positions[i]={x=boundary.left+((i-1)%columns)*cell.width,y=y+math.floor((i-1)/columns)*cell.height} end
   y=y+math.ceil(count/columns)*cell.height+2
  end end
 else
 table.sort(ordered,function(a,b) return a.cell.height>b.cell.height or a.cell.height==b.cell.height and (a.cell.width>b.cell.width or a.cell.width==b.cell.width and (a.stage<b.stage or a.stage==b.stage and a.index<b.index)) end)
 local selected,score
-for width=1,problem.area[2][1]-4 do
+for width=1,problem.area[2][1]-4-boundary.left do
  local shelves,positions,height,used={},{},2,0
  local valid=true
  for _,entry in ipairs(ordered) do
@@ -57,9 +59,9 @@ for width=1,problem.area[2][1]-4 do
   local shelf
   for _,candidate in ipairs(shelves) do if candidate.x+entry.cell.width<=width then shelf=candidate;break end end
   if not shelf then shelf={x=0,y=height};shelves[#shelves+1]=shelf;height=height+entry.cell.height end
-  positions[#positions+1]={x=shelf.x,y=shelf.y};shelf.x=shelf.x+entry.cell.width;used=math.max(used,shelf.x)
+  positions[#positions+1]={x=boundary.left+shelf.x,y=shelf.y};shelf.x=shelf.x+entry.cell.width;used=math.max(used,shelf.x)
  end
- if valid and height<=problem.area[2][2]-2 then
+ if valid and height<=problem.area[2][2]-boundary.bottom then
   local shape=problem.layout.shape
   local candidate=shape=='tall' and used*1000+height or shape=='wide' and height*1000+used or math.abs(used-height)*1000+used*height
   if not score or candidate<score then selected,score=positions,candidate end
@@ -90,7 +92,7 @@ for index,line in ipairs(plan.lines) do if line.machines>0.000001 then
     assert(demand[key('item',part.name)] or (produced[part.name] or 0)>0,'No native plan supply for '..part.name)
     filters[j]={index=j,type='item',name=part.name,quality='normal',comparator='=',count=math.max(math.ceil(part.amount*2),math.ceil(rate(line.ingredients,'item',part.name)/count*problem.logistics.requestSeconds/60))}
    end
-   local chest=add(problem.logistics.requester,left+cell.input_chest.x,top+cell.input_chest.y,{request_filters={sections={{index=1,filters=filters}}}})
+   local chest=add(problem.logistics.requester,left+cell.input_chest.x,top+cell.input_chest.y,{request_filters={request_from_buffers=problem.transport and true or nil,sections={{index=1,filters=filters}}}})
    for _,part in ipairs(recipe.ingredients) do if demand[key('item',part.name)] then ports[#ports+1]={entity=chest,item=part.name,kind='input',position=entities[chest].position,perMinute=demand[key('item',part.name)]*rate(line.ingredients,'item',part.name)/consumed[part.name]/count} end end
    add(problem.tiers.inserter,left+cell.input_arm.x,top+cell.input_arm.y,{pickup_position=cell.input_settings.pickup_position,drop_position=cell.input_settings.drop_position})
   end
@@ -113,7 +115,9 @@ for index,line in ipairs(plan.lines) do if line.machines>0.000001 then
      settings.use_filters=true;settings.filters={{index=1,name=part.name}}
     end
     add(problem.tiers.inserter,left+cell.output_arm.x+offset,top+cell.output_arm.y,settings)
-    local chest=add(problem.logistics.provider,left+cell.output_chest.x+offset,top+cell.output_chest.y,options.product_settings(problem,pack,part.name))
+    local terminal=requested[key('item',part.name)] and (not problem.transport or problem.transport.outputs=='storage-chests')
+    local provider=problem.transport and not terminal and problem.logistics.buffer or problem.logistics.provider
+    local chest=add(provider,left+cell.output_chest.x+offset,top+cell.output_chest.y,options.product_settings(problem,pack,part.name,provider))
     local output=requested[key('item',part.name)]
     if output then ports[#ports+1]={entity=chest,item=part.name,kind='output',position=entities[chest].position,perMinute=output.perMinute*rate(line.products,'item',part.name)/produced[part.name]/count} end
    end
@@ -127,6 +131,7 @@ else
  entities,ports,sources,sinks,steps,reserved=placed.entities,placed.ports,placed.sources,placed.sinks,placed.steps,placed.reservations
  circuits=placed.circuits
 end
+boundary.install(add,ports,entities)
 -- Gate the pipe before a disposal input: disabled furnaces still trap fluid in their one-way input buffers.
 for _,c in ipairs(circuits) do if c.gate then
  local recipe=pack.recipes[c.gate];local d=recipe.disposal;local p=recipe.fluid_inputs[1]
@@ -148,7 +153,7 @@ for _,port in ipairs(problem.outputs) do if port.type=='fluid' then local d=({[0
 -- Join every producer to one header per fluid, rather than letting disconnected
 -- producers each serve an arbitrary subset of consumers.
 local priority={}
-if not problem.logistics then local n=0;for _,p in ipairs(sinks) do if not priority[p.fluid] then n=n+1;priority[p.fluid]=n end end end
+if not robot_cells then local n=0;for _,p in ipairs(sinks) do if not priority[p.fluid] then n=n+1;priority[p.fluid]=n end end end
 local headers,joins={},{}
 for _,port in ipairs(sources) do
  if not headers[port.fluid] then headers[port.fluid]=port
@@ -204,7 +209,7 @@ for _,entry in ipairs{{sources,'input'},{sinks,'output'}} do for _,port in ipair
  ports[#ports+1]={entity=assert(pipes[engine.blueprint.tile_key(math.floor(port.position.x),math.floor(port.position.y))]),
   item=port.fluid,kind=entry[2],position=port.position,perMinute=port.perMinute}
 end end end
-if not problem.logistics then
+if not robot_cells then
  local pinned={} for _,p in ipairs(ports) do pinned[#pinned+1]=p end
  for _,p in ipairs(sources) do pinned[#pinned+1]=p end
  for _,p in ipairs(sinks) do pinned[#pinned+1]=p end
@@ -282,4 +287,4 @@ for _,e in ipairs(entities) do
 end
 for _,e in ipairs(entities) do e.entity_number=nil end
 return {entities=entities,wires=wires,tiles=tiles,inputs=inputs,steps=steps,ports=ports,warnings={
- problem.logistics and 'Native planner quantities, connected fluid headers and robot-fed items between production stages. Live logistics coverage, ordinary robots and external power are required.' or 'Saved machine counts with routed belts, fluids and power. External supplies and power are required.'}}
+ robot_cells and 'Native planner quantities, connected fluid headers and robot-fed items between production stages. Live logistics coverage, ordinary robots and external power are required.' or 'Saved machine counts with routed belts, fluids and power. External supplies and power are required.'}}
