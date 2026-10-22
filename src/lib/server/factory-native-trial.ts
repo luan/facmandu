@@ -76,8 +76,10 @@ export function testCompiledFactory(
 ) {
 	// Fluid chains can spend minutes filling recycling loops. Measure once delivery stabilizes.
 	const startupSeconds = input.test.warmupSeconds >= 300 ? 1800 : undefined;
+	// Four minutes reduce batch-boundary error for synchronized multi-machine outputs.
+	const measurementSeconds = startupSeconds ? 240 : input.test.seconds;
 	const benchmarkSeconds = startupSeconds
-		? startupSeconds + 120
+		? startupSeconds + measurementSeconds
 		: input.test.warmupSeconds + input.test.seconds;
 	const designId = input.artifact.designId;
 	if (!designId) throw new ServerError(400, 'Native validation requires a saved factory design');
@@ -130,6 +132,7 @@ export function testCompiledFactory(
 				const payload = {
 					request: input.request,
 					startupSeconds,
+					measurementSeconds,
 					plan:
 						input.request.fixedPlan || input.request.nativePlan
 							? z.object({ plan: z.json() }).parse(input.pack).plan
@@ -176,6 +179,10 @@ export function testCompiledFactory(
 						sandbox
 							.replaceAll('facmandu-toby-sandbox', 'facmandu-layout-sandbox')
 							.replace('number(warmupLimit,0,120)', 'number(warmupLimit,0,300)')
+							.replace(
+								'not number(p.perMinute,0.01,1000000)',
+								'not number(p.perMinute,0,1000000) or p.perMinute==0'
+							)
 							.replace('#rows>2000', `#rows>${MAX_BLUEPRINT_ENTITIES}`)
 							.replace('1..2000 entities', `1..${MAX_BLUEPRINT_ENTITIES} entities`)
 					),

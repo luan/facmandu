@@ -98,6 +98,39 @@ local function verify_fluids(job,pack)
   assert(inlet and outlet,'Overflow pump must connect the correct supply to its disposal furnace: '..name)
  end end
 end
+-- Supply the surrounding network, never intermediate items, in robot-fed trials.
+local function provide_logistics(job,pack)
+ if not payload.request.logistics then return end
+ local consumed={}
+ for _,line in ipairs(pack.plan and pack.plan.lines or {}) do for _,part in ipairs(line.ingredients) do if part.type=='item' then consumed[part.name]=true end end end
+ local internal=false
+ for _,line in ipairs(pack.plan and pack.plan.lines or {}) do for _,part in ipairs(line.products) do if part.type=='item' and consumed[part.name] then internal=true end end end
+ if not internal then return end
+ local surface,force=job.surface,job.entities[1].force
+ local left,top,right,bottom=math.huge,math.huge,-math.huge,-math.huge
+ for _,e in ipairs(job.entities) do left=math.min(left,e.position.x);top=math.min(top,e.position.y);right=math.max(right,e.position.x);bottom=math.max(bottom,e.position.y) end
+ local radius=prototypes.entity.roboport.logistic_radius
+ local count=0;storage.logistics_ports={}
+ for x=left-4,right+radius,radius do for y=top-4,bottom+radius,radius do
+  local position=surface.find_non_colliding_position('roboport',{x=x,y=y},12,1)
+  if position then
+   local port=assert(surface.create_entity{name='roboport',position=position,force=force})
+   port.get_inventory(defines.inventory.roboport_robot).insert{name='logistic-robot',count=20}
+   port.energy=1000000000;storage.logistics_ports[#storage.logistics_ports+1]=port
+   count=count+1
+  end
+ end end
+ assert(count>0,'No room for the isolated logistics network')
+ storage.provided_logistics=true
+end
+local function verify_logistics(job)
+ local network
+ for _,e in ipairs(job.entities) do if e.type=='logistic-container' then
+  local current=job.surface.find_logistic_network_by_position(e.position,e.force)
+  assert(current and (not network or current.network_id==network),'Isolated logistics network does not cover every production chest')
+  network=current.network_id
+ end end
+end
 local function context()
  local c=payload.context
  for name,version in pairs(c.mods) do assert(script.active_mods[name]==version,'Native mod version changed: '..name) end
@@ -132,6 +165,7 @@ end
 events.on_event(defines.events.on_tick,function(e)
  if storage.finished then return end
  local ok,err=pcall(function()
+  for _,port in ipairs(storage.logistics_ports or {}) do if port.valid then port.energy=1000000000 end end
   if not storage.started then
    storage.started=true
    helpers.write_file('layout-progress.json',helpers.table_to_json({id=payload.designId,status='running',phase='context'}),false)
@@ -143,8 +177,9 @@ events.on_event(defines.events.on_tick,function(e)
    local started=sandbox.start(trial,300,256)
    storage.job=started.id
    local job=assert(storage.toby_trials.jobs[storage.job])
+   provide_logistics(job,storage.pack)
    if payload.startupSeconds then
-    storage.startup={history={},deadline=job.startTick+payload.startupSeconds*60,sampleTicks=job.endTick-job.sampleStart}
+    storage.startup={history={},deadline=job.startTick+payload.startupSeconds*60,sampleTicks=payload.measurementSeconds*60}
     job.endTick=storage.startup.deadline+storage.startup.sampleTicks
    end
    for _,wanted in ipairs(payload.settings or {}) do
@@ -193,6 +228,7 @@ events.on_event(defines.events.on_tick,function(e)
   elseif e.tick%60==0 then
    local job=storage.toby_trials.jobs[storage.job]
    local rates
+   if storage.provided_logistics and not storage.logistics_verified and job and job.entities and game.tick>=job.startTick+300 then verify_logistics(job);storage.logistics_verified=true end
    if storage.startup then
     local ready;ready,rates=startup(storage.startup.history,game.tick,job.outputs,payload.request.logistics~=nil)
     if ready or game.tick>=storage.startup.deadline then
@@ -207,6 +243,7 @@ events.on_event(defines.events.on_tick,function(e)
    end
    local result=sandbox.read(payload.request.force,storage.job)
    if result.status~='running' then
+    if storage.provided_logistics then assert(storage.logistics_verified,'Isolated logistics coverage was not verified');result.note=result.note..' Ordinary robots and connected roboport coverage were supplied by the isolated fixture.' end
     result.diagnostics=storage.diagnostics;result.settingsVerified=storage.settings_verified
     write({pack=storage.pack,result=result});storage.finished=true
    else

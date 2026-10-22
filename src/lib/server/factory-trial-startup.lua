@@ -20,5 +20,8 @@ return function(history,tick,outputs,aggregateItems)
   ready=ready and met
   rates[#rates+1]={name=total.name,kind=total.kind,perMinute=rate,targetPerMinute=total.rate,met=met}
  end
- return ready,rates
+ -- A full buffer can produce one good window before upstream supply catches up.
+ -- Keep that rate for another minute before starting the independent measurement.
+ if ready then history.readySince=history.readySince or tick else history.readySince=nil end
+ return ready and tick-history.readySince>=3600,rates
 end

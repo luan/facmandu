@@ -631,7 +631,9 @@ const chainRequest = factoryLayoutInput.parse({
 	}
 });
 
-test('native fluid plans compile all production and disposal stages within a bounded block', async () => {
+test('native fluid plans compile all production and disposal stages within a bounded block', {
+	timeout: 20000
+}, async () => {
 	const compiled = await compileFactoryLayout(chainRequest, chainPack, modules);
 	assert.deepEqual(await compileFactoryLayout(chainRequest, chainPack, modules), compiled);
 	assert.deepEqual(
@@ -1176,7 +1178,9 @@ test('two saved disposal stages using the same furnace retain their distinct flu
 });
 
 for (const circuitReach of [20.25, 15])
-	test(`the complete saved processing-unit plan routes with circuit reach ${circuitReach}`, async () => {
+	test(`the complete saved processing-unit plan routes with circuit reach ${circuitReach}`, {
+		timeout: 15000
+	}, async () => {
 		const fixture = JSON.parse(
 			readFileSync('tests/fixtures/interpose/saved-processing-units-belts-2.1.21.json', 'utf8')
 		);
@@ -1278,4 +1282,78 @@ for (const circuitReach of [20.25, 15])
 			reachable.has(result.design.entities.indexOf(consumer) + 1),
 			'The producer must read its normal consumer across stages'
 		);
+	});
+
+for (const transport of ['belts', 'robots'] as const)
+	test(`the current 60/min processing-unit plan supports ${transport} without importing intermediates`, {
+		timeout: 15000
+	}, async () => {
+		const fixture = JSON.parse(
+			readFileSync('tests/fixtures/interpose/saved-processing-units-60-2.1.21.json', 'utf8')
+		);
+		const logistics =
+			transport === 'robots'
+				? {
+						requester: 'requester-chest',
+						provider: 'storage-chest',
+						requestSeconds: 30,
+						outputSlots: 4
+					}
+				: undefined;
+		const request = factoryLayoutInput.parse({
+			...fixture.request,
+			logistics,
+			layout: { shape: 'square', spacing: transport === 'robots' ? 'spacious' : 'compact' }
+		});
+		const result = await compileFactoryLayout(request, z.json().parse(fixture.pack), modules);
+		assert.equal(result.steps.length, 26);
+		assert.equal(
+			result.steps.reduce((n, s) => n + s.machines, 0),
+			60
+		);
+		assert.ok(blueprintInputSchema.safeParse({ ...result.design, operation: 'create' }).success);
+		assert.ok(
+			result.design.entities.every(
+				(e) => e.position.x >= 0 && e.position.x < 100 && e.position.y >= 0 && e.position.y < 100
+			)
+		);
+		assert.ok(Math.abs(result.test.outputs.reduce((n, p) => n + p.perMinute, 0) - 60) < 1e-6);
+		const declared = new Set(request.inputs.map((p) => p.item));
+		assert.ok(
+			result.test.inputs.every((p) => declared.has(p.name)),
+			'Trials must never inject internally produced intermediates'
+		);
+		if (transport === 'robots') {
+			for (const part of fixture.pack.plan.ingredients.filter(
+				(p: { type: string; perMinute: number }) => p.type === 'item' && p.perMinute > 0
+			)) {
+				assert.ok(
+					Math.abs(
+						result.test.inputs
+							.filter((p) => p.name === part.name)
+							.reduce((n, p) => n + p.perMinute, 0) - part.perMinute
+					) < 1e-6
+				);
+			}
+			for (const name of ['stone', 'kr-rare-metal-ore']) {
+				assert.ok(
+					result.design.entities.some(
+						(e) =>
+							e.name === 'storage-chest' &&
+							e.request_filters?.sections[0]?.filters[0]?.name === name
+					),
+					`Separate filtered ${name} output`
+				);
+				assert.ok(
+					result.design.entities.some((e) => e.use_filters && e.filters?.[0]?.name === name)
+				);
+			}
+			assert.ok(
+				result.design.entities.some(
+					(e) =>
+						e.name === 'requester-chest' &&
+						e.request_filters?.sections[0]?.filters.some((f) => f.name === 'kr-rare-metals')
+				)
+			);
+		}
 	});

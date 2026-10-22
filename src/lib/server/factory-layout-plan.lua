@@ -22,33 +22,76 @@ local function rate(parts,kind,name)
  return 0
 end
 if problem.logistics then
-local y=2
-for _,line in ipairs(plan.lines) do if line.machines>0.000001 then
+local consumed,produced={},{}
+for _,line in ipairs(plan.lines) do
+ for _,part in ipairs(line.ingredients) do if part.type=='item' then consumed[part.name]=(consumed[part.name] or 0)+part.perMinute end end
+ for _,part in ipairs(line.products) do if part.type=='item' then produced[part.name]=(produced[part.name] or 0)+part.perMinute end end
+end
+-- Pack complete cells across shelves; small intermediate stages share a shelf.
+local cells,ordered={},{}
+for index,line in ipairs(plan.lines) do if line.machines>0.000001 then
+ local recipe=assert(pack.recipes[line.recipe]);local machine=assert(pack.machines[line.machine] or pack.furnaces[line.machine])
+ local w,h=table.unpack(machine.native_size or machine.size)
+ local cell=options.cell(w,h,problem,pack,#(recipe.fluid_inputs or {})+#(recipe.fluid_outputs or {})>0)
+ cells[index]={cell=cell,positions={}}
+ for i=1,math.ceil(line.machines-1e-9) do ordered[#ordered+1]={stage=index,index=i,cell=cell} end
+end end
+local internal=false
+for name in pairs(consumed) do if produced[name] then internal=true;break end end
+if not internal then
+ local y=2
+ for index,line in ipairs(plan.lines) do if cells[index] then
+  local entry=cells[index];local count=math.ceil(line.machines-1e-9);local cell=entry.cell
+  local columns=options.columns(count,cell.width,cell.height,problem.area[2][1]-4,problem.area[2][2]-y-2,problem.layout.shape)
+  for i=1,count do entry.positions[i]={x=((i-1)%columns)*cell.width,y=y+math.floor((i-1)/columns)*cell.height} end
+  y=y+math.ceil(count/columns)*cell.height+2
+ end end
+else
+table.sort(ordered,function(a,b) return a.cell.height>b.cell.height or a.cell.height==b.cell.height and (a.cell.width>b.cell.width or a.cell.width==b.cell.width and (a.stage<b.stage or a.stage==b.stage and a.index<b.index)) end)
+local selected,score
+for width=1,problem.area[2][1]-4 do
+ local shelves,positions,height,used={},{},2,0
+ local valid=true
+ for _,entry in ipairs(ordered) do
+  if entry.cell.width>width then valid=false;break end
+  local shelf
+  for _,candidate in ipairs(shelves) do if candidate.x+entry.cell.width<=width then shelf=candidate;break end end
+  if not shelf then shelf={x=0,y=height};shelves[#shelves+1]=shelf;height=height+entry.cell.height end
+  positions[#positions+1]={x=shelf.x,y=shelf.y};shelf.x=shelf.x+entry.cell.width;used=math.max(used,shelf.x)
+ end
+ if valid and height<=problem.area[2][2]-2 then
+  local shape=problem.layout.shape
+  local candidate=shape=='tall' and used*1000+height or shape=='wide' and height*1000+used or math.abs(used-height)*1000+used*height
+  if not score or candidate<score then selected,score=positions,candidate end
+ end
+end
+assert(selected,'The requested logistics cells do not fit this block; enlarge it without reducing production')
+for i,entry in ipairs(ordered) do cells[entry.stage].positions[entry.index]=selected[i] end
+end
+for index,line in ipairs(plan.lines) do if line.machines>0.000001 then
  local recipe=assert(pack.recipes[line.recipe])
  local machine=assert(pack.machines[line.machine] or pack.furnaces[line.machine])
  local w,h=table.unpack(machine.native_size or machine.size)
  assert(w==h,'Native plan cells require square machines')
  local count=math.ceil(line.machines-0.000000001)
- local cell=options.cell(w,h,problem,pack,#(recipe.fluid_inputs or {})+#(recipe.fluid_outputs or {})>0)
- local columns=options.columns(count,cell.width,cell.height,problem.area[2][1]-4,problem.area[2][2]-y-2,problem.layout.shape)
- local rows=math.ceil(count/columns)
+ local cell=cells[index].cell
  local production=0
  for _,part in ipairs(line.products) do if part.type~='entity' then production=production+part.perMinute end end
  steps[#steps+1]={recipe=line.recipe,machines=count,perMinute=production}
  for i=1,count do
-  local left=((i-1)%columns)*cell.width
-  local top=y+math.floor((i-1)/columns)*cell.height
+  local left=cells[index].positions[i].x
+  local top=cells[index].positions[i].y
   local x=left+cell.machine.x
   local center=top+cell.machine.y
   if #recipe.ingredients>0 then
    assert(problem.logistics,'Item supplies require requester/provider tiers')
    local filters={}
    for j,part in ipairs(recipe.ingredients) do
-    assert(demand[key('item',part.name)],'Internal item intermediates need a separate belt or logistics stage: '..part.name)
+    assert(demand[key('item',part.name)] or (produced[part.name] or 0)>0,'No native plan supply for '..part.name)
     filters[j]={index=j,type='item',name=part.name,quality='normal',comparator='=',count=math.max(math.ceil(part.amount*2),math.ceil(rate(line.ingredients,'item',part.name)/count*problem.logistics.requestSeconds/60))}
    end
    local chest=add(problem.logistics.requester,left+cell.input_chest.x,top+cell.input_chest.y,{request_filters={sections={{index=1,filters=filters}}}})
-   for _,part in ipairs(recipe.ingredients) do ports[#ports+1]={entity=chest,item=part.name,kind='input',position=entities[chest].position,perMinute=rate(line.ingredients,'item',part.name)/count} end
+   for _,part in ipairs(recipe.ingredients) do if demand[key('item',part.name)] then ports[#ports+1]={entity=chest,item=part.name,kind='input',position=entities[chest].position,perMinute=demand[key('item',part.name)]*rate(line.ingredients,'item',part.name)/consumed[part.name]/count} end end
    add(problem.tiers.inserter,left+cell.input_arm.x,top+cell.input_arm.y,{pickup_position=cell.input_settings.pickup_position,drop_position=cell.input_settings.drop_position})
   end
   local settings,wire,connector,gate=options.machine_settings(line,pack)
@@ -57,20 +100,27 @@ for _,line in ipairs(plan.lines) do if line.machines>0.000001 then
   for _,p in ipairs(recipe.fluid_connections or {}) do reserved[#reserved+1]={fluid=p.name,x=math.floor(x+p.position.x),y=math.floor(center+p.position.y)} end
   local item_products={}
   for _,part in ipairs(recipe.results) do if part.type=='item' then
-   assert(requested[key('item',part.name)],'Internal item intermediates need a separate belt or logistics stage: '..part.name)
    item_products[#item_products+1]=part
   end end
   if #item_products>0 then
    assert(problem.logistics,'Item outputs require requester/provider tiers')
-   assert(#item_products==1 or pack.chests[problem.logistics.provider].mode~='storage','Filtered storage cells need one item product')
-   add(problem.tiers.inserter,left+cell.output_arm.x,top+cell.output_arm.y,{pickup_position=cell.output_settings.pickup_position,drop_position=cell.output_settings.drop_position})
-   local chest=add(problem.logistics.provider,left+cell.output_chest.x,top+cell.output_chest.y,options.product_settings(problem,pack,item_products[1].name))
-   for _,part in ipairs(item_products) do ports[#ports+1]={entity=chest,item=part.name,kind='output',position=entities[chest].position,perMinute=rate(line.products,'item',part.name)/count} end
+   assert(#item_products<=math.ceil(w/2),'Filtered output chests do not fit '..line.recipe)
+   for j,part in ipairs(item_products) do
+    local offset=2*j-#item_products-1
+    local settings={pickup_position=cell.output_settings.pickup_position,drop_position=cell.output_settings.drop_position}
+    if #item_products>1 then
+     assert((pack.inserters[problem.tiers.inserter].filter_count or 0)>0,'Output sorting requires filtered inserters')
+     settings.use_filters=true;settings.filters={{index=1,name=part.name}}
+    end
+    add(problem.tiers.inserter,left+cell.output_arm.x+offset,top+cell.output_arm.y,settings)
+    local chest=add(problem.logistics.provider,left+cell.output_chest.x+offset,top+cell.output_chest.y,options.product_settings(problem,pack,part.name))
+    local output=requested[key('item',part.name)]
+    if output then ports[#ports+1]={entity=chest,item=part.name,kind='output',position=entities[chest].position,perMinute=output.perMinute*rate(line.products,'item',part.name)/produced[part.name]/count} end
+   end
   end
   for _,part in ipairs(recipe.fluid_inputs or {}) do sinks[#sinks+1]={fluid=part.name,position={x=x+part.position.x,y=center+part.position.y},direction=0} end
   for _,part in ipairs(recipe.fluid_outputs or {}) do sources[#sources+1]={fluid=part.name,position={x=x+part.position.x,y=center+part.position.y},direction=0} end
  end
- y=y+rows*cell.height+2
 end end
 else
  local placed=beltPlan()
@@ -232,4 +282,4 @@ for _,e in ipairs(entities) do
 end
 for _,e in ipairs(entities) do e.entity_number=nil end
 return {entities=entities,wires=wires,tiles=tiles,inputs=inputs,steps=steps,ports=ports,warnings={
- problem.logistics and 'Native planner quantities, connected fluid headers and robot-fed external items. Live logistics coverage, ordinary robots and external power are required.' or 'Saved machine counts with routed belts, fluids and power. External supplies and power are required.'}}
+ problem.logistics and 'Native planner quantities, connected fluid headers and robot-fed items between production stages. Live logistics coverage, ordinary robots and external power are required.' or 'Saved machine counts with routed belts, fluids and power. External supplies and power are required.'}}

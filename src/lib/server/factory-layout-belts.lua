@@ -80,7 +80,7 @@ local function geometry(line,width)
  local row_gap=clearance('y',h+overhead,problem.layout.spacing=='spacious' and 2 or (#pins>1 and 2 or 0))
  local pitch=w+gap
  local count=math.ceil(line.machines-1e-9)
- local outlet=loader and #products==1 and consumed[products[1].name] and 2 or 0
+ local outlet=loader and #products==1 and consumed[products[1].name] and (w==1 and 3 or 2) or 0
  local lead=belts.lead
  for _,pin in ipairs(pins) do
   if pin.position.x < -w/2 then lead=math.max(lead,recipe.disposal and recipe.disposal.gate and 4 or 2) end
@@ -174,9 +174,12 @@ for index,line in ipairs(pack.plan.lines) do if line.machines>0.000001 then
   strip(ib);for _,belt in ipairs(output_belts) do strip(belt) end
   if loader and #products==1 and consumed[products[1].name] then
    -- Loaders fill both lanes; side-load them onto one right lane before routing.
-   add(problem.tiers.belt,right+1+.5,ob.y+.5,{direction=0})
-   add(problem.tiers.belt,right+1+.5,ob.y-1+.5,{direction=4})
-   ob={x1=right+1,x2=right+1,y=ob.y-1}
+   local turn=right+(w==1 and 2 or 1)
+   for x=right+1,turn do add(problem.tiers.belt,x+.5,ob.y+.5,{direction=x==turn and 0 or 4}) end
+   -- A predecessor makes this a straight T-junction, not a corner preserving both lanes.
+   add(problem.tiers.belt,turn-1+.5,ob.y-1+.5,{direction=4})
+   add(problem.tiers.belt,turn+.5,ob.y-1+.5,{direction=4})
+   ob={x1=turn,x2=turn,y=ob.y-1}
   end
   local outer_belt=outer==1 and {x1=left,x2=right,y=y} or nil
   strip(outer_belt)
@@ -278,9 +281,8 @@ if product_count==1 then
   end
  end end
 end
--- Raw supplies share capacity while their branches fill; priority splitters can
--- starve a small prerequisite behind minutes of buffers in a bulk consumer.
-local item_problem={area=problem.area,tiers=problem.tiers,inputs=problem.inputs,outputs={},obstacles=problem.obstacles,item_headers={},link_sources={},max_route_expansions=8000,heuristic_weight=2}
+-- Keep raw fan geometry stable; routing steers startup toward its largest demand.
+local item_problem={area=problem.area,tiers=problem.tiers,inputs=problem.inputs,outputs={},obstacles=problem.obstacles,item_headers={},link_sources={},max_route_expansions=3000,heuristic_weight=4}
 for _,p in ipairs(problem.inputs) do
  assert(p.perMinute<=belt_capacity+1e-6,'The '..p.item..' input exceeds the selected belt capacity')
  local id=add(problem.tiers.belt,p.position.x,p.position.y,{direction=p.direction})
@@ -327,7 +329,9 @@ for _,item in ipairs(names) do
    local lane=math.min(needed,belt_capacity/2)
    local goals={}
    if right then goals[#goals+1]={x=belt.x1,y=belt.y,dirs={[4]=true}} end
-   for x=belt.x1,last do goals[#goals+1]={x=x,y=belt.y,dirs={[right and 0 or 8]=true}} end
+   -- A mixed belt's first ingredient must enter from behind. Otherwise a
+   -- side-fed first tile curves and moves both ingredients onto the same lane.
+   if not right or both then for x=belt.x1,last do goals[#goals+1]={x=x,y=belt.y,dirs={[right and 0 or 8]=true}} end end
    local remaining=lane
    local target={degree=0}
    local feeds,feed_edges={},{}
@@ -419,10 +423,9 @@ for _,e in ipairs(extras) do add(e.name,e.position.x,e.position.y,{direction=e.d
 for _,p in ipairs(problem.outputs) do if buses[p.item] then nets[#nets+1]=buses[p.item] end end
 if #nets>0 then
  problem.phase='belt routing'
-  engine.routing.GREEDY_ORDERS=1;engine.routing.NEGOTIATION_ROUNDS=12
- -- Large dependency graphs need a greedier bounded search, rather than spending
- -- the whole worker budget on the first obstructed link.
- if #nets>32 then item_problem.max_route_expansions=3000;item_problem.heuristic_weight=4;engine.routing.NEGOTIATION_ROUNDS=16 end
+  engine.routing.GREEDY_ORDERS=#nets<=32 and 4 or 1;engine.routing.NEGOTIATION_ROUNDS=16
+ -- Keep the same bounded search for small and large plans; retry blocked links
+ -- first before paying for negotiated congestion.
  local job=engine.routing.route_new(nets,entities,item_problem,pack,engine.routing.new_counter(100000))
  while not job.done do engine.routing.route_step(job,pack,2000) end
  assert(job.result,job.errors and job.errors[1] and job.errors[1].message)

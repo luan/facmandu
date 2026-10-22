@@ -22,3 +22,5 @@ It preserves 61 selected machines, including the planner-selected EARS variant.
 That variant requires EARS research and harene-compatible flooring before construction; the fixture tests layout,
 not current research availability or live production. The current fluid
 service corridors require a larger block than 64×64.
+
+`saved-processing-units-60-2.1.21.json` captures the unchanged 26-stage blue-circuit plan at revision 67, targeting 60/min. It includes native belt and logistic-chest profiles. Both modes must preserve every machine; isolated trial supplies include only the declared external inputs.

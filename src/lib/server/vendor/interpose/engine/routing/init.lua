@@ -416,12 +416,12 @@ function routing.nets(layout, problem, pack, base)
   -- every place an item must go, in a fixed order
   local demands, items, by_item = {}, {}, {}
   -- src: the source's key (an item, or item#copy for a chain's own row)
-  local function demand(src, item, sink_label, goals, reserve, port, priority, bootstrap_rate)
+  local function demand(src, item, sink_label, goals, reserve, port, priority, bootstrap_rate, perMinute)
     if not by_item[src] then
       by_item[src] = {}
       items[#items + 1] = src
     end
-    local d = { item = item, sink = sink_label, goals = goals, reserve = reserve, port = port, priority=priority, bootstrap_rate=bootstrap_rate }
+    local d = { item = item, sink = sink_label, goals = goals, reserve = reserve, port = port, priority=priority, bootstrap_rate=bootstrap_rate, perMinute=perMinute }
     demands[#demands + 1] = d
     table.insert(by_item[src], d)
   end
@@ -446,7 +446,7 @@ function routing.nets(layout, problem, pack, base)
         local critical={};for _,tile in pairs(approaches) do critical[#critical+1]=tile end
         demand(route.source,item,label,route.goals,#critical==1 and critical or {},false,route.priority,route.bootstrap_rate)
       end
-    else demand(source_key(item,row),item,label,goals,reserve) end
+    else demand(source_key(item,row),item,label,goals,reserve,false,nil,nil,row.ingredient_rates and row.ingredient_rates[item]) end
   end
   for _, row in ipairs(layout.rows) do
     local ib = row.input_belt
@@ -718,6 +718,10 @@ function routing.nets(layout, problem, pack, base)
         -- Keep routed outlets fixed; only steer startup toward a recycled feed.
         local bootstrap
         for i,d in ipairs(sorted) do if d.bootstrap_rate and (not bootstrap or d.bootstrap_rate<sorted[bootstrap].bootstrap_rate) then bootstrap=i end end
+        -- Keep raw fan routes fixed while giving the largest consumer priority.
+        if not bootstrap and not from_row[list[1].item] then
+          for i,d in ipairs(sorted) do if d.perMinute and (not bootstrap or d.perMinute>sorted[bootstrap].perMinute) then bootstrap=i end end
+        end
         if bootstrap then for j,e in ipairs(placed.entities) do
           local outer=j<bootstrap
           e.output_priority=(side==1)==outer and "right" or "left"
