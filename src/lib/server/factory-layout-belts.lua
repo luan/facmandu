@@ -277,7 +277,9 @@ for index,line in ipairs(lines) do if line.machines>0.000001 then
     local chest=add(cycle.buffer,x-1.5,middle,{bar=1})
     links[#links+1]={machine_entity,entities[chest]}
     add(problem.tiers.inserter,x-.5,middle-1,{use_filters=true,filters={{index=1,name=cycle.name}},pickup_position={x=1,y=0},drop_position={x=-1,y=1}})
-    add(problem.tiers.inserter,x-.5,middle+1,{use_filters=true,filters={{index=1,name=cycle.name}},pickup_position={x=-1,y=-1},drop_position={x=1,y=0}})
+    local back=add(problem.tiers.inserter,x-.5,middle+1,{use_filters=true,filters={{index=1,name=cycle.name}},pickup_position={x=-1,y=-1},drop_position={x=1,y=0},override_stack_size=1,
+     control_behavior={circuit_enabled=true,circuit_condition={first_signal={type='item',name=cycle.name},comparator='<',constant=math.ceil(cycle.amount*2)}}})
+    links[#links+1]={machine_entity,entities[back],2}
     startup[#startup+1]={entity=machine_entity,name=cycle.name,count=math.ceil(cycle.amount*2)}
    end
    if wire then circuits[#circuits+1]={entity=entities[id],reach=wire,connector=connector,gate=gate} end
@@ -315,6 +317,7 @@ for index,line in ipairs(lines) do if line.machines>0.000001 then
       end
       if not input and recipe.recycling and product==recipe.recycling.name then
        vectors=vectors or {};vectors.override_stack_size=1
+       vectors.pickup_position={x=-col-2,y=math.floor(h/2)-h}
        vectors.control_behavior={circuit_enabled=true,circuit_read_hand_contents=true,circuit_hand_read_mode=1,
         circuit_condition={first_signal={type='item',name=product},comparator='>',constant=math.ceil(recipe.recycling.amount*2)}}
       end

@@ -148,7 +148,7 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
   local arm=pack.inserters and pack.inserters[request.tiers.inserter]
   -- Qualify one solid catalyst loop per dry machine; fluid and multiple-catalyst cells need their own templates.
   if not stochastic and #fluid_in==0 and #fluid_out==0 and crafter.tile_height>=3 and crafter.tile_width>=2 and #results<=2
-   and arm and arm.custom and arm.custom.range>=2 and arm.custom.cross and arm.custom.diagonal and arm.filter_count>0 and crafter.get_max_circuit_wire_distance()>0 then
+   and arm and arm.custom and arm.custom.range>=math.max(math.floor(crafter.tile_width/2)+2,crafter.tile_height-math.floor(crafter.tile_height/2)) and arm.custom.cross and arm.custom.diagonal and arm.custom.all and arm.filter_count>0 and crafter.get_max_circuit_wire_distance()>0 then
    local candidates={}
    for _,ingredient in ipairs(ingredients) do for _,product in ipairs(results) do
     if ingredient.name==product.name and product.amount>=ingredient.amount and ingredient.amount*2<=prototypes.item[ingredient.name].stack_size then candidates[#candidates+1]=ingredient end

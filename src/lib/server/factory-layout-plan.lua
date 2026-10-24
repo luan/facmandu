@@ -259,7 +259,7 @@ assert(power.unpowered==0 and not power.split,'Could not power the complete nati
 local poles,wires={},{}
 for _,p in ipairs(power.poles) do poles[p.position.x..','..p.position.y]=add(p.name,p.position.x,p.position.y) end
 for _,wire in ipairs(power.wires) do local a,b=wire[1],wire[2];wires[#wires+1]={assert(poles[a.x..','..a.y]),5,assert(poles[b.x..','..b.y]),5} end
-for _,link in ipairs(links) do wires[#wires+1]={link[1].entity_number,1,link[2].entity_number,1} end
+for _,link in ipairs(links) do wires[#wires+1]={link[1].entity_number,link[3] or 1,link[2].entity_number,link[3] or 1} end
 -- Red networks read local disposal buffers. Green carries normal-consumer demand between stages.
 local groups,green={},false
 for _,c in ipairs(circuits) do

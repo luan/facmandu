@@ -1661,8 +1661,23 @@ test('saved uranium chain sorts all four products and routes the complete 100 by
 		assert.equal(item.name, 'uranium-235');
 		assert.equal(result.design.entities[item.entity - 1]?.recipe, 'kovarex-enrichment-process');
 	}
-	const exports = result.design.entities.filter((e) => e.override_stack_size === 1);
+	const exports = result.design.entities.filter(
+		(e) =>
+			e.override_stack_size === 1 &&
+			(e.control_behavior?.circuit_condition as { comparator?: string } | undefined)?.comparator ===
+				'>'
+	);
 	assert.equal(exports.length, 11);
+	assert.ok(exports.every((e) => (e.pickup_position?.x ?? 0) < 0));
+	assert.equal(
+		result.design.entities.filter(
+			(e) =>
+				e.override_stack_size === 1 &&
+				(e.control_behavior?.circuit_condition as { comparator?: string } | undefined)
+					?.comparator === '<'
+		).length,
+		11
+	);
 	assert.ok(exports.every((e) => e.control_behavior?.circuit_enabled === true));
 	assert.equal(result.design.entities.filter((e) => e.recipe === 'uranium-processing').length, 31);
 	assert.equal(
