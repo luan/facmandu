@@ -480,17 +480,18 @@ local function action(request)
     return {operation=operation,drone=remote.call('facmandu-toby-drone','command',request.force,request.owner,request.command,request.expected,request.position)}
   end
   if operation=='task_add' or operation=='task_update' then
-    local interface=remote.interfaces['facmandu-task-list']
-    if not interface or not interface.read or not interface.add or not interface.update then
-      local force=game.forces[request.force];if not force then fail('Force no longer exists') end
-      if operation=='task_add' then local result=toby_tasks.add(storage,force,request.title,request.description,request.status);return {operation=operation,task=result.task,created=result.created,source='toby'} end
+    local force=game.forces[request.force];if not force then fail('Force no longer exists') end
+    local interface=toby_tasks.interface(remote)
+    toby_tasks.migrate(storage,force,remote)
+    if not interface then
+      if operation=='task_add' then local result=toby_tasks.add(storage,force,request.title,request.description,request.status);return {operation=operation,task=result.task,created=result.created,source='toby',visible=false,window='Conversation only; update Toby for the Tasks board'} end
       return {operation=operation,source='toby',task=toby_tasks.update(storage,force,request.id,request.expected,request.title,request.description,request.status,request.completed)}
     end
     if operation=='task_add' then
-      local result=remote.call('facmandu-task-list','add',request.force,request.title,request.description,request.status)
-      return {operation=operation,task=result.task,created=result.created}
+      local result=remote.call(interface,'add',request.force,request.title,request.description,request.status)
+      return {operation=operation,task=result.task,created=result.created,source=interface,visible=result.visible,window=result.window}
     end
-    return {operation=operation,task=remote.call('facmandu-task-list','update',request.force,request.id,request.expected,request.title,request.description,request.status,request.completed)}
+    return {operation=operation,task=remote.call(interface,'update',request.force,request.id,request.expected,request.title,request.description,request.status,request.completed)}
   end
   if operation == "entities_inspect" or operation == "entities_edit" then return entity_edits(request) end
   if operation == "ghost_inspect" or operation == "ghost_cancel" then return ghost_action(request) end

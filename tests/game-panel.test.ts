@@ -12,6 +12,8 @@ test('Toby panel sends native player requests and preserves typed drafts across 
 	const books = readFileSync('factorio-mod/facmandu-assistant/planner/books.lua', 'utf8');
 	const script = `
  package.preload.events=function() ${events} end
+ package.preload['task-store']=function() ${readFileSync('factorio-mod/facmandu-assistant/task-store.lua', 'utf8')} end
+ package.preload['task-board']=function() ${readFileSync('factorio-mod/facmandu-assistant/task-board.lua', 'utf8')} end
  package.preload['planner.control']=function() end
  package.preload['planner.layout']=function() return {} end
  package.preload['planner.api']=function() end
@@ -21,9 +23,9 @@ test('Toby panel sends native player requests and preserves typed drafts across 
  prototypes={item={},fluid={},recipe={},entity={},technology={}}
  local handlers={};local interface;local last
  package.preload.drone=function() return {init=function() end,built=function() end,tick=function() end,animate=function() end,read=function() return {available=false} end} end
- storage={};defines={events={on_player_created=1,on_player_joined_game=2,on_gui_click=3,on_gui_selection_state_changed=4,on_gui_closed=5,on_gui_text_changed=6,on_gui_selected_tab_changed=7,on_gui_confirmed=8,on_built_entity=9,on_lua_shortcut=10,on_player_changed_force=11,on_forces_merged=12,on_player_display_resolution_changed=13,on_player_display_scale_changed=14}}
+ storage={};defines={events={on_player_created=1,on_player_joined_game=2,on_gui_click=3,on_gui_selection_state_changed=4,on_gui_closed=5,on_gui_text_changed=6,on_gui_selected_tab_changed=7,on_gui_confirmed=8,on_built_entity=9,on_lua_shortcut=10,on_player_changed_force=11,on_forces_merged=12,on_player_display_resolution_changed=13,on_player_display_scale_changed=14,on_gui_checked_state_changed=15}}
  script={on_init=function(fn) handlers.init=fn end,on_configuration_changed=function(fn) handlers.migrate=fn end,on_event=function(event,fn) handlers[event]=fn end,on_nth_tick=function() end}
- remote={add_interface=function(name,api) assert(name=='facmandu-assistant');interface=api end,
+ remote={add_interface=function(name,api) if name=='facmandu-assistant' then interface=api else assert(name=='facmandu-toby-tasks') end end,
  call=function(name,operation,force,player,id) assert(name=='facmandu-toby-planner' and operation=='read_plan' and force=='player' and player=='Alice' and id==99);return {reference='toby://plan/1/99'} end}
  local function encode(data)
   if type(data)~='table' then return tostring(data) end

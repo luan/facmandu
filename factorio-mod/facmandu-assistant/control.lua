@@ -10,6 +10,7 @@ local PREFIX='facmandu-toby-'
 local drone=require('drone')
 local references=require('references')
 local books=require('planner.books')
+local task_board=require('task-board')
 local function drone_status(player,refs)
  local state=drone.read(player.force.name,player.name)
  refs.drone_status.caption=state.available and ('Toby · '..state.display) or 'Waiting for your character'
@@ -101,7 +102,7 @@ local function panel(player)
   content_width=text_width,sidebar_width=sidebar_width,task_cards={}}
  for _,entry in ipairs{{'conversation','Chat'},{'activity',compact and 'Tools' or 'Activity'},{'design',compact and 'Plan' or 'Design'}} do
   local tab=tabs.add{type='tab',caption=entry[2]}
-  if compact then tab.style.minimal_width=0;tab.style.width=math.floor(content_width/5)-4 end
+  if compact then tab.style.minimal_width=0;tab.style.width=math.floor(content_width/6)-4 end
   local content=tabs.add{type='scroll-pane',name=PREFIX..entry[1],direction='vertical',horizontal_scroll_policy='never'}
   content.style.width=content_width;content.style.height=height-260
   local rows=content.add{type='flow',direction='vertical'}
@@ -110,7 +111,7 @@ local function panel(player)
   if entry[1]=='conversation' then refs.history=content end
  end
  local drone_tab=tabs.add{type='tab',caption='Drone'}
- if compact then drone_tab.style.minimal_width=0;drone_tab.style.width=math.floor(content_width/5)-4 end
+ if compact then drone_tab.style.minimal_width=0;drone_tab.style.width=math.floor(content_width/6)-4 end
  local drone_content=tabs.add{type='flow',direction='vertical'}
  drone_content.style.width=content_width;drone_content.style.height=height-260
  refs.drone_status=label(drone_content,'',text_width,'heading_2_label')
@@ -124,12 +125,26 @@ local function panel(player)
  refs.drone_stay=drone_actions.add{type='button',name=PREFIX..'drone-stay',caption='Stay here',style='toby_planner_button_frame_tool'}
  tabs.add_tab(drone_tab,drone_content)
  local book_tab=tabs.add{type='tab',caption='Books'}
- if compact then book_tab.style.minimal_width=0;book_tab.style.width=math.floor(content_width/5)-4 end
+ if compact then book_tab.style.minimal_width=0;book_tab.style.width=math.floor(content_width/6)-4 end
  local book_content=tabs.add{type='scroll-pane',direction='vertical',horizontal_scroll_policy='never'}
  book_content.style.width=content_width;book_content.style.height=height-260
  refs.books=book_content.add{type='flow',direction='vertical'}
  refs.books.style.width=text_width
  tabs.add_tab(book_tab,book_content)
+ local task_tab=tabs.add{type='tab',caption='Tasks'}
+ if compact then task_tab.style.minimal_width=0;task_tab.style.width=math.floor(content_width/6)-4 end
+ local task_content=tabs.add{type='flow',direction='vertical'}
+ label(task_content,'Shared with '..player.force.name,text_width,'heading_2_label')
+ local task_add=task_content.add{type='flow',direction='horizontal'}
+ refs.task_title=task_add.add{type='textfield',tooltip='New shared task title'};refs.task_title.style.width=text_width-74
+ task_add.add{type='button',name='facmandu-toby-task-add',caption='Add',style='confirm_button'}
+ refs.task_editor=task_content.add{type='flow',direction='vertical',visible=false}
+ local task_scroll=task_content.add{type='scroll-pane',direction='vertical',horizontal_scroll_policy='never'}
+ refs.task_scroll=task_scroll
+ task_scroll.style.width=content_width;task_scroll.style.height=height-322
+ refs.task_rows=task_scroll.add{type='flow',direction='vertical'};refs.task_rows.style.vertical_spacing=8
+ tabs.add_tab(task_tab,task_content)
+ task_board.render(refs,player)
  tabs.selected_tab_index=storage.tabs[player.index] or 1
  drone_status(player,refs)
  local composer=body.add{type='textfield',name=PREFIX..'message',text=storage.drafts[player.index] or '',tooltip='Message Toby · Enter to send'}
@@ -265,6 +280,7 @@ local function update(player_index,state)
  if changed and refs and refs.message.valid then refs.message.text=storage.drafts[player.index] end
  if not refs or not refs.frame.valid or not refs.frame.visible then return receipt end
  render_tasks(refs,state)
+ task_board.render(refs,player)
  if refs.tabs.selected_tab_index==5 then render_books(player,refs) end
  local current
  for _,chat in ipairs(state.chats) do if chat.id==state.current then current=chat;break end end

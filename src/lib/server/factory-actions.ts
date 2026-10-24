@@ -1,7 +1,7 @@
 import { z } from 'zod';
+import sharedTasks from '../../../factorio-mod/facmandu-assistant/task-store.lua?raw';
 import type { ManagedServer } from './db/schema';
 import source from './factory-actions/action.lua?raw';
-import sharedTasks from './factory-query/scripts/tools/shared_tasks.lua?raw';
 import { ServerError } from './server-files';
 import { serverStatus } from './server-process';
 import { rconScript } from './server-rcon';
@@ -230,7 +230,7 @@ export const factoryActionManifest = {
 	drone_command:
 		'Control the owning player’s automatic Toby companion. Supply force, owner, command (follow, stay, move), and expected unitNumber/revision/surface from a fresh toby_drone lookup; move also needs position within 256 explored tiles. Toby follows and constructs nearby ghosts using actual materials from its cargo, the player or nearby same-force provider/storage chests. No crafting, equipment, robots or fuel is needed. Missing materials leave ghosts untouched; no building items or research are granted. In-game callers can command only their own drone.',
 	task_add:
-		'Add a shared force task using title, description and status (not_started, in_progress, paused, blocked). Identical active tasks are reused. Uses the native Task List adapter when available, otherwise Toby tasks stored with the save. Read with task_list; no world construction is implied.',
+		'Add a shared force task using title, description and status (not_started, in_progress, paused, blocked). Identical active tasks are reused. Uses Toby’s native shared Tasks board when available, then the Task List adapter. Legacy Toby versions store conversation-only tasks with the save; they do not appear in TaskList. Read with task_list; no world construction is implied.',
 	task_update:
 		'Update a shared force task using id, title, description, status and completed. Copy expected title, description, status and completed from a fresh task_list read; concurrent edits are rejected. Private player tasks are inaccessible.',
 	entities_edit:

@@ -25,6 +25,8 @@ import readme from '../../../factorio-mod/facmandu-assistant/README.md?raw';
 import references from '../../../factorio-mod/facmandu-assistant/references.lua?raw';
 import robotTrial from '../../../factorio-mod/facmandu-assistant/robot-trial.lua?raw';
 import sandbox from '../../../factorio-mod/facmandu-assistant/sandbox.lua?raw';
+import taskBoard from '../../../factorio-mod/facmandu-assistant/task-board.lua?raw';
+import taskStore from '../../../factorio-mod/facmandu-assistant/task-store.lua?raw';
 import type { ManagedServer } from './db/schema';
 import territory from './factory-query/scripts/tools/territory.lua?raw';
 import { ServerError, serverConfig } from './server-files';
@@ -75,6 +77,8 @@ export function tobyModArchive() {
 			...Object.entries({
 				'info.json': JSON.stringify(info),
 				'control.lua': control,
+				'task-store.lua': taskStore,
+				'task-board.lua': taskBoard,
 				'data.lua': data,
 				'data-final-fixes.lua': dataFinalFixes,
 				'events.lua': events,
