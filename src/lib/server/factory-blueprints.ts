@@ -5,6 +5,7 @@ import { inflateSync } from 'node:zlib';
 import { z } from 'zod';
 import {
 	type BlueprintRequest,
+	blueprintCircuitSchema,
 	blueprintDesignSchema,
 	blueprintReferenceSchema,
 	blueprintRequestSchema,
@@ -29,7 +30,8 @@ const variants = [
 	...blueprintRequestSchema.options.filter(
 		(variant) => variant.shape.operation.value === 'catalog'
 	),
-	...blueprintReferenceSchema.options
+	...blueprintReferenceSchema.options,
+	blueprintCircuitSchema.extend({ operation: z.literal('create_circuit') })
 ]
 	.filter((variant) => variant.shape.operation.value !== 'create')
 	.map((variant) => {
@@ -51,7 +53,7 @@ export const blueprintToolJsonSchema = {
 	properties: {
 		operation: {
 			type: 'string',
-			enum: ['catalog', 'find_site', 'inspect', 'place', 'check']
+			enum: ['catalog', 'create_circuit', 'find_site', 'inspect', 'place', 'check']
 		},
 		display: { type: 'boolean', default: false },
 		args: { type: 'object' }

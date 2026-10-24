@@ -102,6 +102,31 @@ export const blueprintDesignSchema = z.strictObject({
 	entities: z.array(blueprintEntitySchema).max(MAX_BLUEPRINT_ENTITIES).default([]),
 	tiles: z.array(blueprintTileSchema).max(1024).default([])
 });
+// Small circuit modules have no production plan or machine-rate calculation.
+// Raise the 64-entity limit only after qualifying larger circuit import budgets.
+export const blueprintCircuitSchema = blueprintDesignSchema
+	.omit({ tiles: true })
+	.extend({
+		entities: z
+			.array(
+				blueprintEntitySchema
+					.pick({ name: true, position: true, direction: true, control_behavior: true, bar: true })
+					.extend({
+						position: z.strictObject({
+							x: coordinate.min(-32).max(32),
+							y: coordinate.min(-32).max(32)
+						})
+					})
+			)
+			.min(1)
+			.max(64),
+		wires: z.array(wire).max(128).default([])
+	})
+	.refine(
+		(design) => new Set(design.entities.map((e) => e.name)).size <= 40,
+		'A circuit module may use at most 40 prototypes'
+	);
+
 const entityRows = z
 	.array(
 		z.strictObject({
