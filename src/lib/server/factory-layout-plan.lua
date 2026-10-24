@@ -1,5 +1,10 @@
 local engine=require('engine.init')
 local plan=assert(pack.plan,'Missing native production plan')
+local internal_items,produced_items=false,{}
+for _,line in ipairs(plan.lines) do for _,p in ipairs(line.products) do if p.type=='item' and p.perMinute>1e-6 then produced_items[p.name]=true end end end
+for _,line in ipairs(plan.lines) do for _,p in ipairs(line.ingredients) do if p.type=='item' and p.perMinute>1e-6 and produced_items[p.name] then internal_items=true end end end
+-- An unused internal transport preference must not force belt sorting on a chest-fed stage.
+if not internal_items and problem.transport and problem.transport.inputs=='requester-chests' and problem.transport.outputs=='storage-chests' then problem.transport=nil end
 local robot_cells=problem.logistics and (not problem.transport or problem.transport.intermediates=='buffer-chests')
 local boundary=interfaces.prepare(problem,pack,robot_cells,options)
 local entities,ports,sources,sinks,inputs,steps={},{},{},{},{},{}

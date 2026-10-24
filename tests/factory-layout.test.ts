@@ -1588,6 +1588,20 @@ test('saved 900 scrap/min plan collects all thirteen products from six rectangul
 	);
 	const job = factoryLayoutInput.parse(fixture.request);
 	const result = await compileFactoryLayout(job, z.json().parse(fixture.pack), modules);
+	const explicit = await compileFactoryLayout(
+		factoryLayoutInput.parse({
+			...fixture.request,
+			transport: { inputs: 'requester-chests', intermediates: 'belts', outputs: 'storage-chests' }
+		}),
+		z.json().parse(fixture.pack),
+		modules
+	);
+	assert.deepEqual(
+		explicit.design.entities,
+		result.design.entities,
+		'Unused internal belt preference must preserve the qualified chest-fed design'
+	);
+	assert.deepEqual(explicit.test, result.test);
 	assert.equal(job.outputs.length, 13);
 	assert.equal(result.design.entities.filter((e) => e.name === 'recycler').length, 6);
 	assert.equal(new Set(result.test.outputs.map((p) => p.name)).size, 13);
