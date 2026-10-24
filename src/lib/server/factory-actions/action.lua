@@ -481,7 +481,11 @@ local function action(request)
   end
   if operation=='task_add' or operation=='task_update' then
     local interface=remote.interfaces['facmandu-task-list']
-    if not interface or not interface.read or not interface.add or not interface.update then fail('Task List does not expose shared-task APIs on this server') end
+    if not interface or not interface.read or not interface.add or not interface.update then
+      local force=game.forces[request.force];if not force then fail('Force no longer exists') end
+      if operation=='task_add' then local result=toby_tasks.add(storage,force,request.title,request.description,request.status);return {operation=operation,task=result.task,created=result.created,source='toby'} end
+      return {operation=operation,source='toby',task=toby_tasks.update(storage,force,request.id,request.expected,request.title,request.description,request.status,request.completed)}
+    end
     if operation=='task_add' then
       local result=remote.call('facmandu-task-list','add',request.force,request.title,request.description,request.status)
       return {operation=operation,task=result.task,created=result.created}

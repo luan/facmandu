@@ -50,3 +50,35 @@ test('Task List adapter scopes shared tasks, reuses additions and rejects concur
 	);
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 });
+
+test('Toby shared tasks persist in the save without TaskList and reject stale or foreign edits', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const source = readFileSync(
+		'src/lib/server/factory-query/scripts/tools/shared_tasks.lua',
+		'utf8'
+	);
+	const actions = readFileSync('src/lib/server/factory-actions/action.lua', 'utf8');
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ storage={};local player={index=1,name='player'};local enemy={index=2,name='enemy'}
+ game={forces={player=player,enemy=enemy}};remote={interfaces={}}
+ local toby_tasks=(function() ${source} end)()
+ ${actions}
+ assert(toby_tasks.read(storage,player,20,false).total==0 and next(storage)==nil)
+ local added=action{operation='task_add',force='player',title='Scrap',description='900/min',status='not_started'}
+ assert(added.created and added.source=='toby')
+ assert(not action{operation='task_add',force='player',title='Scrap',description='900/min',status='not_started'}.created)
+ local before=added.task
+ local updated=action{operation='task_update',force='player',id=before.id,expected=before,title='Scrap',description='Built',status='in_progress',completed=false}
+ assert(updated.task.description=='Built' and before.description=='900/min')
+ assert(not pcall(action,{operation='task_update',force='player',id=before.id,expected=before,title='Stale',description='',status='paused',completed=false}))
+ assert(not pcall(action,{operation='task_update',force='enemy',id=before.id,expected=updated.task,title='Foreign',description='',status='paused',completed=false}))
+ assert(toby_tasks.read(storage,enemy,20,true).total==0)
+ local reloaded=(function() ${source} end)()
+ assert(reloaded.read(storage,player,20,false).tasks[1].description=='Built')
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
