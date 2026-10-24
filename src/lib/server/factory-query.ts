@@ -5,6 +5,7 @@ import { factoryCatalog, factoryDefinesSchema } from './factory-query-catalog';
 import { ServerError } from './server-files';
 import { serverStatus } from './server-process';
 import { rconScript } from './server-rcon';
+import { prepareTaskList } from './task-list-bridge';
 
 const sources = import.meta.glob<string>('./factory-query/scripts/**/*.lua', {
 	query: '?raw',
@@ -70,6 +71,17 @@ export async function factoryQuery(server: ManagedServer, request: Record<string
 		owners.length && owners.every((name): name is string => !!name)
 			? [...new Set(owners)]
 			: undefined;
+	if (
+		Array.isArray(queries) &&
+		queries.some(
+			(query: unknown) =>
+				query !== null &&
+				typeof query === 'object' &&
+				'tool' in query &&
+				(query.tool === 'task_list' || query.tool === 'mod_integrations')
+		)
+	)
+		await prepareTaskList(server);
 	return execute(server, request, selected);
 }
 

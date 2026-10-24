@@ -29,7 +29,7 @@ end
 local function snapshot(task)
  return {id=task.id,title=task.title,description=task.description,status=task.status,completed=task.completed,assignee=task.assignee and task.assignee.valid and task.assignee.name or nil}
 end
-remote.add_interface('facmandu-task-list',{
+local api={
  read=function(name,limit,completed)
   local force=force_for(name)
   limit=math.min(50,math.max(1,math.floor(tonumber(limit) or 20)))
@@ -46,7 +46,7 @@ remote.add_interface('facmandu-task-list',{
    if #rows>=limit or bytes>6000 then break end
    rows[#rows+1]=row
   end
-  return {force=force.name,tasks=rows,total=#ids,truncated=#ids>#rows}
+  return {source='TaskList',visible=true,window='TaskList',force=force.name,tasks=rows,total=#ids,truncated=#ids>#rows}
  end,
  add=function(name,title,description,state)
   local force=force_for(name)
@@ -56,11 +56,11 @@ remote.add_interface('facmandu-task-list',{
   for _,task in pairs(storage.tasks) do
    if owner_of(task)==force then
     count=count+1
-    if not task.completed and task.title==title and task.description==description and task.status==state then return {task=snapshot(task),created=false} end
+    if not task.completed and task.title==title and task.description==description and task.status==state then return {task=snapshot(task),created=false,source='TaskList',visible=true,window='TaskList'} end
    end
   end
   if count>=500 then error('Archive completed shared tasks before adding more',0) end
-  return {task=snapshot(tasks.new(title,description,force,nil,state,false)),created=true}
+  return {task=snapshot(tasks.new(title,description,force,nil,state,false)),created=true,source='TaskList',visible=true,window='TaskList'}
  end,
  update=function(name,id,expected,title,description,state,completed)
   local task=task_for(force_for(name),id)
@@ -71,4 +71,33 @@ remote.add_interface('facmandu-task-list',{
   if task.completed~=completed then task:toggle_completed() end
   return snapshot(task)
  end
-})
+}
+function api.import(name,source,rows)
+ local force=force_for(name)
+ assert(source=='scenario' or source=='toby','Unknown task source')
+ assert(type(rows)=='table' and #rows<=50,'Too many tasks to migrate at once')
+ for _,row in ipairs(rows) do
+  assert(type(row.id)=='number' and row.id>=1 and row.id%1==0,'Invalid task identity')
+  assert(text(row.title,200):match('%S'),'Task needs a title');text(row.description,2000);status(row.status)
+  assert(type(row.completed)=='boolean','Invalid completion state')
+ end
+ storage.facmandu_task_imports=storage.facmandu_task_imports or {}
+ local imports=storage.facmandu_task_imports
+ imports[force.index]=imports[force.index] or {scenario={},toby={}}
+ local ids=imports[force.index][source]
+ local count=0;for _,task in pairs(storage.tasks) do if owner_of(task)==force then count=count+1 end end
+ for _,row in ipairs(rows) do if not ids[row.id] then
+  local existing
+  for _,task in pairs(storage.tasks) do
+   if owner_of(task)==force and task.title==row.title and task.description==row.description and task.completed==row.completed then existing=task;break end
+  end
+  if not existing then
+   assert(count<500,'Archive completed shared tasks before importing more');count=count+1
+   existing=tasks.new(row.title,row.description,force,nil,row.status,false)
+   if row.completed then existing:toggle_completed() end
+  end
+  ids[row.id]=existing.id
+ end end
+ return {imported=true}
+end
+remote.add_interface('facmandu-task-list',api)

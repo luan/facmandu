@@ -483,10 +483,7 @@ local function action(request)
     local force=game.forces[request.force];if not force then fail('Force no longer exists') end
     local interface=toby_tasks.interface(remote)
     toby_tasks.migrate(storage,force,remote)
-    if not interface then
-      if operation=='task_add' then local result=toby_tasks.add(storage,force,request.title,request.description,request.status);return {operation=operation,task=result.task,created=result.created,source='toby',visible=false,window='Conversation only; update Toby for the Tasks board'} end
-      return {operation=operation,source='toby',task=toby_tasks.update(storage,force,request.id,request.expected,request.title,request.description,request.status,request.completed)}
-    end
+    if not interface then fail('TaskList is required for shared tasks') end
     if operation=='task_add' then
       local result=remote.call(interface,'add',request.force,request.title,request.description,request.status)
       return {operation=operation,task=result.task,created=result.created,source=interface,visible=result.visible,window=result.window}

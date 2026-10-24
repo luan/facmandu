@@ -1,10 +1,11 @@
 import { z } from 'zod';
-import sharedTasks from '../../../factorio-mod/facmandu-assistant/task-store.lua?raw';
 import type { ManagedServer } from './db/schema';
 import source from './factory-actions/action.lua?raw';
+import taskService from './factory-query/scripts/tools/task_service.lua?raw';
 import { ServerError } from './server-files';
 import { serverStatus } from './server-process';
 import { rconScript } from './server-rcon';
+import { prepareTaskList } from './task-list-bridge';
 
 const name = z.string().min(1).max(200);
 const label = name;
@@ -230,7 +231,7 @@ export const factoryActionManifest = {
 	drone_command:
 		'Control the owning player’s automatic Toby companion. Supply force, owner, command (follow, stay, move), and expected unitNumber/revision/surface from a fresh toby_drone lookup; move also needs position within 256 explored tiles. Toby follows and constructs nearby ghosts using actual materials from its cargo, the player or nearby same-force provider/storage chests. No crafting, equipment, robots or fuel is needed. Missing materials leave ghosts untouched; no building items or research are granted. In-game callers can command only their own drone.',
 	task_add:
-		'Add a shared force task using title, description and status (not_started, in_progress, paused, blocked). Identical active tasks are reused. Uses Toby’s native shared Tasks board when available, then the Task List adapter. Legacy Toby versions store conversation-only tasks with the save; they do not appear in TaskList. Read with task_list; no world construction is implied.',
+		'Add a shared force task using title, description and status (not_started, in_progress, paused, blocked). Identical active tasks are reused. Requires the TaskList mod and uses its shared force board exclusively. Read with task_list; no world construction is implied.',
 	task_update:
 		'Update a shared force task using id, title, description, status and completed. Copy expected title, description, status and completed from a fresh task_list read; concurrent edits are rejected. Private player tasks are inaccessible.',
 	entities_edit:
@@ -283,7 +284,7 @@ if request.player then
  local p = game.get_player(request.player.name)
  if not p or not p.connected or p.force.name ~= request.force or (request.player.requireAdmin and not p.admin) then error("Player permission changed; ask again", 0) end
 end
-local toby_tasks=(function() ${sharedTasks} end)()
+local toby_tasks=(function() ${taskService} end)()
 ${source}
 return action(request)
 end)
@@ -363,6 +364,8 @@ async function execute(
 ) {
 	if (!(await serverStatus(server)).running)
 		throw new ServerError(409, 'Start this server to access the factory');
+	if (input.operation === 'task_add' || input.operation === 'task_update')
+		await prepareTaskList(server);
 	const raw = await rconScript(server, factoryActionCommand(input, player));
 	let decoded: unknown;
 	try {
