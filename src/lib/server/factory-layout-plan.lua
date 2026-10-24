@@ -9,7 +9,7 @@ local robot_cells=problem.logistics and (not problem.transport or problem.transp
 local boundary=interfaces.prepare(problem,pack,robot_cells,options)
 local entities,ports,sources,sinks,inputs,steps={},{},{},{},{},{}
 local demand,available,requested,reserved={},{},{},{}
-local circuits={}
+local circuits,links,startup={},{},{}
 local collected={}
 local function key(kind,name) return kind..'/'..name end
 for _,port in ipairs(problem.inputs) do available[key('item',port.item)]=(available[key('item',port.item)] or 0)+port.perMinute end
@@ -161,7 +161,7 @@ end
 else
  local placed=beltPlan()
  entities,ports,sources,sinks,steps,reserved=placed.entities,placed.ports,placed.sources,placed.sinks,placed.steps,placed.reservations
- circuits=placed.circuits
+ circuits=placed.circuits;links=placed.links or {};startup=placed.startup or {}
 end
 boundary.install(add,ports,entities)
 -- Gate the pipe before a disposal input: disabled furnaces still trap fluid in their one-way input buffers.
@@ -259,6 +259,7 @@ assert(power.unpowered==0 and not power.split,'Could not power the complete nati
 local poles,wires={},{}
 for _,p in ipairs(power.poles) do poles[p.position.x..','..p.position.y]=add(p.name,p.position.x,p.position.y) end
 for _,wire in ipairs(power.wires) do local a,b=wire[1],wire[2];wires[#wires+1]={assert(poles[a.x..','..a.y]),5,assert(poles[b.x..','..b.y]),5} end
+for _,link in ipairs(links) do wires[#wires+1]={link[1].entity_number,1,link[2].entity_number,1} end
 -- Red networks read local disposal buffers. Green carries normal-consumer demand between stages.
 local groups,green={},false
 for _,c in ipairs(circuits) do
@@ -317,6 +318,7 @@ for _,e in ipairs(entities) do
   end end
  end
 end
+local startup_items={};for _,item in ipairs(startup) do startup_items[#startup_items+1]={entity=item.entity.entity_number,name=item.name,count=item.count} end
 for _,e in ipairs(entities) do e.entity_number=nil end
-return {entities=entities,wires=wires,tiles=tiles,inputs=inputs,steps=steps,ports=ports,warnings={
+return {entities=entities,wires=wires,tiles=tiles,inputs=inputs,steps=steps,ports=ports,startupItems=startup_items,warnings={
  robot_cells and 'Native planner quantities, connected fluid headers and robot-fed items between production stages. Live logistics coverage, ordinary robots and external power are required.' or 'Saved machine counts with routed belts, fluids and power. External supplies and power are required.'}}

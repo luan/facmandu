@@ -1,0 +1,1266 @@
+{
+	"request": {
+		"force": "player",
+		"surface": "nauvis",
+		"label": "Uranium and production science",
+		"width": 100,
+		"height": 100,
+		"inputs": [
+			{
+				"item": "uranium-ore",
+				"type": "item",
+				"perMinute": 1538.4615384615415,
+				"position": {
+					"x": 0.5,
+					"y": 0.5
+				},
+				"direction": 4
+			},
+			{
+				"item": "iron-plate",
+				"type": "item",
+				"perMinute": 730.102564102568,
+				"position": {
+					"x": 0.5,
+					"y": 3.5
+				},
+				"direction": 4
+			},
+			{
+				"item": "kr-silicon",
+				"type": "item",
+				"perMinute": 133.33333333333394,
+				"position": {
+					"x": 0.5,
+					"y": 6.5
+				},
+				"direction": 4
+			},
+			{
+				"item": "plastic-bar",
+				"type": "item",
+				"perMinute": 133.33333333333394,
+				"position": {
+					"x": 0.5,
+					"y": 9.5
+				},
+				"direction": 4
+			},
+			{
+				"item": "copper-plate",
+				"type": "item",
+				"perMinute": 94.22222222222263,
+				"position": {
+					"x": 0.5,
+					"y": 12.5
+				},
+				"direction": 4
+			},
+			{
+				"item": "kr-glass",
+				"type": "item",
+				"perMinute": 9.871794871795728,
+				"position": {
+					"x": 0.5,
+					"y": 15.5
+				},
+				"direction": 4
+			},
+			{
+				"item": "steel-plate",
+				"type": "item",
+				"perMinute": 5.999999999999999,
+				"position": {
+					"x": 0.5,
+					"y": 18.5
+				},
+				"direction": 4
+			}
+		],
+		"outputs": [
+			{
+				"item": "production-science-pack",
+				"type": "item",
+				"perMinute": 60,
+				"position": {
+					"x": 5.5,
+					"y": 99.5
+				},
+				"direction": 8
+			},
+			{
+				"item": "uranium-fuel-cell",
+				"type": "item",
+				"perMinute": 6,
+				"position": {
+					"x": 8.5,
+					"y": 99.5
+				},
+				"direction": 8
+			}
+		],
+		"recipes": [
+			"production-science-pack",
+			"uranium-fuel-cell",
+			"uranium-processing",
+			"kovarex-enrichment-process",
+			"productivity-module",
+			"fast-transport-belt",
+			"transport-belt",
+			"iron-gear-wheel",
+			"kr-blank-tech-card",
+			"copper-cable",
+			"electronic-circuit",
+			"kr-electronic-components",
+			"iron-plate",
+			"kr-sand",
+			"kr-glass"
+		],
+		"nativePlan": true,
+		"fixedPlan": true,
+		"layout": {
+			"shape": "auto",
+			"spacing": "compact"
+		},
+		"logistics": {
+			"requester": "requester-chest",
+			"provider": "storage-chest",
+			"requestSeconds": 30,
+			"outputSlots": 4
+		},
+		"transport": {
+			"inputs": "requester-chests",
+			"intermediates": "belts",
+			"outputs": "storage-chests"
+		},
+		"tiers": {
+			"machine": "kr-research-server",
+			"crafters": [
+				"assembling-machine-2",
+				"centrifuge",
+				"electromagnetic-plant",
+				"electric-furnace",
+				"crusher"
+			],
+			"belt": "fast-transport-belt",
+			"inserter": "bulk-inserter",
+			"pole": "substation",
+			"pipe": "pipe",
+			"pipe_underground": "pipe-to-ground"
+		}
+	},
+	"pack": {
+		"recipes": {
+			"production-science-pack": {
+				"category": "kr-tech-cards",
+				"time": 20,
+				"machine": "kr-research-server",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "uranium-238",
+						"amount": 5
+					},
+					{
+						"type": "item",
+						"name": "fast-transport-belt",
+						"amount": 10
+					},
+					{
+						"type": "item",
+						"name": "productivity-module",
+						"amount": 5
+					},
+					{
+						"type": "item",
+						"name": "kr-blank-tech-card",
+						"amount": 5
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "production-science-pack",
+						"amount": 5
+					}
+				],
+				"stochastic": false,
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"uranium-fuel-cell": {
+				"category": "crafting",
+				"time": 10,
+				"machine": "assembling-machine-2",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "steel-plate",
+						"amount": 1
+					},
+					{
+						"type": "item",
+						"name": "uranium-235",
+						"amount": 2
+					},
+					{
+						"type": "item",
+						"name": "uranium-238",
+						"amount": 10
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "uranium-fuel-cell",
+						"amount": 1
+					}
+				],
+				"stochastic": false,
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"uranium-processing": {
+				"category": "centrifuging",
+				"time": 12,
+				"machine": "centrifuge",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "uranium-ore",
+						"amount": 10
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "uranium-235",
+						"amount": 0.007000000000000001
+					},
+					{
+						"type": "item",
+						"name": "uranium-238",
+						"amount": 0.993
+					},
+					{
+						"type": "item",
+						"name": "iron-ore",
+						"amount": 0.25
+					},
+					{
+						"type": "item",
+						"name": "stone",
+						"amount": 0.5
+					}
+				],
+				"stochastic": true,
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"kovarex-enrichment-process": {
+				"category": "centrifuging",
+				"time": 60,
+				"machine": "centrifuge",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "uranium-235",
+						"amount": 30
+					},
+					{
+						"type": "item",
+						"name": "uranium-238",
+						"amount": 3
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "uranium-235",
+						"amount": 31
+					},
+					{
+						"type": "item",
+						"name": "stone",
+						"amount": 2
+					}
+				],
+				"stochastic": false,
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {},
+				"recycling": {
+					"name": "uranium-235",
+					"amount": 30,
+					"buffer": "steel-chest"
+				}
+			},
+			"productivity-module": {
+				"category": "electromagnetics",
+				"time": 15,
+				"machine": "electromagnetic-plant",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "electronic-circuit",
+						"amount": 5
+					},
+					{
+						"type": "item",
+						"name": "kr-electronic-components",
+						"amount": 10
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "productivity-module",
+						"amount": 1.5
+					}
+				],
+				"stochastic": false,
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"fast-transport-belt": {
+				"category": "crafting",
+				"time": 0.5,
+				"machine": "assembling-machine-2",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "iron-gear-wheel",
+						"amount": 4
+					},
+					{
+						"type": "item",
+						"name": "transport-belt",
+						"amount": 1
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "fast-transport-belt",
+						"amount": 1
+					}
+				],
+				"stochastic": false,
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"transport-belt": {
+				"category": "crafting",
+				"time": 0.5,
+				"machine": "assembling-machine-2",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "iron-plate",
+						"amount": 1
+					},
+					{
+						"type": "item",
+						"name": "iron-gear-wheel",
+						"amount": 1
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "transport-belt",
+						"amount": 2
+					}
+				],
+				"stochastic": false,
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"iron-gear-wheel": {
+				"category": "crafting",
+				"time": 0.5,
+				"machine": "assembling-machine-2",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "iron-plate",
+						"amount": 1
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "iron-gear-wheel",
+						"amount": 1
+					}
+				],
+				"stochastic": false,
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"kr-blank-tech-card": {
+				"category": "electromagnetics",
+				"time": 2,
+				"machine": "electromagnetic-plant",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "iron-plate",
+						"amount": 2
+					},
+					{
+						"type": "item",
+						"name": "copper-cable",
+						"amount": 2
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "kr-blank-tech-card",
+						"amount": 7.5
+					}
+				],
+				"stochastic": false,
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"copper-cable": {
+				"category": "electromagnetics",
+				"time": 0.5,
+				"machine": "electromagnetic-plant",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "copper-plate",
+						"amount": 1
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "copper-cable",
+						"amount": 3
+					}
+				],
+				"stochastic": false,
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"electronic-circuit": {
+				"category": "electromagnetics",
+				"time": 2,
+				"machine": "electromagnetic-plant",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "iron-plate",
+						"amount": 2
+					},
+					{
+						"type": "item",
+						"name": "copper-cable",
+						"amount": 4
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "electronic-circuit",
+						"amount": 3
+					}
+				],
+				"stochastic": false,
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"kr-electronic-components": {
+				"category": "electromagnetics",
+				"time": 4,
+				"machine": "electromagnetic-plant",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "kr-glass",
+						"amount": 2
+					},
+					{
+						"type": "item",
+						"name": "kr-silicon",
+						"amount": 2
+					},
+					{
+						"type": "item",
+						"name": "plastic-bar",
+						"amount": 2
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "kr-electronic-components",
+						"amount": 6
+					}
+				],
+				"stochastic": false,
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"iron-plate": {
+				"category": "smelting",
+				"time": 3.2,
+				"machine": "electric-furnace",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "iron-ore",
+						"amount": 2
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "iron-plate",
+						"amount": 1
+					}
+				],
+				"stochastic": false,
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"kr-sand": {
+				"category": "kr-crushing",
+				"time": 1,
+				"machine": "crusher",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "stone",
+						"amount": 3
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "kr-sand",
+						"amount": 7.5
+					}
+				],
+				"stochastic": true,
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			},
+			"kr-glass": {
+				"category": "smelting",
+				"time": 16,
+				"machine": "electric-furnace",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "kr-sand",
+						"amount": 16
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "kr-glass",
+						"amount": 8
+					}
+				],
+				"stochastic": false,
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			}
+		},
+		"machines": {
+			"kr-research-server": {
+				"crafting_speed": 1,
+				"categories": ["kr-research-data", "kr-tech-cards"],
+				"size": [3, 3],
+				"flooring": {}
+			},
+			"assembling-machine-2": {
+				"crafting_speed": 0.75,
+				"categories": ["advanced-crafting", "crafting", "crafting-with-fluid"],
+				"size": [3, 3],
+				"flooring": {}
+			},
+			"centrifuge": {
+				"crafting_speed": 1,
+				"categories": ["centrifuging"],
+				"size": [3, 3],
+				"flooring": {}
+			},
+			"electromagnetic-plant": {
+				"crafting_speed": 2,
+				"categories": ["electromagnetics", "kr-electrolysis"],
+				"size": [4, 4],
+				"flooring": {}
+			},
+			"electric-furnace": {
+				"crafting_speed": 2,
+				"categories": ["smelting"],
+				"size": [3, 3],
+				"flooring": {}
+			},
+			"crusher": {
+				"crafting_speed": 1,
+				"categories": ["crushing", "kr-crushing", "kr-crushing__rigor_module_mod"],
+				"size": [2, 3],
+				"flooring": {}
+			}
+		},
+		"belts": {
+			"fast-transport-belt": {
+				"items_per_second": 30,
+				"speed": 0.0625,
+				"size": [1, 1]
+			}
+		},
+		"undergrounds": {
+			"fast-underground-belt": {
+				"max_distance": 11,
+				"speed": 0.0625,
+				"size": [1, 1]
+			}
+		},
+		"splitters": {
+			"fast-splitter": {
+				"speed": 0.0625,
+				"size": [2, 1]
+			}
+		},
+		"inserters": {
+			"bulk-inserter": {
+				"pickup_position": [0, -1],
+				"insert_position": [0, 1.2],
+				"rotation_speed": 0.08,
+				"extension_speed": 0.4,
+				"filter_count": 5,
+				"stack_size": 5,
+				"size": [1, 1],
+				"custom": {
+					"range": 3,
+					"cross": true,
+					"diagonal": true,
+					"all": true,
+					"offsets": true
+				}
+			}
+		},
+		"furnaces": {},
+		"poles": {
+			"substation": {
+				"size": [2, 2],
+				"supply": 10,
+				"reach": 20.25,
+				"circuit_reach": 20.25
+			}
+		},
+		"fuels": {},
+		"drills": {},
+		"resources": {},
+		"pipes": {
+			"pipe": {},
+			"pipe-to-ground": {
+				"underground": 20
+			}
+		},
+		"transport": {
+			"underground": "fast-underground-belt",
+			"splitter": "fast-splitter",
+			"long_inserter": "bulk-inserter"
+		},
+		"loaders": {
+			"aai-fast-loader": {
+				"size": [1, 1],
+				"items_per_second": 30,
+				"electric": false
+			}
+		},
+		"chests": {
+			"requester-chest": {
+				"size": [1, 1],
+				"mode": "requester",
+				"capacity": 48
+			},
+			"storage-chest": {
+				"size": [1, 1],
+				"mode": "storage",
+				"capacity": 48
+			},
+			"active-provider-chest": {
+				"size": [1, 1],
+				"mode": "active-provider",
+				"capacity": 48
+			},
+			"steel-chest": {
+				"size": [1, 1],
+				"mode": "container",
+				"capacity": 48
+			}
+		},
+		"mixed_output_provider": "active-provider-chest",
+		"plan": {
+			"status": "solved",
+			"lines": [
+				{
+					"recipe": "production-science-pack",
+					"machine": "kr-research-server",
+					"machines": 4.0000000000000195,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "production-science-pack",
+							"type": "item",
+							"perMinute": 60.00000000000029
+						}
+					],
+					"ingredients": [
+						{
+							"name": "fast-transport-belt",
+							"type": "item",
+							"perMinute": 120.00000000000058
+						},
+						{
+							"name": "uranium-238",
+							"type": "item",
+							"perMinute": 60.00000000000029
+						},
+						{
+							"name": "kr-blank-tech-card",
+							"type": "item",
+							"perMinute": 60.00000000000029
+						},
+						{
+							"name": "productivity-module",
+							"type": "item",
+							"perMinute": 60.00000000000029
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 1033333.3333333385,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "uranium-fuel-cell",
+					"machine": "assembling-machine-2",
+					"machines": 1.333333333333333,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "uranium-fuel-cell",
+							"type": "item",
+							"perMinute": 5.999999999999998
+						}
+					],
+					"ingredients": [
+						{
+							"name": "uranium-238",
+							"type": "item",
+							"perMinute": 59.999999999999986
+						},
+						{
+							"name": "uranium-235",
+							"type": "item",
+							"perMinute": 11.999999999999996
+						},
+						{
+							"name": "steel-plate",
+							"type": "item",
+							"perMinute": 5.999999999999998
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 172222.22222222222,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "uranium-processing",
+					"machine": "centrifuge",
+					"machines": 30.76923076923083,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "uranium-238",
+							"type": "item",
+							"perMinute": 152.76923076923106
+						},
+						{
+							"name": "stone",
+							"type": "item",
+							"perMinute": 76.92307692307708
+						},
+						{
+							"name": "iron-ore",
+							"type": "item",
+							"perMinute": 38.46153846153854
+						},
+						{
+							"name": "uranium-235",
+							"type": "item",
+							"perMinute": 1.0769230769230789
+						}
+					],
+					"ingredients": [
+						{
+							"name": "uranium-ore",
+							"type": "item",
+							"perMinute": 1538.4615384615413
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 11128205.12820515,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kovarex-enrichment-process",
+					"machine": "centrifuge",
+					"machines": 10.923076923076923,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "stone",
+							"type": "item",
+							"perMinute": 21.846153846153847
+						},
+						{
+							"name": "uranium-235",
+							"type": "item",
+							"perMinute": 10.923076923076923
+						}
+					],
+					"ingredients": [
+						{
+							"name": "uranium-238",
+							"type": "item",
+							"perMinute": 32.769230769230774
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 3950512.820512821,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "productivity-module",
+					"machine": "electromagnetic-plant",
+					"machines": 5.000000000000027,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "productivity-module",
+							"type": "item",
+							"perMinute": 60.00000000000032
+						}
+					],
+					"ingredients": [
+						{
+							"name": "kr-electronic-components",
+							"type": "item",
+							"perMinute": 400.0000000000021
+						},
+						{
+							"name": "electronic-circuit",
+							"type": "item",
+							"perMinute": 200.00000000000105
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 10333333.33333339,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "fast-transport-belt",
+					"machine": "assembling-machine-2",
+					"machines": 1.3333333333333404,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "fast-transport-belt",
+							"type": "item",
+							"perMinute": 120.00000000000064
+						}
+					],
+					"ingredients": [
+						{
+							"name": "iron-gear-wheel",
+							"type": "item",
+							"perMinute": 480.00000000000256
+						},
+						{
+							"name": "transport-belt",
+							"type": "item",
+							"perMinute": 120.00000000000064
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 172222.22222222315,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "transport-belt",
+					"machine": "assembling-machine-2",
+					"machines": 0.6666666666666702,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "transport-belt",
+							"type": "item",
+							"perMinute": 120.00000000000064
+						}
+					],
+					"ingredients": [
+						{
+							"name": "iron-plate",
+							"type": "item",
+							"perMinute": 60.00000000000032
+						},
+						{
+							"name": "iron-gear-wheel",
+							"type": "item",
+							"perMinute": 60.00000000000032
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 86111.11111111158,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "iron-gear-wheel",
+					"machine": "assembling-machine-2",
+					"machines": 6.000000000000032,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "iron-gear-wheel",
+							"type": "item",
+							"perMinute": 540.0000000000028
+						}
+					],
+					"ingredients": [
+						{
+							"name": "iron-plate",
+							"type": "item",
+							"perMinute": 540.0000000000028
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 775000.0000000042,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-blank-tech-card",
+					"machine": "electromagnetic-plant",
+					"machines": 0.13333333333333397,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "kr-blank-tech-card",
+							"type": "item",
+							"perMinute": 60.00000000000029
+						}
+					],
+					"ingredients": [
+						{
+							"name": "iron-plate",
+							"type": "item",
+							"perMinute": 16.000000000000078
+						},
+						{
+							"name": "copper-cable",
+							"type": "item",
+							"perMinute": 16.000000000000078
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 275555.5555555569,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "copper-cable",
+					"machine": "electromagnetic-plant",
+					"machines": 0.39259259259259427,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "copper-cable",
+							"type": "item",
+							"perMinute": 282.6666666666679
+						}
+					],
+					"ingredients": [
+						{
+							"name": "copper-plate",
+							"type": "item",
+							"perMinute": 94.22222222222263
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 811358.0246913616,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "electronic-circuit",
+					"machine": "electromagnetic-plant",
+					"machines": 1.1111111111111165,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "electronic-circuit",
+							"type": "item",
+							"perMinute": 200.00000000000097
+						}
+					],
+					"ingredients": [
+						{
+							"name": "copper-cable",
+							"type": "item",
+							"perMinute": 266.66666666666794
+						},
+						{
+							"name": "iron-plate",
+							"type": "item",
+							"perMinute": 133.33333333333397
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 2296296.296296308,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-electronic-components",
+					"machine": "electromagnetic-plant",
+					"machines": 2.2222222222222325,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "kr-electronic-components",
+							"type": "item",
+							"perMinute": 400.0000000000019
+						}
+					],
+					"ingredients": [
+						{
+							"name": "kr-glass",
+							"type": "item",
+							"perMinute": 133.33333333333394
+						},
+						{
+							"name": "plastic-bar",
+							"type": "item",
+							"perMinute": 133.33333333333394
+						},
+						{
+							"name": "kr-silicon",
+							"type": "item",
+							"perMinute": 133.33333333333394
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 4592592.592592615,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "iron-plate",
+					"machine": "electric-furnace",
+					"machines": 0.5128205128205128,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "iron-plate",
+							"type": "item",
+							"perMinute": 19.23076923076923
+						}
+					],
+					"ingredients": [
+						{
+							"name": "iron-ore",
+							"type": "item",
+							"perMinute": 38.46153846153846
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 105982.90598290597,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-sand",
+					"machine": "crusher",
+					"machines": 0.5487179487179478,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "kr-sand",
+							"type": "item",
+							"perMinute": 246.92307692307648
+						}
+					],
+					"ingredients": [
+						{
+							"name": "stone",
+							"type": "item",
+							"perMinute": 98.7692307692306
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 306184.61538461485,
+							"unit": "W"
+						}
+					]
+				},
+				{
+					"recipe": "kr-glass",
+					"machine": "electric-furnace",
+					"machines": 2.057692307692303,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "kr-glass",
+							"type": "item",
+							"perMinute": 123.46153846153818
+						}
+					],
+					"ingredients": [
+						{
+							"name": "kr-sand",
+							"type": "item",
+							"perMinute": 246.92307692307637
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 425256.41025640926,
+							"unit": "W"
+						}
+					]
+				}
+			],
+			"ingredients": [
+				{
+					"name": "uranium-ore",
+					"type": "item",
+					"perMinute": 1538.4615384615415
+				},
+				{
+					"name": "iron-plate",
+					"type": "item",
+					"perMinute": 730.102564102568
+				},
+				{
+					"name": "kr-silicon",
+					"type": "item",
+					"perMinute": 133.33333333333394
+				},
+				{
+					"name": "plastic-bar",
+					"type": "item",
+					"perMinute": 133.33333333333394
+				},
+				{
+					"name": "copper-plate",
+					"type": "item",
+					"perMinute": 94.22222222222263
+				},
+				{
+					"name": "kr-glass",
+					"type": "item",
+					"perMinute": 9.871794871795728
+				},
+				{
+					"name": "steel-plate",
+					"type": "item",
+					"perMinute": 5.999999999999999
+				},
+				{
+					"name": "custom-electric-power",
+					"type": "entity",
+					"amount": 36464166.57170003,
+					"unit": "W"
+				}
+			],
+			"products": [
+				{
+					"name": "production-science-pack",
+					"type": "item",
+					"perMinute": 60
+				},
+				{
+					"name": "uranium-fuel-cell",
+					"type": "item",
+					"perMinute": 6
+				}
+			],
+			"byproducts": {}
+		}
+	}
+}

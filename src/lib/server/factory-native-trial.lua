@@ -191,6 +191,11 @@ events.on_event(defines.events.on_tick,function(e)
    storage.job=started.id
    local job=assert(storage.toby_trials.jobs[storage.job])
    provide_logistics(job,storage.pack)
+   for _,item in ipairs(trial.startupItems or {}) do
+    local machine=assert(job.entities[item.entity],'Missing startup-stock machine')
+    local inventory=assert(machine.get_inventory(defines.inventory.crafter_input),'Startup stock requires a crafting input inventory')
+    assert(inventory.insert{name=item.name,count=item.count}==item.count,'Cannot supply declared startup stock: '..item.name)
+   end
    if payload.startupSeconds then
     storage.startup={history={},deadline=job.startTick+payload.startupSeconds*60,sampleTicks=payload.measurementSeconds*60}
     job.endTick=storage.startup.deadline+storage.startup.sampleTicks
@@ -201,6 +206,9 @@ events.on_event(defines.events.on_tick,function(e)
      local b=assert(entity.get_control_behavior(),'Missing native machine controls')
      assert(wanted.control.read_contents==nil or b.circuit_read_contents==wanted.control.read_contents,'Native contents reading changed')
      assert(b.circuit_enable_disable==wanted.control.circuit_enabled,'Native circuit enable control changed')
+     if wanted.control.include_in_crafting~=nil then assert(b.include_in_crafting==wanted.control.include_in_crafting,'Native in-crafting stock reading changed') end
+     if wanted.control.circuit_read_hand_contents~=nil then assert(b.circuit_read_hand_contents==wanted.control.circuit_read_hand_contents,'Native inserter hand reading changed') end
+
      assert((b.get_circuit_network(defines.wire_connector_id.circuit_red) or b.get_circuit_network(defines.wire_connector_id.circuit_green)),'Native fluid-control circuit wire is missing')
      local expected=wanted.control.circuit_condition
      if expected then
@@ -233,6 +241,7 @@ events.on_event(defines.events.on_tick,function(e)
      assert(entity.use_filters==wanted.useFilters,'Native inserter filter mode changed')
      for _,filter in ipairs(wanted.filters) do local actual=entity.get_filter(filter.index);assert(actual and actual.name==filter.name,'Native inserter filter changed') end
     end
+    if wanted.stackSize then assert(entity.inserter_stack_size_override==wanted.stackSize,'Native inserter stack size changed') end
     if wanted.bar then assert(entity.get_inventory(defines.inventory.chest).get_bar()==wanted.bar+1,'Native inventory limit changed') end
    end
    verify_fluids(job,storage.pack)
@@ -265,6 +274,8 @@ events.on_event(defines.events.on_tick,function(e)
    local result=sandbox.read(payload.request.force,storage.job)
    if result.status~='running' then
     if storage.provided_logistics then assert(storage.logistics_verified,'Isolated logistics coverage was not verified');result.note=result.note..' Ordinary robots and connected roboport coverage were supplied by the isolated fixture.' end
+    result.startupItems=payload.test.startupItems
+    if #(payload.test.startupItems or {})>0 then result.note=result.note..' Declared startup stock was supplied once to prime local recycling buffers.' end
     result.recyclingProof=storage.recycling_proof;result.diagnostics=storage.diagnostics;result.settingsVerified=storage.settings_verified
     write({pack=storage.pack,result=result});storage.finished=true
    else

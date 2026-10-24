@@ -34,7 +34,16 @@ const resultSchema = z.object({
 			perMinute: z.number().positive().optional()
 		})
 	),
-	warnings: z.array(z.json())
+	warnings: z.array(z.json()),
+	startupItems: z
+		.array(
+			z.object({
+				entity: z.number().int().positive(),
+				name: z.string(),
+				count: z.number().int().positive()
+			})
+		)
+		.default([])
 });
 
 // Values are Lua data literals, never executable model text.
@@ -111,7 +120,7 @@ export async function compileFactoryLayout(
 			signal
 		});
 		let output = '';
-		const deadline = setTimeout(() => child.kill('SIGKILL'), 10000);
+		const deadline = setTimeout(() => child.kill('SIGKILL'), request.nativePlan ? 20000 : 10000);
 		child.on('error', reject);
 		child.stdout.on('data', (chunk: Buffer) => {
 			output += chunk.toString();
@@ -206,6 +215,13 @@ export async function compileFactoryLayout(
 					perMinute: source.perMinute
 				};
 			});
+	const initialStock = new Map<string, number>();
+	for (const item of report.startupItems)
+		initialStock.set(item.name, (initialStock.get(item.name) ?? 0) + item.count);
+	for (const [name, count] of initialStock)
+		report.warnings.push(
+			`Prime local recycling buffers with ${count} [item=${name}] from factory stock.`
+		);
 	const pole = entities.find((entity) => entity.name === request.tiers.pole);
 	if (!pole) throw new ServerError(400, 'Compiler returned no power connection');
 	let sampleSeconds = 120;
@@ -243,6 +259,7 @@ export async function compileFactoryLayout(
 			operation: 'run' as const,
 			force: request.force,
 			surface: request.surface,
+			startupItems: report.startupItems,
 			inputs: endpoints('input'),
 			outputs: endpoints('output'),
 			// Compiled blocks use the accelerated headless fixture, including buffer startup.

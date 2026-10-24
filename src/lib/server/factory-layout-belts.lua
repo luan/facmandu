@@ -2,6 +2,32 @@
 local engine=require('engine.init')
 local entities,ports,sources,sinks,steps,rows,fluid_clearance,reservations={},{},{},{},{},{},{},{}
 local circuits={}
+local links,startup={},{}
+local lines,recipes={},{}
+for name,r in pairs(pack.recipes) do recipes[name]=r end
+for _,original in ipairs(pack.plan.lines) do
+ local line={};for k,v in pairs(original) do line[k]=v end
+ local r=pack.recipes[line.recipe];local cycle=r.recycling
+ if cycle then
+  local recipe={};for k,v in pairs(r) do recipe[k]=v end
+  recipe.ingredients={};recipe.results={}
+  for _,p in ipairs(r.ingredients) do if p.name~=cycle.name then recipe.ingredients[#recipe.ingredients+1]=p end end
+  for _,p in ipairs(r.results) do
+   local part={};for k,v in pairs(p) do part[k]=v end
+   if part.name==cycle.name then part.amount=part.amount-cycle.amount end
+   if part.amount>1e-9 then recipe.results[#recipe.results+1]=part end
+  end
+  recipes[line.recipe]=recipe
+  local returned=0;line.ingredients={};line.products={}
+  for _,p in ipairs(original.ingredients) do if p.name==cycle.name and p.type=='item' then returned=returned+p.perMinute else line.ingredients[#line.ingredients+1]=p end end
+  for _,p in ipairs(original.products) do
+   local part={};for k,v in pairs(p) do part[k]=v end
+   if part.name==cycle.name and part.type=='item' then part.perMinute=part.perMinute-returned end
+   if part.perMinute>1e-9 then line.products[#line.products+1]=part end
+  end
+ end
+ lines[#lines+1]=line
+end
 local function add(name,x,y,settings)
  local e=settings or {};e.name=name;e.position={x=x,y=y};e.direction=e.direction or 0
  entities[#entities+1]=e;e.entity_number=#entities;return #entities
@@ -14,16 +40,22 @@ local loader
 for name in pairs(pack.loaders or {}) do if not loader or name<loader then loader=name end end
 local arm=pack.inserters[problem.tiers.inserter]
 local belt_capacity=pack.belts[problem.tiers.belt].items_per_second*60
+local arm_capacity=(arm.stack_size or 1)*arm.rotation_speed*60*.6*60
+local function sorting_width(line,products,n,count)
+ local width=0
+ for _,p in ipairs(products) do width=width+math.max(1,math.ceil(rate(line.products,p.name)*n/count/arm_capacity-1e-9))+2 end
+ return width
+end
 local consumed={}
-for _,line in ipairs(pack.plan.lines) do for _,p in ipairs(line.ingredients) do if p.type=='item' then consumed[p.name]=true end end end
+for _,line in ipairs(lines) do for _,p in ipairs(line.ingredients) do if p.type=='item' then consumed[p.name]=true end end end
 local made={}
-for _,line in ipairs(pack.plan.lines) do for _,p in ipairs(line.products) do if p.type=='item' then made[p.name]=true end end end
+for _,line in ipairs(lines) do for _,p in ipairs(line.products) do if p.type=='item' then made[p.name]=true end end end
 -- A recycled ingredient must seed its own supply cycle before bulk buffers fill.
 local producers,upstream={},{}
-for _,line in ipairs(pack.plan.lines) do for _,p in ipairs(line.products) do if p.type~='entity' and p.perMinute>1e-6 then
+for _,line in ipairs(lines) do for _,p in ipairs(line.products) do if p.type~='entity' and p.perMinute>1e-6 then
  local k=p.type..'/'..p.name;producers[k]=producers[k] or {};producers[k][line.recipe]=true
 end end end
-for _,line in ipairs(pack.plan.lines) do
+for _,line in ipairs(lines) do
  local deps=upstream[line.recipe] or {};upstream[line.recipe]=deps
  for _,p in ipairs(line.ingredients) do for recipe in pairs(producers[p.type..'/'..p.name] or {}) do deps[recipe]=true end end
 end
@@ -47,11 +79,10 @@ local function belts_for(line,recipe)
  return engine.rows.belts_for(line.recipe,recipe,made)
 end
 local function geometry(line,width)
- local recipe=pack.recipes[line.recipe]
+ local recipe=recipes[line.recipe]
  local machine=pack.machines[line.machine] or pack.furnaces[line.machine]
  local w,h=table.unpack(machine.native_size or machine.size)
  local products={} for _,p in ipairs(recipe.results) do if p.type=='item' then products[#products+1]=p end end
- assert(#products<=2,'More than two solid products need a qualified sorting junction: '..line.recipe)
  if #products>1 then assert((arm.filter_count or 0)>0,'Select an inserter with item filters for '..line.recipe) end
  local belts,issue=belts_for(line,recipe);assert(belts,issue and issue.message)
  for _,part in ipairs(recipe.ingredients) do if made[part.name] then belts.lead=math.max(belts.lead,3) end end
@@ -59,8 +90,13 @@ local function geometry(line,width)
  local long=problem.tiers.long_inserter and pack.inserters[problem.tiers.long_inserter]
  local reach=long and (long.custom and long.custom.cross and long.custom.range>=2 or math.max(math.abs(long.pickup_position[1]),math.abs(long.pickup_position[2]))>=2)
  assert(outer==0 or reach,'This recipe needs researched adjustable reach or a long-handed inserter: '..line.recipe)
+ local output_arm=long or arm
+ local output_reach=output_arm.custom and output_arm.custom.cross and output_arm.custom.range or math.floor(math.abs(output_arm.insert_position[2])+.5)
+ local output_columns=0
+ for _,p in ipairs(products) do output_columns=output_columns+math.max(1,math.ceil(rate(line.products,p.name)/math.ceil(line.machines-1e-9)/arm_capacity-1e-9)) end
+ local sort=#products>1 and (#products>output_reach or output_columns>w)
  local has_in,has_out=#recipe.ingredients>0,#products>0
- local overhead=(has_in and 2+outer or 0)+(has_out and #products+1 or 0)
+ local overhead=(has_in and 2+outer or 0)+(has_out and (sort and 4 or #products+1) or 0)
  local pins=recipe.fluid_connections or {}
  if #pins==0 then for _,list in ipairs{recipe.fluid_inputs or {},recipe.fluid_outputs or {}} do for _,pin in ipairs(list) do pins[#pins+1]=pin end end end
  local function clearance(axis,base,minimum)
@@ -80,8 +116,8 @@ local function geometry(line,width)
  local row_gap=clearance('y',h+overhead,problem.layout.spacing=='spacious' and 2 or (#pins>1 and 2 or 0))
  local pitch=w+gap
  local count=math.ceil(line.machines-1e-9)
- local outlet=loader and #products==1 and consumed[products[1].name] and (w==1 and 3 or 2) or 0
- local lead=belts.lead
+ local outlet=loader and not recipe.recycling and #products==1 and consumed[products[1].name] and (w<=2 and 3 or 2) or 0
+ local lead=math.max(belts.lead,recipe.recycling and 3 or 0)
  for _,pin in ipairs(pins) do
   if pin.position.x < -w/2 then lead=math.max(lead,recipe.disposal and recipe.disposal.gate and 4 or 2) end
   if pin.position.x > w/2 then outlet=math.max(outlet,recipe.disposal and recipe.disposal.gate and 4 or 2) end
@@ -96,11 +132,16 @@ local function geometry(line,width)
  for _,part in ipairs(products) do local required=rate(line.products,part.name)
   if required>0 then columns=math.min(columns,math.floor(belt_capacity/2*count/required+1e-9)) end
  end
+ if sort then
+  local total=0;for _,p in ipairs(products) do total=total+rate(line.products,p.name) end
+  if total>0 then columns=math.min(columns,math.floor(belt_capacity/2*count/total+1e-9)) end
+  while columns>0 and columns*pitch-gap+lead+outlet+sorting_width(line,products,columns,count)>width do columns=columns-1 end
+ end
  if columns<1 then return nil end
  local row_height=h+overhead+row_gap
  local boundary=1;for _,pin in ipairs(pins) do if math.abs(pin.position.y)>=h/2 then boundary=2 end end
- return {recipe=recipe,w=w,h=h,products=products,belts=belts,outer=outer,has_in=has_in,has_out=has_out,count=count,
-  pitch=pitch,columns=columns,row_height=row_height,lead=lead,width=columns*pitch-gap+lead+outlet,
+ return {recipe=recipe,w=w,h=h,products=products,sort=sort,outlet=outlet,belts=belts,outer=outer,has_in=has_in,has_out=has_out,count=count,
+  pitch=pitch,columns=columns,row_height=row_height,lead=lead,width=columns*pitch-gap+lead+outlet+(sort and sorting_width(line,products,columns,count) or 0),
   height=math.ceil(count/columns)*row_height-row_gap+boundary}
 end
 local margin=problem.margin or 8
@@ -109,7 +150,7 @@ local selected,best_score,bounds_height,minimum_height
 for width=1,problem.area[2][1]-margin-2 do
  local x,y,shelf_height,used,valid=margin,2,0,0,true
  local specs={}
- for index,line in ipairs(pack.plan.lines) do if line.machines>1e-6 then
+ for index,line in ipairs(lines) do if line.machines>1e-6 then
   local s=geometry(line,width)
   if not s then valid=false;break end
   if x+s.width>margin+width then x=margin;y=y+shelf_height;shelf_height=0 end
@@ -130,7 +171,7 @@ if not selected then
  -- Fill earlier shelves with the small service stages before rejecting the block.
  for width=1,problem.area[2][1]-margin-2 do
   local specs,ordered={},{}
-  for index,line in ipairs(pack.plan.lines) do if line.machines>1e-6 then
+  for index,line in ipairs(lines) do if line.machines>1e-6 then
    local spec=geometry(line,width)
    if not spec then ordered=nil;break end
    specs[index]=spec;ordered[#ordered+1]={index=index,spec=spec}
@@ -155,10 +196,13 @@ if not selected then
  end
 end
 assert(selected,'The complete saved plan needs at least '..tostring(minimum_height or 'more')..' tiles of height at this width; enlarge the block without reducing production')
-for index,line in ipairs(pack.plan.lines) do if line.machines>0.000001 then
+local uses_sorter=false
+for index,line in ipairs(lines) do if line.machines>0.000001 then
  local s=selected[index]
+ if s.sort then uses_sorter=true end
  local recipe,w,h,products,belts,outer,has_in,has_out,count,pitch,columns,row_height=s.recipe,s.w,s.h,s.products,s.belts,s.outer,s.has_in,s.has_out,s.count,s.pitch,s.columns,s.row_height
  local y=s.top
+ local sorted_rows={}
  local production=0;for _,p in ipairs(line.products) do if p.type~='entity' then production=production+p.perMinute end end
  steps[#steps+1]={recipe=line.recipe,machines=count,perMinute=production}
  for first=1,count,columns do
@@ -168,15 +212,34 @@ for index,line in ipairs(pack.plan.lines) do if line.machines>0.000001 then
   local right=left+(n-1)*pitch+w-1
   local ib=has_in and {x1=left-belts.lead,x2=right,y=y+outer} or nil
   local output_belts={}
-  for j=1,#products do output_belts[j]={x1=left,x2=right,y=ym+h+j} end
+  local mixed
+  if s.sort then
+   -- Collect mixed output first; each filtered station feeds one pure belt lane.
+   local x=left+(columns-1)*pitch+w-1+s.outlet+2
+   for j,p in ipairs(products) do
+    local k=math.max(1,math.ceil(rate(line.products,p.name)*n/count/arm_capacity-1e-9))
+    output_belts[j]={x1=x,x2=x+k-1,y=ym+h+3}
+    for a=0,k-1 do
+     local settings={use_filters=true,filters={{index=1,name=p.name}}}
+     if arm.custom and arm.custom.cross and arm.custom.range>=1 then
+      settings.pickup_position={x=0,y=-1};settings.drop_position={x=0,y=1+(arm.custom.offsets and 51/256 or 0)}
+     end
+     add(problem.tiers.inserter,x+a+.5,ym+h+2+.5,settings)
+    end
+    x=x+k+2
+   end
+   mixed={x1=left,x2=x-3,y=ym+h+1}
+  else
+   for j=1,#products do output_belts[j]={x1=left,x2=right,y=ym+h+j} end
+  end
   local ob=output_belts[1]
   local function strip(row)
    if row then for x=row.x1,row.x2 do add(problem.tiers.belt,x+.5,row.y+.5,{direction=4}) end end
   end
-  strip(ib);for _,belt in ipairs(output_belts) do strip(belt) end
-  if loader and #products==1 and consumed[products[1].name] then
+  strip(ib);strip(mixed);for _,belt in ipairs(output_belts) do strip(belt) end
+  if loader and not recipe.recycling and #products==1 and consumed[products[1].name] then
    -- Loaders fill both lanes; side-load them onto one right lane before routing.
-   local turn=right+(w==1 and 2 or 1)
+   local turn=right+(w<=2 and 2 or 1)
    for x=right+1,turn do add(problem.tiers.belt,x+.5,ob.y+.5,{direction=x==turn and 0 or 4}) end
    -- A predecessor makes this a straight T-junction, not a corner preserving both lanes.
    add(problem.tiers.belt,turn-1+.5,ob.y-1+.5,{direction=4})
@@ -190,7 +253,12 @@ for index,line in ipairs(pack.plan.lines) do if line.machines>0.000001 then
    ingredient_rates={},alone=belts.alone,input_belt=ib,output_belt=ob,product_rate=products[1] and rate(line.products,products[1].name)*n/count,item=products[1] and products[1].name,last_first_machine_inserter_x=left+math.floor(w/2),last_first_machine_long_x=left+w-1}
   for _,p in ipairs(recipe.ingredients) do row.ingredient_rates[p.name]=rate(line.ingredients,p.name)*n/count end
   rows[#rows+1]=row
-  for j=2,#products do rows[#rows+1]={recipe=line.recipe,copy=#rows+1,ingredients={},inner={},output_belt=output_belts[j],product_rate=rate(line.products,products[j].name)*n/count,item=products[j].name} end
+  local product_rows={row}
+  for j=2,#products do
+   local output={recipe=line.recipe,copy=#rows+1,ingredients={},inner={},output_belt=output_belts[j],product_rate=rate(line.products,products[j].name)*n/count,item=products[j].name}
+   rows[#rows+1]=output;product_rows[j]=output
+  end
+  if s.sort then sorted_rows[#sorted_rows+1]={rows=product_rows,mixed=mixed} end
   for _,p in ipairs(recipe.ingredients) do
    local per_row=rate(line.ingredients,p.name)*n/count
    local lane=(#recipe.ingredients==1 or belts.alone[p.name]) and belt_capacity or belt_capacity/2
@@ -201,22 +269,32 @@ for index,line in ipairs(pack.plan.lines) do if line.machines>0.000001 then
    local x=left+i*pitch
    local center={x=x+w/2,y=ym+h/2}
    local settings,wire,connector,gate=options.machine_settings(line,pack)
+   if recipe.recycling then settings.control_behavior={read_contents=true,include_in_crafting=true,circuit_enabled=false} end
    local id=add(line.machine,center.x,center.y,settings)
+   local machine_entity=entities[id]
+   if recipe.recycling then
+    local cycle=recipe.recycling;local middle=ym+math.floor(h/2)+.5
+    local chest=add(cycle.buffer,x-1.5,middle,{bar=1})
+    links[#links+1]={machine_entity,entities[chest]}
+    add(problem.tiers.inserter,x-.5,middle-1,{use_filters=true,filters={{index=1,name=cycle.name}},pickup_position={x=1,y=0},drop_position={x=-1,y=1}})
+    add(problem.tiers.inserter,x-.5,middle+1,{use_filters=true,filters={{index=1,name=cycle.name}},pickup_position={x=-1,y=-1},drop_position={x=1,y=0}})
+    startup[#startup+1]={entity=machine_entity,name=cycle.name,count=math.ceil(cycle.amount*2)}
+   end
    if wire then circuits[#circuits+1]={entity=entities[id],reach=wire,connector=connector,gate=gate} end
    for _,p in ipairs(recipe.fluid_connections or {}) do reservations[#reservations+1]={fluid=p.name,x=math.floor(center.x+p.position.x),y=math.floor(center.y+p.position.y)} end
    local output_column=0
    local function transfer(input,amount,outer_arm,product,output_lane)
-    local cap=(arm.stack_size or 1)*arm.rotation_speed*60*.6*60
+    local cap=arm_capacity
     local k=math.max(1,math.ceil(amount/count/cap-1e-9))
     -- A parallel feed belt cannot side-load a loader intake. Use inserters for
     -- inputs until splitter branches have a native-qualified template.
-    local direct=loader and not input and #products==1
+    local direct=loader and not recipe.recycling and not input and #products==1
     if direct then k=1 end
     assert(k<=w,'Inserters cannot keep up with '..line.recipe..'; a compatible researched loader or faster inserter is needed')
     for a=1,k do
      local col=math.floor(w/2)+(a%2==0 and -a/2 or (a-1)/2)
      if outer_arm then col=w-a end
-     if not input and #products>1 then
+     if not input and #products>1 and not s.sort then
       output_column=output_column+1;col=math.floor(w/2)+(output_column%2==0 and -output_column/2 or (output_column-1)/2)
       assert(col>=0 and col<w,'Filtered output inserters do not fit '..line.recipe)
      end
@@ -231,11 +309,17 @@ for index,line in ipairs(pack.plan.lines) do if line.machines>0.000001 then
       if profile.custom and profile.custom.cross and profile.custom.range>=reach then
        vectors={pickup_position={x=0,y=input and -reach or -1},drop_position={x=0,y=reach+(profile.custom.offsets and 51/256 or 0)}}
       end
-      if not input and #products>1 then
+      if not input and #products>1 and not s.sort then
        assert((profile.filter_count or 0)>0,'The output inserter needs item filters: '..line.recipe)
        vectors=vectors or {};vectors.use_filters=true;vectors.filters={{index=1,name=product}}
       end
-      add(selected,x+col+.5,ay,vectors)
+      if not input and recipe.recycling and product==recipe.recycling.name then
+       vectors=vectors or {};vectors.override_stack_size=1
+       vectors.control_behavior={circuit_enabled=true,circuit_read_hand_contents=true,circuit_hand_read_mode=1,
+        circuit_condition={first_signal={type='item',name=product},comparator='>',constant=math.ceil(recipe.recycling.amount*2)}}
+      end
+      local arm_id=add(selected,x+col+.5,ay,vectors)
+      if not input and recipe.recycling and product==recipe.recycling.name then links[#links+1]={machine_entity,entities[arm_id]} end
      end
     end
    end
@@ -244,7 +328,12 @@ for index,line in ipairs(pack.plan.lines) do if line.machines>0.000001 then
     for _,p in ipairs(recipe.ingredients) do if p.name==belts.outer_behind or p.name==belts.outer_side then far=far+rate(line.ingredients,p.name) else inner=inner+rate(line.ingredients,p.name) end end
     transfer(true,inner,false);if far>0 then transfer(true,far,true) end
    end
-   for j,p in ipairs(products) do transfer(false,rate(line.products,p.name),false,p.name,j) end
+   if s.sort then
+    local total=0;for _,p in ipairs(products) do total=total+rate(line.products,p.name) end
+    transfer(false,total,false,nil,1)
+   else
+    for j,p in ipairs(products) do transfer(false,rate(line.products,p.name),false,p.name,j) end
+   end
    local function fluid_port(p,list)
     local pos={x=center.x+p.position.x,y=center.y+p.position.y}
     local dx=math.abs(p.position.x)>=w/2 and (p.position.x>0 and 1 or -1) or 0
@@ -258,6 +347,32 @@ for index,line in ipairs(pack.plan.lines) do if line.machines>0.000001 then
   end
   y=y+row_height
  end
+ -- Combine matching sorted products beside their stage instead of routing every
+ -- physical row separately to distant ingredient merge junctions.
+ local spine=#sorted_rows>1
+ for _,group in ipairs(sorted_rows) do for j,p in ipairs(products) do
+  local b=group.rows[j].output_belt
+  if b.x1~=b.x2 or rate(line.products,p.name)>belt_capacity/2+1e-6 then spine=false end
+ end end
+ if spine then for j,p in ipairs(products) do
+  local x=sorted_rows[1].rows[j].output_belt.x2+1
+  local top=sorted_rows[1].rows[j].output_belt.y-1
+  local bottom=sorted_rows[#sorted_rows].rows[j].output_belt.y
+  local crossing={}
+  for k=2,#sorted_rows do
+   crossing[sorted_rows[k].mixed.y-1]='input'
+   crossing[sorted_rows[k].mixed.y]='skip'
+   crossing[sorted_rows[k].mixed.y+1]='output'
+  end
+  for y=top,bottom do
+   local kind=crossing[y]
+   if kind~='skip' then add(kind and problem.tiers.underground or problem.tiers.belt,x+.5,y+.5,{direction=8,type=kind}) end
+  end
+  for _,group in ipairs(sorted_rows) do group.rows[j].output_belt=nil end
+  local output=sorted_rows[#sorted_rows].rows[j]
+  output.output_belt={x1=x,x2=x,y=bottom,direction=8}
+  output.product_rate=rate(line.products,p.name)
+ end end
 end end
 local y=bounds_height
 -- Merge low-rate identical products onto one shared output spine instead of routing
@@ -300,6 +415,36 @@ end end
 local internal={}
 for _,row in ipairs(rows) do for _,item in ipairs(row.inner) do if made[item] then internal[item]=true end end
  for _,item in ipairs{row.outer_behind,row.outer_side} do if item and made[item] then internal[item]=true end end
+end
+local function merge_position(count,preferred,target)
+ local occupied={}
+ for _,e in ipairs(engine.blueprint.load({entities=entities},pack).entities) do for _,tile in ipairs(e.tiles) do occupied[tile[1]..','..tile[2]]=true end end
+ for _,tile in ipairs(item_problem.obstacles or {}) do occupied[tile.x..','..tile.y]=true end
+ -- A source's first routed tile belongs to that source, even before its route exists.
+ for _,p in ipairs(problem.inputs) do local v=({[0]={0,-1},[4]={1,0},[8]={0,1},[12]={-1,0}})[p.direction];occupied[(math.floor(p.position.x)+v[1])..','..(math.floor(p.position.y)+v[2])]=true end
+ for _,row in ipairs(rows) do
+  local b=row.output_belt;if b then local v=({[0]={0,-1},[4]={1,0},[8]={0,1},[12]={-1,0}})[b.direction or 4];occupied[(b.x2+v[1])..','..(b.y+v[2])]=true end
+  for _,b in ipairs{row.input_belt or false,row.outer_belt or false} do if b then
+   occupied[(b.x1-1)..','..b.y]=true
+   for x=b.x1,b.x2 do occupied[x..','..(b.y-1)]=true end
+  end end
+ end
+ local function fits(x,y)
+  if x<1 or y<1 or x+count>=problem.area[2][1] or y+1>=problem.area[2][2] then return false end
+  for dx=-1,count do for dy=-1,1 do if occupied[(x+dx)..','..(y+dy)] then return false end end end
+  return true
+ end
+ if fits(1,preferred) then return 1,preferred end
+ for distance=0,problem.area[2][1]+problem.area[2][2] do
+  for dx=-distance,distance do
+   local dy=distance-math.abs(dx)
+   for _,sign in ipairs(dy==0 and {1} or {1,-1}) do
+    local x,y=target.x-count+dx,target.y+dy*sign
+    if fits(x,y) then return x,y end
+   end
+  end
+ end
+ error('No free space for an ingredient merge junction',0)
 end
 local junctions=0
 local names={} for name in pairs(internal) do names[#names+1]=name end;table.sort(names)
@@ -354,6 +499,7 @@ for _,item in ipairs(names) do
     -- Separate routes cannot share the same mandatory approach tile.
     junctions=junctions+1
     local x,y=1,18+(junctions-1)*3
+    if uses_sorter then x,y=merge_position(#feeds,y,{x=belt.x1,y=belt.y}) end
     assert(y<problem.area[2][2]-2,'No room for an ingredient merge junction')
     for offset=0,#feeds-1 do add(problem.tiers.belt,x+offset+.5,y+.5,{direction=4}) end
     source=item..'#merge'..junctions
@@ -433,4 +579,4 @@ if #nets>0 then
  assert(job.result,job.errors and job.errors[1] and job.errors[1].message)
  for _,e in ipairs(job.result) do add(e.name,e.position.x,e.position.y,{direction=e.direction,type=e.type}) end
 end
-return {entities=entities,ports=ports,sources=sources,sinks=sinks,steps=steps,reservations=reservations,circuits=circuits}
+return {entities=entities,ports=ports,sources=sources,sinks=sinks,steps=steps,reservations=reservations,circuits=circuits,links=links,startup=startup}

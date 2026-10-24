@@ -158,6 +158,7 @@ export function testCompiledFactory(
 										index: i + 1,
 										pickup: e.pickup_position,
 										drop: e.drop_position,
+										stackSize: e.override_stack_size,
 										requests: e.request_filters,
 										bar: e.bar,
 										filters: e.filters,

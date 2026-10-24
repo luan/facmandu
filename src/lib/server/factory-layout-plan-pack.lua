@@ -144,8 +144,25 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
    local capacity=volume(box)
    disposal={fluid=fluid_in[1].name,capacity=capacity,threshold=math.floor(capacity*.5),wire_reach=crafter.get_max_circuit_wire_distance()}
   end
+  local recycling
+  local arm=pack.inserters and pack.inserters[request.tiers.inserter]
+  -- Qualify one solid catalyst loop per dry machine; fluid and multiple-catalyst cells need their own templates.
+  if not stochastic and #fluid_in==0 and #fluid_out==0 and crafter.tile_height>=3 and crafter.tile_width>=2 and #results<=2
+   and arm and arm.custom and arm.custom.range>=2 and arm.custom.cross and arm.custom.diagonal and arm.filter_count>0 and crafter.get_max_circuit_wire_distance()>0 then
+   local candidates={}
+   for _,ingredient in ipairs(ingredients) do for _,product in ipairs(results) do
+    if ingredient.name==product.name and product.amount>=ingredient.amount and ingredient.amount*2<=prototypes.item[ingredient.name].stack_size then candidates[#candidates+1]=ingredient end
+   end end
+   if #candidates==1 then for _,buffer in ipairs{'steel-chest','iron-chest','wooden-chest'} do
+    local ok,chest=pcall(entity,buffer,'container')
+    if ok and chest.tile_width==1 and chest.tile_height==1 then
+     pack.chests=pack.chests or {};pack.chests[chest.name]={size={1,1},mode='container',capacity=chest.get_inventory_size(defines.inventory.chest)}
+     recycling={name=candidates[1].name,amount=candidates[1].amount,buffer=chest.name};break
+    end
+   end end
+  end
   pack.recipes[name]={category=category,time=recipe.energy,machine=crafter.name,ingredients=ingredients,results=results,
-   stochastic=stochastic,direction=direction,fluid_inputs=fluid_inputs,fluid_outputs=fluid_outputs,fluid_connections=reserved,disposal=disposal}
+   stochastic=stochastic,direction=direction,fluid_inputs=fluid_inputs,fluid_outputs=fluid_outputs,fluid_connections=reserved,disposal=disposal,recycling=recycling}
  end
  local solved=frozen_plan
  for _,line in ipairs(solved.lines) do

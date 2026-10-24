@@ -1528,7 +1528,9 @@ test('compact buffer cells use less space without changing production or transpo
 });
 
 for (const intermediates of ['belts', 'buffer-chests'] as const)
-	test(`complete blue-circuit plan with requester inputs, ${intermediates} inside and storage outputs`, async () => {
+	test(`complete blue-circuit plan with requester inputs, ${intermediates} inside and storage outputs`, {
+		timeout: 30000
+	}, async () => {
 		const fixture = JSON.parse(
 			readFileSync('tests/fixtures/interpose/saved-processing-units-60-2.1.21.json', 'utf8')
 		);
@@ -1633,4 +1635,56 @@ test('saved 900 scrap/min plan collects all thirteen products from six rectangul
 		}).success,
 		false
 	);
+});
+
+test('saved uranium chain sorts all four products and routes the complete 100 by 100 plan', {
+	timeout: 30000
+}, async () => {
+	const fixture = JSON.parse(
+		readFileSync('tests/fixtures/interpose/saved-uranium-2.1.21.json', 'utf8')
+	);
+	const input = factoryLayoutInput.parse(fixture.request);
+	const result = await compileFactoryLayout(input, z.json().parse(fixture.pack), modules);
+	const occupied = new Set<string>();
+	for (const entity of result.design.entities) {
+		const key = `${entity.position.x},${entity.position.y}`;
+		assert.ok(!occupied.has(key), `Overlapping entities at ${key}`);
+		occupied.add(key);
+	}
+	assert.equal(result.steps.length, 15);
+	assert.equal(result.test.startupItems.length, 11);
+	assert.equal(
+		result.test.startupItems.reduce((sum, item) => sum + item.count, 0),
+		660
+	);
+	for (const item of result.test.startupItems) {
+		assert.equal(item.name, 'uranium-235');
+		assert.equal(result.design.entities[item.entity - 1]?.recipe, 'kovarex-enrichment-process');
+	}
+	const exports = result.design.entities.filter((e) => e.override_stack_size === 1);
+	assert.equal(exports.length, 11);
+	assert.ok(exports.every((e) => e.control_behavior?.circuit_enabled === true));
+	assert.equal(result.design.entities.filter((e) => e.recipe === 'uranium-processing').length, 31);
+	assert.equal(
+		result.design.entities.filter((e) => e.recipe === 'kovarex-enrichment-process').length,
+		11
+	);
+	for (const product of ['uranium-235', 'uranium-238', 'iron-ore', 'stone'])
+		assert.ok(
+			result.design.entities.some(
+				(e) => e.use_filters && e.filters?.some((f) => f.name === product)
+			)
+		);
+	assert.deepEqual(
+		result.test.outputs.map((p) => [p.name, p.perMinute]),
+		[
+			['production-science-pack', 60],
+			['uranium-fuel-cell', 6]
+		]
+	);
+	assert.ok(result.test.inputs.every((p) => input.inputs.some((q) => q.item === p.name)));
+	for (const e of result.design.entities) {
+		assert.ok(e.position.x >= 0 && e.position.x < 100 && e.position.y >= 0 && e.position.y < 100);
+	}
+	assert.ok(blueprintInputSchema.safeParse({ ...result.design, operation: 'create' }).success);
 });

@@ -400,7 +400,9 @@ function routing.nets(layout, problem, pack, base)
     if ob then
     local k = key_of(row.item, row.copy)
     local label = "row " .. row.recipe .. (row.copy and (" (chain " .. row.copy .. ")") or "")
-    sources[k] = { x = ob.x2 + 1, y = ob.y, dir = direction.EAST, from_x = ob.x2, from_y = ob.y, label = label,rate=row.product_rate }
+    local d=ob.direction or direction.EAST
+    local v=direction.vector(d)
+    sources[k] = { x = ob.x2 + v.x, y = ob.y + v.y, dir = d, from_x = ob.x2, from_y = ob.y, label = label,rate=row.product_rate }
     from_row[row.item] = true
     product_sources[row.item] = product_sources[row.item] or {}
     table.insert(product_sources[row.item], k)
