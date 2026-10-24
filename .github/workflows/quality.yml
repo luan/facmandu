@@ -27,6 +27,8 @@ jobs:
       - run: python3 -m unittest discover -s tests -p '*_test.py'
       # Fengari rejects precision over two digits before calling sprintf-js.
       # Remove this exception when sprintf-js publishes a patched release.
-      - run: bun audit --ignore GHSA-hp3w-g68c-fv3c
+      # Kit 2 mitigations: hooks reject // paths; no pages are prerendered.
+      # HTTP checks enforce both until the Kit 3 migration removes these exceptions.
+      - run: bun audit --ignore GHSA-hp3w-g68c-fv3c --ignore GHSA-pfhg-q3qv-9q6r --ignore GHSA-27mw-82g8-phjj
       - run: bun run build
       - run: bun run test:http

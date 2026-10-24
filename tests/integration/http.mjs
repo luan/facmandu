@@ -1285,6 +1285,26 @@ try {
 	);
 	legacy.close();
 	await start();
+	// SvelteKit 2 security workarounds must hold before admitting audit exceptions.
+	for (const method of ['GET', 'POST']) {
+		const invalidPath = await fetch(`${appUrl}//attacker.invalid/login`, {
+			method,
+			redirect: 'manual'
+		});
+		assert.ok(
+			[400, 404].includes(invalidPath.status),
+			`Unsafe action path returned ${invalidPath.status}`
+		);
+		assert.equal(invalidPath.headers.get('location'), null);
+	}
+	assert.deepEqual(
+		await readdir(join(root, 'build/prerendered/pages'), { recursive: true }).catch((cause) => {
+			if (cause.code === 'ENOENT') return [];
+			throw cause;
+		}),
+		[]
+	);
+	passed('Protocol-relative paths rejected; no pages prerendered.');
 	const initialized = await fetch(`${appUrl}/login`);
 	assert.equal(initialized.status, 200, await initialized.text());
 	client = createClient({ url: `file:${database}`, timeout: 1000 });

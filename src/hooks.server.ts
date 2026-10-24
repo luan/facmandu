@@ -58,6 +58,8 @@ const handleSecurity: Handle = async ({ event, resolve }) => {
 };
 
 export const handle: Handle = async ({ event, resolve }) => {
+	// GHSA-pfhg-q3qv-9q6r: reject protocol-relative action paths before routing.
+	if (event.url.pathname.startsWith('//')) return new Response('Invalid path', { status: 400 });
 	await initializeDatabase();
 	startFactoryWatchSampler();
 	startDropboxBackups();
