@@ -1,0 +1,526 @@
+{
+	"request": {
+		"force": "player",
+		"surface": "fulgora",
+		"label": "Fulgora scrap scrapper",
+		"width": 40,
+		"height": 40,
+		"inputs": [
+			{
+				"item": "scrap",
+				"type": "item",
+				"position": {
+					"x": 0.5,
+					"y": 0.5
+				},
+				"direction": 4,
+				"perMinute": 899.9999999999999
+			}
+		],
+		"outputs": [
+			{
+				"item": "holmium-ore",
+				"type": "item",
+				"position": {
+					"x": 5.5,
+					"y": 39.5
+				},
+				"direction": 8,
+				"perMinute": 9.000000000000009
+			},
+			{
+				"item": "iron-gear-wheel",
+				"type": "item",
+				"position": {
+					"x": 8.5,
+					"y": 39.5
+				},
+				"direction": 8,
+				"perMinute": 180
+			},
+			{
+				"item": "electronic-circuit",
+				"type": "item",
+				"position": {
+					"x": 11.5,
+					"y": 39.5
+				},
+				"direction": 8,
+				"perMinute": 90
+			},
+			{
+				"item": "concrete",
+				"type": "item",
+				"position": {
+					"x": 14.5,
+					"y": 39.5
+				},
+				"direction": 8,
+				"perMinute": 53.99999999999999
+			},
+			{
+				"item": "ice",
+				"type": "item",
+				"position": {
+					"x": 17.5,
+					"y": 39.5
+				},
+				"direction": 8,
+				"perMinute": 44.999999999999986
+			},
+			{
+				"item": "battery",
+				"type": "item",
+				"position": {
+					"x": 20.5,
+					"y": 39.5
+				},
+				"direction": 8,
+				"perMinute": 36.00000000000003
+			},
+			{
+				"item": "kr-electronic-components",
+				"type": "item",
+				"position": {
+					"x": 23.5,
+					"y": 39.5
+				},
+				"direction": 8,
+				"perMinute": 36.00000000000001
+			},
+			{
+				"item": "stone",
+				"type": "item",
+				"position": {
+					"x": 26.5,
+					"y": 39.5
+				},
+				"direction": 8,
+				"perMinute": 35.999999999999986
+			},
+			{
+				"item": "steel-plate",
+				"type": "item",
+				"position": {
+					"x": 29.5,
+					"y": 39.5
+				},
+				"direction": 8,
+				"perMinute": 35.999999999999986
+			},
+			{
+				"item": "advanced-circuit",
+				"type": "item",
+				"position": {
+					"x": 32.5,
+					"y": 39.5
+				},
+				"direction": 8,
+				"perMinute": 27.00000000000002
+			},
+			{
+				"item": "copper-cable",
+				"type": "item",
+				"position": {
+					"x": 35.5,
+					"y": 39.5
+				},
+				"direction": 8,
+				"perMinute": 27.00000000000002
+			},
+			{
+				"item": "processing-unit",
+				"type": "item",
+				"position": {
+					"x": 38.5,
+					"y": 39.5
+				},
+				"direction": 8,
+				"perMinute": 17.999999999999915
+			},
+			{
+				"item": "low-density-structure",
+				"type": "item",
+				"position": {
+					"x": 5.5,
+					"y": 36.5
+				},
+				"direction": 8,
+				"perMinute": 9.000000000000009
+			}
+		],
+		"recipes": ["scrap-recycling"],
+		"nativePlan": true,
+		"fixedPlan": true,
+		"layout": {
+			"shape": "square",
+			"spacing": "compact"
+		},
+		"logistics": {
+			"requester": "requester-chest",
+			"provider": "passive-provider-chest",
+			"buffer": "buffer-chest",
+			"requestSeconds": 30,
+			"outputSlots": 48
+		},
+		"tiers": {
+			"machine": "recycler",
+			"crafters": [],
+			"belt": "fast-transport-belt",
+			"inserter": "fast-inserter",
+			"pole": "medium-electric-pole",
+			"pipe": "pipe",
+			"pipe_underground": "pipe-to-ground"
+		}
+	},
+	"pack": {
+		"recipes": {
+			"scrap-recycling": {
+				"category": "recycling",
+				"time": 0.2,
+				"machine": "recycler",
+				"ingredients": [
+					{
+						"type": "item",
+						"name": "scrap",
+						"amount": 1
+					}
+				],
+				"results": [
+					{
+						"type": "item",
+						"name": "iron-gear-wheel",
+						"amount": 0.2
+					},
+					{
+						"type": "item",
+						"name": "electronic-circuit",
+						"amount": 0.1
+					},
+					{
+						"type": "item",
+						"name": "concrete",
+						"amount": 0.06
+					},
+					{
+						"type": "item",
+						"name": "ice",
+						"amount": 0.04999999999999999
+					},
+					{
+						"type": "item",
+						"name": "steel-plate",
+						"amount": 0.03999999999999998
+					},
+					{
+						"type": "item",
+						"name": "battery",
+						"amount": 0.040000000000000036
+					},
+					{
+						"type": "item",
+						"name": "stone",
+						"amount": 0.03999999999999998
+					},
+					{
+						"type": "item",
+						"name": "kr-electronic-components",
+						"amount": 0.04
+					},
+					{
+						"type": "item",
+						"name": "advanced-circuit",
+						"amount": 0.030000000000000027
+					},
+					{
+						"type": "item",
+						"name": "copper-cable",
+						"amount": 0.030000000000000027
+					},
+					{
+						"type": "item",
+						"name": "processing-unit",
+						"amount": 0.019999999999999907
+					},
+					{
+						"type": "item",
+						"name": "low-density-structure",
+						"amount": 0.010000000000000009
+					},
+					{
+						"type": "item",
+						"name": "holmium-ore",
+						"amount": 0.010000000000000009
+					}
+				],
+				"stochastic": true,
+				"direction": 0,
+				"fluid_inputs": {},
+				"fluid_outputs": {},
+				"fluid_connections": {}
+			}
+		},
+		"machines": {},
+		"belts": {
+			"fast-transport-belt": {
+				"items_per_second": 30,
+				"speed": 0.0625,
+				"size": [1, 1]
+			}
+		},
+		"undergrounds": {
+			"fast-underground-belt": {
+				"max_distance": 11,
+				"speed": 0.0625,
+				"size": [1, 1]
+			}
+		},
+		"splitters": {
+			"fast-splitter": {
+				"speed": 0.0625,
+				"size": [2, 1]
+			}
+		},
+		"inserters": {
+			"fast-inserter": {
+				"pickup_position": [0, -1],
+				"insert_position": [0, 1.2],
+				"rotation_speed": 0.08,
+				"extension_speed": 0.4,
+				"filter_count": 5,
+				"stack_size": 2,
+				"size": [1, 1],
+				"custom": {
+					"range": 3,
+					"cross": true,
+					"diagonal": true,
+					"all": true,
+					"offsets": true
+				}
+			}
+		},
+		"furnaces": {
+			"recycler": {
+				"crafting_speed": 0.5,
+				"categories": ["recycling"],
+				"size": [2, 4],
+				"flooring": {},
+				"result_position": [-0.35, -2.3]
+			}
+		},
+		"poles": {
+			"medium-electric-pole": {
+				"size": [1, 1],
+				"supply": 4.5,
+				"reach": 9.75,
+				"circuit_reach": 9.75
+			}
+		},
+		"fuels": {},
+		"drills": {},
+		"resources": {},
+		"pipes": {
+			"pipe": {},
+			"pipe-to-ground": {
+				"underground": 20
+			}
+		},
+		"transport": {
+			"underground": "fast-underground-belt",
+			"splitter": "fast-splitter",
+			"long_inserter": "fast-inserter"
+		},
+		"loaders": {
+			"aai-fast-loader": {
+				"size": [1, 1],
+				"items_per_second": 30,
+				"electric": false
+			}
+		},
+		"chests": {
+			"requester-chest": {
+				"size": [1, 1],
+				"mode": "requester",
+				"capacity": 48
+			},
+			"passive-provider-chest": {
+				"size": [1, 1],
+				"mode": "passive-provider",
+				"capacity": 48
+			}
+		},
+		"plan": {
+			"status": "solved",
+			"lines": [
+				{
+					"recipe": "scrap-recycling",
+					"machine": "recycler",
+					"machines": 6,
+					"productionType": "produce",
+					"products": [
+						{
+							"name": "holmium-ore",
+							"type": "item",
+							"perMinute": 9.000000000000007
+						},
+						{
+							"name": "copper-cable",
+							"type": "item",
+							"perMinute": 27.000000000000025
+						},
+						{
+							"name": "advanced-circuit",
+							"type": "item",
+							"perMinute": 27.000000000000025
+						},
+						{
+							"name": "iron-gear-wheel",
+							"type": "item",
+							"perMinute": 180
+						},
+						{
+							"name": "electronic-circuit",
+							"type": "item",
+							"perMinute": 90
+						},
+						{
+							"name": "concrete",
+							"type": "item",
+							"perMinute": 53.99999999999999
+						},
+						{
+							"name": "ice",
+							"type": "item",
+							"perMinute": 44.999999999999986
+						},
+						{
+							"name": "battery",
+							"type": "item",
+							"perMinute": 36.00000000000003
+						},
+						{
+							"name": "kr-electronic-components",
+							"type": "item",
+							"perMinute": 36.00000000000001
+						},
+						{
+							"name": "stone",
+							"type": "item",
+							"perMinute": 35.99999999999998
+						},
+						{
+							"name": "steel-plate",
+							"type": "item",
+							"perMinute": 35.99999999999998
+						},
+						{
+							"name": "processing-unit",
+							"type": "item",
+							"perMinute": 17.999999999999915
+						},
+						{
+							"name": "low-density-structure",
+							"type": "item",
+							"perMinute": 9.000000000000007
+						}
+					],
+					"ingredients": [
+						{
+							"name": "scrap",
+							"type": "item",
+							"perMinute": 900
+						},
+						{
+							"name": "custom-electric-power",
+							"type": "entity",
+							"amount": 1116000,
+							"unit": "W"
+						}
+					]
+				}
+			],
+			"ingredients": [
+				{
+					"name": "scrap",
+					"type": "item",
+					"perMinute": 899.9999999999999
+				},
+				{
+					"name": "custom-electric-power",
+					"type": "entity",
+					"amount": 1116000,
+					"unit": "W"
+				}
+			],
+			"products": [
+				{
+					"name": "holmium-ore",
+					"type": "item",
+					"perMinute": 9.000000000000009
+				}
+			],
+			"byproducts": [
+				{
+					"name": "iron-gear-wheel",
+					"type": "item",
+					"perMinute": 180
+				},
+				{
+					"name": "electronic-circuit",
+					"type": "item",
+					"perMinute": 90
+				},
+				{
+					"name": "concrete",
+					"type": "item",
+					"perMinute": 53.99999999999999
+				},
+				{
+					"name": "ice",
+					"type": "item",
+					"perMinute": 44.999999999999986
+				},
+				{
+					"name": "battery",
+					"type": "item",
+					"perMinute": 36.00000000000003
+				},
+				{
+					"name": "kr-electronic-components",
+					"type": "item",
+					"perMinute": 36.00000000000001
+				},
+				{
+					"name": "stone",
+					"type": "item",
+					"perMinute": 35.999999999999986
+				},
+				{
+					"name": "steel-plate",
+					"type": "item",
+					"perMinute": 35.999999999999986
+				},
+				{
+					"name": "advanced-circuit",
+					"type": "item",
+					"perMinute": 27.00000000000002
+				},
+				{
+					"name": "copper-cable",
+					"type": "item",
+					"perMinute": 27.00000000000002
+				},
+				{
+					"name": "processing-unit",
+					"type": "item",
+					"perMinute": 17.999999999999915
+				},
+				{
+					"name": "low-density-structure",
+					"type": "item",
+					"perMinute": 9.000000000000009
+				}
+			]
+		}
+	}
+}

@@ -50,7 +50,7 @@ export const factoryLayoutJobInput = z
 		width: tile.min(8),
 		height: tile.min(8),
 		inputs: z.array(port).min(1).max(12),
-		outputs: z.array(port).min(1).max(6),
+		outputs: z.array(port).min(1).max(32),
 		recipes: z.array(name).min(1).max(64),
 		nativePlan: z.boolean().default(false),
 		fixedPlan: z.boolean().default(false),
@@ -92,8 +92,11 @@ export const factoryLayoutJobInput = z
 				x:
 					request.recipes.length === 1 && request.outputs.length === 1
 						? Math.max(5.5, request.width - 7.5)
-						: 5.5 + index * 3,
-				y: request.height - 0.5
+						: 5.5 + (index % Math.max(1, Math.floor((request.width - 6) / 3) + 1)) * 3,
+				y:
+					request.height -
+					0.5 -
+					Math.floor(index / Math.max(1, Math.floor((request.width - 6) / 3) + 1)) * 3
 			},
 			direction: port.direction ?? (8 as const)
 		}))

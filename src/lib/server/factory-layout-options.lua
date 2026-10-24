@@ -12,16 +12,19 @@ function options.arm(arm,chosen)
   end
   return chosen,{pickup_position=chosen.pickup,drop_position=chosen.drop}
  end
-function options.cell(w,h,problem,pack,fluid)
+function options.cell(w,h,problem,pack,fluid,result_position)
  local arm=assert(pack.inserters[problem.tiers.inserter])
  local input_profile=problem.inserters and problem.inserters.input
  local output_profile=problem.inserters and problem.inserters.output
  if arm.custom and arm.custom.cross and arm.custom.range>=1 then
   -- A quarter-turn reaches the same machine with less chest clearance than straight arms.
-  input_profile=input_profile or {pickup={x=-1,y=0},drop={x=0,y=1}}
+  input_profile=input_profile or {pickup={x=-1,y=0},drop={x=0,y=result_position and -1 or 1}}
   output_profile=output_profile or {pickup={x=0,y=-1},drop={x=1,y=0}}
  end
  local input,ins=options.arm(arm,input_profile);local output,outs=options.arm(arm,output_profile)
+ if result_position and not input_profile then
+  for _,p in ipairs{input.pickup,input.drop} do p.x=-p.x;p.y=-p.y end;ins.direction=8
+ end
  local function attach(v)
   local x,y=tile(v.x),tile(v.y)
   assert(x~=0 or y~=0,'Inserter vector must reach another tile')
@@ -33,7 +36,8 @@ function options.cell(w,h,problem,pack,fluid)
  local ia,oa=attach(input.drop),attach(output.pickup)
  local ic={x=ia.x+tile(input.pickup.x),y=ia.y+tile(input.pickup.y)}
  local oc={x=oa.x+tile(output.drop.x),y=oa.y+tile(output.drop.y)}
- local points={ia,oa,ic,oc}
+ if result_position then oc={x=math.floor(w/2+result_position[1])+.5,y=math.floor(h/2+result_position[2])+.5} end
+ local points=result_position and {ia,ic,oc} or {ia,oa,ic,oc}
  local occupied={}
  local tight=problem.transport and problem.layout.spacing=='compact' and not fluid
  local left,top,right,bottom=0,tight and 0 or -2,w,tight and h or h+2
@@ -48,7 +52,7 @@ function options.cell(w,h,problem,pack,fluid)
  local dx,dy=padding-left,-top
  for _,p in ipairs(points) do p.x=p.x+dx;p.y=p.y+dy end
  return {width=right-left+padding*2+(spacious and 1 or 0),height=bottom-top+(tight and 0 or 1)+(spacious and 3 or 0),
-  machine={x=w/2+dx,y=h/2+dy},input_arm=ia,output_arm=oa,input_chest=ic,output_chest=oc,input_settings=ins,output_settings=outs}
+  ejects=result_position~=nil,machine={x=w/2+dx,y=h/2+dy},input_arm=ia,output_arm=oa,input_chest=ic,output_chest=oc,input_settings=ins,output_settings=outs}
 end
 function options.columns(count,width,height,available_width,available_height,shape)
  local maximum=math.min(count,math.floor(available_width/width))

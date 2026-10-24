@@ -18,6 +18,7 @@ import planPackSource from './factory-layout-plan-pack.lua?raw';
 import { recordCompiledFactoryTrial } from './factory-layout-status';
 import control from './factory-native-trial.lua?raw';
 import { luaString } from './factory-query-bundle';
+import { qualifyRecyclingTrial, recyclingTrial } from './factory-recycling-trial';
 import { aggregateLogisticsOutputs, sandboxResultSchema } from './factory-sandbox';
 import startup from './factory-trial-startup.lua?raw';
 import { nativeProfileFingerprint, withNativeProfile } from './map-generation-native';
@@ -75,12 +76,14 @@ export function testCompiledFactory(
 	options: { signal?: AbortSignal; progress: (value: TrialResult) => void }
 ) {
 	// Fluid chains can spend minutes filling recycling loops. Measure once delivery stabilizes.
-	const startupSeconds = input.test.warmupSeconds >= 300 ? 1800 : undefined;
+	const recycling = recyclingTrial(input.request, input.pack);
+	const warmupSeconds = recycling ? 30 : input.test.warmupSeconds;
+	const startupSeconds = !recycling && warmupSeconds >= 300 ? 1800 : undefined;
 	// Four minutes reduce batch-boundary error for synchronized multi-machine outputs.
 	const measurementSeconds = startupSeconds ? 240 : input.test.seconds;
 	const benchmarkSeconds = startupSeconds
 		? startupSeconds + measurementSeconds
-		: input.test.warmupSeconds + input.test.seconds;
+		: warmupSeconds + input.test.seconds;
 	const designId = input.artifact.designId;
 	if (!designId) throw new ServerError(400, 'Native validation requires a saved factory design');
 	const id = `headless-${randomUUID()}`;
@@ -138,7 +141,8 @@ export function testCompiledFactory(
 							? z.object({ plan: z.json() }).parse(input.pack).plan
 							: undefined,
 					context: input.context,
-					test: input.test,
+					test: { ...input.test, warmupSeconds },
+					recycling,
 					blueprint: input.artifact.blueprint,
 					designId,
 					settings: input.artifact.entities.flatMap((e, i) =>
@@ -182,6 +186,10 @@ export function testCompiledFactory(
 							.replace(
 								'not number(p.perMinute,0.01,1000000)',
 								'not number(p.perMinute,0,1000000) or p.perMinute==0'
+							)
+							.replace(
+								'local outputs,passed,sufficient={},true,true',
+								'if M.before_finish then M.before_finish(job) end; local outputs,passed,sufficient={},true,true'
 							)
 							.replace('#rows>2000', `#rows>${MAX_BLUEPRINT_ENTITIES}`)
 							.replace('1..2000 entities', `1..${MAX_BLUEPRINT_ENTITIES} entities`)
@@ -240,7 +248,7 @@ export function testCompiledFactory(
 											: native.phase === 'measurement'
 												? 'Measuring sustained factory output.'
 												: typeof native.elapsedTicks === 'number' &&
-														native.elapsedTicks < input.test.warmupSeconds * 60
+														native.elapsedTicks < warmupSeconds * 60
 													? 'Filling belts and machine buffers in the simulator.'
 													: 'Measuring factory output.'
 							});
@@ -310,9 +318,11 @@ export function testCompiledFactory(
 						);
 					if ((await nativeProfileFingerprint(server)) !== fingerprint)
 						throw new ServerError(409, 'Game or mods changed during native qualification');
-					const tested = input.request.logistics
-						? aggregateLogisticsOutputs(observed.result)
-						: sandboxResultSchema.parse(observed.result);
+					const tested = recycling
+						? qualifyRecyclingTrial(observed.result, recycling)
+						: input.request.logistics
+							? aggregateLogisticsOutputs(observed.result)
+							: sandboxResultSchema.parse(observed.result);
 					return sandboxResultSchema.parse({
 						...tested,
 						id,

@@ -5,6 +5,7 @@ local boundary=interfaces.prepare(problem,pack,robot_cells,options)
 local entities,ports,sources,sinks,inputs,steps={},{},{},{},{},{}
 local demand,available,requested,reserved={},{},{},{}
 local circuits={}
+local collected={}
 local function key(kind,name) return kind..'/'..name end
 for _,port in ipairs(problem.inputs) do available[key('item',port.item)]=(available[key('item',port.item)] or 0)+port.perMinute end
 for _,port in ipairs(problem.fluid_inputs or {}) do available[key('fluid',port.item)]=(available[key('fluid',port.item)] or 0)+port.perMinute end
@@ -34,7 +35,7 @@ local cells,ordered={},{}
 for index,line in ipairs(plan.lines) do if line.machines>0.000001 then
  local recipe=assert(pack.recipes[line.recipe]);local machine=assert(pack.machines[line.machine] or pack.furnaces[line.machine])
  local w,h=table.unpack(machine.native_size or machine.size)
- local cell=options.cell(w,h,problem,pack,#(recipe.fluid_inputs or {})+#(recipe.fluid_outputs or {})>0)
+ local cell=options.cell(w,h,problem,pack,#(recipe.fluid_inputs or {})+#(recipe.fluid_outputs or {})>0,machine.result_position)
  cells[index]={cell=cell,positions={}}
  for i=1,math.ceil(line.machines-1e-9) do ordered[#ordered+1]={stage=index,index=i,cell=cell} end
 end end
@@ -74,7 +75,6 @@ for index,line in ipairs(plan.lines) do if line.machines>0.000001 then
  local recipe=assert(pack.recipes[line.recipe])
  local machine=assert(pack.machines[line.machine] or pack.furnaces[line.machine])
  local w,h=table.unpack(machine.native_size or machine.size)
- assert(w==h,'Native plan cells require square machines')
  local count=math.ceil(line.machines-0.000000001)
  local cell=cells[index].cell
  local production=0
@@ -94,7 +94,7 @@ for index,line in ipairs(plan.lines) do if line.machines>0.000001 then
    end
    local chest=add(problem.logistics.requester,left+cell.input_chest.x,top+cell.input_chest.y,{request_filters={request_from_buffers=problem.transport and true or nil,sections={{index=1,filters=filters}}}})
    for _,part in ipairs(recipe.ingredients) do if demand[key('item',part.name)] then ports[#ports+1]={entity=chest,item=part.name,kind='input',position=entities[chest].position,perMinute=demand[key('item',part.name)]*rate(line.ingredients,'item',part.name)/consumed[part.name]/count} end end
-   add(problem.tiers.inserter,left+cell.input_arm.x,top+cell.input_arm.y,{pickup_position=cell.input_settings.pickup_position,drop_position=cell.input_settings.drop_position})
+   add(problem.tiers.inserter,left+cell.input_arm.x,top+cell.input_arm.y,{direction=cell.input_settings.direction,pickup_position=cell.input_settings.pickup_position,drop_position=cell.input_settings.drop_position})
   end
   local settings,wire,connector,gate=options.machine_settings(line,pack)
   local id=add(line.machine,x,center,settings)
@@ -106,7 +106,22 @@ for index,line in ipairs(plan.lines) do if line.machines>0.000001 then
   end end
   if #item_products>0 then
    assert(problem.logistics,'Item outputs require requester/provider tiers')
-   assert(#item_products<=math.ceil(w/2),'Filtered output chests do not fit '..line.recipe)
+   if #item_products>math.ceil(w/2) then
+    -- Robots empty the mixed provider into separately filtered storage, without requester loops.
+    local storage_output=pack.chests[problem.logistics.provider].mode=='storage'
+    assert(not problem.transport or problem.transport.outputs=='storage-chests','Mixed products need chest output')
+    local provider=storage_output and assert(pack.mixed_output_provider,'Mixed products require an unlocked active provider chest') or problem.logistics.provider
+    local slots=math.max(problem.logistics.outputSlots,#item_products)
+    assert(slots<=pack.chests[provider].capacity,'Output chest needs room for every product: '..line.recipe)
+    if not cell.ejects then add(problem.tiers.inserter,left+cell.output_arm.x,top+cell.output_arm.y,{pickup_position=cell.output_settings.pickup_position,drop_position=cell.output_settings.drop_position}) end
+    local chest=add(provider,left+cell.output_chest.x,top+cell.output_chest.y,{bar=slots})
+    for _,part in ipairs(item_products) do local output=requested[key('item',part.name)]
+     if output then
+      if storage_output then collected[part.name]=true
+      else ports[#ports+1]={entity=chest,item=part.name,kind='output',position=entities[chest].position,perMinute=output.perMinute*rate(line.products,'item',part.name)/produced[part.name]/count} end
+     end
+    end
+   else
    for j,part in ipairs(item_products) do
     local offset=2*j-#item_products-1
     local settings={pickup_position=cell.output_settings.pickup_position,drop_position=cell.output_settings.drop_position}
@@ -114,7 +129,7 @@ for index,line in ipairs(plan.lines) do if line.machines>0.000001 then
      assert((pack.inserters[problem.tiers.inserter].filter_count or 0)>0,'Output sorting requires filtered inserters')
      settings.use_filters=true;settings.filters={{index=1,name=part.name}}
     end
-    add(problem.tiers.inserter,left+cell.output_arm.x+offset,top+cell.output_arm.y,settings)
+    if not cell.ejects then add(problem.tiers.inserter,left+cell.output_arm.x+offset,top+cell.output_arm.y,settings) end
     local terminal=requested[key('item',part.name)] and (not problem.transport or problem.transport.outputs=='storage-chests')
     local provider=problem.transport and not terminal and problem.logistics.buffer or problem.logistics.provider
     local chest=add(provider,left+cell.output_chest.x+offset,top+cell.output_chest.y,options.product_settings(problem,pack,part.name,provider))
@@ -122,10 +137,22 @@ for index,line in ipairs(plan.lines) do if line.machines>0.000001 then
     if output then ports[#ports+1]={entity=chest,item=part.name,kind='output',position=entities[chest].position,perMinute=output.perMinute*rate(line.products,'item',part.name)/produced[part.name]/count} end
    end
   end
+   end
   for _,part in ipairs(recipe.fluid_inputs or {}) do sinks[#sinks+1]={fluid=part.name,position={x=x+part.position.x,y=center+part.position.y},direction=0} end
   for _,part in ipairs(recipe.fluid_outputs or {}) do sources[#sources+1]={fluid=part.name,position={x=x+part.position.x,y=center+part.position.y},direction=0} end
  end
 end end
+if next(collected) then
+ local bottom=2
+ for _,entry in pairs(cells) do for _,p in ipairs(entry.positions) do bottom=math.max(bottom,p.y+entry.cell.height) end end
+ local index=0;local columns=math.floor(problem.area[2][1]-boundary.left)
+ for _,port in ipairs(problem.outputs) do if port.type~='fluid' and collected[port.item] then
+  local x=boundary.left+(index%columns)+.5;local y=bottom+1+math.floor(index/columns)+.5
+  assert(y<problem.area[2][2]-boundary.bottom,'Filtered output storage does not fit this block')
+  local id=add(problem.logistics.provider,x,y,options.product_settings(problem,pack,port.item))
+  ports[#ports+1]={entity=id,item=port.item,kind='output',position=entities[id].position,perMinute=port.perMinute};index=index+1
+ end end
+end
 else
  local placed=beltPlan()
  entities,ports,sources,sinks,steps,reserved=placed.entities,placed.ports,placed.sources,placed.sinks,placed.steps,placed.reservations

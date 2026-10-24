@@ -5,6 +5,18 @@ local build_plan=require('plan-pack')
 local inserter_rules=require('inserter-rules')
 local payload=helpers.json_to_table(require('request'))
 local startup=require('startup')
+local function recycling_stats(job)
+ local stats=job.entities[1].force.get_item_production_statistics(job.surface)
+ local products={};for _,name in ipairs(payload.recycling.products) do products[name]=stats.get_input_count(name) end
+ return {consumed=stats.get_output_count(payload.recycling.ingredient),products=products,tick=game.tick}
+end
+sandbox.before_finish=function(job)
+ if payload.recycling and storage.recycling_start and job.entities then
+  local after=recycling_stats(job);local before=storage.recycling_start
+  local products={};for name,value in pairs(after.products) do products[name]=value-before.products[name] end
+  storage.recycling_proof={consumed=after.consumed-before.consumed,products=products,ticks=after.tick-before.tick}
+ end
+end
 local function write(value)
  helpers.write_file('layout-trial.json',helpers.table_to_json(value),false)
 end
@@ -105,6 +117,7 @@ local function provide_logistics(job,pack)
  for _,line in ipairs(pack.plan and pack.plan.lines or {}) do for _,part in ipairs(line.ingredients) do if part.type=='item' then consumed[part.name]=true end end end
  local internal=false
  for _,line in ipairs(pack.plan and pack.plan.lines or {}) do for _,part in ipairs(line.products) do if part.type=='item' and consumed[part.name] then internal=true end end end
+ if not internal then for _,e in ipairs(job.entities) do if e.type=='logistic-container' and e.prototype.logistic_mode=='active-provider' then internal=true;break end end end
  if not internal then return end
  local surface,force=job.surface,job.entities[1].force
  local left,top,right,bottom=math.huge,math.huge,-math.huge,-math.huge
@@ -228,6 +241,7 @@ events.on_event(defines.events.on_tick,function(e)
    helpers.write_file('layout-progress.json',helpers.table_to_json(started),false)
   elseif e.tick%60==0 then
    local job=storage.toby_trials.jobs[storage.job]
+   if payload.recycling and not storage.recycling_start and job and job.entities and game.tick>=job.sampleStart then storage.recycling_start=recycling_stats(job) end
    local rates
    if not storage.loaders_verified and job and job.entities and game.tick>=job.startTick+60 then
     for _,entity in ipairs(job.entities) do if entity.type=='loader-1x1' then
@@ -251,7 +265,7 @@ events.on_event(defines.events.on_tick,function(e)
    local result=sandbox.read(payload.request.force,storage.job)
    if result.status~='running' then
     if storage.provided_logistics then assert(storage.logistics_verified,'Isolated logistics coverage was not verified');result.note=result.note..' Ordinary robots and connected roboport coverage were supplied by the isolated fixture.' end
-    result.diagnostics=storage.diagnostics;result.settingsVerified=storage.settings_verified
+    result.recyclingProof=storage.recycling_proof;result.diagnostics=storage.diagnostics;result.settingsVerified=storage.settings_verified
     write({pack=storage.pack,result=result});storage.finished=true
    else
     if payload.startupSeconds then result.phase=storage.startup and 'startup' or 'measurement';result.outputs=storage.startup and rates or nil end

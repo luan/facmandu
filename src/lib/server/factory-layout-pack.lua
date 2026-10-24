@@ -92,7 +92,7 @@ return function(request,build_plan,inserter_rules)
   if pack.machines[p.name] or pack.furnaces[p.name] then return end
   if p.type=='furnace' then
    local f=entity(p.name,'furnace',request.fixedPlan);assert(f.electric_energy_source_prototype,'Factory compiler requires electric furnaces')
-   pack.furnaces[p.name]={crafting_speed=f.get_crafting_speed(),categories=keys(f.crafting_categories),size=size(f),flooring=flooring(f)}
+   pack.furnaces[p.name]={crafting_speed=f.get_crafting_speed(),categories=keys(f.crafting_categories),size=size(f),flooring=flooring(f),result_position=f.vector_to_place_result}
   else
    p=entity(p.name,'assembling-machine',request.fixedPlan)
    assert(not p.burner_prototype and (p.electric_energy_source_prototype or p.void_energy_source_prototype),'Factory compiler requires electric or void-powered crafting machines')

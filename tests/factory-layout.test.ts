@@ -1581,3 +1581,42 @@ for (const intermediates of ['belts', 'buffer-chests'] as const)
 		assert.ok(Math.abs(result.test.outputs.reduce((sum, p) => sum + p.perMinute, 0) - 60) < 1e-6);
 		assert.ok(blueprintInputSchema.safeParse({ ...result.design, operation: 'create' }).success);
 	});
+
+test('saved 900 scrap/min plan collects all thirteen products from six rectangular recyclers', async () => {
+	const fixture = JSON.parse(
+		readFileSync('tests/fixtures/interpose/scrap-recycling-2.1.21.json', 'utf8')
+	);
+	const job = factoryLayoutInput.parse(fixture.request);
+	const result = await compileFactoryLayout(job, z.json().parse(fixture.pack), modules);
+	assert.equal(job.outputs.length, 13);
+	assert.equal(result.design.entities.filter((e) => e.name === 'recycler').length, 6);
+	assert.equal(new Set(result.test.outputs.map((p) => p.name)).size, 13);
+	assert.ok(Math.abs(result.test.inputs.reduce((n, p) => n + p.perMinute, 0) - 900) < 1e-6);
+	const expected = new Map(job.outputs.map((p) => [p.item, p.perMinute]));
+	for (const name of expected.keys())
+		assert.ok(
+			Math.abs(
+				result.test.outputs.filter((p) => p.name === name).reduce((n, p) => n + p.perMinute, 0) -
+					(expected.get(name) ?? 0)
+			) < 1e-6
+		);
+	// The recycler ejects north. Its output chest must receive directly, with the input arm south.
+	for (const machine of result.design.entities.filter((e) => e.name === 'recycler')) {
+		const vector = fixture.pack.furnaces.recycler.result_position;
+		const x = Math.floor(machine.position.x + vector[0]) + 0.5,
+			y = Math.floor(machine.position.y + vector[1]) + 0.5;
+		assert.ok(
+			result.design.entities.some(
+				(e) => e.name === 'passive-provider-chest' && e.position.x === x && e.position.y === y
+			)
+		);
+	}
+	assert.ok(blueprintInputSchema.safeParse({ ...result.design, operation: 'create' }).success);
+	assert.equal(
+		factoryLayoutInput.safeParse({
+			...job,
+			outputs: Array.from({ length: 33 }, (_, i) => ({ item: 'product-' + i, perMinute: 1 }))
+		}).success,
+		false
+	);
+});

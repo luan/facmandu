@@ -62,7 +62,7 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
  end
  local function ports(crafter,parts,kind,direction,reserved)
   assert(#parts==0 or (request.tiers.pipe and request.tiers.pipe_underground),'Saved fluid stages require pipe tiers')
-  assert(crafter.tile_width==crafter.tile_height,'Native fluid cells require square machines: '..crafter.name)
+  assert(#parts==0 or crafter.tile_width==crafter.tile_height,'Native fluid cells require square machines: '..crafter.name)
   local boxes=boxes_for(crafter,kind)
   local result={}
   for i,part in ipairs(parts) do
@@ -99,6 +99,7 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
   assert(crafter,'No selected machine can craft '..name)
   assert(not crafter.fixed_recipe or crafter.fixed_recipe.name==name,'Machine has a different fixed recipe: '..name)
   local ingredients,results,fluid_in,fluid_out={},{},{},{}
+  local stochastic=false
   for _,part in pairs(recipe.ingredients) do
    if part.type=='fluid' then
     local temperature=temperatures[part.name] or prototypes.fluid[part.name].default_temperature
@@ -110,6 +111,7 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
   local effect=crafter.effect_receiver and crafter.effect_receiver.base_effect
   local productivity=math.min((recipe.productivity_bonus or 0)+(effect and effect.productivity or 0),p.maximum_productivity or math.huge)
   for i,part in ipairs(recipe.products) do
+   stochastic=stochastic or (part.probability or part.independent_probability or 1)<1 or part.amount_min~=nil
    -- Factorio supplies the same expected product amount used by the planner,
    -- including random yields and productivity. Layout never changes the plan.
    local amount
@@ -121,6 +123,12 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
    local product={type=part.type,name=part.name,amount=amount}
    results[#results+1]=product
    if part.type=='fluid' then fluid_out[#fluid_out+1]={name=part.name,amount=amount,index=part.fluidbox_index,temperature=part.temperature} end
+  end
+  if request.logistics and pack.chests[request.logistics.provider].mode=='storage' and #results>math.ceil(crafter.tile_width/2) then
+   local provider=entity('active-provider-chest','logistic-container')
+   assert(provider.logistic_mode=='active-provider' and provider.tile_width==1 and provider.tile_height==1,'Mixed-product collection requires a one-tile active provider chest')
+   pack.chests[provider.name]={size={1,1},mode=provider.logistic_mode,capacity=provider.get_inventory_size(defines.inventory.chest)}
+   pack.mixed_output_provider=provider.name
   end
   local allow_ends=#ingredients==0
   for _,part in ipairs(results) do if part.type=='item' then allow_ends=false end end
@@ -137,7 +145,7 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
    disposal={fluid=fluid_in[1].name,capacity=capacity,threshold=math.floor(capacity*.5),wire_reach=crafter.get_max_circuit_wire_distance()}
   end
   pack.recipes[name]={category=category,time=recipe.energy,machine=crafter.name,ingredients=ingredients,results=results,
-   direction=direction,fluid_inputs=fluid_inputs,fluid_outputs=fluid_outputs,fluid_connections=reserved,disposal=disposal}
+   stochastic=stochastic,direction=direction,fluid_inputs=fluid_inputs,fluid_outputs=fluid_outputs,fluid_connections=reserved,disposal=disposal}
  end
  local solved=frozen_plan
  for _,line in ipairs(solved.lines) do
@@ -158,8 +166,17 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
   assert(requested[part.type..'/'..part.name],'Add a disposal recipe or output for '..part.name)
  end end
  local lines={}
- for _,line in ipairs(solved.lines) do lines[#lines+1]={recipe=line.recipe,machine=line.machine,machines=line.machines,
-  productionType=line.productionType,products=line.products,ingredients=line.ingredients} end
+ for _,line in ipairs(solved.lines) do
+  local products,index={},{}
+  -- Simplex separates used products from surplus; transport must collect their combined yield.
+  for _,list in ipairs{line.products,line.byproducts or {}} do for _,part in ipairs(list) do
+   local k=part.type..'/'..part.name
+   if index[k] then index[k].perMinute=index[k].perMinute+(part.perMinute or 0)
+   else local p={name=part.name,type=part.type,perMinute=part.perMinute or 0};products[#products+1]=p;index[k]=p end
+  end end
+  lines[#lines+1]={recipe=line.recipe,machine=line.machine,machines=line.machines,
+   productionType=line.productionType,products=products,ingredients=line.ingredients}
+ end
  -- A fractional gas producer otherwise runs flat out into its disposal furnaces.
  -- Regulate fluid-only producers from the most demanded output, before venting.
  local vented,demand,drivers,consumers={},{},{},{}
