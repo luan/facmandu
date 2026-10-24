@@ -958,6 +958,38 @@ test('native placement inspection identifies pole gaps and preserves uncertainty
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 });
 
+test('native export accepts omitted crafting defaults but rejects changed circuit settings', () => {
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ local force={recipes={{enabled=true,products={{type='item',name='centrifuge'}}}}}
+ prototypes={entity={centrifuge={type='assembling-machine',tile_width=3,tile_height=3,items_to_place_this={{name='centrifuge'}},has_flag=function() return false end}}}
+ local native={read_contents=true}
+ game={forces={player=force},create_inventory=function()
+  local saved
+  return {{set_stack=function() end,set_blueprint_entities=function(e) saved=e end,
+   get_blueprint_entities=function()
+    local e=saved[1];return {{name=e.name,position=e.position,direction=e.direction,control_behavior=native}}
+   end,get_blueprint_tiles=function() return {} end,export_stack=function() return '0native' end,cost_to_build={}}}
+ end}
+ ${blueprintSource}
+ local request={operation='create',force='player',label='Catalyst stock',entities={{name='centrifuge',position={x=.5,y=.5},direction=0,control_behavior={read_contents=true,include_in_crafting=true}}}}
+ assert(blueprint(request).kind=='blueprint','Omitted include_in_crafting means true')
+ native.include_in_crafting=false
+ local ok,err=pcall(blueprint,request)
+ assert(not ok and err:match('control_behavior.include_in_crafting'),'Explicit false must still be rejected')
+ native.include_in_crafting=nil;request.entities[1].control_behavior.include_in_crafting=false
+ ok,err=pcall(blueprint,request)
+ assert(not ok and err:match('control_behavior.include_in_crafting'),'Omission cannot satisfy requested false')
+ native.include_in_crafting=false
+ assert(blueprint(request).kind=='blueprint','Explicit false must survive export')
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});
+
 test('native export warns about missing, distant and competing underground partners', () => {
 	const state = lauxlib.luaL_newstate();
 	lualib.luaL_openlibs(state);
