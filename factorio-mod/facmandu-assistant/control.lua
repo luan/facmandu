@@ -480,8 +480,8 @@ events.on_event(defines.events.on_gui_click,function(event)
  end
 end)
 events.on_event(defines.events.on_built_entity,drone.built)
+events.on_nth_tick(1,drone.tick)
 events.on_nth_tick(5,function(event)
- drone.tick()
  drone.animate()
  if event.tick%15==0 then
   for _,refs in pairs(storage.gui or {}) do

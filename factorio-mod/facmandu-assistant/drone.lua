@@ -125,7 +125,7 @@ function M.submit(request)
 end
 local function fly(state,target)
  local e=state.entity;local d=math.sqrt(distance(e.position,target));if d<=0.3 then return true end
- local step=math.min(d,SPEED*5/60)
+ local step=math.min(d,SPEED/60)
  local next={x=e.position.x+(target.x-e.position.x)*step/d,y=e.position.y+(target.y-e.position.y)*step/d}
  if not charted(e.force,e.surface,next)then error('Toby reached unexplored terrain; choose an explored approach',0)end
  e.torso_orientation=(atan2(target.y-e.position.y,target.x-e.position.x)/math.pi/2+0.25)%1
@@ -175,5 +175,5 @@ function M.activity(player,activity)
  if state and state.job and (state.job.state=='travelling' or state.job.state=='placing')then return end
  visuals.activity(player,activity)
 end
-remote.add_interface('facmandu-toby-drone',{read=M.read,command=M.command,submit=M.submit,features=function()return {ghostOnly=e.name==NAME,invulnerable=true,speed=SPEED,inventory=false,robots=false}end})
+remote.add_interface('facmandu-toby-drone',{read=M.read,command=M.command,submit=M.submit,features=function()return {ghostOnly=true,invulnerable=true,speed=SPEED,inventory=false,robots=false}end})
 return M
