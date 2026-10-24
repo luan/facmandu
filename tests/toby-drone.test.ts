@@ -3,117 +3,79 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { lauxlib, lua, lualib, to_luastring } from 'fengari';
 
-test('Toby owns a separate drone, rejects foreign/stale commands and preserves cargo on departure', () => {
+const drone = readFileSync('factorio-mod/facmandu-assistant/drone.lua', 'utf8');
+function run(body: string) {
 	const state = lauxlib.luaL_newstate();
 	lualib.luaL_openlibs(state);
-	const visuals = readFileSync('factorio-mod/facmandu-assistant/drone-visuals.lua', 'utf8');
-	const source = readFileSync('factorio-mod/facmandu-assistant/drone.lua', 'utf8');
-	const status = lauxlib.luaL_dostring(
-		state,
-		to_luastring(`
- package.preload['drone-visuals']=function() ${visuals} end
- package.preload['territory']=function() ${readFileSync('src/lib/server/factory-query/scripts/tools/territory.lua', 'utf8')} end
- rendering={draw_animation=function(spec) spec.valid=true;spec.destroy=function() spec.valid=false end;return spec end}
- storage={};defines={inventory={spider_trunk=1}};local api
- local force={name='player',technologies={},recipes={},is_chunk_charted=function(_,chunk) return chunk[1]>=0 end}
- local surface={name='nauvis',find_entities_filtered=function() return {} end}
- local alice={name='alice',index=1,force=force,connected=true,character={},physical_surface=surface,physical_position={x=0,y=0},get_main_inventory=function() return nil end}
- local bob={name='bob',index=2,force=force,connected=true,character={},physical_surface=surface,physical_position={x=0,y=0},get_main_inventory=function() return nil end}
- game={tick=0,players={},forces={force},get_player=function(id) if id==1 or id=='alice' then return alice elseif id==2 or id=='bob' then return bob end end}
- remote={add_interface=function(name,interface) assert(name=='facmandu-toby-drone');api=interface end}
- local inventory={get_contents=function() return {{name='transport-belt',quality='normal',count=10}} end}
- local entity={stop_spider=function() end,valid=true,name='toby-drone',force=force,unit_number=4,surface=surface,torso_orientation=0,position={x=0,y=0},grid={available_in_batteries=1000},get_inventory=function() return inventory end}
- local module=(function() ${source} end)()
- module.init();module.built{entity=entity,player_index=1}
- local snapshot=api.read('player','alice')
- assert(snapshot.available and snapshot.unitNumber==4 and snapshot.cargo[1].count==10)
- assert(not api.read('player','bob').available)
- assert(not pcall(module.bind,bob,entity))
- assert(not pcall(api.read,'enemy','alice'))
- local next=api.command('player','alice','follow',snapshot)
- assert(next.mode=='follow' and entity.follow_target==alice.character)
- assert(not pcall(api.command,'player','alice','stay',snapshot))
- assert(not pcall(api.command,'player','bob','stay',next))
- assert(not pcall(api.command,'player','alice','move',next,{x=257,y=0}))
- assert(not pcall(api.command,'player','alice','move',next,{x=-2,y=0}))
- assert(not pcall(api.command,'player','alice','move',next,{x=0/0,y=0}))
- assert(entity.follow_target==alice.character and api.read('player','alice').revision==next.revision)
- next=api.command('player','alice','move',next,{x=25,y=2})
- assert(next.mode=='move' and entity.autopilot_destination.x==25 and not entity.follow_target)
- alice.connected=false;module.tick()
- local stopped=api.read('player','alice')
- assert(stopped.mode=='move' and not entity.follow_target and not entity.autopilot_destination)
- assert(stopped.cargo[1].count==10)
- assert(not pcall(api.command,'player','alice','follow',stopped))
- alice.connected=true;alice.physical_surface={name='platform-1'}
- assert(not pcall(api.command,'player','alice','follow',stopped))
- alice.physical_surface=surface
- api.command('player','alice','follow',stopped)
- alice.character={};module.tick();assert(entity.follow_target==alice.character)
- entity.valid=false;module.tick();assert(not api.read('player','alice').available)
- `)
-	);
+	const prelude = `
+ table.deepcopy=function(t)if type(t)~='table'then return t end;local r={};for k,v in pairs(t)do r[k]=table.deepcopy(v)end;return r end
+ package.preload['drone-visuals']=function()return {clear=function()end,update=function()end,activity=function()end}end
+ local calls={inspect=0,place=0,orders=0};local blocked=false
+ package.preload['ghost-work']=function()return {run=function(r)
+  if r.operation=='inspect' then calls.inspect=calls.inspect+1;return {ready=not blocked,expectedTick=game.tick,blocked={{reason='Site changed'}}} end
+  if r.validateOnly then if blocked then error('Order snapshot changed')end;return {validated=true,tick=game.tick}end
+  if r.operation=='entities_edit' then calls.orders=calls.orders+1;return {outcomes={{state='upgrade_queued'}}}end
+  assert(not blocked);calls.place=calls.place+1;return {operation='place_blueprint',complete=true,placed=#r.entities,placed_tiles=0}
+ end}end
+ local force={name='player',recipes={},is_chunk_charted=function(_,at)return at[1]>=0 end}
+ local surface={name='nauvis'}
+ local alice={name='Alice',index=1,force=force,connected=true,character={},physical_surface=surface,physical_position={x=0,y=0},insert=function()error('Ghost work must not touch inventory')end}
+ local bob={name='Bob',index=2,force=force,connected=true,character={},physical_surface=surface,physical_position={x=0,y=0}}
+ local e={name='toby-ghost-drone',valid=true,unit_number=4,force=force,surface=surface,position={x=0,y=0},destructible=true}
+ e.teleport=function(p,s)e.position={x=p.x,y=p.y};if s then e.surface=s end;return true end
+ surface.find_non_colliding_position=function()return {x=0,y=0}end;surface.create_entity=function()return e end
+ storage={};game={tick=100,players={},forces={player=force},surfaces={nauvis=surface},get_player=function(n)if n==1 or n=='Alice'then return alice elseif n==2 or n=='Bob'then return bob end end}
+ helpers={table_to_json=function()return 'bounded'end};defines={inventory={spider_trunk=1,spider_trash=2}}
+ local api;remote={add_interface=function(_,value)api=value end}
+ local module=(function()${drone}end)();module.init();module.bind(alice,e)
+ `;
+	const status = lauxlib.luaL_dostring(state, to_luastring(prelude + body));
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+}
+
+test('Toby flies quickly, is invulnerable and has no material or robot work', () => {
+	run(`local snapshot=api.read('player','Alice')
+ assert(snapshot.ghostOnly and snapshot.invulnerable and snapshot.cargo==nil and not e.operable and not e.enable_logistics_while_moving)
+ assert(api.features().inventory==false and api.features().robots==false)
+ assert(not pcall(api.command,'enemy','Alice','stay',snapshot))
+ assert(not pcall(module.bind,bob,e))
+ local moving=api.command('player','Alice','move',snapshot,{x=600,y=0})
+ assert(not pcall(api.command,'player','Alice','stay',snapshot),'Stale move must be rejected')
+ module.tick();assert(e.position.x==4 and e.position.y==0,'48 tiles/sec in five-tick steps')
+ assert(not pcall(api.command,'player','Alice','move',moving,{x=-100,y=0}),'Unexplored target accepted')
+ assert(not pcall(api.command,'player','Alice','move',moving,{x=0/0,y=0}))
+ api.command('player','Alice','stay',moving);local before=e.position.x;module.tick();assert(e.position.x==before)
+ assert(calls.place==0 and calls.orders==0)
+ `);
 });
 
-test('automatic Toby constructs without equipment and conserves real materials on failed revival', () => {
-	const state = lauxlib.luaL_newstate();
-	lualib.luaL_openlibs(state);
-	const visuals = readFileSync('factorio-mod/facmandu-assistant/drone-visuals.lua', 'utf8');
-	const source = readFileSync('factorio-mod/facmandu-assistant/drone.lua', 'utf8');
-	const status = lauxlib.luaL_dostring(
-		state,
-		to_luastring(`
- package.preload['drone-visuals']=function() ${visuals} end
- package.preload['territory']=function() ${readFileSync('src/lib/server/factory-query/scripts/tools/territory.lua', 'utf8')} end
- rendering={draw_animation=function(spec) spec.valid=true;spec.destroy=function() spec.valid=false end;return spec end}
- storage={};defines={inventory={spider_trunk=1,chest=2}};local api
- local function stack(count)
-  local data={count=count,name='transport-belt',quality={name='normal'}}
-  local value={clear=function() data.count=0 end,set_stack=function(other) data.name=other.name;data.quality=other.quality;data.count=other.count end}
-  return setmetatable(value,{__index=function(_,key) if key=='valid_for_read' then return data.count>0 end;return data[key] end,__newindex=function(_,key,v) data[key]=v end})
- end
- local function inventory(count)
-  local inv={stack(count),valid=true}
-  inv.insert=function(item) inv[1].count=inv[1].count+item.count;return item.count end
-  inv.get_contents=function() return inv[1].count>0 and {{name=inv[1].name,quality=inv[1].quality.name,count=inv[1].count}} or {} end
-  inv.destroy=function() inv.valid=false end
-  return inv
- end
- local cargo=inventory(0);local stock=inventory(0);local provider=inventory(0)
- local force={name='player',recipes={},is_chunk_charted=function() return true end};local spawned=0;local built=0;local allow=false
- local ghost={valid=true,type='entity-ghost',ghost_name='transport-belt',ghost_prototype={items_to_place_this={{name='transport-belt',count=1}}},quality={name='normal'},position={x=1.5,y=0.5},force=force}
- ghost.revive=function() if not allow then return nil end;ghost.valid=false;built=built+1;return {} end
- local surface={name='nauvis',is_chunk_generated=function() return true end,get_territory_for_chunk=function() return nil end};ghost.surface=surface
- ghost.bounding_box={left_top={x=1,y=0},right_bottom={x=2,y=1}}
- local entity={stop_spider=function() end,valid=true,name='toby-drone',force=force,unit_number=4,surface=surface,torso_orientation=0,position={x=1,y=0},get_inventory=function() return cargo end}
- surface.find_non_colliding_position=function() return entity.position end
- surface.create_entity=function(input) assert(input.name=='toby-drone' and input.force==force);spawned=spawned+1;return entity end
- surface.find_entities_filtered=function(input)
-  assert(input.force==force)
-  if input.type=='logistic-container' then return {{prototype={logistic_mode='storage'},get_inventory=function() return provider end}} end
-  return ghost.valid and {ghost} or {}
- end
- local player={name='alice',index=1,force=force,connected=true,character={},physical_surface=surface,physical_position={x=0,y=0},get_main_inventory=function() return stock end}
- game={tick=0,players={player},forces={force},get_player=function() return player end,create_inventory=function() return inventory(0) end}
- remote={add_interface=function(_,value) api=value end}
- local module=(function() ${source} end)();module.tick()
- assert(spawned==1 and api.read('player','alice').mode=='follow' and not entity.grid)
- module.tick();assert(ghost.valid and built==0 and spawned==1)
- stock[1].count=2;ghost.quality.name='uncommon';module.tick();assert(stock[1].count==2 and ghost.valid)
- ghost.quality.name='normal';module.tick();assert(stock[1].count==2 and ghost.valid and built==0)
- game.tick=120;allow=true
- local guardian={valid=true,prototype={name='small-demolisher'}}
- surface.get_territory_for_chunk=function() return {get_segmented_units=function() return {guardian} end} end
- module.tick();assert(stock[1].count==2 and ghost.valid and built==0,'Guarded construction must not consume items')
- guardian.valid=false;module.tick();assert(stock[1].count==1 and not ghost.valid and built==1)
- assert(api.read('player','alice').built==1 and entity.follow_target==nil)
- stock[1].count=0;provider[1].count=1;ghost.valid=true;game.tick=240
- module.tick();assert(provider[1].count==0 and not ghost.valid and built==2)
- stock[1].count=1;stock[1].is_item_with_entity_data=true;ghost.valid=true;game.tick=360
- module.tick();assert(stock[1].count==1 and ghost.valid and built==2)
- player.connected=false;module.tick();assert(ghost.valid and stock[1].count==1 and not entity.follow_target)
- `)
-	);
-	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+test('drone jobs travel, place only ghosts, survive reloads and deduplicate retries', () => {
+	run(`local request={operation='place',force='player',surface='nauvis',label='Pole and belt ghosts',design='abc',expectedDesign='abc',expectedTick=100,position={x=12,y=0},entities={{name='pole'},{name='belt'}}}
+ local queued=api.submit(request);assert(queued.owner=='Alice' and queued.job.state=='travelling' and calls.place==0)
+ module.tick();assert(e.position.x==4 and api.read('player','Alice').job.state=='travelling')
+ module=(function()${drone}end)();module.init()
+ module.tick();module.tick()
+ local done=api.read('player','Alice');assert(done.job.state=='done' and done.ghosts==2 and calls.place==1 and e.position.x==12)
+ assert(api.submit(request).job.id==queued.job.id and calls.place==1)
+ game.tick=200;request.expectedTick=200;local again=api.submit(request);assert(again.job.id~=queued.job.id,'A fresh placement request must recheck the world')
+ module.tick();assert(calls.place==2)
+ assert(not pcall(api.submit,{operation='place',force='player',surface='nauvis',design='changed',expectedDesign='stale',entities={}}))
+ `);
+});
+
+test('changed sites block jobs and explicit stop cancels pending ghost work', () => {
+	run(`local request={operation='place',force='player',surface='nauvis',label='Ghosts',design='abc',expectedDesign='abc',expectedTick=100,position={x=8,y=0},entities={{name='belt'}}}
+ api.submit(request);blocked=true;module.tick();module.tick()
+ assert(api.read('player','Alice').job.state=='blocked' and calls.place==0)
+ blocked=false;request.design='retry';request.expectedDesign='retry';request.position.x=20
+ api.submit(request);local current=api.read('player','Alice');api.command('player','Alice','stay',current)
+ module.tick();assert(api.read('player','Alice').job.state=='cancelled' and calls.place==0)
+ `);
+});
+
+test('Toby schedules native upgrade and deconstruction markers without constructing or mining', () => {
+	run(`local request={operation='entities_edit',force='player',surface='nauvis',label='Upgrade and removal orders',design='orders',expectedTick=100,position={x=8,y=0},edits={{kind='upgrade',to='fast-transport-belt'},{kind='deconstruct'}}}
+ local queued=api.submit(request);assert(queued.job.requested==2 and calls.orders==0)
+ module.tick();module.tick();assert(api.read('player','Alice').job.state=='done' and calls.orders==1 and calls.place==0)
+ `);
 });

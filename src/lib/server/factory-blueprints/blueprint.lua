@@ -209,7 +209,7 @@ local function control_example(kind)
  if kind=='constant-combinator' then return {control_behavior={sections={sections={{index=1,filters={{index=1,type='item',name='oxide-asteroid-chunk',quality='normal',comparator='=',count=1}}}}}}} end
  if kind=='decider-combinator' then return {control_behavior={decider_conditions={conditions={{first_signal={type='item',name='oxide-asteroid-chunk'},comparator='<',constant=5}},outputs={{signal={type='virtual',name='signal-A'},copy_count_from_input=false,constant=1}},else_outputs={}}}} end
 end
-local function blueprint(request,territories)
+local function blueprint(request,territories,inventory_created,custom_inserter_range)
  local force=game.forces[request.force]
  if not force then error('Unknown force',0) end
  local actor
@@ -363,7 +363,8 @@ local function blueprint(request,territories)
    warn('Entity '..i..' ('..e.name..') has a circuit condition but no wire connection. Its inventory cannot control that condition until wired; encode the complete control circuit.')
   end
  end
- inventory=game.create_inventory(1)
+ local inventory=game.create_inventory(1)
+ if inventory_created then inventory_created(inventory) end
  local stack=inventory[1]
  stack.set_stack{name='blueprint'}
  stack.set_blueprint_entities(entities,false)
@@ -955,3 +956,5 @@ local function blueprint(request,territories)
  local requested=#entities-retained_built-retained_ghosts
  return {operation='place_blueprint',expectedDesign=request.design,surface=surface.name,position=request.position,requested=requested,placed=placed,retained_built=retained_built,retained_ghosts=retained_ghosts,recipe_machines=recipe_machines,unconfigured_machines=unconfigured_machines,requested_tiles=#pending_tiles,placed_tiles=placed_tiles,complete=placed==requested and placed_tiles==#pending_tiles and not failure,error=failure,cost=cost,note=surface.platform and 'Construction requests use real platform hub inventory. Matching entities and settings were retained; no structures were removed.' or 'Construction ghosts require real items and player or robot construction. Matching entities and settings were retained; no structures were removed.'}
 end
+
+return blueprint

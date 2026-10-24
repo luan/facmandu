@@ -13,7 +13,7 @@ function M.update(player,state)
  if state.visual and state.visual.valid and state.visual.surface~=entity.surface then M.clear(state) end
  local phase=state.activity and state.activity.phase or 'idle'
  if not phases[phase] then phase='idle' end
- if state.job and state.job.valid or state.mode=='move' and entity.autopilot_destination then phase='working' end
+ if state.job and (state.job.state=='travelling' or state.job.state=='placing') or state.mode=='move' and state.destination then phase='working' end
  if phase~='error' and game.tick<(state.speaking_until or 0) then phase='speaking' end
  if not state.visual or not state.visual.valid then
   state.visual=rendering.draw_animation{animation='toby-screen-'..phase,animation_speed=0,target=entity,surface=entity.surface,render_layer='air-object'}
@@ -26,7 +26,7 @@ function M.update(player,state)
  state.shadow.animation_offset=direction
  state.display=phase
  local message=state.activity and state.activity.message
- if player.connected and player.physical_surface==entity.surface and message and #message>0 and message~=state.spoken and game.tick-(state.last_speech or -1200)>=600 then
+ if player.connected and player.physical_surface==entity.surface and message and #message>0 and message~=state.spoken and game.tick-(state.last_speech or -1200)>=180 then
   player.create_local_flying_text{position={entity.position.x,entity.position.y-2},text=message,color={r=0.6,g=0.9,b=1},time_to_live=300,speed=0.15}
   state.spoken=message;state.last_speech=game.tick;state.speaking_until=game.tick+120
  end

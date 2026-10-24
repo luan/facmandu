@@ -506,3 +506,5 @@ local function action(request)
   if operation == "logistic_set_request" or operation == "logistic_clear_request" then return logistic_action(request) end
   fail("Unknown factory action")
 end
+
+return action

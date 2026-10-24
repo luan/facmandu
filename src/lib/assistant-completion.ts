@@ -112,6 +112,21 @@ export const factoryCompletionEvidenceSchema = z.object({
 	unconfigured_machines: z.number().int().nonnegative().optional(),
 	power: powerEvidenceSchema.optional()
 });
+// Travelling jobs are intent only; a native placement result is world evidence.
+export function observedFactoryBuild(value: unknown) {
+	const direct = factoryCompletionEvidenceSchema.safeParse(value);
+	if (direct.success) return direct.data;
+	const job = z
+		.object({
+			job: z.object({
+				state: z.enum(['done', 'blocked']),
+				result: factoryCompletionEvidenceSchema.extend({ operation: z.literal('place_blueprint') })
+			})
+		})
+		.safeParse(value);
+	return job.success ? job.data.job.result : null;
+}
+
 export type FactoryCompletionEvidence = z.infer<typeof factoryCompletionEvidenceSchema>;
 
 export function placedFactoryPowerGaps(

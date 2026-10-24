@@ -107,11 +107,18 @@ export function blueprintCommand(
 	return `/silent-command local request=helpers.json_to_table([${delimiter}[${encoded}]${delimiter}])
 local inventory
 local ok,result=pcall(function()
+if request.operation=='place' then
+ local api=remote.interfaces['facmandu-toby-drone']
+ if api and api.submit then
+  local queued=remote.call('facmandu-toby-drone','submit',request)
+  return {operation='queue_ghost_plan',owner=queued.owner,job=queued.job,complete=false,note='Toby is travelling to place construction ghosts. Queued is not placed; read toby_drone for this owner and job ID.'}
+ end
+end
 local custom_inserter_range=(function() ${inserterRules} end)().range
-${source}
+local blueprint=(function() ${source} end)()
 return blueprint(request,(function()
 ${territorySource}
-end)())
+end)(),function(value) inventory=value end,custom_inserter_range)
 end)
 if inventory and inventory.valid then inventory.destroy() end
 local reply=helpers.table_to_json(ok and {ok=true,result=result} or {ok=false,error=tostring(result):match("^[^\\n]*")})

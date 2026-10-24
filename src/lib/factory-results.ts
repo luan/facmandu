@@ -1398,6 +1398,46 @@ export function presentFactoryResult(item: FactoryResult): ResultView {
 			});
 		return view;
 	}
+	if (data.operation === 'queue_ghost_plan') {
+		const job = record(data.job);
+		view.title = 'Toby work queued';
+		view.cards = [
+			{
+				title: `Job #${display(job.id)} · ${string(data.owner)}`,
+				badge: humanName(job.state),
+				tone: job.state === 'blocked' ? 'warning' : 'muted',
+				metrics: [
+					...numeric('Requested targets', job.requested),
+					...numeric('Placed ghosts', job.placed)
+				],
+				notes: [
+					string(job.error),
+					'Queued work is not completed placement or construction.'
+				].filter(Boolean)
+			}
+		];
+		return view;
+	}
+	if (tool === 'toby_drone' && data.available === true) {
+		const job = record(data.job);
+		view.title = 'Toby drone';
+		view.cards = [
+			{
+				title: string(data.player),
+				badge: Object.keys(job).length ? humanName(job.state) : humanName(data.mode),
+				tone: job.state === 'blocked' ? 'warning' : 'muted',
+				metrics: [...numeric('Ghosts placed', data.ghosts), ...numeric('Job ID', job.id)],
+				notes: [
+					string(record(data.activity).message),
+					string(job.error),
+					data.ghostOnly === true
+						? 'Ghost-only · Invulnerable · No inventory or robots'
+						: 'Older native drone; update required for ghost-only jobs.'
+				].filter(Boolean)
+			}
+		];
+		return view;
+	}
 	if (tool === 'blueprint_operation') {
 		view.title = item.title;
 		if (data.operation === 'find_blueprint_site') {

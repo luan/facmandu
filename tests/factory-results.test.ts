@@ -949,3 +949,16 @@ test('headless validation shows preparation progress and separates real time fro
 		)
 	);
 });
+
+test('queued drone work reports its job instead of claiming ghosts or buildings are finished', () => {
+	const result = view('factory_action', {
+		operation: 'queue_ghost_plan',
+		owner: 'Alice',
+		complete: false,
+		job: { id: 7, state: 'travelling', requested: 16, placed: 0 }
+	});
+	assert.equal(result.title, 'Toby work queued');
+	assert.match(result.cards[0]?.title ?? '', /7.*Alice/);
+	assert.equal(result.cards[0]?.badge, 'Travelling');
+	assert.match(result.cards[0]?.notes.join(' ') ?? '', /not completed/);
+});

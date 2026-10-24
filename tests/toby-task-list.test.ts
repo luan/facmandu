@@ -125,7 +125,7 @@ test('task actions cannot write to an alternate store without TaskList', () => {
 	const actions = readFileSync('src/lib/server/factory-actions/action.lua', 'utf8');
 	const code = `local toby_tasks=(function() ${service} end)()
  storage={facmandu_toby_tasks={next=9,forces={}}};game={forces={player={name='player',index=1}}};remote={interfaces={}}
- ${actions}
+ local action=(function() ${actions} end)()
  assert(not pcall(action,{operation='task_add',force='player',title='New task',description='',status='not_started'}))
  assert(storage.facmandu_toby_tasks.next==9 and next(storage.facmandu_toby_tasks.forces)==nil)
  `;

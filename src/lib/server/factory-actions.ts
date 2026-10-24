@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { ManagedServer } from './db/schema';
 import source from './factory-actions/action.lua?raw';
@@ -229,7 +230,7 @@ export const factoryActionManifest = {
 	wire_connect:
 		'Connect an inspected native copper or circuit wire between two same-force stationary entities or construction ghosts, including existing-world endpoints omitted from a blueprint. Supply source/target identities and connectorId, force/surface, and expectedTick/Connected/SourceGhost/TargetGhost from wire_inspect. Native reach and wire compatibility are enforced. Never disconnects other wires, replaces entities, supplies items or changes research.',
 	drone_command:
-		'Control the owning player’s automatic Toby companion. Supply force, owner, command (follow, stay, move), and expected unitNumber/revision/surface from a fresh toby_drone lookup; move also needs position within 256 explored tiles. Toby follows and constructs nearby ghosts using actual materials from its cargo, the player or nearby same-force provider/storage chests. No crafting, equipment, robots or fuel is needed. Missing materials leave ghosts untouched; no building items or research are granted. In-game callers can command only their own drone.',
+		'Control the owning player’s invulnerable ghost-only Toby drone. Supply force, owner, command (follow, stay, move), and expected unitNumber/revision/surface from a fresh toby_drone lookup. move accepts an explored position on the current surface. stay or follow cancels the current ghost job without deleting ghosts already placed. No inventory, equipment, real robots or materials are used. Blueprint place sends a native ghost job to Toby and reports its owner/job ID; inspect toby_drone to distinguish travelling, done, blocked and cancelled. No physical building items or research are granted. In-game callers can command only their own drone',
 	task_add:
 		'Add a shared force task using title, description and status (not_started, in_progress, paused, blocked). Identical active tasks are reused. Requires the TaskList mod and uses its shared force board exclusively. Read with task_list; no world construction is implied.',
 	task_update:
@@ -285,7 +286,17 @@ if request.player then
  if not p or not p.connected or p.force.name ~= request.force or (request.player.requireAdmin and not p.admin) then error("Player permission changed; ask again", 0) end
 end
 local toby_tasks=(function() ${taskService} end)()
-${source}
+local action=(function() ${source} end)()
+if request.operation=='entities_edit' then
+ local api=remote.interfaces['facmandu-toby-drone']
+ if api and api.submit then
+  request.design=${luaString(createHash('sha256').update(encoded).digest('hex'))}
+  request.label='Factory upgrade, deconstruction or configuration orders'
+  request.position=request.edits[1].position
+  local queued=remote.call('facmandu-toby-drone','submit',request)
+  return {operation='queue_ghost_plan',owner=queued.owner,job=queued.job,complete=false}
+ end
+end
 return action(request)
 end)
 local reply = helpers.table_to_json(ok and {ok=true,result=result} or {ok=false,error=tostring(result):match("^[^\\n]*")})
@@ -404,6 +415,15 @@ async function execute(
 			throw new ServerError(502, 'The server returned an invalid wire batch');
 		return parsed.data;
 	}
+	const queued = z
+		.object({
+			operation: z.literal('queue_ghost_plan'),
+			owner: label,
+			job: z.json(),
+			complete: z.literal(false)
+		})
+		.safeParse(reply.data.result);
+	if (input.operation === 'entities_edit' && queued.success) return queued.data;
 	if (input.operation.startsWith('wire_')) {
 		const result = wireResultSchema.safeParse(reply.data.result);
 		if (!result.success) throw new ServerError(502, 'The server returned an invalid wire result');
@@ -422,18 +442,10 @@ async function execute(
 					position: entity.shape.position,
 					mode: z.enum(['follow', 'stay', 'move']),
 					revision: z.number().int().nonnegative(),
-					built: z.number().int().nonnegative(),
-					working: label.optional(),
-					cargo: z
-						.union([
-							z
-								.array(
-									z.object({ name: label, quality: label, count: z.number().int().positive() })
-								)
-								.max(20),
-							z.object({}).strict()
-						])
-						.transform((items) => (Array.isArray(items) ? items : [])),
+					ghosts: z.number().int().nonnegative().optional(),
+					ghostOnly: z.boolean().optional(),
+					invulnerable: z.boolean().optional(),
+					job: z.json().optional(),
 					destination: entity.shape.position.optional()
 				})
 			})

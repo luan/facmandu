@@ -1,0 +1,1 @@
+../../src/lib/server/factory-inserter-rules.lua

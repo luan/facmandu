@@ -240,3 +240,27 @@ test('completion decisions require consistent confident evidence', () => {
 	assert.deepEqual(request.state.requests, ['I need more glass.', 'Use a new mine.']);
 	assert.equal(request.model, 'clef-flash');
 });
+
+test('only native placement results count as evidence from drone jobs', async () => {
+	const { observedFactoryBuild } = await import('../src/lib/assistant-completion');
+	assert.equal(
+		observedFactoryBuild({
+			operation: 'queue_ghost_plan',
+			owner: 'Alice',
+			job: { state: 'travelling' }
+		}),
+		null
+	);
+	const result = {
+		operation: 'place_blueprint',
+		expectedDesign: 'saved-design',
+		recipe_machines: 2,
+		unconfigured_machines: 0
+	};
+	assert.deepEqual(observedFactoryBuild({ job: { state: 'done', result } }), result);
+	assert.equal(observedFactoryBuild({ job: { state: 'travelling', result } }), null);
+	assert.equal(
+		observedFactoryBuild({ job: { state: 'done', result: { operation: 'entities_edit' } } }),
+		null
+	);
+});

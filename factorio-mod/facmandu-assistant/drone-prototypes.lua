@@ -19,7 +19,10 @@ drone.selected_minimap_representation=util.table.deepcopy(drone.minimap_represen
 -- Native autopilot moves Toby. The legacy grid is retained to preserve equipment
 -- from early development builds; it is not needed for construction.
 drone.graphics_set={animation=util.empty_sprite(),render_layer='air-object'}
-local prototypes={drone,
+local legacy=util.table.deepcopy(drone)
+drone.name='toby-ghost-drone';drone.collision_mask={layers={}};drone.inventory_size=0;drone.trash_inventory_size=0;drone.equipment_grid=nil
+drone.allow_remote_driving=false
+local prototypes={legacy,drone,
  {type='equipment-grid',name='toby-drone-grid',width=6,height=6,equipment_categories={'armor'}},
  {type='item-with-entity-data',name=name,icon=drone.icon,icon_size=64,subgroup='logistic-network',order='b[construction-robot]-z[toby]',place_result=name,stack_size=1,hidden=true},
  {type='recipe',name=name,enabled=false,hidden=true,energy_required=10,ingredients={{type='item',name='construction-robot',amount=1},{type='item',name='personal-roboport-equipment',amount=1},{type='item',name='processing-unit',amount=10},{type='item',name='steel-plate',amount=10}},results={{type='item',name=name,amount=1}}}

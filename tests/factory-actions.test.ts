@@ -138,7 +138,7 @@ test('native wiring preserves other connections and rejects stale, foreign or un
 	const status = lauxlib.luaL_dostring(
 		state,
 		to_luastring(`
- ${readFileSync('src/lib/server/factory-actions/action.lua', 'utf8')}
+ local action=(function() ${readFileSync('src/lib/server/factory-actions/action.lua', 'utf8')} end)()
  local force={name='player'}
  local p={type='electric-pole',items_to_place_this={{name='medium-electric-pole'}}}
  prototypes={entity={pole=p}}
@@ -213,7 +213,7 @@ test('Toby drone commands require ownership and a fresh movement revision', () =
 	const source = readFileSync('src/lib/server/factory-actions/action.lua', 'utf8');
 	const status = lauxlib.luaL_dostring(
 		state,
-		to_luastring(`${source}
+		to_luastring(`local action=(function() ${source} end)()
  local called=false
  remote={interfaces={['facmandu-toby-drone']={command=true}},call=function(interface,method,force,owner,mode,expected,position)
   assert(interface=='facmandu-toby-drone' and method=='command' and force=='player' and owner=='alice' and mode=='follow' and expected.revision==2)
@@ -351,7 +351,7 @@ test('platform requester inspection preserves manual sections and rejects change
 	const source = readFileSync('src/lib/server/factory-actions/action.lua', 'utf8');
 	const status = lauxlib.luaL_dostring(
 		state,
-		to_luastring(`${source}
+		to_luastring(`local action=(function() ${source} end)()
  local filter={value={name='card',quality='normal'},min=1000,import_from={name='nauvis'}}
  local section={index=2,valid=true,is_manual=true,filters_count=1,filters={filter},get_slot=function() return filter end}
  section.set_slot=function(index,value) assert(index==1 and value.import_from.name=='nauvis');filter=value;return index end
@@ -380,7 +380,7 @@ test('native upgrade orders preserve entities and quality, reject locked tiers a
 	lualib.luaL_openlibs(state);
 	const status = lauxlib.luaL_dostring(
 		state,
-		to_luastring(`${readFileSync('src/lib/server/factory-actions/action.lua', 'utf8')}
+		to_luastring(`local action=(function() ${readFileSync('src/lib/server/factory-actions/action.lua', 'utf8')} end)()
  local quality={name='normal'}
  local next_proto={name='fast-belt',type='transport-belt',items_to_place_this={{name='fast-belt'}}}
  prototypes={entity={belt={type='transport-belt',items_to_place_this={{name='belt'}},next_upgrade=next_proto},['fast-belt']=next_proto}}
@@ -423,7 +423,7 @@ test('recipe assignment fills only freshly inspected empty compatible machines a
 	const source = readFileSync('src/lib/server/factory-actions/action.lua', 'utf8');
 	const status = lauxlib.luaL_dostring(
 		state,
-		to_luastring(`${source}
+		to_luastring(`local action=(function() ${source} end)()
  local recipe={name='glass',enabled=true,categories={'smelting'},prototype={surface_conditions={}}}
  local force={name='player',recipes={glass=recipe}}
  local p={type='assembling-machine',crafting_categories={smelting=true},items_to_place_this={{name='furnace'}}}

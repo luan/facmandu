@@ -19,6 +19,7 @@ import drone from '../../../factorio-mod/facmandu-assistant/drone.lua?raw';
 import dronePrototypes from '../../../factorio-mod/facmandu-assistant/drone-prototypes.lua?raw';
 import droneVisuals from '../../../factorio-mod/facmandu-assistant/drone-visuals.lua?raw';
 import events from '../../../factorio-mod/facmandu-assistant/events.lua?raw';
+import ghostWork from '../../../factorio-mod/facmandu-assistant/ghost-work.lua?raw';
 import info from '../../../factorio-mod/facmandu-assistant/info.json';
 import locale from '../../../factorio-mod/facmandu-assistant/locale/en/toby.cfg?raw';
 import readme from '../../../factorio-mod/facmandu-assistant/README.md?raw';
@@ -28,6 +29,9 @@ import sandbox from '../../../factorio-mod/facmandu-assistant/sandbox.lua?raw';
 import taskBoard from '../../../factorio-mod/facmandu-assistant/task-board.lua?raw';
 import taskStore from '../../../factorio-mod/facmandu-assistant/task-store.lua?raw';
 import type { ManagedServer } from './db/schema';
+import actionEngine from './factory-actions/action.lua?raw';
+import blueprintEngine from './factory-blueprints/blueprint.lua?raw';
+import inserterRules from './factory-inserter-rules.lua?raw';
 import territory from './factory-query/scripts/tools/territory.lua?raw';
 import { ServerError, serverConfig } from './server-files';
 import { installMod, toggleMod } from './server-mods';
@@ -83,6 +87,10 @@ export function tobyModArchive() {
 				'data-final-fixes.lua': dataFinalFixes,
 				'events.lua': events,
 				'drone.lua': drone,
+				'ghost-work.lua': ghostWork,
+				'blueprint-engine.lua': blueprintEngine,
+				'action-engine.lua': actionEngine,
+				'inserter-rules.lua': inserterRules,
 				'territory.lua': territory,
 				'drone-visuals.lua': droneVisuals,
 				'references.lua': references,

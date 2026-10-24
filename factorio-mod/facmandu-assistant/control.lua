@@ -15,8 +15,8 @@ local function drone_status(player,refs)
  local state=drone.read(player.force.name,player.name)
  refs.drone_status.caption=state.available and ('Toby · '..state.display) or 'Waiting for your character'
  refs.drone_work.caption=state.activity and state.activity.message or 'Ready'
- refs.drone_details.caption=state.available and (state.mode..' · '..state.surface..' ['..math.floor(state.position.x)..', '..math.floor(state.position.y)..']\n'..(state.built or 0)..' ghosts built') or ''
- refs.drone_follow.enabled=state.available;refs.drone_stay.enabled=state.available;refs.drone_inventory.enabled=state.available
+ refs.drone_details.caption=state.available and (state.mode..' · '..state.surface..' ['..math.floor(state.position.x)..', '..math.floor(state.position.y)..']\n'..(state.ghosts or 0)..' ghosts placed · '..(state.job and ('Job #'..state.job.id..' · '..state.job.state) or 'No active job')) or ''
+ refs.drone_follow.enabled=state.available;refs.drone_stay.enabled=state.available
 end
 local function bounded_text(value,limit)
  if #value<=limit then return value end
@@ -119,7 +119,6 @@ local function panel(player)
  refs.drone_work=label(drone_content,'Ready',text_width)
  refs.drone_details=label(drone_content,'',text_width)
  label(drone_content,'Nearby ghosts are built with your items.',text_width)
- refs.drone_inventory=drone_content.add{type='button',name=PREFIX..'drone-inventory',caption='Inventory',style='toby_planner_button_frame_tool'}
  local drone_actions=drone_content.add{type='flow',direction='horizontal'}
  refs.drone_follow=drone_actions.add{type='button',name=PREFIX..'drone-follow',caption='Follow me',style='toby_planner_button_frame_tool'}
  refs.drone_stay=drone_actions.add{type='button',name=PREFIX..'drone-stay',caption='Stay here',style='toby_planner_button_frame_tool'}
@@ -467,22 +466,22 @@ events.on_event(defines.events.on_gui_click,function(event)
   local ok,message=pcall(books.take,player,name==PREFIX..'update-book')
   if not ok then player.print(message) else refs.frame.destroy() end
  elseif name==PREFIX..'new' then emit(player,'new')
- elseif name==PREFIX..'stop' then emit(player,'stop',nil,storage.players[player.index] and storage.players[player.index].current)
+ elseif name==PREFIX..'stop' then
+  local current=drone.read(player.force.name,player.name)
+  if current.available and current.job and (current.job.state=='travelling' or current.job.state=='placing')then pcall(drone.command,player.force.name,player.name,'stay',current)end
+  emit(player,'stop',nil,storage.players[player.index] and storage.players[player.index].current)
  elseif name==PREFIX..'drone-follow' or name==PREFIX..'drone-stay' then
   local state=drone.read(player.force.name,player.name)
   local ok,message=pcall(drone.command,player.force.name,player.name,name==PREFIX..'drone-follow' and 'follow' or 'stay',state)
   if not ok then player.print(message) end
   drone_status(player,refs)
- elseif name==PREFIX..'drone-inventory' then
-  local state=storage.drones[player.index]
-  if state and state.entity.valid then refs.frame.destroy();player.opened=state.entity end
  elseif name==PREFIX..'blueprint' or name==PREFIX..'inspect-blueprint' then
   take_blueprint(player,name==PREFIX..'inspect-blueprint')
  end
 end)
 events.on_event(defines.events.on_built_entity,drone.built)
 events.on_nth_tick(5,function(event)
- if event.tick%10==0 then drone.tick() end
+ drone.tick()
  drone.animate()
  if event.tick%15==0 then
   for _,refs in pairs(storage.gui or {}) do
