@@ -1687,7 +1687,7 @@ test('saved uranium chain sorts all four products and routes the complete 100 by
 	for (const [dy, direction] of [
 		[-1, 8],
 		[1, 0]
-	])
+	] as const)
 		assert.ok(
 			result.design.entities.some(
 				(e) =>
