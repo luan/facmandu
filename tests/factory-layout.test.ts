@@ -1680,6 +1680,22 @@ test('saved uranium chain sorts all four products and routes the complete 100 by
 	);
 	assert.ok(exports.every((e) => e.control_behavior?.circuit_enabled === true));
 	assert.equal(result.design.entities.filter((e) => e.recipe === 'uranium-processing').length, 31);
+	const fuel = result.design.entities.find((e) => e.recipe === 'uranium-fuel-cell');
+	assert.ok(fuel);
+	// This saved three-ingredient row merges steel and uranium on opposite sides.
+	const merge = { x: fuel.position.x - 4, y: fuel.position.y - 3 };
+	for (const [dy, direction] of [
+		[-1, 8],
+		[1, 0]
+	])
+		assert.ok(
+			result.design.entities.some(
+				(e) =>
+					e.position.x === merge.x && e.position.y === merge.y + dy && e.direction === direction
+			),
+			'Merged raw and internal ingredients must enter opposite lanes'
+		);
+
 	assert.equal(
 		result.design.entities.filter((e) => e.recipe === 'kovarex-enrichment-process').length,
 		11

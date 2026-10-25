@@ -478,10 +478,15 @@ for _,item in ipairs(names) do
   while needed>1e-6 do
    local lane=math.min(needed,belt_capacity/2)
    local goals={}
-   if right then goals[#goals+1]={x=belt.x1,y=belt.y,dirs={[4]=true}} end
-   -- A mixed belt's first ingredient must enter from behind. Otherwise a
-   -- side-fed first tile curves and moves both ingredients onto the same lane.
-   if not right or both then for x=belt.x1,last do goals[#goals+1]={x=x,y=belt.y,dirs={[right and 0 or 8]=true}} end end
+   if not outer and row.merge and (not made[row.inner[1]] or not made[row.inner[2]]) then
+    -- Mixed raw/internal feeds must agree with the raw router about their lanes.
+    goals[1]={x=belt.x1,y=belt.y,dirs={[right and 8 or 0]=true}}
+   else
+    if right then goals[#goals+1]={x=belt.x1,y=belt.y,dirs={[4]=true}} end
+    -- A mixed belt's first ingredient must enter from behind. Otherwise a
+    -- side-fed first tile curves and moves both ingredients onto the same lane.
+    if not right or both then for x=belt.x1,last do goals[#goals+1]={x=x,y=belt.y,dirs={[right and 0 or 8]=true}} end end
+   end
    local remaining=lane
    local target={degree=0}
    local feeds,feed_edges={},{}
