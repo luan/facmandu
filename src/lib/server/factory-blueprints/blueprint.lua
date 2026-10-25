@@ -253,6 +253,7 @@ local function blueprint(request,territories,inventory_created,custom_inserter_r
   if actual==nil then
    actual=defaults[key]
    if key=='type' and (path:match('%.first_signal%.type$') or path:match('%.second_signal%.type$') or path:match('%.signal%.type$') or path:match('%.filters%.%d+%.type$')) then actual='item' end
+   if key=='count' and path:match('%.in_inventory%.%d+%.count$') then actual=1 end
    if key=='constant' and path:match('%.outputs%.%d+%.constant$') then actual=1 end
    if key=='comparator' then actual=path:match('%.filters%.%d+%.comparator$') and '=' or '<' end
   end
@@ -262,7 +263,7 @@ local function blueprint(request,territories,inventory_created,custom_inserter_r
   for k,v in pairs(wanted) do local mismatch=difference(actual[k],v,path..'.'..k,k);if mismatch then return mismatch end end
  end
  local function contains(actual,wanted) return difference(actual,wanted,'','')==nil end
- local settings={'input_priority','output_priority','filters','use_filters','filter_mode','pickup_position','drop_position','override_stack_size','control_behavior','chunk-filter','request_filters','bar'}
+ local settings={'input_priority','output_priority','filters','use_filters','filter_mode','pickup_position','drop_position','override_stack_size','control_behavior','chunk-filter','request_filters','bar','items'}
  local entities,preview,boxes,warnings,collisions,alignments={},{},{},{},{},{}
  local warned={}
  local function warn(text) if not warned[text] then warnings[#warnings+1]=text;warned[text]=true end end
@@ -306,6 +307,21 @@ local function blueprint(request,territories,inventory_created,custom_inserter_r
   if (e.input_priority or e.output_priority) and p.type~='splitter' then error('Belt priorities require a splitter',0) end
   if e.request_filters and (p.type~='logistic-container' or p.logistic_mode~='requester' and p.logistic_mode~='buffer' and p.logistic_mode~='storage') then error('Logistic sections require a requester, buffer or storage chest',0) end
   if e.bar and p.type~='container' and p.type~='logistic-container' then error('Inventory limits require a chest',0) end
+  local module_slots={}
+  for _,item_request in ipairs(e.items or {}) do
+   local item=prototypes.item[item_request.id.name]
+   if not item or item.type~='module' or not prototypes.quality[item_request.id.quality or 'normal'] then error('Unknown module item or quality',0) end
+   if not available[item.name] then
+    if request.operation~='create' then error('Module is not unlocked: '..item.name,0) end
+    warn('Module is not unlocked: '..item.name)
+   end
+   for _,position in ipairs(item_request.items.in_inventory) do
+    if position.inventory~=defines.inventory.crafter_modules or (p.type~='assembling-machine' and p.type~='furnace') then error('Module requests require a crafting machine module inventory',0) end
+    local capacity=p.get_inventory_size(defines.inventory.crafter_modules)
+    if not capacity or position.stack>=capacity or module_slots[position.stack] then error('Module requests overlap or exceed machine slots',0) end
+    module_slots[position.stack]=true
+   end
+  end
   local reach=custom_inserter_range(force,p)
   if reach then
    for _,key in ipairs({'pickup_position','drop_position'}) do
@@ -919,7 +935,7 @@ local function blueprint(request,territories,inventory_created,custom_inserter_r
    if surface.count_entities_filtered{area={{b.x1+request.position.x,b.y1+request.position.y},{b.x2+request.position.x,b.y2+request.position.y}},type="entity-ghost"}>0 then error("Site changed during placement",0) end
    if not can_request_ghost(force,surface,e,position,b,request.position) then error('Site changed during placement',0) end
    local creation={name='entity-ghost',inner_name=e.name,position=position,direction=e.direction,force=force,type=e.type,expires=false}
-   for _,key in ipairs(settings) do creation[key]=e[key] end
+   for _,key in ipairs(settings) do if key~='items' then creation[key]=e[key] end end
    local ghost=surface.create_entity(creation)
    ghosts[i]=ghost
    if not ghost then error('Factorio refused a construction ghost',0) end
@@ -929,6 +945,7 @@ local function blueprint(request,territories,inventory_created,custom_inserter_r
     local recipe=ghost.get_recipe()
     if not recipe or recipe.name~=e.recipe then error('Factorio refused the ghost recipe',0) end
    end
+   if e.items then ghost.insert_plan=e.items end
    if e.type then
     local actual=ghost.ghost_type=='underground-belt' and ghost.belt_to_ground_type or ghost.loader_type
     if actual~=e.type then error('Factorio refused the input/output type',0) end

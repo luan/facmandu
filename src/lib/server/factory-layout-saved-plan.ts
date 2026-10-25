@@ -16,7 +16,21 @@ const line = z
 		recipe: z.string(),
 		machine: z.string(),
 		machines: z.number().finite().nonnegative(),
-		active: z.boolean().optional()
+		active: z.boolean().optional(),
+		modules: z
+			.union([
+				z
+					.array(
+						z.strictObject({
+							name: z.string().min(1),
+							quality: z.string().default('normal'),
+							count: z.number().int().positive().max(256)
+						})
+					)
+					.max(64),
+				z.strictObject({}).transform(() => [])
+			])
+			.optional()
 	})
 	.passthrough();
 export const layoutPlanSnapshot = z.object({
@@ -52,14 +66,15 @@ export function resolveFactoryLayout(input: FactoryLayoutInput, value: unknown) 
 				400,
 				'Layout does not yet support this saved quality; plan was not modified'
 			);
-		if (
-			(line.modules && typeof line.modules === 'object' && Object.keys(line.modules).length > 0) ||
-			line.beacon ||
-			line.fuel
-		)
+		if (line.beacon)
 			throw new ServerError(
 				400,
-				'Layout does not yet support saved modules, beacons or fuel; plan was not modified'
+				`Saved beacons need a layout template for ${line.recipe}; plan was not modified`
+			);
+		if (line.fuel)
+			throw new ServerError(
+				400,
+				`Saved burner fuel needs a supply layout for ${line.recipe}; plan was not modified`
 			);
 		if (machines[line.recipe] && machines[line.recipe] !== line.machine)
 			throw new ServerError(

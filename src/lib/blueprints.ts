@@ -19,6 +19,27 @@ export const blueprintEntitySchema = z.strictObject({
 	direction: z.literal([0, 4, 8, 12]).default(0),
 	recipe: name.optional(),
 	type: z.enum(['input', 'output']).optional(),
+	items: z
+		.array(
+			z.strictObject({
+				id: z.strictObject({ name, quality: name.default('normal') }),
+				items: z.strictObject({
+					in_inventory: z
+						.array(
+							z.strictObject({
+								inventory: z.number().int().positive().max(65535),
+								stack: z.number().int().nonnegative().max(255),
+								count: z.literal(1).default(1)
+							})
+						)
+						.min(1)
+						.max(256)
+				})
+			})
+		)
+		.min(1)
+		.max(64)
+		.optional(),
 	input_priority: z.enum(['left', 'right', 'none']).optional(),
 	output_priority: z.enum(['left', 'right', 'none']).optional(),
 	filters: z
@@ -94,7 +115,7 @@ export const blueprintTileSchema = z.strictObject({
 		y: z.number().int().min(-10000).max(10000)
 	})
 });
-// Modules and train schedules need explicit request/settings support before being added.
+// Train schedules need explicit request/settings support before being added.
 export const blueprintDesignSchema = z.strictObject({
 	force: name,
 	wires: z.array(wire).max(1000).default([]),

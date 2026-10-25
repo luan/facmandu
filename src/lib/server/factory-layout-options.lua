@@ -82,7 +82,7 @@ function options.product_settings(problem,pack,item,provider)
 end
 function options.machine_settings(line,pack)
  local recipe=pack.recipes[line.recipe]
- local settings={direction=recipe.direction or 4}
+ local settings={direction=recipe.direction or 4,items=line.module_items}
  if not pack.furnaces[line.machine] then settings.recipe=line.recipe end
  if recipe.disposal and recipe.disposal.gate then return settings,pack.pumps[recipe.disposal.gate].wire_reach,2,line.recipe end
  if recipe.regulation or recipe.disposal or recipe.sensor then

@@ -202,6 +202,16 @@ events.on_event(defines.events.on_tick,function(e)
    end
    for _,wanted in ipairs(payload.settings or {}) do
     local entity=assert(job.entities[wanted.index],'Missing configured entity')
+    if wanted.items then
+     local inventory=assert(entity.get_module_inventory(),'Missing native module inventory')
+     for _,request in ipairs(wanted.items) do for _,position in ipairs(request.items.in_inventory) do
+      assert(position.inventory==defines.inventory.crafter_modules,'Unexpected module inventory')
+      local stack=inventory[position.stack+1]
+      stack.set_stack{name=request.id.name,quality=request.id.quality or 'normal',count=position.count or 1}
+      assert(stack.valid_for_read and stack.name==request.id.name and stack.quality.name==(request.id.quality or 'normal'),'Native module configuration changed')
+     end end
+     local proxy=entity.item_request_proxy;if proxy then proxy.destroy() end
+    end
     if wanted.control then
      local b=assert(entity.get_control_behavior(),'Missing native machine controls')
      assert(wanted.control.read_contents==nil or b.circuit_read_contents==wanted.control.read_contents,'Native contents reading changed')

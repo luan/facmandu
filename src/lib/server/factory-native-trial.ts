@@ -152,7 +152,8 @@ export function testCompiledFactory(
 						e.bar ||
 						e.filters ||
 						e.output_priority ||
-						e.control_behavior
+						e.control_behavior ||
+						e.items
 							? [
 									{
 										index: i + 1,
@@ -164,6 +165,7 @@ export function testCompiledFactory(
 										filters: e.filters,
 										useFilters: e.use_filters,
 										outputPriority: e.output_priority,
+										items: e.items,
 										control: e.control_behavior
 									}
 								]

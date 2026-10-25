@@ -1363,3 +1363,58 @@ test('placement inspection distinguishes robot delivery coverage from constructi
 	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
 	lua.lua_close(state);
 });
+
+test('module requests survive native export and reject dropped or overlapping slots', () => {
+	const configured = {
+		...design,
+		entities: [
+			{
+				name: 'assembling-machine-2',
+				position: { x: 0.5, y: 0.5 },
+				direction: 0,
+				items: [
+					{
+						id: { name: 'speed-module', quality: 'normal' },
+						items: {
+							in_inventory: [
+								{ inventory: 4, stack: 0, count: 1 },
+								{ inventory: 4, stack: 1, count: 1 }
+							]
+						}
+					}
+				]
+			}
+		]
+	};
+	assert.deepEqual(blueprintDesignSchema.parse(configured), {
+		...configured,
+		wires: [],
+		tiles: []
+	});
+	const state = lauxlib.luaL_newstate();
+	lualib.luaL_openlibs(state);
+	const status = lauxlib.luaL_dostring(
+		state,
+		to_luastring(`
+ local p={type='assembling-machine',tile_width=3,tile_height=3,items_to_place_this={{name='machine'}},has_flag=function()return false end,get_inventory_size=function()return 2 end}
+ prototypes={entity={machine=p},item={['speed-module']={name='speed-module',type='module'}},quality={normal={}}}
+ defines={inventory={crafter_modules=4},wire_connector_id={}}
+ local native={{id={name='speed-module'},items={in_inventory={{inventory=4,stack=0},{inventory=4,stack=1}}}}}
+ game={forces={player={recipes={{enabled=true,products={{type='item',name='machine'},{type='item',name='speed-module'}}}}}},create_inventory=function()
+ local saved;return {{set_stack=function()end,set_blueprint_entities=function(e)saved=e end,get_blueprint_entities=function()
+ local e=saved[1];return {{name=e.name,position=e.position,direction=e.direction,items=native}}
+ end,get_blueprint_tiles=function()return {}end,export_stack=function()return '0native'end,cost_to_build={}}}
+ end}
+ ${blueprintSource}
+ local items={{id={name='speed-module',quality='normal'},items={in_inventory={{inventory=4,stack=0,count=1},{inventory=4,stack=1,count=1}}}}}
+ local request={operation='create',force='player',label='Modules',entities={{name='machine',position={x=.5,y=.5},direction=0,items=items}}}
+ assert(blueprint(request).kind=='blueprint')
+ native=nil;local ok,err=pcall(blueprint,request);assert(not ok and err:match('items'),'Dropped modules must fail validation')
+ items[1].items.in_inventory[2].stack=0
+ ok,err=pcall(blueprint,request);assert(not ok and err:match('overlap'))
+ items[1].items.in_inventory[2].stack=2
+ ok,err=pcall(blueprint,request);assert(not ok and err:match('exceed'))
+ `)
+	);
+	assert.equal(status, lua.LUA_OK, lua.lua_tojsstring(state, -1));
+});

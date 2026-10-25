@@ -167,7 +167,6 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
  local solved=frozen_plan
  for _,line in ipairs(solved.lines) do
   assert(not line.quality or line.quality=='normal','Layout does not yet support this saved quality; keep the plan unchanged')
-  assert(not line.modules or #line.modules==0,'Layout does not yet support saved modules; keep the plan unchanged')
   assert(not line.beacon,'Layout does not yet support saved beacons; keep the plan unchanged')
   assert(not line.fuel,'Layout does not yet support saved burner fuel; keep the plan unchanged')
  end
@@ -191,8 +190,21 @@ return function(request,force,surface,entity,pack,crafters,frozen_plan)
    if index[k] then index[k].perMinute=index[k].perMinute+(part.perMinute or 0)
    else local p={name=part.name,type=part.type,perMinute=part.perMinute or 0};products[#products+1]=p;index[k]=p end
   end end
+  local module_items,slot={},0
+  local crafter=prototypes.entity[line.machine]
+  local capacity
+  for _,module in ipairs(line.modules or {}) do
+   local item=prototypes.item[module.name]
+   assert(item and item.type=='module','Saved module is unavailable: '..module.name)
+   assert(prototypes.quality[module.quality or 'normal'],'Saved module quality is unavailable')
+   capacity=capacity or crafter.get_inventory_size(defines.inventory.crafter_modules)
+   assert(capacity and slot+module.count<=capacity,'Saved modules exceed machine slots: '..line.machine)
+   local positions={}
+   for i=1,module.count do positions[#positions+1]={inventory=defines.inventory.crafter_modules,stack=slot,count=1};slot=slot+1 end
+   module_items[#module_items+1]={id={name=module.name,quality=module.quality or 'normal'},items={in_inventory=positions}}
+  end
   lines[#lines+1]={recipe=line.recipe,machine=line.machine,machines=line.machines,
-   productionType=line.productionType,products=products,ingredients=line.ingredients}
+   productionType=line.productionType,products=products,ingredients=line.ingredients,module_items=#module_items>0 and module_items or nil}
  end
  -- A fractional gas producer otherwise runs flat out into its disposal furnaces.
  -- Regulate fluid-only producers from the most demanded output, before venting.

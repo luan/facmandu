@@ -831,6 +831,15 @@ test('saved layouts preserve planner machine counts across shape, spacing and au
 			resolveFactoryLayout(savedLayoutInput.parse(settings), { ...snapshot, name }).job.label,
 			'Factory layout'
 		);
+	const configured = structuredClone(snapshot);
+	assert.ok(configured.lines[0]);
+	Object.assign(configured.lines[0], {
+		modules: [{ name: 'speed-module', quality: 'normal', count: 2 }]
+	});
+	assert.deepEqual(
+		resolveFactoryLayout(savedLayoutInput.parse(settings), configured).plan.lines[0]?.modules,
+		[{ name: 'speed-module', quality: 'normal', count: 2 }]
+	);
 	const { job, plan } = resolveFactoryLayout(savedLayoutInput.parse(settings), snapshot);
 	const unqualified = structuredClone(native);
 	delete unqualified.inserters['fast-inserter'].custom;
@@ -1719,3 +1728,101 @@ test('saved uranium chain sorts all four products and routes the complete 100 by
 	}
 	assert.ok(blueprintInputSchema.safeParse({ ...result.design, operation: 'create' }).success);
 });
+
+test('saved machine modules become native inventory requests without changing planner rates', () => {
+	const result = spawnSync('lua', ['-'], {
+		encoding: 'utf8',
+		input: `
+ local capture=dofile('src/lib/server/factory-layout-plan-pack.lua')
+ local machine={name='machine',type='assembling-machine',tile_width=3,tile_height=3,crafting_categories={crafting=true},fluidbox_prototypes={},get_inventory_size=function(id)assert(id==4);return 2 end}
+ prototypes={entity={machine=machine},item={['speed-module']={type='module'}},quality={normal={}}}
+ defines={inventory={crafter_modules=4}}
+ local ingredient={type='item',name='iron-plate',amount=2}
+ local product={type='item',name='iron-gear-wheel',amount=1}
+ local force={recipes={gear={enabled=true,categories={'crafting'},ingredients={ingredient},products={product},prototype={energy=.5,get_product_amount=function()return 1 end}}}}
+ local inputs={{type='item',name='iron-plate',perMinute=252}}
+ local outputs={{type='item',name='iron-gear-wheel',perMinute=126}}
+ local line={recipe='gear',machine='machine',machines=1,ingredients=inputs,products=outputs,modules={{name='speed-module',quality='normal',count=2}}}
+ local frozen={status='solved',lines={line},ingredients=inputs,products=outputs,byproducts={}}
+ local pack={machines={machine={}},recipes={},furnaces={}}
+ capture({recipes={'gear'},inputs={{item='iron-plate',perMinute=252}},outputs={{item='iron-gear-wheel'}}},force,{},nil,pack,{},frozen)
+ local saved=pack.plan.lines[1]
+ assert(saved.machines==1 and saved.products[1].perMinute==126 and saved.ingredients[1].perMinute==252)
+ local settings=dofile('src/lib/server/factory-layout-options.lua').machine_settings(saved,pack)
+ assert(settings.items[1].id.name=='speed-module' and settings.items[1].id.quality=='normal')
+ assert(#settings.items[1].items.in_inventory==2)
+ assert(settings.items[1].items.in_inventory[1].stack==0 and settings.items[1].items.in_inventory[2].stack==1)
+ assert(line.modules[1].count==2 and not line.module_items,'The saved planner data must remain unchanged')
+ line.modules[1].count=3
+ local ok,err=pcall(capture,{recipes={'gear'},inputs={{item='iron-plate',perMinute=252}},outputs={}},force,{},nil,pack,{},frozen)
+ assert(not ok and err:match('exceed machine slots'))
+ `
+	});
+	assert.equal(result.status, 0, result.stderr);
+});
+
+for (const robots of [false, true])
+	test(`saved modules remain on every ${robots ? 'logistics' : 'belt'} machine`, async () => {
+		const pack = JSON.parse(readFileSync('tests/fixtures/interpose/options-2.1.21.json', 'utf8'));
+		const items = [
+			{
+				id: { name: 'speed-module', quality: 'normal' },
+				items: {
+					in_inventory: [
+						{ inventory: 4, stack: 0, count: 1 },
+						{ inventory: 4, stack: 1, count: 1 }
+					]
+				}
+			}
+		];
+		const inputs = [{ name: 'iron-plate', type: 'item', perMinute: 126 }];
+		const products = [{ name: 'iron-gear-wheel', type: 'item', perMinute: 126 }];
+		pack.plan = {
+			status: 'solved',
+			ingredients: inputs,
+			products,
+			byproducts: [],
+			lines: [
+				{
+					recipe: 'iron-gear-wheel',
+					machine: 'assembling-machine-2',
+					machines: 1,
+					products,
+					ingredients: inputs,
+					module_items: items
+				}
+			]
+		};
+		const input = factoryLayoutInput.parse({
+			force: 'player',
+			surface: 'nauvis',
+			label: 'Saved speed modules',
+			width: 32,
+			height: 32,
+			inputs: [{ item: 'iron-plate', perMinute: 126 }],
+			outputs: [{ item: 'iron-gear-wheel', perMinute: 126 }],
+			recipes: ['iron-gear-wheel'],
+			nativePlan: true,
+			fixedPlan: true,
+			tiers: {
+				machine: 'assembling-machine-2',
+				belt: 'transport-belt',
+				underground: 'underground-belt',
+				inserter: 'fast-inserter',
+				pole: 'medium-electric-pole'
+			},
+			logistics: robots
+				? {
+						requester: 'requester-chest',
+						provider: 'storage-chest',
+						requestSeconds: 30,
+						outputSlots: 4
+					}
+				: undefined
+		});
+		const result = await compileFactoryLayout(input, z.json().parse(pack), modules);
+		const machines = result.design.entities.filter((e) => e.name === 'assembling-machine-2');
+		assert.equal(machines.length, 1);
+		assert.deepEqual(machines[0]?.items, items);
+		assert.equal(result.test.outputs[0]?.perMinute, 126);
+	});
