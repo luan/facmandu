@@ -8,6 +8,7 @@ import { createClient } from '@libsql/client';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/libsql';
 import { user } from '../src/lib/server/db/schema';
+import { emptyPrivateEnv } from './fixtures/app-env';
 
 if (process.env.FACMANDU_PROVIDER_TEST_CHILD !== '1') {
 	test('provider auth keeps verified keys and account-specific model access', () => {
@@ -33,7 +34,7 @@ if (process.env.FACMANDU_PROVIDER_TEST_CHILD !== '1') {
 	INSERT INTO user(id) VALUES ('owner');`);
 	const db = drizzle(client, { schema: { user } });
 	afterAll(() => client.close());
-	mock.module('$env/dynamic/private', () => ({ env: {} }));
+	mock.module('$app/env/private', emptyPrivateEnv);
 	mock.module('../src/lib/server/db', () => ({ db }));
 	const codexRequests: { key: string; url: string; headers?: HeadersInit }[] = [];
 	const codexCatalog = {
@@ -88,6 +89,21 @@ if (process.env.FACMANDU_PROVIDER_TEST_CHILD !== '1') {
 	const { loadAssistantModel } = await import('../src/lib/server/assistant-models');
 	const { apiProviders } = await import('../src/lib/server/assistant-providers');
 	const expires = Date.now() + 600_000;
+
+	test('API-key choices exclude providers needing endpoint or identity configuration', () => {
+		const ids = apiProviders.map((provider) => provider.id);
+		assert.ok(ids.includes('anthropic'));
+		for (const id of [
+			'amazon-bedrock',
+			'azure',
+			'cloudflare-ai-gateway',
+			'cloudflare-workers-ai',
+			'google-vertex',
+			'github-copilot'
+		]) {
+			assert.ok(!ids.includes(id), `${id} needs additional configuration`);
+		}
+	});
 
 	test('API-key-only accounts use Pi models and cannot retain a removed credential', async () => {
 		await client.execute("INSERT INTO user(id) VALUES ('api-owner')");

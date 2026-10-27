@@ -1,5 +1,5 @@
 import { toast } from 'svelte-sonner';
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 
 export function createRejectedRecommendationsStore(modlistId: string) {
 	let rejected = $state(new Set<string>());

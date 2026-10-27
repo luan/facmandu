@@ -1,6 +1,6 @@
 <script lang="ts">
 	import '../app.css';
-	import * as Tooltip from '$lib/components/ui/tooltip';
+	import * as Tooltip from '#lib/components/ui/tooltip/index.js';
 	import { Toaster } from 'svelte-sonner';
 
 	let { children } = $props();

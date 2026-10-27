@@ -3,11 +3,11 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, rename, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { env } from '$env/dynamic/private';
-import { compareVersions } from '$lib/dependencies';
-import { validModName } from '$lib/server/mod-names';
-import type { PortalRelease } from '$lib/server/portal-cache';
-import { factorioApiLimiter } from '$lib/server/rate-limiter';
+import { compareVersions } from '#lib/dependencies.js';
+import { validModName } from '#lib/server/mod-names.js';
+import type { PortalRelease } from '#lib/server/portal-cache.js';
+import { factorioApiLimiter } from '#lib/server/rate-limiter.js';
+import { FACMANDU_CACHE_DIR } from '$app/env/private';
 
 const pending = new Map<string, Promise<{ path: string; size: number }>>();
 const verified = new Map<string, { size: number; mtime: number }>();
@@ -32,7 +32,7 @@ export async function modArchive(
 	)
 		throw new Error('Release download metadata is incomplete');
 	const sha1 = release.sha1.toLowerCase();
-	const directory = join(env.FACMANDU_CACHE_DIR || '.cache/facmandu', 'mods');
+	const directory = join(FACMANDU_CACHE_DIR || '.cache/facmandu', 'mods');
 	const path = join(directory, `${name}_${release.version}_${sha1}.zip`);
 	const cached = await stat(path).catch(() => null);
 	if (cached) {

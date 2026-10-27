@@ -1,12 +1,12 @@
 import { error } from '@sveltejs/kit';
 import { eq, or } from 'drizzle-orm';
-import { subscribeActivity } from '$lib/server/activity';
-import { db } from '$lib/server/db';
-import { modList, modListCollaborator } from '$lib/server/db/schema';
-import { eventStream } from '$lib/server/event-stream';
-import { addModlistListener } from '$lib/server/realtime';
-import { recoverInterruptedJobs } from '$lib/server/server-mod-sync';
-import { canManageServer } from '$lib/server/servers';
+import { subscribeActivity } from '#lib/server/activity.js';
+import { db } from '#lib/server/db/index.js';
+import { modList, modListCollaborator } from '#lib/server/db/schema.js';
+import { eventStream } from '#lib/server/event-stream.js';
+import { addModlistListener } from '#lib/server/realtime.js';
+import { recoverInterruptedJobs } from '#lib/server/server-mod-sync.js';
+import { canManageServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, request }) => {

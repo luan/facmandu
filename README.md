@@ -13,7 +13,7 @@ A Factorio server manager with a shared mod library. Manage multiple instances, 
 
 ## Run locally
 
-Use Bun **1.4.2**:
+Use Bun **1.4.4**:
 
 ```sh
 bun install --frozen-lockfile
@@ -45,17 +45,17 @@ In **Server → Mods**, choose a list and use **Sync list from server** while st
 
 ## Cache and performance
 
-| Data | Storage and refresh |
-| --- | --- |
-| Mod metadata and release history | SQLite/Turso; reused indefinitely, with daily rechecks for unresolved releases or an explicit refresh |
-| Mod search and bookmarks | Durable cache, 15 minutes, isolated by Factorio credentials |
-| Available Factorio releases | Durable cache, 24 hours |
-| Missing portal entries | Cached 15 minutes |
-| Remote failures | Retry cooldown; valid stale data stays usable |
-| Mod archives | Disk, validated against the portal SHA-1; atomic downloads |
-| Exports | Disk, keyed by exact resolved contents; concurrent requests share work |
-| Server status / local views | Local process state and files; no remote manager calls |
-| Map generation options / previews | Instance disk; keyed by selected version, mods, startup settings and preview parameters |
+| Data                              | Storage and refresh                                                                                   |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Mod metadata and release history  | SQLite/Turso; reused indefinitely, with daily rechecks for unresolved releases or an explicit refresh |
+| Mod search and bookmarks          | Durable cache, 15 minutes, isolated by Factorio credentials                                           |
+| Available Factorio releases       | Durable cache, 24 hours                                                                               |
+| Missing portal entries            | Cached 15 minutes                                                                                     |
+| Remote failures                   | Retry cooldown; valid stale data stays usable                                                         |
+| Mod archives                      | Disk, validated against the portal SHA-1; atomic downloads                                            |
+| Exports                           | Disk, keyed by exact resolved contents; concurrent requests share work                                |
+| Server status / local views       | Local process state and files; no remote manager calls                                                |
+| Map generation options / previews | Instance disk; keyed by selected version, mods, startup settings and preview parameters               |
 
 Set `FACMANDU_CACHE_DIR` to persistent storage. Its `mods/` and `exports/` directories survive restarts. Downloads are never treated as complete before validation. Retain this directory to avoid repeated downloads; remove only when no download/export job is running.
 
@@ -93,7 +93,7 @@ NeuralWatt offers its native **No thinking** control separately from the existin
 
 Production plans read this save's recipes, unlocks, yields and machine speeds, and compare targets with measured production. Plans expose unresolved recipe choices and report gross inputs with separate byproducts; they do not pretend to solve recycling loops. Factory watches sample once per minute without a model call. Research stalls require five minutes without progress; item deficits compare one-minute consumption and production. Watches and their owner-scoped alert inbox survive restarts. A stopped server pauses sampling; repeated samples do not repeat an alert until the condition clears.
 
-Flue conversation state lives in `.data/agent` (override with `FACMANDU_AGENT_DATA`). Keep this directory private and back it up with the database. One application process owns the runtime; add shared coordination before running multiple app processes. There is no fixed three-minute request cutoff. Explicit Stop cancels a response; browser disconnection and chat navigation leave its work running. Follow-ups steer an active request, and periodic progress reports keep long operations visible. Empty or truncated model replies get bounded continuation attempts using their recorded tool results. Deployments defer restarts while assistant work is active. The application stores private chats per user and list or server, with a chat selector and new-chat action. The context bar reports provider limits and automatic compaction status. Context compacts near the selected model’s window, reserving output headroom and preserving completed writes, visible history and native draft files. The pinned Flue 2.2.2 patch also applies updated compaction settings during a run; remove it when an upstream release passes the same mid-run compaction test. No shell or filesystem tools are exposed to the assistant. New item-production layouts use the vendored MIT Interpose compiler: Toby supplies products, rates, item/fluid input ports, output belts, selected recipes and a bounded area; local port coordinates are optional, with compact west-input/south-output defaults. Reviewed native Lua generates the machines, belts and connected power network outside the game process. Live prototype reads filter locked recipes, surface restrictions and unavailable entity tiers. Raw entity creation and model-written layout programs are no longer assistant tools. The initial compiler supports ground item chains with selected electric crafting-machine prototypes and an optional electric furnace, including fluid-fed solid products such as plastic and battery-fed robot frames. Select the primary tier in `tiers.machine` and additional prototypes in `tiers.crafters`. For single-recipe item production, `logistics:{requester,provider}` generates complete robot-fed cells with recipe-derived requests, provider inventory limits and connected power. Chest-fed trials qualify the machines and inserters; live robot delivery capacity still needs inspection. Fluid inputs use native rotated machine connections and separate pipe routes; fluid-only recipes, fluid products, modules, byproducts and custom circuit controllers still need qualified templates. Unsupported cases return a concrete limitation rather than falling back to arbitrary geometry. Compilation runs a separate headless Factorio process using the same mod archives and startup/runtime settings, copied research and inserter bonuses, declared supply budgets and the generated power network. The recipe/prototype snapshot must match. A reusable initial world avoids repeating map creation; compiled blocks get two minutes of simulated startup and a two-minute sample without waiting for live multiplayer ticks. Failed or paused trials block ghost placement; completed trials retain measured rates. Two compiler attempts per product set bound repairs. Safe world-placement checks remain mandatory.
+Flue conversation state lives in `.data/agent` (override with `FACMANDU_AGENT_DATA`). Keep this directory private and back it up with the database. One application process owns the runtime; add shared coordination before running multiple app processes. There is no fixed three-minute request cutoff. Explicit Stop cancels a response; browser disconnection and chat navigation leave its work running. Follow-ups steer an active request, and periodic progress reports keep long operations visible. Empty or truncated model replies get bounded continuation attempts using their recorded tool results. Deployments defer restarts while assistant work is active. The application stores private chats per user and list or server, with a chat selector and new-chat action. The context bar reports provider limits and automatic compaction status. Context compacts near the selected model’s window, reserving output headroom and preserving completed writes, visible history and native draft files. The pinned Flue 2.3.0 patch applies updated compaction settings during a run, preserves unlimited-duration requests, and handles provider retries and available delegates. Remove it when an upstream release passes `tests/assistant-compaction.test.ts` without the patch. No shell or filesystem tools are exposed to the assistant. New item-production layouts use the vendored MIT Interpose compiler: Toby supplies products, rates, item/fluid input ports, output belts, selected recipes and a bounded area; local port coordinates are optional, with compact west-input/south-output defaults. Reviewed native Lua generates the machines, belts and connected power network outside the game process. Live prototype reads filter locked recipes, surface restrictions and unavailable entity tiers. Raw entity creation and model-written layout programs are no longer assistant tools. The initial compiler supports ground item chains with selected electric crafting-machine prototypes and an optional electric furnace, including fluid-fed solid products such as plastic and battery-fed robot frames. Select the primary tier in `tiers.machine` and additional prototypes in `tiers.crafters`. For single-recipe item production, `logistics:{requester,provider}` generates complete robot-fed cells with recipe-derived requests, provider inventory limits and connected power. Chest-fed trials qualify the machines and inserters; live robot delivery capacity still needs inspection. Fluid inputs use native rotated machine connections and separate pipe routes; fluid-only recipes, fluid products, modules, byproducts and custom circuit controllers still need qualified templates. Unsupported cases return a concrete limitation rather than falling back to arbitrary geometry. Compilation runs a separate headless Factorio process using the same mod archives and startup/runtime settings, copied research and inserter bonuses, declared supply budgets and the generated power network. The recipe/prototype snapshot must match. A reusable initial world avoids repeating map creation; compiled blocks get two minutes of simulated startup and a two-minute sample without waiting for live multiplayer ticks. Failed or paused trials block ghost placement; completed trials retain measured rates. Two compiler attempts per product set bound repairs. Safe world-placement checks remain mandatory.
 
 ## Checks
 
@@ -110,7 +110,7 @@ The HTTP suite uses the actual production build, fresh temporary databases, and 
 
 Login and registration share a 30-attempt/minute budget per client address, with at most two concurrent password operations. Authentication bodies are capped at 16 KiB even when large save uploads are enabled. Configure `ADDRESS_HEADER` only behind a trusted proxy; direct deployments use the peer address.
 
-Biome handles formatting and strict linting. Svelte formatting is temporarily disabled because Biome's experimental formatter does not preserve all Svelte syntax; Svelte is still linted and checked. TypeScript 7 performs type checking through `svelte-check --tsgo`; TypeScript 6 supplies the JS compiler API still needed by build tooling. The `cookie` override stays on its compatible 1.x API until SvelteKit supports cookie 2. Security-sensitive transitive dependencies are pinned through overrides.
+Biome handles formatting and strict linting. Svelte formatting is temporarily disabled because Biome's experimental formatter does not preserve all Svelte syntax; Svelte is still linted and checked. TypeScript 7 performs type checking through `svelte-check --tsgo`; TypeScript 6 supplies the JS compiler API still needed by build tooling. Flue pins an older MCP client, and Drizzle loads an older esbuild; overrides keep both on patched versions. SvelteKit uses cookie 2 without an override.
 
 `bun run db:push` is for deliberate development schema changes. Normal startup runs the checked-in migrations. When changing the initial schema, regenerate `src/lib/server/db/initial.sql` with `drizzle-kit export` and retain `IF NOT EXISTS` so interrupted initialization can retry.
 
@@ -118,7 +118,7 @@ Biome handles formatting and strict linting. Svelte formatting is temporarily di
 
 The public application is **https://factorio.luan.sh**. The named Cloudflare Tunnel `facmandu-beast` connects outbound from beast to Facmandu on `127.0.0.1:5173`; it requires no inbound port forwarding or browser-side SSH session.
 
-- App: user service `facmandu-dev.service`, verified releases at `/home/luan/.local/share/facmandu-deploy/current`, Bun 1.4.2, port 5173.
+- App: user service `facmandu-dev.service`, verified releases at `/home/luan/.local/share/facmandu-deploy/current`, app-specific Bun 1.4.4, port 5173.
 - Game instances: user services `facmandu-factorio-<id>.service`, data in `/home/luan/.local/share/facmandu/servers`.
 - Tunnel: system service `facmandu-cloudflared.service`.
 - Public origin: `ORIGIN=https://factorio.luan.sh`.
@@ -128,7 +128,7 @@ Back up the database, environment, and instance directories before changing serv
 
 ### Automatic deployment and rollback
 
-Pushes to `main` run quality checks. Beast polls for a successful check on the exact main revision, builds in an isolated release, restarts the existing app, and verifies the running revision, database, login, and private-source boundaries. Failed health checks restore the previous source/service configuration. Game processes and all runtime data stay in place. See [infra/beast/README.md](infra/beast/README.md) for installation, status, pausing, and rollback.
+Pushes to `main` run quality checks. Beast polls for a successful check on the exact main revision, copies old immutable client assets into an isolated release before building, restarts the existing app, and verifies the running revision, database, login, and private-source boundaries. Failed health checks restore the previous source/service configuration. Game processes and all runtime data stay in place. See [infra/beast/README.md](infra/beast/README.md) for installation, status, pausing, and rollback.
 
 The original `/home/luan/src/facmandu` checkout is retained as the first rollback source and holds existing assistant state. [infra/dev/README.md](infra/dev/README.md) documents the legacy manual development setup; direct edits there no longer publish changes after automatic releases are enabled.
 

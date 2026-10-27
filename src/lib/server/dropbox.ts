@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { error, type RequestEvent, redirect } from '@sveltejs/kit';
 import { and, eq, gt, lt } from 'drizzle-orm';
 import { z } from 'zod';
-import { env } from '$env/dynamic/private';
+import { DROPBOX_APP_KEY, ORIGIN } from '$app/env/private';
 import { generateSessionToken, requireSameOrigin, setSessionTokenCookie } from './auth';
 import { db } from './db';
 import { dropboxAccount, dropboxLogin, session } from './db/schema';
@@ -18,15 +18,15 @@ const tokenSchema = z.object({
 	account_id: z.string().optional(),
 	scope: z.string().optional()
 });
-export const dropboxConfigured = () => !!env.DROPBOX_APP_KEY;
+export const dropboxConfigured = () => !!DROPBOX_APP_KEY;
 function callbackUrl(event: RequestEvent) {
-	return new URL('/api/dropbox/callback', env.ORIGIN || event.url.origin).href;
+	return new URL('/api/dropbox/callback', ORIGIN || event.url.origin).href;
 }
 async function exchangeToken(fields: Record<string, string>) {
-	if (!env.DROPBOX_APP_KEY) throw new ServerError(503, 'Dropbox is not configured');
+	if (!DROPBOX_APP_KEY) throw new ServerError(503, 'Dropbox is not configured');
 	const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
 		method: 'POST',
-		body: new URLSearchParams({ client_id: env.DROPBOX_APP_KEY, ...fields }),
+		body: new URLSearchParams({ client_id: DROPBOX_APP_KEY, ...fields }),
 		signal: AbortSignal.timeout(30_000)
 	});
 	if (!response.ok)
@@ -66,7 +66,7 @@ export async function beginDropbox(event: RequestEvent): Promise<never> {
 	});
 	const url = new URL('https://www.dropbox.com/oauth2/authorize');
 	url.search = new URLSearchParams({
-		client_id: env.DROPBOX_APP_KEY || '',
+		client_id: DROPBOX_APP_KEY || '',
 		redirect_uri: callbackUrl(event),
 		response_type: 'code',
 		token_access_type: 'offline',
@@ -75,7 +75,7 @@ export async function beginDropbox(event: RequestEvent): Promise<never> {
 		code_challenge_method: 'S256',
 		code_challenge: createHash('sha256').update(verifier).digest('base64url')
 	}).toString();
-	redirect(303, url.href);
+	redirect(303, url.href, { external: ['https://www.dropbox.com'] });
 }
 export async function finishDropbox(event: RequestEvent): Promise<Response> {
 	const state = event.url.searchParams.get('state');

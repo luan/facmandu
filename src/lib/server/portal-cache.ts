@@ -1,9 +1,9 @@
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { supportsFactorio } from '$lib/dependencies';
-import { db } from '$lib/server/db';
-import { portalCache } from '$lib/server/db/schema';
-import { factorioApiLimiter } from '$lib/server/rate-limiter';
+import { supportsFactorio } from '#lib/dependencies.js';
+import { db } from '#lib/server/db/index.js';
+import { portalCache } from '#lib/server/db/schema.js';
+import { factorioApiLimiter } from '#lib/server/rate-limiter.js';
 
 export class PortalHttpError extends Error {
 	constructor(readonly status: number) {

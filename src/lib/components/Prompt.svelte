@@ -1,8 +1,8 @@
 <script lang="ts">
  import { tick, type Snippet } from 'svelte';
  import { SendIcon, SquareIcon, LoaderCircleIcon } from '@lucide/svelte';
- import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
- import { tokenClass, type highlightCommand } from '$lib/console';
+ import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
+ import { tokenClass, type highlightCommand } from '#lib/console.js';
  let { value = $bindable(''), element = $bindable(), label, placeholder, busy = false, allowSteering = false, disabledReason = '', maxLength, controls, tokens, completionId, activeOption, onkeydown, oninput, send, stop }: {
   value?: string; element?: HTMLTextAreaElement; label: string; placeholder: string;
   busy?: boolean; allowSteering?: boolean; disabledReason?: string; maxLength: number; controls?: Snippet;

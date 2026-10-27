@@ -1,11 +1,11 @@
 import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
-import { requireSameOrigin } from '$lib/server/auth';
+import { requireSameOrigin } from '#lib/server/auth.js';
 import {
 	createFactoryWatch,
 	factoryWatchInput,
 	listFactoryWatches
-} from '$lib/server/factory-watches';
+} from '#lib/server/factory-watches.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, params }) => {

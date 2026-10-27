@@ -9,7 +9,7 @@ import { neuralwattProvider } from './neuralwatt';
 // Add them when the connection form can collect those fields; never use host credentials.
 const configuredProviders = new Set([
 	'amazon-bedrock',
-	'azure-openai-responses',
+	'azure',
 	'cloudflare-ai-gateway',
 	'cloudflare-workers-ai',
 	'google-vertex',

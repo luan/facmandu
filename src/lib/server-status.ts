@@ -1,4 +1,4 @@
-import type { ServerView } from '$lib/server/server-view';
+import type { ServerView } from '#lib/server/server-view.js';
 
 // Watch only visible pages, with one request at a time and no work left after navigation.
 export function watchServerStatus(

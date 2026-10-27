@@ -1,10 +1,10 @@
 import { createReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
 import { and, eq, isNull, or } from 'drizzle-orm';
-import { db, userHasModlistAccess } from '$lib/server/db';
-import * as table from '$lib/server/db/schema';
-import { modArchive } from '$lib/server/mod-downloads';
-import { getPortalMod } from '$lib/server/portal-cache';
+import { db, userHasModlistAccess } from '#lib/server/db/index.js';
+import * as table from '#lib/server/db/schema.js';
+import { modArchive } from '#lib/server/mod-downloads.js';
+import { getPortalMod } from '#lib/server/portal-cache.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async (event) => {

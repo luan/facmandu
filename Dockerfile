@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-ARG BUN_VERSION=1.4.2
+ARG BUN_VERSION=1.4.4
 FROM oven/bun:${BUN_VERSION}-slim AS build
 WORKDIR /app
 COPY .npmrc bun.lock package.json ./
@@ -15,5 +15,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends lua5.4 && rm -r
 COPY .npmrc bun.lock package.json ./
 RUN bun install --frozen-lockfile --production --ignore-scripts
 COPY --from=build /app/build ./build
+COPY --from=build /app/scripts/start.mjs ./scripts/start.mjs
 EXPOSE 3000
 CMD ["bun", "run", "start"]

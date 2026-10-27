@@ -1,12 +1,12 @@
 <script lang="ts">
- import Prompt from '$lib/components/Prompt.svelte';
+ import Prompt from '#lib/components/Prompt.svelte';
 	import { PlayIcon, PauseIcon, CheckIcon, CopyIcon, DownloadIcon, EraserIcon } from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { onMount, tick } from 'svelte';
 	import { deserialize } from '$app/forms';
-	import { MAX_CONSOLE_LINES, boundedConsoleLines, consoleText, RCON_COMMAND_BYTES, commandCompletions, consoleLevel, parseConsoleLine, highlightCommand, isLuaLine, tokenClass } from '$lib/console';
-	import type { LogPacket } from '$lib/server/server-logs';
-	import Button from '$lib/components/ui/button/button.svelte';
+	import { MAX_CONSOLE_LINES, boundedConsoleLines, consoleText, RCON_COMMAND_BYTES, commandCompletions, consoleLevel, parseConsoleLine, highlightCommand, isLuaLine, tokenClass } from '#lib/console.js';
+	import type { LogPacket } from '#lib/server/server-logs.js';
+	import Button from '#lib/components/ui/button/button.svelte';
 	let { serverId, serverName, running }: { serverId: string; serverName: string; running: boolean } = $props();
 	type Entry = { id: string; text: string; time: number | null; source: 'log' | 'command' | 'response'; level: 'error' | 'warning' | 'info' };
 	const LIMIT = MAX_CONSOLE_LINES;

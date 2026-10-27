@@ -1,8 +1,9 @@
 // @ts-expect-error Bun supplies this built-in at runtime; the project uses Node type declarations.
 import { mock, test } from 'bun:test';
 import assert from 'node:assert/strict';
+import { emptyPrivateEnv } from './fixtures/app-env';
 
-mock.module('$env/dynamic/private', () => ({ env: {} }));
+mock.module('$app/env/private', emptyPrivateEnv);
 mock.module('../src/lib/server/db', () => ({ db: {}, userHasModlistAccess: async () => false }));
 const { changeSchema } = await import('../src/lib/server/modlist-plans');
 

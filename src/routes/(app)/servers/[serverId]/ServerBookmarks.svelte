@@ -1,15 +1,15 @@
 <script lang="ts">
 	import { RefreshCwIcon, ChevronLeftIcon, ChevronRightIcon, DownloadIcon, PackagePlusIcon, PackageMinusIcon, TrashIcon } from '@lucide/svelte';
 	import { enhance } from '$app/forms';
-	import type { SubmitFunction } from '@sveltejs/kit';
-	import ModSummary from '$lib/components/ModSummary.svelte';
- import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
+	import type { SubmitFunction } from '$app/forms';
+	import ModSummary from '#lib/components/ModSummary.svelte';
+ import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
  import ModPreviewSheet from '../../modlists/[id]/ModPreviewSheet.svelte';
- import Button from '$lib/components/ui/button/button.svelte';
-	import * as Card from '$lib/components/ui/card';
-	import { compareVersions, supportsFactorio } from '$lib/dependencies';
-	import type { ModInventory } from '$lib/server/server-mods';
-	import type { PortalMod } from '$lib/server/portal-cache';
+ import Button from '#lib/components/ui/button/button.svelte';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import { compareVersions, supportsFactorio } from '#lib/dependencies.js';
+	import type { ModInventory } from '#lib/server/server-mods.js';
+	import type { PortalMod } from '#lib/server/portal-cache.js';
 
 	let { base, factorioVersion, running, busy, action, submit, revision }: { base: string; factorioVersion: string; running: boolean; busy: boolean; action: string; submit: SubmitFunction; revision: unknown } = $props();
 	type Bookmarks = ModInventory & { names: string[]; warning?: string };

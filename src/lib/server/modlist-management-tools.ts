@@ -2,12 +2,12 @@ import { createHash } from 'node:crypto';
 import { useDelivery, useTool } from '@flue/runtime';
 import { eq } from 'drizzle-orm';
 import * as v from 'valibot';
-import { compareVersions, supportsFactorio } from '$lib/dependencies';
+import { compareVersions, supportsFactorio } from '#lib/dependencies.js';
 import {
 	type RecommendationMod,
 	recommendationCandidates,
 	recommendationRelease
-} from '$lib/recommendations';
+} from '#lib/recommendations.js';
 import { db } from './db';
 import { user } from './db/schema';
 import { searchFactorioMods } from './factorio-search';

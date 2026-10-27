@@ -2,9 +2,9 @@
  import { toast } from 'svelte-sonner';
  import { enhance } from '$app/forms';
  import { PlusIcon, ShieldIcon, XIcon, CopyIcon } from '@lucide/svelte';
- import { Button } from '$lib/components/ui/button';
- import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
- import type { SubmitFunction } from '@sveltejs/kit';
+ import { Button } from '#lib/components/ui/button/index.js';
+ import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
+ import type { SubmitFunction } from '$app/forms';
  import type { PageProps } from './$types';
  let { data, form }: PageProps = $props();
  let pending = $state(false);

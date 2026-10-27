@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { ChevronDownIcon, ChevronRightIcon } from '@lucide/svelte';
-	import { bundledModTitle, isBundledMod, satisfiesVersion, type ParsedDependency } from '$lib/dependencies';
-	import { dependencyTreeMatches, modDependencyGraph } from '$lib/mod-dependency-tree';
-	import type { ModSummary } from '$lib/server/db/schema';
+	import { bundledModTitle, isBundledMod, satisfiesVersion, type ParsedDependency } from '#lib/dependencies.js';
+	import { dependencyTreeMatches, modDependencyGraph } from '#lib/mod-dependency-tree.js';
+	import type { ModSummary } from '#lib/server/db/schema.js';
 	import ModInfoCell from './ModInfoCell.svelte';
 	import ThumbnailCell from './ThumbnailCell.svelte';
 

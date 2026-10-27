@@ -10,7 +10,7 @@ import {
 	getModSettingValues,
 	settingSections,
 	updateModSettingValues
-} from '$lib/mod-settings';
+} from '#lib/mod-settings.js';
 import type { ManagedServer } from './db/schema';
 
 export const versionPattern = /^\d+\.\d+\.\d+$/u;

@@ -1,11 +1,11 @@
 <script lang="ts">
- import ProviderLogin from '$lib/components/ProviderLogin.svelte';
+ import ProviderLogin from '#lib/components/ProviderLogin.svelte';
 	import { LogInIcon } from '@lucide/svelte';
 	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
-	import { Input } from '$lib/components/ui/input';
-	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
 	import type { PageProps } from './$types';
 	let { form }: PageProps = $props();
 	let pending = $state(false);

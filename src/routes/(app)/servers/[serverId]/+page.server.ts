@@ -1,14 +1,14 @@
 import { error, fail } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { RCON_COMMAND_BYTES } from '$lib/console';
-import { worldGenerationSchema } from '$lib/map-generation';
-import { loadAssistantModel } from '$lib/server/assistant-models';
-import { db } from '$lib/server/db';
-import * as table from '$lib/server/db/schema';
-import { refreshInGameAssistants } from '$lib/server/in-game-assistant';
-import { validModName } from '$lib/server/mod-names';
-import { saveLiveModSettings } from '$lib/server/mod-settings-defs';
+import { RCON_COMMAND_BYTES } from '#lib/console.js';
+import { worldGenerationSchema } from '#lib/map-generation.js';
+import { loadAssistantModel } from '#lib/server/assistant-models.js';
+import { db } from '#lib/server/db/index.js';
+import * as table from '#lib/server/db/schema.js';
+import { refreshInGameAssistants } from '#lib/server/in-game-assistant.js';
+import { validModName } from '#lib/server/mod-names.js';
+import { saveLiveModSettings } from '#lib/server/mod-settings-defs.js';
 import {
 	changeServerUser,
 	gameAssistantSchema,
@@ -19,30 +19,30 @@ import {
 	saveModSettings,
 	type UserList,
 	updateServerConfig
-} from '$lib/server/server-files';
-import { modSyncJob, syncModlistFromServer } from '$lib/server/server-mod-sync';
-import { installMod, removeMod, toggleMod } from '$lib/server/server-mods';
-import { requireStopped, serverStatus, startFactorio } from '$lib/server/server-process';
-import { rcon } from '$lib/server/server-rcon';
+} from '#lib/server/server-files.js';
+import { modSyncJob, syncModlistFromServer } from '#lib/server/server-mod-sync.js';
+import { installMod, removeMod, toggleMod } from '#lib/server/server-mods.js';
+import { requireStopped, serverStatus, startFactorio } from '#lib/server/server-process.js';
+import { rcon } from '#lib/server/server-rcon.js';
 import {
 	deleteSave,
 	renameSave,
 	savePath,
 	serverSaves,
 	uploadSave
-} from '$lib/server/server-saves';
+} from '#lib/server/server-saves.js';
 import {
 	reserveServer,
 	serverTask,
 	startSaveCreation,
 	startServerDownload,
 	stopServer
-} from '$lib/server/server-tasks';
-import { selectVersion, uninstallVersion } from '$lib/server/server-versions';
-import { editableSettings, settingFields, settingKind } from '$lib/server/server-view';
-import { canManageServer, publicServer, requireServer } from '$lib/server/servers';
-import { installTobyIntegration } from '$lib/server/toby-integrations';
-import { installTobyMod } from '$lib/server/toby-mod';
+} from '#lib/server/server-tasks.js';
+import { selectVersion, uninstallVersion } from '#lib/server/server-versions.js';
+import { editableSettings, settingFields, settingKind } from '#lib/server/server-view.js';
+import { canManageServer, publicServer, requireServer } from '#lib/server/servers.js';
+import { installTobyIntegration } from '#lib/server/toby-integrations.js';
+import { installTobyMod } from '#lib/server/toby-mod.js';
 import type { Actions, PageServerLoad } from './$types';
 
 const jsonObject = z.record(z.string(), z.unknown());
@@ -156,7 +156,7 @@ export const actions: Actions = {
 							return fail(400, { message: 'Choose an available model and effort' });
 					}
 					if (parsed.data.enabled && parsed.data.chatMode === 'ambient') {
-						const { accountProviderKey } = await import('$lib/server/assistant-providers');
+						const { accountProviderKey } = await import('#lib/server/assistant-providers.js');
 						await accountProviderKey(event.locals.user?.id ?? '', 'neuralwatt');
 					}
 					await updateServerConfig(server, { gameAssistant: parsed.data });

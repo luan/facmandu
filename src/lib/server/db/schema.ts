@@ -8,7 +8,7 @@ import {
 	unique,
 	uniqueIndex
 } from 'drizzle-orm/sqlite-core';
-import type { AssistantContextUsage } from '$lib/assistant-context';
+import type { AssistantContextUsage } from '#lib/assistant-context.js';
 
 export const user = sqliteTable('user', {
 	id: text('id').primaryKey(),

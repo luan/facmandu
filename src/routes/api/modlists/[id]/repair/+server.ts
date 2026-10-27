@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
-import { userHasModlistAccess } from '$lib/server/db';
-import { repairProgress, startModlistRepair } from '$lib/server/modlist-repair';
+import { userHasModlistAccess } from '#lib/server/db/index.js';
+import { repairProgress, startModlistRepair } from '#lib/server/modlist-repair.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params, locals }) => {

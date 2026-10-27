@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { z } from 'zod';
-import type { DecisionRequest } from '$lib/decisions';
+import type { DecisionRequest } from '#lib/decisions.js';
 import { cachedPortalRequest } from './portal-cache';
 
 export function cachedDecisionRequest<T extends z.ZodType>(

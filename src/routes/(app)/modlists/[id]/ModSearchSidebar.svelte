@@ -1,9 +1,9 @@
 <script lang="ts">
-	import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
+	import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import Input from '$lib/components/ui/input/input.svelte';
-	import Button from '$lib/components/ui/button/button.svelte';
+	import Input from '#lib/components/ui/input/input.svelte';
+	import Button from '#lib/components/ui/button/button.svelte';
 	import { SearchIcon, FilterIcon } from '@lucide/svelte';
 
 	interface Props {
@@ -72,7 +72,7 @@
 </script>
 
 <div class="flex flex-col gap-4">
-	<form method="GET" class="flex flex-col gap-4" onsubmit={(event) => { event.preventDefault(); const query = new URLSearchParams(); for (const [key, value] of new FormData(event.currentTarget)) if (typeof value === 'string') query.append(key, value); void goto(`${page.url.pathname}?${query}`, { keepFocus: true, noScroll: true }); }}>
+	<form method="GET" class="flex flex-col gap-4" onsubmit={(event) => { event.preventDefault(); const query = new URLSearchParams(); for (const [key, value] of new FormData(event.currentTarget)) if (typeof value === 'string') query.append(key, value); void goto(`${page.url.pathname}?${query}`, { reset: false }); }}>
 		<!-- Text search -->
 		<div class="flex items-center gap-2">
 			<Input name="q" aria-label="Search mods" maxlength={200} placeholder="Search mods..." bind:value={q} class="flex-1" />

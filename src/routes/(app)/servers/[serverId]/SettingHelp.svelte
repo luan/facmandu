@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { InfoIcon } from '@lucide/svelte';
-	import * as Tooltip from '$lib/components/ui/tooltip';
-	import FactorioRichText from '$lib/components/FactorioRichText.svelte';
-	import { parseFactorioRichText } from '$lib/factorio-rich-text';
+	import * as Tooltip from '#lib/components/ui/tooltip/index.js';
+	import FactorioRichText from '#lib/components/FactorioRichText.svelte';
+	import { parseFactorioRichText } from '#lib/factorio-rich-text.js';
 
 	let { label, description, serverId }: { label: string; description: string; serverId: string } =
 		$props();

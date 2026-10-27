@@ -1,7 +1,7 @@
 import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
-import { modSyncJob, startModSync } from '$lib/server/server-mod-sync';
-import { canManageServer, requireServer } from '$lib/server/servers';
+import { modSyncJob, startModSync } from '#lib/server/server-mod-sync.js';
+import { canManageServer, requireServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 
 const requestSchema = z.object({

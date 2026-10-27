@@ -1,8 +1,8 @@
 <script lang="ts">
  import { tick } from 'svelte';
  import { PlusIcon, XIcon } from '@lucide/svelte';
- import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
- import type { SettingDef } from '$lib/server/mod-settings-lua';
+ import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
+ import type { SettingDef } from '#lib/server/mod-settings-lua.js';
  import SettingInput from './SettingInput.svelte';
  type Color = { r: number; g: number; b: number; a?: number };
  let {

@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
-import { factorioReleases } from '$lib/server/server-versions';
-import { requireServer } from '$lib/server/servers';
+import { factorioReleases } from '#lib/server/server-versions.js';
+import { requireServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params, locals }) => {

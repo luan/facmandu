@@ -1,10 +1,10 @@
 <script lang="ts">
- import type { ServerView } from '$lib/server/server-view';
- import { watchServerStatus } from '$lib/server-status';
+ import type { ServerView } from '#lib/server/server-view.js';
+ import { watchServerStatus } from '#lib/server-status.js';
  import { ChevronRightIcon, LibraryIcon } from '@lucide/svelte';
- import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
+ import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
  import InstanceSettings from './[serverId]/InstanceSettings.svelte';
- import type { ServerSummary } from '$lib/server/servers';
+ import type { ServerSummary } from '#lib/server/servers.js';
  let { server, listName, reviewListId }: { server:ServerSummary; listName?:string; reviewListId:string|null } = $props();
  let status = $state<ServerView['status'] | null>(null);
  let unavailable = $state(false);

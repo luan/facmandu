@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { z } from 'zod';
-import { blueprintDesignSchema, MAX_BLUEPRINT_ENTITIES } from '$lib/blueprints';
-import { type FactoryLayoutJob, factoryLayoutJobInput } from '$lib/factory-layout';
+import { blueprintDesignSchema, MAX_BLUEPRINT_ENTITIES } from '#lib/blueprints.js';
+import { type FactoryLayoutJob, factoryLayoutJobInput } from '#lib/factory-layout.js';
 import adapter from './factory-layout-adapter.lua?raw';
 import belts from './factory-layout-belts.lua?raw';
 import compression from './factory-layout-compress.lua?raw';

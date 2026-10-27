@@ -1,6 +1,6 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { validModName } from '$lib/server/mod-names';
-import { getPortalMod } from '$lib/server/portal-cache';
+import { validModName } from '#lib/server/mod-names.js';
+import { getPortalMod } from '#lib/server/portal-cache.js';
 
 export const GET: RequestHandler = async ({ params }) => {
 	const { name } = params;

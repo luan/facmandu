@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { RefreshCwIcon, PlusIcon, TrashIcon, SnowflakeIcon, ChevronLeftIcon, ChevronRightIcon } from '@lucide/svelte';
-	import ModSummary from '$lib/components/ModSummary.svelte';
+	import ModSummary from '#lib/components/ModSummary.svelte';
 	import { enhance } from '$app/forms';
 	import { goto, invalidate } from '$app/navigation';
 	import { page } from '$app/state';
-	import type { SubmitFunction } from '@sveltejs/kit';
+	import type { SubmitFunction } from '$app/forms';
 	import { toast } from 'svelte-sonner';
-	import Button from '$lib/components/ui/button/button.svelte';
-	import type { searchFactorioMods } from '$lib/server/factorio-search';
+	import Button from '#lib/components/ui/button/button.svelte';
+	import type { searchFactorioMods } from '#lib/server/factorio-search.js';
 	import ModPreviewSheet from './ModPreviewSheet.svelte';
 
 	let { currentMods, readOnly = false }: { currentMods: {id: string; name: string; icebox?: boolean | null}[]; readOnly?: boolean } = $props();
@@ -44,7 +44,7 @@
 	});
 	function changePage(number: number) {
 		const query = new URLSearchParams(searchKey); query.set('page', String(number));
-		void goto(`${page.url.pathname}?${query}`, {keepFocus: true, noScroll: true});
+		void goto(`${page.url.pathname}?${query}`, { reset: false });
 	}
 	const submit: SubmitFunction = ({formData, cancel}) => {
 		const name = String(formData.get('modName'));

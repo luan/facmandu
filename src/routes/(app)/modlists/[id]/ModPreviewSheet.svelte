@@ -1,17 +1,17 @@
 <script module lang="ts">
-	import type { PortalMod } from '$lib/server/portal-cache';
+	import type { PortalMod } from '#lib/server/portal-cache.js';
 	const previews = new Map<string, { info: PortalMod; expires: number }>();
 </script>
 <script lang="ts">
 	import { CheckIcon, RefreshCwIcon, ExternalLinkIcon } from '@lucide/svelte';
-	import { modThumbnailUrl } from '$lib/utils';
+	import { modThumbnailUrl } from '#lib/utils.js';
 	import { enhance } from '$app/forms';
 	import { invalidate } from '$app/navigation';
-	import type { SubmitFunction } from '@sveltejs/kit';
-	import Button from '$lib/components/ui/button/button.svelte';
+	import type { SubmitFunction } from '$app/forms';
+	import Button from '#lib/components/ui/button/button.svelte';
 	import { toast } from 'svelte-sonner';
-	import * as Sheet from '$lib/components/ui/sheet';
-	import { compareVersions, inspectDependencies, isBundledMod, supportsFactorio } from '$lib/dependencies';
+	import * as Sheet from '#lib/components/ui/sheet/index.js';
+	import { compareVersions, inspectDependencies, isBundledMod, supportsFactorio } from '#lib/dependencies.js';
 	let { open = $bindable(false), modName = null, modId, selectedVersion, factorioVersion, readOnly = true }: {
 		open: boolean; modName: string | null; modId?: string; selectedVersion?: string | null; factorioVersion?: string; readOnly?: boolean;
 	} = $props();

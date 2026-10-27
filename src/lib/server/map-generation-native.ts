@@ -14,12 +14,12 @@ import {
 } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
-import type { WorldGenerationSettings } from '$lib/map-generation';
+import type { WorldGenerationSettings } from '#lib/map-generation.js';
 import {
 	fromFactorioMapSettings,
 	toFactorioMapSettings,
 	worldGenerationSchema
-} from '$lib/map-generation';
+} from '#lib/map-generation.js';
 import type { ManagedServer } from './db/schema';
 import { ServerError, serverConfig } from './server-files';
 import { executable } from './server-process';

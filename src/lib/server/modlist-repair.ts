@@ -6,15 +6,15 @@ import {
 	inspectDependencies,
 	isBundledMod,
 	supportsFactorio
-} from '$lib/dependencies';
-import { type ReleaseCatalog, resolveModList } from '$lib/mod-resolution';
-import { publishActivity } from '$lib/server/activity';
-import { db } from '$lib/server/db';
-import { type Mod, mod, modList } from '$lib/server/db/schema';
-import { latestCompatibleRelease, modMetadataValues } from '$lib/server/mod-metadata';
-import { validModName } from '$lib/server/mod-names';
-import { getPortalMod, getPortalModForFactorio, type PortalMod } from '$lib/server/portal-cache';
-import { publishModlistEvent } from '$lib/server/realtime';
+} from '#lib/dependencies.js';
+import { type ReleaseCatalog, resolveModList } from '#lib/mod-resolution.js';
+import { publishActivity } from '#lib/server/activity.js';
+import { db } from '#lib/server/db/index.js';
+import { type Mod, mod, modList } from '#lib/server/db/schema.js';
+import { latestCompatibleRelease, modMetadataValues } from '#lib/server/mod-metadata.js';
+import { validModName } from '#lib/server/mod-names.js';
+import { getPortalMod, getPortalModForFactorio, type PortalMod } from '#lib/server/portal-cache.js';
+import { publishModlistEvent } from '#lib/server/realtime.js';
 
 export type RepairProgress = {
 	state: 'running' | 'done' | 'error';

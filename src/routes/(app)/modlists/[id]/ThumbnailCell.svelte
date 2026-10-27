@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { PackageIcon } from '@lucide/svelte';
-	import { modThumbnailUrl } from '$lib/utils';
-	import * as Tooltip from '$lib/components/ui/tooltip';
-	import type { ModSummary } from '$lib/server/db/schema';
+	import { modThumbnailUrl } from '#lib/utils.js';
+	import * as Tooltip from '#lib/components/ui/tooltip/index.js';
+	import type { ModSummary } from '#lib/server/db/schema.js';
 
 	interface Props {
 		mod: Omit<ModSummary, 'updatedBy'>;

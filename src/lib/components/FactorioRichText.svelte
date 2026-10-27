@@ -1,6 +1,6 @@
 <script lang="ts">
 	import PrototypeIcon from './PrototypeIcon.svelte';
-	import { parseFactorioRichText } from '$lib/factorio-rich-text';
+	import { parseFactorioRichText } from '#lib/factorio-rich-text.js';
 
 	let { text, serverId, inline = true }: { text: string; serverId: string; inline?: boolean } = $props();
 	const parts = $derived(parseFactorioRichText(text));

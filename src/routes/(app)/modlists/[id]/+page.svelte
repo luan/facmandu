@@ -6,7 +6,7 @@
 	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import type { PageProps } from './$types';
-	import * as Sheet from '$lib/components/ui/sheet';
+	import * as Sheet from '#lib/components/ui/sheet/index.js';
 	import ModSearchSidebar from './ModSearchSidebar.svelte';
 	import ModSearchResults from './ModSearchResults.svelte';
 	import ModTable from './ModTable.svelte';
@@ -14,13 +14,13 @@
 	import EditableModlistName from './EditableModlistName.svelte';
 	import DependencyValidation from './DependencyValidation.svelte';
 	import { enhance, deserialize } from '$app/forms';
-	import type { SubmitFunction } from '@sveltejs/kit';
-	import { Button, buttonVariants } from '$lib/components/ui/button';
+	import type { SubmitFunction } from '$app/forms';
+	import { Button, buttonVariants } from '#lib/components/ui/button/index.js';
 	import { invalidate, goto } from '$app/navigation';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import { createModList } from '$lib/mod-list';
-	import type { RepairProgress } from '$lib/server/modlist-repair';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import { createModList } from '#lib/mod-list.js';
+	import type { RepairProgress } from '#lib/server/modlist-repair.js';
+	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 
 	let { data }: PageProps = $props();
 	let modlist = $derived(data.modlist);

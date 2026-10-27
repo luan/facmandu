@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { tobyModArchive, tobyModInfo } from '$lib/server/toby-mod';
+import { tobyModArchive, tobyModInfo } from '#lib/server/toby-mod.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = ({ locals }) => {

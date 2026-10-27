@@ -4,10 +4,10 @@ import {
 	accountProviderKeys,
 	apiProviderAuth,
 	apiProviders
-} from '$lib/server/assistant-providers';
-import { authenticationForm } from '$lib/server/auth';
-import { db } from '$lib/server/db';
-import * as table from '$lib/server/db/schema';
+} from '#lib/server/assistant-providers.js';
+import { authenticationForm } from '#lib/server/auth.js';
+import { db } from '#lib/server/db/index.js';
+import * as table from '#lib/server/db/schema.js';
 import type { Actions, PageServerLoad } from './$types';
 import { schema } from './schema';
 

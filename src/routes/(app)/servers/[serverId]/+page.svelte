@@ -1,19 +1,19 @@
 <script module lang="ts">
-	import type { ServerView } from '$lib/server/server-view';
+	import type { ServerView } from '#lib/server/server-view.js';
 	const views = new Map<string, { data: ServerView; expiresAt: number; completions: Record<string, number> }>();
 </script>
 <script lang="ts">
-	import Assistant from '$lib/components/Assistant.svelte';
+	import Assistant from '#lib/components/Assistant.svelte';
 	import InstanceSettings from './InstanceSettings.svelte';
 	import { RefreshCwIcon, PlayIcon, SquareIcon, PackageIcon, HardDriveIcon, TerminalIcon, SettingsIcon, ShieldCheckIcon } from '@lucide/svelte';
 	import { goto } from '$app/navigation';
 	import { enhance } from '$app/forms';
 	import { toast } from 'svelte-sonner';
-	import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
+	import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
 	import { untrack } from 'svelte';
-	import { watchServerStatus } from '$lib/server-status';
-	import { getActivityState } from '$lib/activity.svelte';
-	import Button from '$lib/components/ui/button/button.svelte';
+	import { watchServerStatus } from '#lib/server-status.js';
+	import { getActivityState } from '#lib/activity.svelte.js';
+	import Button from '#lib/components/ui/button/button.svelte';
 	import ServerWorkspace from './ServerWorkspace.svelte';
 	import type { PageProps } from './$types';
 	let { data }: PageProps = $props();
@@ -37,7 +37,7 @@
 	const task = $derived(activityState.items.find((item) => item.scope === 'server' && item.targetId === data.server.id && item.state === 'running'));
 	const stopping = $derived(task?.task === 'stop' || headerStatus?.stopping);
 	const startReason = $derived(!view ? 'Loading server details' : lifecyclePending ? 'Updating server' : task?.message || (headerView?.modSyncJob?.status === 'running' ? 'Applying mod list' : !headerView?.status.is_configured ? 'Select a Factorio version in Settings' : ''));
-	const manageLifecycle: import('@sveltejs/kit').SubmitFunction = ({ cancel }) => {
+	const manageLifecycle: import('$app/forms').SubmitFunction = ({ cancel }) => {
 		if (startReason) { cancel(); return; }
 		lifecyclePending = true;
 		return async ({ update, result }) => {

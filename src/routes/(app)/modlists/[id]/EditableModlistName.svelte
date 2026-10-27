@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidate } from '$app/navigation';
-	import { Input } from '$lib/components/ui/input';
-	import Button from '$lib/components/ui/button/tooltip-button.svelte';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import Button from '#lib/components/ui/button/tooltip-button.svelte';
 	import { CheckIcon, XIcon, EditIcon } from '@lucide/svelte';
 	import { tick } from 'svelte';
-	import type { ActionResult } from '@sveltejs/kit';
+	import type { ActionResult } from '$app/forms';
 
 	let {
 		name = '',

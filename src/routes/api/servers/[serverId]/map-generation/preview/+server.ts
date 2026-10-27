@@ -1,8 +1,8 @@
 import { error } from '@sveltejs/kit';
-import { worldGenerationSchema } from '$lib/map-generation';
-import { mapGenerationPreview } from '$lib/server/map-generation-native';
-import { ServerError } from '$lib/server/server-files';
-import { requireServer } from '$lib/server/servers';
+import { worldGenerationSchema } from '#lib/map-generation.js';
+import { mapGenerationPreview } from '#lib/server/map-generation-native.js';
+import { ServerError } from '#lib/server/server-files.js';
+import { requireServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {

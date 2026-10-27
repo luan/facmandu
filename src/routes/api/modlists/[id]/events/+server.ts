@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm';
-import { db, userHasModlistAccess } from '$lib/server/db';
-import * as table from '$lib/server/db/schema';
-import { eventStream } from '$lib/server/event-stream';
-import { addActiveViewer, addModlistListener, getActiveViewers } from '$lib/server/realtime';
+import { db, userHasModlistAccess } from '#lib/server/db/index.js';
+import * as table from '#lib/server/db/schema.js';
+import { eventStream } from '#lib/server/event-stream.js';
+import { addActiveViewer, addModlistListener, getActiveViewers } from '#lib/server/realtime.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params, locals, request }) => {

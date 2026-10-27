@@ -1,4 +1,4 @@
-import { type AmbientChat, ambientRoute, ambientRouteRequest } from '$lib/ambient-chat';
+import { type AmbientChat, ambientRoute, ambientRouteRequest } from '#lib/ambient-chat.js';
 import { accountProviderKey } from './assistant-providers';
 
 export async function routeAmbientChat(ownerId: string, prompt: string, chats: AmbientChat[]) {

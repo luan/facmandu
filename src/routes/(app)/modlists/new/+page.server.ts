@@ -1,11 +1,11 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
-import { compareVersions } from '$lib/dependencies';
-import { db } from '$lib/server/db';
-import { genID } from '$lib/server/db/ids';
-import * as table from '$lib/server/db/schema';
-import { validModName } from '$lib/server/mod-names';
-import { startModlistRepair } from '$lib/server/modlist-repair';
+import { compareVersions } from '#lib/dependencies.js';
+import { genID } from '#lib/server/db/ids.js';
+import { db } from '#lib/server/db/index.js';
+import * as table from '#lib/server/db/schema.js';
+import { validModName } from '#lib/server/mod-names.js';
+import { startModlistRepair } from '#lib/server/modlist-repair.js';
 import type { Actions } from './$types';
 import { formSchema } from './schema';
 

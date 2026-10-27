@@ -1,7 +1,7 @@
 import { normalizeContext } from '@earendil-works/pi-ai';
 import { error } from '@sveltejs/kit';
 import { and, desc, eq, getTableColumns, sql } from 'drizzle-orm';
-import { assistantTitle } from '$lib/assistant-title';
+import { assistantTitle } from '#lib/assistant-title.js';
 import { loadAssistantModel } from './assistant-models';
 import { db } from './db';
 import { genID } from './db/ids';

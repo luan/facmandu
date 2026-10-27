@@ -1,8 +1,8 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { count, eq, inArray, sql } from 'drizzle-orm';
-import { db, userHasModlistAccess } from '$lib/server/db';
-import { genID } from '$lib/server/db/ids';
-import * as table from '$lib/server/db/schema';
+import { genID } from '#lib/server/db/ids.js';
+import { db, userHasModlistAccess } from '#lib/server/db/index.js';
+import * as table from '#lib/server/db/schema.js';
 import type { Actions, PageServerLoad } from './$types';
 
 export const actions: Actions = {

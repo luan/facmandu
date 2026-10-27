@@ -1,10 +1,10 @@
 <script lang="ts">
  import { CloudIcon, RefreshCwIcon, DownloadIcon, UploadIcon } from '@lucide/svelte';
  import { toast } from 'svelte-sonner';
- import Button from '$lib/components/ui/button/button.svelte';
- import * as Dialog from '$lib/components/ui/dialog';
- import { getActivityState } from '$lib/activity.svelte';
- import type { CloudSave } from '$lib/server/dropbox-backups';
+ import Button from '#lib/components/ui/button/button.svelte';
+ import * as Dialog from '#lib/components/ui/dialog/index.js';
+ import { getActivityState } from '#lib/activity.svelte.js';
+ import type { CloudSave } from '#lib/server/dropbox-backups.js';
  let { serverId, running, busyReason }: { serverId: string; running: boolean; busyReason: string } = $props();
  let connected = $state(false);
  let configured = $state(false);

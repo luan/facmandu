@@ -1,6 +1,6 @@
 <script lang="ts">
-	import Button from '$lib/components/ui/button/tooltip-button.svelte';
-	import { cn } from '$lib/utils.js';
+	import Button from '#lib/components/ui/button/tooltip-button.svelte';
+	import { cn } from '#lib/utils.js';
 	import PanelLeftIcon from '@lucide/svelte/icons/panel-left';
 	import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close';
 	import type { ComponentProps } from 'svelte';
@@ -34,7 +34,7 @@
 	{size}
 	class={cn(children ? 'gap-2' : 'size-7', className)}
 	type="button"
-	onclick={(e) => {
+	onclick={(e: MouseEvent) => {
 		onclick?.(e);
 		sidebar.toggle();
 	}}

@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidate } from '$app/navigation';
-	import type { SubmitFunction } from '@sveltejs/kit';
+	import type { SubmitFunction } from '$app/forms';
 	import { TrashIcon, RefreshCwIcon, LockIcon, UnlockIcon, SnowflakeIcon } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
-	import Button from '$lib/components/ui/button/button.svelte';
-	import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
-	import * as Tooltip from '$lib/components/ui/tooltip';
-	import type { ModSummary } from '$lib/server/db/schema';
+	import Button from '#lib/components/ui/button/button.svelte';
+	import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
+	import * as Tooltip from '#lib/components/ui/tooltip/index.js';
+	import type { ModSummary } from '#lib/server/db/schema.js';
 	let { mod, confirmDeleteId, onDeleteClick }: { mod: Omit<ModSummary, 'updatedBy'>; confirmDeleteId: string | null; onDeleteClick: (modId: string) => void } = $props();
 	let pending = $state(false);
 	const submit: SubmitFunction = ({ cancel }) => {

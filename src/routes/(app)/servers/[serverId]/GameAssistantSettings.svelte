@@ -1,11 +1,11 @@
 <script lang="ts">
  import { untrack } from 'svelte';
  import { enhance } from '$app/forms';
- import type { SubmitFunction } from '@sveltejs/kit';
+ import type { SubmitFunction } from '$app/forms';
  import { SaveIcon } from '@lucide/svelte';
- import * as Card from '$lib/components/ui/card';
- import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
- import type { ServerView } from '$lib/server/server-view';
+ import * as Card from '#lib/components/ui/card/index.js';
+ import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
+ import type { ServerView } from '#lib/server/server-view.js';
  let { config, models, action, submit, busyReason }: { config: NonNullable<ServerView['gameAssistant']>; models: ServerView['gameModels']; action: string; submit: SubmitFunction; busyReason: string } = $props();
  let enabled = $state(untrack(() => config.enabled));
  let model = $state(untrack(() => config.model || models.find((item) => item.id.includes('luna'))?.id || models[0]?.id || ''));

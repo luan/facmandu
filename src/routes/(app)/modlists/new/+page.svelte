@@ -2,9 +2,9 @@
  import { toast } from 'svelte-sonner';
 	import { PlusIcon } from '@lucide/svelte';
 	import { enhance } from '$app/forms';
-	import { Input } from '$lib/components/ui/input';
-	import { Button } from '$lib/components/ui/button';
-	import { Textarea } from '$lib/components/ui/textarea';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Textarea } from '#lib/components/ui/textarea/index.js';
 	import type { PageProps } from './$types';
 	let { form }: PageProps = $props();
 	let pending = $state(false);

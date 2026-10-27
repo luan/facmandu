@@ -1,9 +1,9 @@
 import type * as v from 'valibot';
 import { z } from 'zod';
-import type { savedFactoryPlanInput } from '$lib/factory-plan-input';
+import type { savedFactoryPlanInput } from '#lib/factory-plan-input.js';
 import type { ManagedServer } from './db/schema';
 
-export { savedFactoryPlanInput } from '$lib/factory-plan-input';
+export { savedFactoryPlanInput } from '#lib/factory-plan-input.js';
 
 import { luaString } from './factory-query-bundle';
 import { ServerError } from './server-files';

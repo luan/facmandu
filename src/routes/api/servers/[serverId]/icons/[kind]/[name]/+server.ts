@@ -3,9 +3,9 @@ import {
 	PrototypeIconsPending,
 	prototypeIcon,
 	validPrototypeIcon
-} from '$lib/server/prototype-icons';
-import { ServerError } from '$lib/server/server-files';
-import { requireServer } from '$lib/server/servers';
+} from '#lib/server/prototype-icons.js';
+import { ServerError } from '#lib/server/server-files.js';
+import { requireServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, params }) => {

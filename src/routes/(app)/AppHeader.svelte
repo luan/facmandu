@@ -5,9 +5,9 @@
 	import FactoryWatches from './FactoryWatches.svelte';
 
 	import { ChevronDownIcon, SettingsIcon, UserIcon, ServerIcon, LibraryIcon, ShieldIcon } from '@lucide/svelte';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 
-	import { buttonVariants } from '$lib/components/ui/button/button.svelte';
+	import { buttonVariants } from '#lib/components/ui/button/index.js';
 
 	let { username, servers, lists, canManageServer, isAdmin }: { isAdmin: boolean; canManageServer: boolean; username: string; servers: { id: string; name: string }[]; lists: { id: string; name: string }[] } = $props();
 </script>

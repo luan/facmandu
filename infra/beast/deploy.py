@@ -21,6 +21,7 @@ ROOT = Path.home() / ".local/share/facmandu-deploy"
 SOURCE = Path.home() / "src/facmandu"
 APP_STATE = Path.home() / ".local/share/facmandu-app"
 SERVICE = "facmandu-dev.service"
+BUN_VERSION = "1.4.4"
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 
 
@@ -83,14 +84,14 @@ def switch(target):
 
 
 def retain_client_assets(previous, destination):
-    # Open tabs still import chunks named by the previous release. Keep only
-    # public immutable assets; current files always win and private state stays out.
     old = previous / 'build/client/_app/immutable'
-    new = destination / 'build/client/_app/immutable'
+    new = destination / 'static/_app/immutable'
     if not old.is_dir():
         return
     for source in old.rglob('*'):
-        if source.is_file():
+        if source.is_file() and not source.is_symlink():
+            if source.suffix in ('.br', '.gz') and source.with_suffix('').is_file():
+                continue
             target = new / source.relative_to(old)
             if not target.exists():
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -138,7 +139,7 @@ def install_dropin(revision):
     path = Path.home() / ".config/systemd/user/facmandu-dev.service.d/50-release.conf"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("[Service]\nWorkingDirectory=" + str(ROOT / "current") + "\n"
-                    "ExecStart=\nExecStart=/usr/bin/bun --no-env-file --env-file=" + str(APP_STATE / ".env") + " run start\n"
+                    "ExecStart=\nExecStart=" + str(ROOT / "bun" / BUN_VERSION / "bun") + " --no-env-file --env-file=" + str(APP_STATE / ".env") + " run start\n"
                     "Environment=NODE_ENV=production\n"
                     "Environment=HOST=127.0.0.1\n"
                     "Environment=PORT=5173\n"
@@ -154,6 +155,13 @@ def deploy(revision):
     releases = ROOT / "releases"
     releases.mkdir(exist_ok=True)
     destination = releases / revision
+    current = ROOT / "current"
+    previous = current.resolve() if current.is_symlink() else SOURCE
+    if not previous.exists():
+        raise RuntimeError("Rollback source is missing")
+    bun = ROOT / "bun" / BUN_VERSION / "bun"
+    if run(str(bun), "--version", capture=True).stdout.strip() != BUN_VERSION:
+        raise RuntimeError(f"Bun {BUN_VERSION} is required at {bun}")
     if not (destination / ".ready").exists():
         # Failed preparations are isolated and can be safely retried.
         temporary = Path(tempfile.mkdtemp(prefix=".prepare-", dir=releases))
@@ -167,12 +175,15 @@ def deploy(revision):
             with tarfile.open(archive) as source:
                 source.extractall(temporary, filter="data")
             archive.unlink()
+            # Adapter-node records servable assets at build time.
+            retain_client_assets(previous, temporary)
+            for release in releases.iterdir():
+                if SHA.fullmatch(release.name) and (release / '.ready').is_file():
+                    retain_client_assets(release, temporary)
             # Never load production .env or database credentials into install/build.
-            environment = {"HOME": str(Path.home()), "PATH": os.environ["PATH"]}
-            if run("bun", "--version", capture=True).stdout.strip() != "1.4.2":
-                raise RuntimeError("Bun 1.4.2 is required")
-            run("bun", "install", "--frozen-lockfile", cwd=temporary, env=environment)
-            run("bun", "run", "build", cwd=temporary, env=environment)
+            environment = {"HOME": str(Path.home()), "PATH": str(bun.parent) + os.pathsep + os.environ["PATH"]}
+            run(str(bun), "install", "--frozen-lockfile", cwd=temporary, env=environment)
+            run(str(bun), "run", "build", cwd=temporary, env=environment)
             (temporary / ".ready").write_text(revision + "\n")
             if destination.exists():
                 raise RuntimeError("Unexpected existing incomplete release; inspect it manually")
@@ -189,16 +200,6 @@ def deploy(revision):
         print("Assistant or preview work is running; deferring application restart")
         return
     previous_dropin = dropin.read_bytes() if dropin.exists() else None
-    current = ROOT / "current"
-    previous = current.resolve() if current.is_symlink() else SOURCE
-    if not previous.exists():
-        raise RuntimeError("Rollback source is missing")
-    retain_client_assets(previous, destination)
-    # Seed assets from earlier successful releases too, including tabs opened
-    # before asset retention was introduced. Release directories are retained.
-    for release in releases.iterdir():
-        if SHA.fullmatch(release.name) and (release / '.ready').is_file():
-            retain_client_assets(release, destination)
     # Source rollback preserves additive schema and every current save/cache/chat.
     (ROOT / "previous.json").write_text(json.dumps({"path": str(previous),
           "dropin": previous_dropin.decode() if previous_dropin else None}))

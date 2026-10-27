@@ -5,17 +5,17 @@ import {
 	inspectDependencies,
 	isBundledMod,
 	supportsFactorio
-} from '$lib/dependencies';
-import { listOwnerKey } from '$lib/server/accounts';
-import { db, userHasModlistAccess } from '$lib/server/db';
-import * as table from '$lib/server/db/schema';
-import { ensureModlistAccess } from '$lib/server/guards';
-import { modMetadataValues } from '$lib/server/mod-metadata';
-import { validModName } from '$lib/server/mod-names';
-import { repairProgress, startModlistRepair } from '$lib/server/modlist-repair';
-import { getPortalMod } from '$lib/server/portal-cache';
-import { publishModlistEvent } from '$lib/server/realtime';
-import { parseDependencies, validateDependencies } from '$lib/server/services/dependencies';
+} from '#lib/dependencies.js';
+import { listOwnerKey } from '#lib/server/accounts.js';
+import { db, userHasModlistAccess } from '#lib/server/db/index.js';
+import * as table from '#lib/server/db/schema.js';
+import { ensureModlistAccess } from '#lib/server/guards.js';
+import { modMetadataValues } from '#lib/server/mod-metadata.js';
+import { validModName } from '#lib/server/mod-names.js';
+import { repairProgress, startModlistRepair } from '#lib/server/modlist-repair.js';
+import { getPortalMod } from '#lib/server/portal-cache.js';
+import { publishModlistEvent } from '#lib/server/realtime.js';
+import { parseDependencies, validateDependencies } from '#lib/server/services/dependencies.js';
 import type { Actions, PageServerLoad } from './$types';
 
 const { description: _description, tags: _tags, ...modColumns } = getTableColumns(table.mod);
@@ -53,7 +53,7 @@ export const load: PageServerLoad = async (event) => {
 		.get();
 
 	if (!modlistVisibility) {
-		return error(404, { message: 'modlist not found' });
+		return error(404, 'modlist not found');
 	}
 
 	let hasAccess = false;
@@ -62,7 +62,7 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	if (!hasAccess && !modlistVisibility.publicRead) {
-		return error(403, { message: 'Access denied' });
+		return error(403, 'Access denied');
 	}
 
 	let hasFactorioCredentials = false;
@@ -96,7 +96,7 @@ export const load: PageServerLoad = async (event) => {
 		.where(eq(table.modList.id, event.params.id));
 	const list = result[0]?.modlist;
 	if (!list) {
-		return error(404, { message: 'modlist not found' });
+		return error(404, 'modlist not found');
 	}
 
 	// Process mods and convert timestamps to proper Date objects

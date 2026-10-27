@@ -3,12 +3,12 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { error, fail, redirect } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
-import { env } from '$env/dynamic/private';
-import { db } from '$lib/server/db';
-import { managedServer } from '$lib/server/db/schema';
-import { initializeServer } from '$lib/server/server-files';
-import { allocateServerPorts } from '$lib/server/server-ports';
-import { canManageServer, newInstanceSchema } from '$lib/server/servers';
+import { db } from '#lib/server/db/index.js';
+import { managedServer } from '#lib/server/db/schema.js';
+import { initializeServer } from '#lib/server/server-files.js';
+import { allocateServerPorts } from '#lib/server/server-ports.js';
+import { canManageServer, newInstanceSchema } from '#lib/server/servers.js';
+import { FACMANDU_SERVER_DIRECTORY } from '$app/env/private';
 import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = ({ locals }) => {
 	if (!canManageServer(locals.user?.id)) error(403, 'Server management is restricted');
@@ -34,7 +34,7 @@ export const actions: Actions = {
 			...parsed.data,
 			...ports,
 			directory: join(
-				env.FACMANDU_SERVER_DIRECTORY || join(homedir(), '.local/share/facmandu/servers'),
+				FACMANDU_SERVER_DIRECTORY || join(homedir(), '.local/share/facmandu/servers'),
 				id
 			),
 			selectedModlist: null

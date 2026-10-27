@@ -1,13 +1,13 @@
 import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
-import { publishActivity } from '$lib/server/activity';
-import { authenticationForm, requireSameOrigin } from '$lib/server/auth';
+import { publishActivity } from '#lib/server/activity.js';
+import { authenticationForm, requireSameOrigin } from '#lib/server/auth.js';
 import {
 	disconnectDropbox,
 	dropboxAccess,
 	dropboxConfigured,
 	hasDropbox
-} from '$lib/server/dropbox';
+} from '#lib/server/dropbox.js';
 import {
 	backupToDropbox,
 	cloudBackupState,
@@ -15,11 +15,11 @@ import {
 	listDropboxSaves,
 	restoreFromDropbox,
 	sampleDropboxBackups
-} from '$lib/server/dropbox-backups';
-import { ServerError, serverConfig, updateServerConfig } from '$lib/server/server-files';
-import { requireStopped } from '$lib/server/server-process';
-import { reserveServer, serverTask } from '$lib/server/server-tasks';
-import { requireServer } from '$lib/server/servers';
+} from '#lib/server/dropbox-backups.js';
+import { ServerError, serverConfig, updateServerConfig } from '#lib/server/server-files.js';
+import { requireStopped } from '#lib/server/server-process.js';
+import { reserveServer, serverTask } from '#lib/server/server-tasks.js';
+import { requireServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, params, url }) => {

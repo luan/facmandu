@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { blueprintCircuitSchema } from '$lib/blueprints';
+import { blueprintCircuitSchema } from '#lib/blueprints.js';
 import type { ManagedServer } from './db/schema';
 import { factoryBlueprint } from './factory-blueprints';
 import { ServerError } from './server-files';

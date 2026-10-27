@@ -1,5 +1,5 @@
 <script lang="ts">
- import ListPage from '$lib/components/ListPage.svelte';
+ import ListPage from '#lib/components/ListPage.svelte';
  import ServerCard from './ServerCard.svelte';
  import type { PageProps } from './$types';
  let { data }: PageProps = $props();

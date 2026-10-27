@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
-import { cachedPortalRequest } from '$lib/server/portal-cache';
-import { serverConfig } from '$lib/server/server-files';
-import { serverModInventory } from '$lib/server/server-mods';
-import { requireServer } from '$lib/server/servers';
+import { cachedPortalRequest } from '#lib/server/portal-cache.js';
+import { serverConfig } from '#lib/server/server-files.js';
+import { serverModInventory } from '#lib/server/server-mods.js';
+import { requireServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, params }) => {

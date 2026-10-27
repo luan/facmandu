@@ -5,22 +5,22 @@ import {
 	assistantModsSchema,
 	factoryResultSchema,
 	serverAssistantPlanSchema
-} from '$lib/assistant-results';
-import { chatHistory, newChat, resolveChat, touchChat } from '$lib/server/assistant-chats';
-import { assistantModelCatalog, loadAssistantModel } from '$lib/server/assistant-models';
-import { authenticationForm, requireSameOrigin } from '$lib/server/auth';
-import { db } from '$lib/server/db';
-import { genID } from '$lib/server/db/ids';
-import { serverAssistantTurn as turnTable } from '$lib/server/db/schema';
+} from '#lib/assistant-results.js';
+import { chatHistory, newChat, resolveChat, touchChat } from '#lib/server/assistant-chats.js';
+import { assistantModelCatalog, loadAssistantModel } from '#lib/server/assistant-models.js';
+import { authenticationForm, requireSameOrigin } from '#lib/server/auth.js';
+import { genID } from '#lib/server/db/ids.js';
+import { db } from '#lib/server/db/index.js';
+import { serverAssistantTurn as turnTable } from '#lib/server/db/schema.js';
 import {
 	finishServerTurn,
 	serverAssistantActivity,
 	serverAssistantController,
 	serverAssistantRequests,
 	steerServerTurn
-} from '$lib/server/server-assistant';
-import { startModSync } from '$lib/server/server-mod-sync';
-import { requireServer } from '$lib/server/servers';
+} from '#lib/server/server-assistant.js';
+import { startModSync } from '#lib/server/server-mod-sync.js';
+import { requireServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 
 const running = serverAssistantRequests;

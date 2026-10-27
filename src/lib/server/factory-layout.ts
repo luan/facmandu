@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { factoryLayoutInput } from '$lib/factory-layout';
+import { factoryLayoutInput } from '#lib/factory-layout.js';
 import type { ManagedServer } from './db/schema';
 import { blueprintDesignHash, factoryBlueprint } from './factory-blueprints';
 import inserterRules from './factory-inserter-rules.lua?raw';

@@ -9,6 +9,7 @@ import { isActionFailure } from '@sveltejs/kit';
 import { drizzle } from 'drizzle-orm/libsql';
 import { migrate } from '../src/lib/server/db/migrate';
 import * as schema from '../src/lib/server/db/schema';
+import { emptyPrivateEnv } from './fixtures/app-env';
 
 if (process.env.FACMANDU_ACTION_RACE_TEST_CHILD !== '1') {
 	test('concurrent account and mod actions preserve sign-in and lock protection', () => {
@@ -26,7 +27,7 @@ if (process.env.FACMANDU_ACTION_RACE_TEST_CHILD !== '1') {
 	);
 	const db = drizzle(client, { schema });
 	afterAll(() => client.close());
-	mock.module('$env/dynamic/private', () => ({ env: {} }));
+	mock.module('$app/env/private', emptyPrivateEnv);
 	mock.module('../src/lib/server/db', () => ({ db, userHasModlistAccess: async () => true }));
 	// External metadata repair and broadcasts are independent of the guarded mutations.
 	mock.module('../src/lib/server/modlist-repair', () => ({

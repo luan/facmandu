@@ -1,4 +1,4 @@
-import { isBundledMod } from '$lib/dependencies';
+import { isBundledMod } from '#lib/dependencies.js';
 
 // Clipboard and archive exports share the same version pins and explicit bundled choices.
 export function createModList(

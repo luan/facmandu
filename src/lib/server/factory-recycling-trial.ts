@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FactoryLayoutJob } from '$lib/factory-layout';
+import type { FactoryLayoutJob } from '#lib/factory-layout.js';
 import { aggregateLogisticsOutputs } from './factory-sandbox';
 
 export function recyclingTrial(request: FactoryLayoutJob, pack: unknown) {

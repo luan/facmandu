@@ -1,8 +1,8 @@
 import { hash } from '@node-rs/argon2';
 import { fail, redirect } from '@sveltejs/kit';
-import { AccountError, createInvitedAccount } from '$lib/server/accounts';
-import * as auth from '$lib/server/auth';
-import { genID } from '$lib/server/db/ids';
+import { AccountError, createInvitedAccount } from '#lib/server/accounts.js';
+import * as auth from '#lib/server/auth.js';
+import { genID } from '#lib/server/db/ids.js';
 import type { Actions, PageServerLoad } from './$types';
 import { registerSchema } from './schema';
 

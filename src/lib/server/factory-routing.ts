@@ -4,7 +4,7 @@ import {
 	blueprintArtifactSchema,
 	blueprintEntitySchema,
 	MAX_BLUEPRINT_ENTITIES
-} from '$lib/blueprints';
+} from '#lib/blueprints.js';
 import type { ManagedServer } from './db/schema';
 import { factoryBlueprint, readBlueprintDraft } from './factory-blueprints';
 import { factoryQuery } from './factory-query';

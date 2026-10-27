@@ -1,9 +1,15 @@
 import { posix } from 'node:path';
-import { sveltekit } from '@sveltejs/kit/vite';
+import adapter from '@sveltejs/adapter-node';
+import { type Config, sveltekit } from '@sveltejs/kit/vite';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type Plugin } from 'vite';
 
 const devHost = process.env.FACMANDU_DEV_HOST;
+type CspSource = NonNullable<
+	NonNullable<NonNullable<Config['csp']>['directives']>['connect-src']
+>[number];
+const devSocket = devHost ? (new URL(`wss://${devHost}`).origin as CspSource) : undefined;
 const root = process.cwd();
 
 function privateSource(url: string, root: string): boolean {
@@ -20,16 +26,19 @@ function privateSource(url: string, root: string): boolean {
 	}
 	if (/%[0-9a-f]{2}/i.test(pathname) || /%[0-9a-f]{2}/i.test(rawPathname)) return true;
 	const path = posix.normalize(pathname.replaceAll('\\', '/'));
+
 	if (rawPathname.replaceAll('\\', '/').startsWith('/@fs/') && !path.startsWith('/@fs/'))
 		return true;
 	if (/^\/(?:__open-in-editor|__inspect|__debug|__vite_inspect)(?:\/|$)/.test(path)) return true;
 	if (/^\/@id\/.*\/(?:private|server)(?:\/|$)/.test(path)) return true;
+
 	const fromFs = path.startsWith('/@fs/');
 	const file = fromFs ? posix.normalize(path.slice(4)) : path;
 	if (fromFs && file !== root && !file.startsWith(`${root}/`)) return true;
 	const relative = file.startsWith(`${root}/`) ? file.slice(root.length + 1) : file.slice(1);
 	const segments = relative.split('/');
 	const name = segments.at(-1) ?? '';
+
 	return (
 		segments.some(
 			(segment, index) =>
@@ -45,7 +54,6 @@ function privateSource(url: string, root: string): boolean {
 		name.includes('.server.') ||
 		name === 'Dockerfile' ||
 		['infra', 'tests', 'build'].includes(segments[0] ?? '') ||
-		// Add new root-level public assets here when they are introduced.
 		(segments.length === 1 &&
 			name.includes('.') &&
 			!['favicon.png', 'favicon.webp', '__data.json'].includes(name))
@@ -73,7 +81,40 @@ function protectPrivateSource(root: string, devHost?: string): Plugin {
 }
 
 export default defineConfig({
-	plugins: [protectPrivateSource(root, devHost), tailwindcss(), sveltekit()],
+	plugins: [
+		protectPrivateSource(root, devHost),
+		tailwindcss(),
+		sveltekit({
+			preprocess: vitePreprocess(),
+			adapter: adapter(),
+			env: { dir: process.env.FACMANDU_DEV_ENV_DIR ?? '.' },
+			csp: {
+				mode: 'auto',
+				directives: {
+					'default-src': ['self'],
+					'script-src': ['self'],
+					// Transitions, virtual rows, and resizable panels use inline styles.
+					'style-src': ['self', 'unsafe-inline'],
+					'img-src': ['self', 'data:', 'blob:', 'https:'],
+					'connect-src': [
+						'self',
+						...(process.env.NODE_ENV === 'development'
+							? ([
+									'ws://localhost:5173',
+									'ws://127.0.0.1:5173',
+									...(devSocket ? [devSocket] : [])
+								] satisfies CspSource[])
+							: [])
+					],
+					'object-src': ['none'],
+					'base-uri': ['self'],
+					'frame-ancestors': ['none'],
+					// Dropbox OAuth redirects the same-origin connection form to its consent page.
+					'form-action': ['self', 'https://www.dropbox.com']
+				}
+			}
+		})
+	],
 	envDir: process.env.FACMANDU_DEV_ENV_DIR,
 	server: {
 		// Rebundling can change imports inside dev modules without changing their URLs.

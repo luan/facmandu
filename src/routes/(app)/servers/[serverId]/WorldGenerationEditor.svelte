@@ -1,14 +1,14 @@
 <script lang="ts">
  import { CheckIcon, ImageIcon, LoaderCircleIcon, RefreshCwIcon } from '@lucide/svelte';
  import { enhance } from '$app/forms';
- import type { SubmitFunction } from '@sveltejs/kit';
+ import type { SubmitFunction } from '$app/forms';
  import { onDestroy } from 'svelte';
- import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
- import PrototypeIcon from '$lib/components/PrototypeIcon.svelte';
- import FactorioRichText from '$lib/components/FactorioRichText.svelte';
+ import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
+ import PrototypeIcon from '#lib/components/PrototypeIcon.svelte';
+ import FactorioRichText from '#lib/components/FactorioRichText.svelte';
  import SettingHelp from './SettingHelp.svelte';
  import ResourceMultiplier from './ResourceMultiplier.svelte';
- import { worldGenerationSchema, type WorldGenerationSettings } from '$lib/map-generation';
+ import { worldGenerationSchema, type WorldGenerationSettings } from '#lib/map-generation.js';
 
  type Resource = { name: string; label: string; description?: string; order?: string; category: string; richness: boolean; canBeDisabled: boolean };
  type Preset = { name: string; label: string; description?: string; order?: string; defaults?: WorldGenerationSettings };

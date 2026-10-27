@@ -1,5 +1,5 @@
 <script lang="ts">
- import { factoryImageUrl, type FactoryImage } from '$lib/factory-images';
+ import { factoryImageUrl, type FactoryImage } from '#lib/factory-images.js';
  import { ZoomInIcon, ZoomOutIcon, RotateCcwIcon } from '@lucide/svelte';
  import TooltipButton from './ui/button/tooltip-button.svelte';
  import Button from './ui/button/button.svelte';

@@ -8,7 +8,7 @@ import {
 	assistantToolFeedback,
 	assistantToolProgress,
 	submissionEvents
-} from '$lib/assistant-events';
+} from '#lib/assistant-events.js';
 import {
 	assistantMilestone,
 	assistantModsSchema,
@@ -17,7 +17,7 @@ import {
 	type FactoryResult,
 	factoryResultSchema,
 	factoryTaskSchema
-} from '$lib/assistant-results';
+} from '#lib/assistant-results.js';
 import { assistantErrorMessage } from './assistant-error';
 import { db } from './db';
 import { assistantChat, serverAssistantTurn as turnTable } from './db/schema';

@@ -1,15 +1,15 @@
 <script lang="ts">
- import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
+ import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
 	import { PlusIcon, CircleStopIcon, GitBranchIcon, LoaderCircleIcon, LockIcon } from '@lucide/svelte';
 	import { enhance } from '$app/forms';
 	import { invalidate } from '$app/navigation';
-	import type { SubmitFunction } from '@sveltejs/kit';
+	import type { SubmitFunction } from '$app/forms';
 	import { toast } from 'svelte-sonner';
-	import Button from '$lib/components/ui/button/button.svelte';
+	import Button from '#lib/components/ui/button/button.svelte';
 	import ModPreviewSheet from './ModPreviewSheet.svelte';
-	import { inspectDependencies } from '$lib/dependencies';
-	import type { Mod } from '$lib/server/db/schema';
-	import type { validateDependencies } from '$lib/server/services/dependencies';
+	import { inspectDependencies } from '#lib/dependencies.js';
+	import type { Mod } from '#lib/server/db/schema.js';
+	import type { validateDependencies } from '#lib/server/services/dependencies.js';
 	let { dependencyValidation, mods, factorioVersion, readOnly = false }: { dependencyValidation: ReturnType<typeof validateDependencies>; mods: Pick<Mod, 'id' | 'name' | 'title' | 'essential' | 'version' | 'enabled' | 'dependencies'>[]; factorioVersion: string; readOnly?: boolean } = $props();
 	let pending = $state(false);
 	let pendingModId = $state<string | null>(null);

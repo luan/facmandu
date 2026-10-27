@@ -10,6 +10,7 @@ import { promisify } from 'node:util';
 import { Param, type SQL } from 'drizzle-orm';
 import { lauxlib, lua, lualib, to_luastring } from 'fengari';
 import { strToU8, zipSync } from 'fflate';
+import { emptyPrivateEnv } from './fixtures/app-env';
 
 // Bun module mocks persist across test files. Run these focused mocks in a
 // child so the real RCON tests can import the real module.
@@ -23,7 +24,7 @@ if (process.env.FACMANDU_DEFS_TEST_CHILD !== '1') {
 		assert.match(result.stdout + result.stderr, /0 fail/u);
 	});
 } else {
-	mock.module('$env/dynamic/private', () => ({ env: {} }));
+	mock.module('$app/env/private', emptyPrivateEnv);
 	let running = false;
 	let liveResponse = '';
 	let liveCommand = '';

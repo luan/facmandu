@@ -1,8 +1,8 @@
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { factoryLayoutInput } from '$lib/factory-layout';
-import { parseGameLayout } from '$lib/game-chat';
+import { factoryLayoutInput } from '#lib/factory-layout.js';
+import { parseGameLayout } from '#lib/game-chat.js';
 import { db } from './db';
 import { type ManagedServer, managedServer } from './db/schema';
 import { designFactory } from './factory-layout';

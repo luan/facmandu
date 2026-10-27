@@ -3,7 +3,7 @@ import {
 	type FactoryViewRequest,
 	factoryViewRequestSchema,
 	factoryViewSchema
-} from '$lib/factory-images';
+} from '#lib/factory-images.js';
 import type { ManagedServer } from './db/schema';
 import { FactoryImagePending, renderFactoryBlueprint } from './factory-images';
 import source from './factory-view.lua?raw';

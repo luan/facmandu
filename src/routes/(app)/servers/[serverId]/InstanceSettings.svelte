@@ -1,12 +1,12 @@
 <script lang="ts">
  import { PencilIcon, SaveIcon } from '@lucide/svelte';
  import { deserialize } from '$app/forms';
- import { invalidateAll } from '$app/navigation';
+ import { refreshAll } from '$app/navigation';
  import { toast } from 'svelte-sonner';
- import * as Dialog from '$lib/components/ui/dialog';
- import Button from '$lib/components/ui/button/button.svelte';
- import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
- import type { ManagedServer } from '$lib/server/db/schema';
+ import * as Dialog from '#lib/components/ui/dialog/index.js';
+ import Button from '#lib/components/ui/button/button.svelte';
+ import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
+ import type { ManagedServer } from '#lib/server/db/schema.js';
  let { server }: { server: ManagedServer } = $props();
  let open = $state(false);
  let pending = $state(false);
@@ -17,7 +17,7 @@
    const response = await fetch(`/servers/${server.id}/connection?/save`, { method:'POST', headers:{'x-sveltekit-action':'true'}, body:new FormData(event.currentTarget) });
    const result = deserialize(await response.text());
    if (result.type !== 'success') { toast.error(result.type === 'failure' ? String(result.data?.message || 'Could not save server') : 'Could not save server'); return; }
-   open = false; toast.success('Server saved'); await invalidateAll();
+   open = false; toast.success('Server saved'); await refreshAll();
   } catch { toast.error('Could not save server'); }
   finally { pending = false; }
  }

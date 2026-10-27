@@ -1,29 +1,29 @@
 <script lang="ts">
 	import { RefreshCwIcon, LoaderCircleIcon, ListChecksIcon, CheckIcon, DownloadIcon, CircleStopIcon, CirclePlayIcon, TrashIcon, LinkIcon, SaveIcon, ShieldCheckIcon, PlusIcon, XIcon, SearchIcon, PackageIcon } from '@lucide/svelte';
-	import { getActivityState } from '$lib/activity.svelte';
-	import { compareVersions } from '$lib/dependencies';
+	import { getActivityState } from '#lib/activity.svelte.js';
+	import { compareVersions } from '#lib/dependencies.js';
 	import { tick, untrack } from 'svelte';
-	import { modThumbnailUrl } from '$lib/utils';
-	import type { ModSettingsCatalog } from '$lib/server/mod-settings-defs';
+	import { modThumbnailUrl } from '#lib/utils.js';
+	import type { ModSettingsCatalog } from '#lib/server/mod-settings-defs.js';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { enhance } from '$app/forms';
-	import Button from '$lib/components/ui/button/button.svelte';
- import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
+	import Button from '#lib/components/ui/button/button.svelte';
+ import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
  import SettingInput from './SettingInput.svelte';
- import FactorioRichText from '$lib/components/FactorioRichText.svelte';
+ import FactorioRichText from '#lib/components/FactorioRichText.svelte';
  import SettingHelp from './SettingHelp.svelte';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import * as Card from '$lib/components/ui/card';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
 	import Console from './Console.svelte';
 	import ServerBookmarks from './ServerBookmarks.svelte';
  import GameAssistantSettings from './GameAssistantSettings.svelte';
  import ServerSaves from './ServerSaves.svelte';
-	import type { ServerView } from '$lib/server/server-view';
-	import type { ServerSummary } from '$lib/server/servers';
-	import type { ModList } from '$lib/server/db/schema';
-	import type { AvailableVersions } from '$lib/server/server-versions';
-	import type { SettingDef } from '$lib/server/mod-settings-lua';
+	import type { ServerView } from '#lib/server/server-view.js';
+	import type { ServerSummary } from '#lib/server/servers.js';
+	import type { ModList } from '#lib/server/db/schema.js';
+	import type { AvailableVersions } from '#lib/server/server-versions.js';
+	import type { SettingDef } from '#lib/server/mod-settings-lua.js';
 
 	let { data, refresh }: { data: ServerView & { server: ServerSummary; modLists: ModList[]; activeTab: string; selectedListId: string | null }; refresh: () => Promise<void> } = $props();
 	const activityState = getActivityState();
@@ -227,7 +227,7 @@
 
 	let confirmation = $state<{ form: HTMLFormElement; label: string } | null>(null);
 	let approved: HTMLFormElement | null = null;
-	const submit: import('@sveltejs/kit').SubmitFunction = ({ cancel, formElement, formData }) => {
+	const submit: import('$app/forms').SubmitFunction = ({ cancel, formElement, formData }) => {
 		if (pending) { cancel(); return; }
 		const operation = String(formData.get('operation'));
 		if (['deleteSave', 'uninstallVersion', 'deleteMod'].includes(operation) && approved !== formElement) {

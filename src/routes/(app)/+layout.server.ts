@@ -1,10 +1,10 @@
 import { redirect } from '@sveltejs/kit';
 import { eq, getTableColumns, or } from 'drizzle-orm';
-import { SIDEBAR_COOKIE_NAME } from '$lib/components/ui/sidebar/constants.js';
+import { SIDEBAR_COOKIE_NAME } from '#lib/components/ui/sidebar/constants.js';
 
-import { db } from '$lib/server/db';
-import * as table from '$lib/server/db/schema';
-import { canManageServer, listServers } from '$lib/server/servers';
+import { db } from '#lib/server/db/index.js';
+import * as table from '#lib/server/db/schema.js';
+import { canManageServer, listServers } from '#lib/server/servers.js';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async ({ cookies, locals, url, depends }) => {

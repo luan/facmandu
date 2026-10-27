@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { cachedPortalRequest } from '$lib/server/portal-cache';
+import { cachedPortalRequest } from '#lib/server/portal-cache.js';
 
 const optionalString = z
 	.string()

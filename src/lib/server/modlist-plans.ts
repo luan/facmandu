@@ -6,8 +6,8 @@ import {
 	inspectDependencies,
 	isBundledMod,
 	supportsFactorio
-} from '$lib/dependencies';
-import { type ReleaseCatalog, resolveModList } from '$lib/mod-resolution';
+} from '#lib/dependencies.js';
+import { type ReleaseCatalog, resolveModList } from '#lib/mod-resolution.js';
 import { db, userHasModlistAccess } from './db';
 import { genID } from './db/ids';
 import { type Mod, mod, modList, modListCollaborator, modlistPlan } from './db/schema';

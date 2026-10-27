@@ -1,6 +1,6 @@
 <script lang="ts">
  import { RotateCcwIcon } from '@lucide/svelte';
- import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
+ import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
  let { label, context, value, defaultValue, allowZero, onChange }: { label: string; context: string; value?: number; defaultValue?: number; allowZero: boolean; onChange: (value: number | undefined) => void } = $props();
  const choices = [0, 0.17, 0.33, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 10];
  const available = $derived(allowZero ? choices : choices.slice(1));

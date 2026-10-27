@@ -1,0 +1,111 @@
+diff --git a/dist/builtin-providers-C5FpT9g1.mjs b/dist/builtin-providers-C5FpT9g1.mjs
+index 63c9b95ea0a8333a7109fce9084ad4068711506d..3b9c81d9b47e4ad22c1cb98a9971939cab50e34e 100644
+--- a/dist/builtin-providers-C5FpT9g1.mjs
++++ b/dist/builtin-providers-C5FpT9g1.mjs
+@@ -555,6 +555,7 @@ async function initializeRootHarness(agent, config, emitEvent, delivery) {
+ 			systemPrompt: promptContext.recompose(next.config.instructions),
+ 			tools: [...next.config.tools ?? [], ...mcpTools],
+ 			resources: renderedResources(next),
++			compaction: next.config.compaction,
+ 			sandbox: next.config.sandbox,
+ 			cwd: next.config.cwd
+ 		};
+diff --git a/dist/conversation-stream-store-CXrgv-b0.mjs b/dist/conversation-stream-store-CXrgv-b0.mjs
+index 28be2fc98bba07dfc9628da831dbbe6a029ba970..9612d3060c154a9b6afa2d471b587b7a5a0d2710 100644
+--- a/dist/conversation-stream-store-CXrgv-b0.mjs
++++ b/dist/conversation-stream-store-CXrgv-b0.mjs
+@@ -1,3 +1,4 @@
++import { estimateContextTokens } from "./dispatch-t-UmrrMW.mjs";
+ import { c as encodeBase64, d as abortErrorFor, f as composeTimeoutSignal, m as raceToolWithDeadline, p as createCallHandle, r as createCwdSandbox, s as decodeBase64, u as abandonToolOnAbort } from "./sandbox-CR3o1Qmd.mjs";
+ import { A as createEditTool, D as READ_SKILL_RESOURCE_TOOL_NAME, E as redactObservationDetailImages, F as createTaskTool, I as createWriteTool, L as formatBashResult, M as createGrepTool, N as createPackagedSkillReadTool, O as createActivateSkillTool, P as createReadTool, R as overlayPackagedSkills, S as renderWithFrame, T as redactEventImages, _ as packageSkillDefinition, a as buildPromptText, b as getSkillReferenceDirectory, c as buildWorkspaceSkillPrompt, d as parseSkillMarkdown, f as getPreparedToolAdapter, g as isSkillDefinition, i as buildPackagedSkillPrompt, j as createGlobTool, k as createBashTool, l as createResultTools, n as GIVE_UP_TOOL_NAME, o as buildResultFollowUpPrompt, r as ResultUnavailableError, s as buildSkillByPathlessNamePrompt, t as FINISH_TOOL_NAME, u as prepareResultTool, w as IMAGE_DATA_OMITTED } from "./result-e-IUH4HT.mjs";
+ import { A as SubmissionAbortedError, B as classifyError, C as SessionBusyError, E as SkillNotRegisteredError, G as normalizeLogAttributes, I as ToolNameConflictError, M as SubmissionInterruptedError, N as SubmissionRetryExhaustedError, P as SubmissionTimeoutError, Q as generateBlockId, X as deriveKeyedSubmissionId, Y as createConversationIdentity, Z as generateAttemptId, a as AttachmentNotAvailableError, c as ConversationRecordInvariantError, ct as generateTaskId, d as FlueError, et as generateIncarnationId, g as OperationFailedError, it as generateOperationId, j as SubmissionConflictError, k as SubagentNotDeclaredError, l as ConversationStreamStoreError, lt as generateToolCallId, m as InvalidRequestError, n as AgentInstanceNotFoundError, nt as generateInstanceUid, pt as interceptExecution, q as serializeEventError, rt as generateInvocationId, st as generateSubmissionId, t as AgentInstanceExistsError, u as DelegationDepthExceededError, ut as generateTurnId } from "./errors-BcRwz-UD.mjs";
+@@ -1269,6 +1270,7 @@ var Session = class {
+ 		let next = this.rerender();
+ 		const swapped = await this.maybeSwapEnvironment(next);
+ 		if (swapped) next = this.rerender();
++		if (next.compaction !== void 0) this.config.compaction = next.compaction;
+ 		this.agentTools = next.tools;
+ 		this.liveSkills = next.resources.skills;
+ 		this.liveSubagents = next.resources.subagents;
+@@ -1284,6 +1286,9 @@ var Session = class {
+ 		} : void 0;
+ 		if (swapped) await this.narrateEnvironmentSnapshot(next.resources.snapshot);
+ 		else await this.narrateResourceDelta(anchor);
++		await this.flushCanonical();
++		const model = this.agentLoop.state.model;
++		if (shouldCompact(estimateContextTokens(this.agentLoop.state.messages), model.contextWindow ?? 0, this.resolveCompactionSettings(model))) await this.runCompaction("threshold");
+ 		return { context: {
+ 			messages: this.agentLoop.state.messages.slice(),
+ 			tools: this.agentLoop.state.tools
+@@ -3570,7 +3575,7 @@ var Session = class {
+ 		const activateSkillTool = Object.keys(this.liveSkills).length > 0 ? createActivateSkillTool((name) => this.activateSkillForTool(name)) : void 0;
+ 		const packagedRead = Object.values(packagedSkills).some((skill) => Object.keys(skill.files).some((path) => path !== "SKILL.md")) ? createPackagedSkillReadTool(packagedSkills) : void 0;
+ 		const frameworkTools = () => [
+-			createTaskTool(runTask),
++			...Object.keys(this.liveSubagents).length ? [createTaskTool(runTask)] : [],
+ 			...activateSkillTool ? [activateSkillTool] : [],
+ 			...packagedRead ? [packagedRead] : []
+ 		];
+@@ -4089,7 +4094,7 @@ var Session = class {
+ 		};
+ 		const throwIfHalted = () => {
+ 			if (options.signal.aborted) throw abortErrorFor(options.signal);
+-			if (this.activeTimeoutAt !== void 0 && Date.now() >= this.activeTimeoutAt) throw new SubmissionTimeoutError();
++			if (this.activeTimeoutAt !== void 0 && this.activeTimeoutAt > 0 && Date.now() >= this.activeTimeoutAt) throw new SubmissionTimeoutError();
+ 		};
+ 		while (true) {
+ 			const overflow = assistant !== void 0 && isAssistantContextOverflow(assistant, this.agentLoop.state.model.contextWindow ?? 0);
+@@ -4575,7 +4580,7 @@ var Session = class {
+ 	resolveSubmissionDurability(startedAt, timeoutAt) {
+ 		return {
+ 			maxAttempts: this.config.durability?.maxAttempts ?? 10,
+-			timeoutAt: timeoutAt ?? (startedAt ?? Date.now()) + (this.config.durability?.timeoutMs ?? 36e5)
++			timeoutAt: timeoutAt ?? (this.config.durability?.timeoutMs === 0 ? 0 : (startedAt ?? Date.now()) + (this.config.durability?.timeoutMs ?? 36e5))
+ 		};
+ 	}
+ 	async runPersistedContextInput(options) {
+@@ -5099,7 +5104,7 @@ function unreadySubmissionDeadline(submission, agent) {
+ 		assertDurability(agent.durability, `[agent "${submission.input.agent}"]`);
+ 		timeoutMs = agent.durability?.timeoutMs ?? 36e5;
+ 	} catch {}
+-	return submission.acceptedAt + timeoutMs;
++	return timeoutMs === 0 ? Number.POSITIVE_INFINITY : submission.acceptedAt + timeoutMs;
+ }
+ /**
+ * Settle a queued submission that can never be claimed — a durable abort on
+diff --git a/dist/dispatch-t-UmrrMW.mjs b/dist/dispatch-t-UmrrMW.mjs
+index 7274a8ed2f7a693bcf089743c29c847f079037c2..e54a068024338e544f6f18404c40a22f29f2a237 100644
+--- a/dist/dispatch-t-UmrrMW.mjs
++++ b/dist/dispatch-t-UmrrMW.mjs
+@@ -1,7 +1,7 @@
+ import { $ as generateEntryId, D as StreamNotFoundError, J as toHttpResponse, K as parseJsonBody, O as StreamOffsetGoneError, V as configureErrorRendering, X as deriveKeyedSubmissionId, a as AttachmentNotAvailableError, c as ConversationRecordInvariantError, f as HistoryCursorNotFoundError, ft as extractTraceCarrier, h as MethodNotAllowedError, m as InvalidRequestError, o as AttachmentNotFoundError, ot as generateRecordId, st as generateSubmissionId, y as RouteNotFoundError } from "./errors-BcRwz-UD.mjs";
+ import { n as getRuntimeModels } from "./providers-DfEK_EsA.mjs";
+ import { n as isValibotSchema } from "./schema-DIDpvZZa.mjs";
+-import { isContextOverflow } from "@earendil-works/pi-ai";
++import { isContextOverflow, isRetryableAssistantError } from "@earendil-works/pi-ai";
+ import * as v from "valibot";
+ import { Hono } from "hono";
+ //#region src/conversation-records.ts
+@@ -2314,7 +2314,7 @@ function findTrailingPartialToolBatch(following) {
+ function isRetryableModelError(message) {
+ 	if (message.stopReason !== "error" || !message.errorMessage) return false;
+ 	if (message.errorMessage.includes("(retryable_interruption)")) return true;
+-	return /overloaded|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|network.?error|connection.?(?:reset|refused|lost|error)|socket hang up|fetch failed|timed? out|timeout|terminated|provider finish_reason:\s*error(?![-\w])/i.test(message.errorMessage);
++	return isRetryableAssistantError(message) || /^provider finish_reason:\s*error$/i.test(message.errorMessage);
+ }
+ function isToolBatchAssistant(message) {
+ 	return message.stopReason === "toolUse" || (message.stopReason === "length" || message.stopReason === "stop") && message.content.some((block) => block.type === "toolCall");
+@@ -3192,7 +3192,7 @@ function assertDurability(definition, label) {
+ 	if (typeof definition !== "object" || definition === null || Array.isArray(definition)) throw new Error(`[flue] ${label} durability must be a configuration object.`);
+ 	for (const key of Object.keys(definition)) if (key !== "maxAttempts" && key !== "timeoutMs") throw new Error(`[flue] ${label} durability received unknown field "${key}".`);
+ 	assertPositiveInteger(definition.maxAttempts, `${label} durability.maxAttempts`);
+-	assertPositiveInteger(definition.timeoutMs, `${label} durability.timeoutMs`);
++	if (definition.timeoutMs !== 0) assertPositiveInteger(definition.timeoutMs, `${label} durability.timeoutMs`);
+ }
+ function assertPositiveInteger(value, label) {
+ 	if (value === void 0) return;
+@@ -4244,3 +4244,4 @@ function validateDispatchRequest(request, agent) {
+ }
+ //#endregion
+ export { MAX_READ_LIMIT as $, replyFromSnapshot as A, DEFAULT_COMPACTION_SETTINGS as B, DeliveredMessageSchema as C, prepareDocumentRequest as Ct, assertThinkingLevel as D, generateConversationEntryId as Dt, assertDurability as E, encodeCanonicalId as Et, getActiveConversationPathSince as F, prepareCompaction as G, compact as H, getLatestConversationCompaction as I, emptyUsage as J, shouldCompact as K, countConsecutiveRetryableModelErrors as L, throwIfAborted as M, aggregateConversationUsageSince as N, observeSubmissionSettlement as O, generateConversationRecordId as Ot, classifyConversationSubmission as P, DEFAULT_READ_LIMIT as Q, findTrailingPartialToolBatch as R, handleAgentRequest as S, mergeOperationAttachments as St, assertCompaction as T, RESERVED_SIGNAL_TYPES as Tt, deriveCompactionDefaults as U, calculateContextTokens as V, isAssistantContextOverflow as W, getConversationFoldHost as X, fromProviderUsage as Y, writeFoldCheckpoint as Z, normalizeMessageInput as _, assertAppendMessage as _t, getRegisteredAgentIdentity as a, conversationScopeKey as at, handleAgentConversationRead as b, fnv1a64 as bt, resetFlueAgentRegistrationForTests as c, toolOutcomeKey as ct, resolveAgentInitialDataSchema as d, createActionScopeName as dt, agentStreamPath as et, configureFlueRuntime as f, createSessionStorageKey as ft, resetFlueRuntimeForTests as g, renderSignalMessage as gt, getFlueRuntime as h, createUserContextMessage as ht, createAgentRouter as i, buildConversationContextEntries as it, settlementFromChunk as j, readSubmissionReply as k, toolStepRecordId as kt, resolveAgentDurability as l, toolResultEntryId as lt, getAgentInstance as m, parseSessionStorageKey as mt, AGENT_IDENTITY_PATTERN as n, parseOffset as nt, getRegisteredFlueAgents as o, getActiveConversationPath as ot, dispatch as p, createTaskSessionName as pt, addUsage as q, __flueBindAgentModule as r, buildConversationContext as rt, registerFlueAgents as s, reduceConversationRecords as st, enqueueDispatch as t, formatOffset as tt, resolveAgentIdentity as u, assertPublicSessionName as ut, handleAgentAttachmentRead as v, createAgentOutputChannel as vt, MAX_IMAGE_DATA_LENGTH as w, toPublicAttachment as wt, assertAgentDispatchAdmissionInput as x, isDocumentMimeType as xt, handleAgentConversationHead as y, runResponseMetadataHooks as yt, isRetryableModelError as z };
++export { estimateContextTokens };

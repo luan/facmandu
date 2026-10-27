@@ -1,15 +1,15 @@
 <script lang="ts">
- import type { FactoryResult } from '$lib/assistant-results';
- import { presentFactoryResult } from '$lib/factory-results';
- import { consoleLevel, highlightCommand, isLuaLine, tokenClass } from '$lib/console';
+ import type { FactoryResult } from '#lib/assistant-results.js';
+ import { presentFactoryResult } from '#lib/factory-results.js';
+ import { consoleLevel, highlightCommand, isLuaLine, tokenClass } from '#lib/console.js';
  import { FlaskConicalIcon, UsersIcon, ChartNoAxesCombinedIcon, MapPinIcon, ServerIcon, CopyIcon, DownloadIcon, CheckIcon, ArrowUpRightIcon } from '@lucide/svelte';
- import { blueprintArtifactSchema } from '$lib/blueprints';
+ import { blueprintArtifactSchema } from '#lib/blueprints.js';
  import BlueprintResult from './BlueprintResult.svelte';
  import FactoryImage from './FactoryImage.svelte';
- import { factoryViewSchema, factoryPreviewPendingSchema, factoryImageArtifactSchema } from '$lib/factory-images';
+ import { factoryViewSchema, factoryPreviewPendingSchema, factoryImageArtifactSchema } from '#lib/factory-images.js';
  import PrototypeIcon from './PrototypeIcon.svelte';
  import Button from './ui/button/button.svelte';
- import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
+ import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
  let { item, serverId }: { item: FactoryResult; serverId?: string } = $props();
  const renderedImage = $derived(factoryImageArtifactSchema.safeParse(item.result));
  const snapshot = $derived(factoryViewSchema.or(factoryPreviewPendingSchema).safeParse(item.result));

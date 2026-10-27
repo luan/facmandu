@@ -2,9 +2,9 @@
 	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { BellIcon, LoaderCircleIcon, PlusIcon, Trash2Icon } from '@lucide/svelte';
-	import * as Sheet from '$lib/components/ui/sheet';
-	import { buttonVariants } from '$lib/components/ui/button';
-	import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
+	import * as Sheet from '#lib/components/ui/sheet/index.js';
+	import { buttonVariants } from '#lib/components/ui/button/index.js';
+	import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
 
 	type Watch = { id: string; serverId: string; kind: 'research_stalled' | 'item_deficit'; force: string; surface: string | null; item: string | null; enabled: boolean; validated: boolean; validationError: string | null };
 	type Alert = { id: string; serverId: string; message: string; createdAt: string; readAt: string | null };

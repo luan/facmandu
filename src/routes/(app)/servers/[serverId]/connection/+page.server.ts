@@ -1,12 +1,12 @@
 import { fail } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
-import { db } from '$lib/server/db';
-import { managedServer } from '$lib/server/db/schema';
-import { ServerError } from '$lib/server/server-files';
-import { modSyncJob } from '$lib/server/server-mod-sync';
-import { requireStopped } from '$lib/server/server-process';
-import { reserveServer, serverTask } from '$lib/server/server-tasks';
-import { instanceSchema, publicServer, requireServer } from '$lib/server/servers';
+import { db } from '#lib/server/db/index.js';
+import { managedServer } from '#lib/server/db/schema.js';
+import { ServerError } from '#lib/server/server-files.js';
+import { modSyncJob } from '#lib/server/server-mod-sync.js';
+import { requireStopped } from '#lib/server/server-process.js';
+import { reserveServer, serverTask } from '#lib/server/server-tasks.js';
+import { instanceSchema, publicServer, requireServer } from '#lib/server/servers.js';
 import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ locals, params }) => ({
 	server: publicServer(await requireServer(locals.user?.id, params.serverId))

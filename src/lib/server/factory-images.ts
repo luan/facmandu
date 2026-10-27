@@ -4,7 +4,7 @@ import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { type FactoryImage, factoryImageSchema } from '$lib/factory-images';
+import { type FactoryImage, factoryImageSchema } from '#lib/factory-images.js';
 import { publishActivity } from './activity';
 import type { ManagedServer } from './db/schema';
 import { blueprintImageData, pngDimensions } from './factory-image-data';

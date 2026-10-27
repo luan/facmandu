@@ -1,4 +1,4 @@
-import { completionDecision, completionRequest } from '$lib/assistant-completion';
+import { completionDecision, completionRequest } from '#lib/assistant-completion.js';
 import { accountProviderKeys } from './assistant-providers';
 
 export async function assistantCompletionDecision(

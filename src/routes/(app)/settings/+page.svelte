@@ -1,13 +1,13 @@
 <script lang="ts">
  import { toast } from 'svelte-sonner';
- import ProviderLogin from '$lib/components/ProviderLogin.svelte';
+ import ProviderLogin from '#lib/components/ProviderLogin.svelte';
  import { PlusIcon, SaveIcon, TrashIcon, KeyRoundIcon } from '@lucide/svelte';
  import { enhance } from '$app/forms';
- import type { SubmitFunction } from '@sveltejs/kit';
- import * as Card from '$lib/components/ui/card';
- import * as Dialog from '$lib/components/ui/dialog';
- import { Input } from '$lib/components/ui/input';
- import { Button } from '$lib/components/ui/button';
+ import type { SubmitFunction } from '$app/forms';
+ import * as Card from '#lib/components/ui/card/index.js';
+ import * as Dialog from '#lib/components/ui/dialog/index.js';
+ import { Input } from '#lib/components/ui/input/index.js';
+ import { Button } from '#lib/components/ui/button/index.js';
  import type { PageProps } from './$types';
  let { data, form }: PageProps = $props();
  let pending = $state(false);

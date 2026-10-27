@@ -17,7 +17,6 @@ import {
 import { sqlite, start } from '@flue/runtime/node';
 import { and, eq } from 'drizzle-orm';
 import * as v from 'valibot';
-import { env } from '$env/dynamic/private';
 import {
 	type FactoryCompletionEvidence,
 	factoryCompletionEvidenceSchema,
@@ -27,12 +26,12 @@ import {
 	placedFactoryPowerGaps,
 	placedFactoryRecipeGaps,
 	unfinishedFactoryConnections
-} from '$lib/assistant-completion';
+} from '#lib/assistant-completion.js';
 import {
 	type AssistantContextUsage,
 	assistantContextLimit,
 	assistantContextTokens
-} from '$lib/assistant-context';
+} from '#lib/assistant-context.js';
 import {
 	modlistRouteBody,
 	modlistRouteFromAnswers,
@@ -42,8 +41,9 @@ import {
 	serverRouteBody,
 	serverRouteFromAnswers,
 	serverRouteSchema
-} from '$lib/assistant-routing';
-import { recommendationPageSize } from '$lib/recommendations';
+} from '#lib/assistant-routing.js';
+import { recommendationPageSize } from '#lib/recommendations.js';
+import { FACMANDU_AGENT_DATA } from '$app/env/private';
 import { listOwnerKey } from './accounts';
 import { assistantCompletionDecision } from './assistant-completion';
 import {
@@ -68,8 +68,8 @@ import { authorizedList } from './modlist-plans';
 export { inspectList } from './modlist-management-tools';
 
 import type { TranscriptContext } from '@earendil-works/pi-ai';
-import { assistantStreamProgress } from '$lib/assistant-events';
-import { factoryLayoutJsonSchema } from '$lib/factory-layout';
+import { assistantStreamProgress } from '#lib/assistant-events.js';
+import { factoryLayoutJsonSchema } from '#lib/factory-layout.js';
 import { factoryActionInspectJsonSchema, factoryActionJsonSchema } from './factory-actions';
 import { blueprintToolJsonSchema } from './factory-blueprints';
 import { addFactoryImages } from './factory-image-context';
@@ -837,7 +837,7 @@ async function startAssistantRuntime() {
 			console.warn('Could not restore assistant provider for pending chat', turn.chatId);
 		}
 	}
-	const directory = resolve(env.FACMANDU_AGENT_DATA ?? '.data/agent');
+	const directory = resolve(FACMANDU_AGENT_DATA ?? '.data/agent');
 	mkdirSync(directory, { recursive: true, mode: 0o700 });
 	return start({
 		agents: [registeredAgent],

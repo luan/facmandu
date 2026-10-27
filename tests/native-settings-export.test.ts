@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { emptyPrivateEnv } from './fixtures/app-env';
 
 if (process.env.FACMANDU_NATIVE_SETTINGS_CHILD !== '1') {
 	test('native settings export', async () => {
@@ -18,7 +19,7 @@ if (process.env.FACMANDU_NATIVE_SETTINGS_CHILD !== '1') {
 		assert.match(result.stdout + result.stderr, /0 fail/u);
 	});
 } else {
-	mock.module('$env/dynamic/private', () => ({ env: {} }));
+	mock.module('$app/env/private', emptyPrivateEnv);
 	const { initializeServer, updateServerConfig } = await import('../src/lib/server/server-files');
 	const { nativeModSettingPrototypes } = await import('../src/lib/server/map-generation-native');
 	const { parseNativeModSettings } = await import('../src/lib/server/mod-settings-lua');

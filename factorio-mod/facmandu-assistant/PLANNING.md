@@ -19,19 +19,19 @@ Preserve these notices in the released Toby archive. Attribute any subsequently 
 
 ## Features to retain and extend
 
-| Capability | Factory Planner base | Toby change |
-| --- | --- | --- |
-| Products defined by rate, belts, or machine count | Already present | Retain existing controls and calculations |
-| Multiple products and byproducts | Already present | Keep explicit targets and surplus visible |
-| Recipe and machine choices, modules, beacons, quality | Already present | Use the same controls for manual and agent edits |
-| Fluids with temperature, surface conditions, research effects | Already present | Preserve these identities and checks in tools |
-| Nested floors and per-floor solver selection | Already present | Independently configured input, output and machine blocks, with optional parent scaling |
-| Sequential, Gaussian, and simplex calculations | Already present | Extend the existing engines rather than add another solver |
-| Available input supply | Simplex has a limited-ingredients TODO | Exact or maximum rates, belts, lanes, stack sizes and watts through the native picker |
-| Counts for a specific recipe line | Existing machine goals resolve through a product's first matching line | Implemented on the selected recipe line, including nested floors |
-| Partial recipe coverage | Matrix solvers choose recipe ratios | Sequential percentage of remaining demand; retained and explicitly inactive under matrix solvers |
-| Solar, storage and reactor planning | Existing generator recipe infrastructure | Average/peak solar, day-cycle storage coverage and active reactor neighbor bonuses |
-| Agent workspace | Existing Toby panel and remote updates | Native planner components, shared plans and revision-checked edits |
+| Capability                                                    | Factory Planner base                                                   | Toby change                                                                                      |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Products defined by rate, belts, or machine count             | Already present                                                        | Retain existing controls and calculations                                                        |
+| Multiple products and byproducts                              | Already present                                                        | Keep explicit targets and surplus visible                                                        |
+| Recipe and machine choices, modules, beacons, quality         | Already present                                                        | Use the same controls for manual and agent edits                                                 |
+| Fluids with temperature, surface conditions, research effects | Already present                                                        | Preserve these identities and checks in tools                                                    |
+| Nested floors and per-floor solver selection                  | Already present                                                        | Independently configured input, output and machine blocks, with optional parent scaling          |
+| Sequential, Gaussian, and simplex calculations                | Already present                                                        | Extend the existing engines rather than add another solver                                       |
+| Available input supply                                        | Simplex has a limited-ingredients TODO                                 | Exact or maximum rates, belts, lanes, stack sizes and watts through the native picker            |
+| Counts for a specific recipe line                             | Existing machine goals resolve through a product's first matching line | Implemented on the selected recipe line, including nested floors                                 |
+| Partial recipe coverage                                       | Matrix solvers choose recipe ratios                                    | Sequential percentage of remaining demand; retained and explicitly inactive under matrix solvers |
+| Solar, storage and reactor planning                           | Existing generator recipe infrastructure                               | Average/peak solar, day-cycle storage coverage and active reactor neighbor bonuses               |
+| Agent workspace                                               | Existing Toby panel and remote updates                                 | Native planner components, shared plans and revision-checked edits                               |
 
 The port covers the requested flexible planning workflows, rather than every unrelated Helmod screen. Mining, fuel, spoilage, fluid temperatures, quality and surface rules retain their native prototype mechanics.
 

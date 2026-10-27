@@ -14,7 +14,7 @@ import {
 	combineBlueprintDesigns,
 	expandBlueprintRows,
 	reviseBlueprintDesign
-} from '$lib/blueprints';
+} from '#lib/blueprints.js';
 import type { ManagedServer } from './db/schema';
 import source from './factory-blueprints/blueprint.lua?raw';
 import inserterRules from './factory-inserter-rules.lua?raw';

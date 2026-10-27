@@ -1,25 +1,25 @@
 import { error, json } from '@sveltejs/kit';
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { assistantFinalText, submissionEvents } from '$lib/assistant-events';
+import { assistantFinalText, submissionEvents } from '#lib/assistant-events.js';
 import {
 	type AssistantMod,
 	assistantModsSchema,
 	type FactoryResult,
 	factoryResultSchema
-} from '$lib/assistant-results';
-import { chatHistory, newChat, resolveChat, touchChat } from '$lib/server/assistant-chats';
-import { assistantErrorMessage } from '$lib/server/assistant-error';
-import { assistantModelCatalog, loadAssistantModel } from '$lib/server/assistant-models';
-import { authenticationForm, requireSameOrigin } from '$lib/server/auth';
-import { db, userHasModlistAccess } from '$lib/server/db';
-import { genID } from '$lib/server/db/ids';
-import { assistantTurn, modlistPlan } from '$lib/server/db/schema';
+} from '#lib/assistant-results.js';
+import { chatHistory, newChat, resolveChat, touchChat } from '#lib/server/assistant-chats.js';
+import { assistantErrorMessage } from '#lib/server/assistant-error.js';
+import { assistantModelCatalog, loadAssistantModel } from '#lib/server/assistant-models.js';
+import { authenticationForm, requireSameOrigin } from '#lib/server/auth.js';
+import { genID } from '#lib/server/db/ids.js';
+import { db, userHasModlistAccess } from '#lib/server/db/index.js';
+import { assistantTurn, modlistPlan } from '#lib/server/db/schema.js';
 import {
 	agentHandle,
 	inspectList,
 	routeModlistRequest,
 	watchCompaction
-} from '$lib/server/modlist-agent';
+} from '#lib/server/modlist-agent.js';
 import {
 	applyModlistPlan,
 	authorizedList,
@@ -28,13 +28,13 @@ import {
 	prepareModlistPlan,
 	refreshModlistPlan,
 	reviewAdditions
-} from '$lib/server/modlist-plans';
-import { ServerError } from '$lib/server/server-files';
+} from '#lib/server/modlist-plans.js';
+import { ServerError } from '#lib/server/server-files.js';
 import {
 	retryServerSetup,
 	serverSetupForRequest,
 	serverSetupStatus
-} from '$lib/server/server-provision';
+} from '#lib/server/server-provision.js';
 import type { RequestHandler } from './$types';
 
 // Requests remain cancellable and serialized while Vite reloads this route.

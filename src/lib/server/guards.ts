@@ -1,5 +1,5 @@
 import { fail, type RequestEvent } from '@sveltejs/kit';
-import { userHasModlistAccess } from '$lib/server/db';
+import { userHasModlistAccess } from '#lib/server/db/index.js';
 
 type AccessResult =
 	| { success: true; userId: string }

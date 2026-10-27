@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream';
-import { readSave, serverSaves } from '$lib/server/server-saves';
-import { requireServer } from '$lib/server/servers';
+import { readSave, serverSaves } from '#lib/server/server-saves.js';
+import { requireServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 export const GET: RequestHandler = async ({ params, locals }) => {
 	const server = await requireServer(locals.user?.id, params.serverId);

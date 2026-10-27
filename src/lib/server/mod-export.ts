@@ -5,13 +5,13 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createGzip } from 'node:zlib';
-import { env } from '$env/dynamic/private';
-import { compareVersions, isBundledMod } from '$lib/dependencies';
-import { createModList } from '$lib/mod-list';
-import { publishActivity } from '$lib/server/activity';
-import { modArchive } from '$lib/server/mod-downloads';
-import { validModName } from '$lib/server/mod-names';
-import { getPortalMod } from '$lib/server/portal-cache';
+import { compareVersions, isBundledMod } from '#lib/dependencies.js';
+import { createModList } from '#lib/mod-list.js';
+import { publishActivity } from '#lib/server/activity.js';
+import { modArchive } from '#lib/server/mod-downloads.js';
+import { validModName } from '#lib/server/mod-names.js';
+import { getPortalMod } from '#lib/server/portal-cache.js';
+import { FACMANDU_CACHE_DIR } from '$app/env/private';
 
 type ExportMod = { name: string; version: string | null; enabled: boolean | null };
 export type ExportProgress = {
@@ -25,7 +25,7 @@ export type ExportProgress = {
 const jobs = new Map<string, ExportProgress>();
 const encoder = new TextEncoder();
 const blockSize = 512;
-const directory = () => join(env.FACMANDU_CACHE_DIR || '.cache/facmandu', 'exports');
+const directory = () => join(FACMANDU_CACHE_DIR || '.cache/facmandu', 'exports');
 export const exportPath = (id: string) => join(directory(), `${id}.tar.gz`);
 export const exportProgress = (id: string) => jobs.get(id);
 

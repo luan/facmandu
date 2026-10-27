@@ -1,7 +1,7 @@
 <script lang="ts">
  import { enhance } from '$app/forms';
  import { PlusIcon, LoaderCircleIcon } from '@lucide/svelte';
- import Button from '$lib/components/ui/button/button.svelte';
+ import Button from '#lib/components/ui/button/button.svelte';
  let pending = $state(false);
  const inputClass = 'border-input bg-background w-full border px-3 py-2 text-sm';
 </script>

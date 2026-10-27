@@ -1,6 +1,6 @@
 <script lang="ts">
  import { PackageIcon } from '@lucide/svelte';
- import { modThumbnailUrl } from '$lib/utils';
+ import { modThumbnailUrl } from '#lib/utils.js';
  import type { Snippet } from 'svelte';
  let { name, title, thumbnail, owner, version, summary, preview, children }: {
   name: string; title?: string | null; thumbnail?: string | null; owner?: string | null;

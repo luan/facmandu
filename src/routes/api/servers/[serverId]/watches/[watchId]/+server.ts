@@ -1,7 +1,7 @@
 import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
-import { requireSameOrigin } from '$lib/server/auth';
-import { removeFactoryWatch, setFactoryWatchEnabled } from '$lib/server/factory-watches';
+import { requireSameOrigin } from '#lib/server/auth.js';
+import { removeFactoryWatch, setFactoryWatchEnabled } from '#lib/server/factory-watches.js';
 import type { RequestHandler } from './$types';
 
 export const PATCH: RequestHandler = async ({ locals, params, request, url }) => {

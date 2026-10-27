@@ -1,6 +1,6 @@
 import type { TranscriptContext } from '@earendil-works/pi-ai';
 import { z } from 'zod';
-import { factoryImageReferenceSchema } from '$lib/factory-images';
+import { factoryImageReferenceSchema } from '#lib/factory-images.js';
 import { pngDimensions } from './factory-image-data';
 
 const reference = factoryImageReferenceSchema.extend({ pending: z.boolean().optional() });

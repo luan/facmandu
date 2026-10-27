@@ -3,7 +3,7 @@
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
-	"packageManager": "bun@1.4.2",
+	"packageManager": "bun@1.4.4",
 	"scripts": {
 		"dev": "vite dev",
 		"test": "bun test tests",
@@ -17,24 +17,24 @@
 		"lint": "biome check .",
 		"db:push": "drizzle-kit push",
 		"db:studio": "drizzle-kit studio",
-		"start": "bun ./build/index.js",
+		"start": "bun ./scripts/start.mjs",
 		"lint:fix": "biome check --write ."
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.5.14",
+		"@biomejs/biome": "^2.6.3",
 		"@internationalized/date": "^3.12.4",
-		"@lucide/svelte": "^1.48.0",
-		"@sveltejs/adapter-node": "^5.5.7",
-		"@sveltejs/kit": "^2.70.3",
+		"@lucide/svelte": "^1.61.0",
+		"@sveltejs/adapter-node": "^6.0.0",
+		"@sveltejs/kit": "^3.1.0",
 		"@sveltejs/vite-plugin-svelte": "^7.3.1",
 		"@tailwindcss/vite": "^4.3.3",
-		"@types/node": "^26.6.3",
+		"@types/node": "^26.6.5",
 		"@typescript/native": "npm:typescript@7.0.2",
-		"bits-ui": "^2.19.3",
+		"bits-ui": "^2.20.2",
 		"clsx": "^2.1.1",
 		"drizzle-kit": "^0.31.11",
-		"svelte": "^5.57.1",
-		"svelte-check": "^4.7.6",
+		"svelte": "^5.57.3",
+		"svelte-check": "^4.7.7",
 		"svelte-sonner": "^1.2.1",
 		"tailwind-merge": "^3.7.0",
 		"tailwind-variants": "^3.3.1",
@@ -44,31 +44,28 @@
 		"vite": "^8.3.5"
 	},
 	"dependencies": {
-		"@earendil-works/pi-ai": "0.99.1",
-		"@flue/runtime": "2.2.2",
+		"@earendil-works/pi-ai": "1.4.0",
+		"@flue/runtime": "2.3.0",
 		"@libsql/client": "^0.18.0",
-		"@node-rs/argon2": "^2.2.1",
-		"@oslojs/crypto": "^1.0.1",
+		"@node-rs/argon2": "^2.2.2",
 		"@oslojs/encoding": "^1.1.0",
-		"drizzle-orm": "^0.45.3",
+		"drizzle-orm": "^0.45.4",
 		"fengari": "^0.1.5",
 		"fflate": "^0.8.3",
 		"micromark": "^4.0.3",
 		"micromark-extension-gfm-table": "^2.1.2",
 		"valibot": "^1.1.0",
-		"zod": "^4.6.5"
-	},
-	"overrides": {
-		"cookie": "1.1.1",
-		"esbuild": "0.28.2",
-		"picomatch": "4.0.7",
-		"ws": "8.21.3",
-		"@earendil-works/pi-ai": "0.99.1",
-		"@modelcontextprotocol/client": "2.3.1",
-		"hono": "4.13.13",
-		"source-map-js": "1.2.2"
+		"zod": "^4.6.7"
 	},
 	"patchedDependencies": {
-		"@flue/runtime@2.2.2": "patches/@flue%2Fruntime@2.2.2.patch"
+		"@flue/runtime@2.3.0": "patches/@flue%2Fruntime@2.3.0.patch"
+	},
+	"imports": {
+		"#lib": "./src/lib/index.js",
+		"#lib/*": "./src/lib/*"
+	},
+	"overrides": {
+		"@modelcontextprotocol/client": "2.4.0",
+		"esbuild": "0.28.2"
 	}
 }

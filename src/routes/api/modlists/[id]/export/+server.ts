@@ -3,9 +3,9 @@ import { stat } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { error, json } from '@sveltejs/kit';
 import { and, eq, isNull, or } from 'drizzle-orm';
-import { db, userHasModlistAccess } from '$lib/server/db';
-import * as table from '$lib/server/db/schema';
-import { exportPath, exportProgress, prepareExport } from '$lib/server/mod-export';
+import { db, userHasModlistAccess } from '#lib/server/db/index.js';
+import * as table from '#lib/server/db/schema.js';
+import { exportPath, exportProgress, prepareExport } from '#lib/server/mod-export.js';
 import type { RequestEvent, RequestHandler } from './$types';
 
 async function authorize(event: RequestEvent) {

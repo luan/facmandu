@@ -1,7 +1,7 @@
 import { open, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
-import { boundedConsoleLines, consoleText } from '$lib/console';
+import { boundedConsoleLines, consoleText } from '#lib/console.js';
 import type { ManagedServer } from './db/schema';
 export type LogLine = { id: string; text: string; time: number | null };
 export type LogPacket =

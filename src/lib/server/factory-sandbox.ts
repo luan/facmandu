@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
-import { blueprintArtifactSchema, MAX_BLUEPRINT_ENTITIES } from '$lib/blueprints';
+import { blueprintArtifactSchema, MAX_BLUEPRINT_ENTITIES } from '#lib/blueprints.js';
 import type { ManagedServer } from './db/schema';
 import { factoryBlueprint, readBlueprintDraft } from './factory-blueprints';
 import { recordCompiledFactoryTrial } from './factory-layout-status';

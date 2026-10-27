@@ -1,14 +1,14 @@
 <script lang="ts">
-	import { modThumbnailUrl } from '$lib/utils';
+	import { modThumbnailUrl } from '#lib/utils.js';
 	import { enhance } from '$app/forms';
 	import { invalidate } from '$app/navigation';
-	import type { SubmitFunction } from '@sveltejs/kit';
+	import type { SubmitFunction } from '$app/forms';
 	import { PlusIcon, XIcon, ChevronLeftIcon, ChevronRightIcon } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
-	import * as Sheet from '$lib/components/ui/sheet';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import type { ModSummary } from '$lib/server/db/schema';
+	import * as Sheet from '#lib/components/ui/sheet/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import type { ModSummary } from '#lib/server/db/schema.js';
 	import ModPreviewSheet from './ModPreviewSheet.svelte';
 	let { iceboxMods, factorioVersion, readOnly = false, open = $bindable(false) }: { iceboxMods: Omit<ModSummary, 'updatedBy'>[]; factorioVersion: string; readOnly?: boolean; open?: boolean } = $props();
 	let query = $state('');

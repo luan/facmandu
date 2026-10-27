@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { browser } from '$app/environment';
+	import { browser } from '$app/env';
 	import { invalidate } from '$app/navigation';
 	import { ActivityIcon, LoaderCircleIcon } from '@lucide/svelte';
-	import * as Sheet from '$lib/components/ui/sheet';
-	import { buttonVariants } from '$lib/components/ui/button';
-	import { getActivityState } from '$lib/activity.svelte';
-	import type { Activity } from '$lib/server/activity';
+	import * as Sheet from '#lib/components/ui/sheet/index.js';
+	import { buttonVariants } from '#lib/components/ui/button/index.js';
+	import { getActivityState } from '#lib/activity.svelte.js';
+	import type { Activity } from '#lib/server/activity.js';
 	let { servers, lists }: { servers: { id: string; name: string }[]; lists: { id: string; name: string }[] } = $props();
 	let open = $state(false);
 	const activityState = getActivityState();

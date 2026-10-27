@@ -4,9 +4,9 @@ import {
 	inspectDependencies,
 	isBundledMod,
 	satisfiesVersion
-} from '$lib/dependencies';
-import { validModName } from '$lib/server/mod-names';
-import { validateDependencies } from '$lib/server/services/dependencies';
+} from '#lib/dependencies.js';
+import { validModName } from '#lib/server/mod-names.js';
+import { validateDependencies } from '#lib/server/services/dependencies.js';
 
 export type DesiredMod = {
 	name: string;

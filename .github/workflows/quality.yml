@@ -15,20 +15,16 @@ jobs:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: '1.4.2'
-      - uses: actions/setup-node@v6
+          bun-version: "1.4.4"
+      - uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: "24"
       - run: sudo apt-get update -qq && sudo apt-get install -y lua5.4
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run check
       - run: bun test
       - run: python3 -m unittest discover -s tests -p '*_test.py'
-      # Fengari rejects precision over two digits before calling sprintf-js.
-      # Remove this exception when sprintf-js publishes a patched release.
-      # Kit 2 mitigations: hooks reject // paths; no pages are prerendered.
-      # HTTP checks enforce both until the Kit 3 migration removes these exceptions.
-      - run: bun audit --ignore GHSA-hp3w-g68c-fv3c --ignore GHSA-pfhg-q3qv-9q6r --ignore GHSA-27mw-82g8-phjj
+      - run: bun audit
       - run: bun run build
       - run: bun run test:http

@@ -1,7 +1,7 @@
 import { error, json } from '@sveltejs/kit';
-import { mapGenerationCatalog } from '$lib/server/map-generation-native';
-import { ServerError } from '$lib/server/server-files';
-import { requireServer } from '$lib/server/servers';
+import { mapGenerationCatalog } from '#lib/server/map-generation-native.js';
+import { ServerError } from '#lib/server/server-files.js';
+import { requireServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, params }) => {

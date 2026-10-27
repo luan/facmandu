@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
-import { factoryImageRendering, readFactoryImage } from '$lib/server/factory-images';
-import { ServerError } from '$lib/server/server-files';
-import { requireServer } from '$lib/server/servers';
+import { factoryImageRendering, readFactoryImage } from '#lib/server/factory-images.js';
+import { ServerError } from '#lib/server/server-files.js';
+import { requireServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, params }) => {

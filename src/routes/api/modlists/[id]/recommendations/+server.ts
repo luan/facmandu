@@ -1,15 +1,15 @@
 import { error, json } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { requireSameOrigin } from '$lib/server/auth';
-import { db, userHasModlistAccess } from '$lib/server/db';
-import { recommendationFeedback } from '$lib/server/db/schema';
-import { validModName } from '$lib/server/mod-names';
+import { requireSameOrigin } from '#lib/server/auth.js';
+import { db, userHasModlistAccess } from '#lib/server/db/index.js';
+import { recommendationFeedback } from '#lib/server/db/schema.js';
+import { validModName } from '#lib/server/mod-names.js';
 import {
 	RecommendationRankingError,
 	rankModlistRecommendations
-} from '$lib/server/modlist-recommendations';
-import { saveRecommendationFeedback } from '$lib/server/recommendation-feedback';
+} from '#lib/server/modlist-recommendations.js';
+import { saveRecommendationFeedback } from '#lib/server/recommendation-feedback.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, params }) => {

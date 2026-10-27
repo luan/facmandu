@@ -1,9 +1,9 @@
 <script lang="ts">
- import type { BlueprintArtifact } from '$lib/blueprints';
+ import type { BlueprintArtifact } from '#lib/blueprints.js';
  import { CopyIcon, DownloadIcon, CheckIcon } from '@lucide/svelte';
  import Button from './ui/button/button.svelte';
  import FactoryImage from './FactoryImage.svelte';
- import { factoryImageSchema, factoryImagePendingSchema, type FactoryImage as ImageData } from '$lib/factory-images';
+ import { factoryImageSchema, factoryImagePendingSchema, type FactoryImage as ImageData } from '#lib/factory-images.js';
  let { blueprint, serverId, unfinished = false }: {blueprint:BlueprintArtifact;serverId?:string;unfinished?:boolean} = $props();
  let rendered=$state<ImageData | {id:string;pending:true}>();
  $effect(()=>{blueprint.blueprint;rendered=undefined;error='';});

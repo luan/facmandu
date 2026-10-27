@@ -1,12 +1,12 @@
 <script lang="ts">
-	import { modDependencyGraph } from '$lib/mod-dependency-tree';
+	import { modDependencyGraph } from '#lib/mod-dependency-tree.js';
 	import ModDependencyTree from './ModDependencyTree.svelte';
-	import { isBundledMod, parseDependencies, supportsFactorio } from '$lib/dependencies';
-	import Button from '$lib/components/ui/button/button.svelte';
-	import * as Table from '$lib/components/ui/table';
-	import { Input } from '$lib/components/ui/input';
+	import { isBundledMod, parseDependencies, supportsFactorio } from '#lib/dependencies.js';
+	import Button from '#lib/components/ui/button/button.svelte';
+	import * as Table from '#lib/components/ui/table/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
 	import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@lucide/svelte';
-	import type { ModSummary } from '$lib/server/db/schema';
+	import type { ModSummary } from '#lib/server/db/schema.js';
 	import ThumbnailCell from './ThumbnailCell.svelte';
 	import ModInfoCell from './ModInfoCell.svelte';
 	import ActionsCell from './ActionsCell.svelte';

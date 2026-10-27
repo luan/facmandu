@@ -1,8 +1,8 @@
 import { error } from '@sveltejs/kit';
-import { codexAuthRoutes } from '$lib/server/codex';
-import { copilotAuthRoutes } from '$lib/server/copilot';
-import { metaAuthRoutes } from '$lib/server/meta';
-import type { ProviderId } from '$lib/server/provider-auth';
+import { codexAuthRoutes } from '#lib/server/codex.js';
+import { copilotAuthRoutes } from '#lib/server/copilot.js';
+import { metaAuthRoutes } from '#lib/server/meta.js';
+import type { ProviderId } from '#lib/server/provider-auth.js';
 import type { RequestHandler } from './$types';
 
 const routes = {

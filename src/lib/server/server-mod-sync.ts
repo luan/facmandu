@@ -1,12 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { and, eq, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { publishActivity } from '$lib/server/activity';
-import { db, userHasModlistAccess } from '$lib/server/db';
-import * as table from '$lib/server/db/schema';
-import { type ModChange, planServerMods } from '$lib/server/server-mod-plan';
-import { reserveServer, serverTask } from '$lib/server/server-tasks';
-import { requireServer } from '$lib/server/servers';
+import { publishActivity } from '#lib/server/activity.js';
+import { db, userHasModlistAccess } from '#lib/server/db/index.js';
+import * as table from '#lib/server/db/schema.js';
+import { type ModChange, planServerMods } from '#lib/server/server-mod-plan.js';
+import { reserveServer, serverTask } from '#lib/server/server-tasks.js';
+import { requireServer } from '#lib/server/servers.js';
 import { genID } from './db/ids';
 import type { ManagedServer } from './db/schema';
 import { publishModlistEvent } from './realtime';

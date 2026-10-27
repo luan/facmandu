@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
-import { requireServer } from '$lib/server/servers';
-import { tobyIntegrationArchive, tobyIntegrations } from '$lib/server/toby-integrations';
+import { requireServer } from '#lib/server/servers.js';
+import { tobyIntegrationArchive, tobyIntegrations } from '#lib/server/toby-integrations.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, params }) => {

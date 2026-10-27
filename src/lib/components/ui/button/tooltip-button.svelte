@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Button, { type ButtonProps } from './button.svelte';
-	import * as Tooltip from '$lib/components/ui/tooltip';
+	import * as Tooltip from '#lib/components/ui/tooltip/index.js';
 	let { tooltip, ref = $bindable(null), children, ...props }: ButtonProps & { tooltip: string } = $props();
 </script>
 

@@ -2,15 +2,15 @@ import { createHash } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { and, desc, eq } from 'drizzle-orm';
-import { assistantMilestone } from '$lib/assistant-results';
-import { gamePanelText, gameReply, gameText, parseGameChat, parseGameUi } from '$lib/game-chat';
+import { assistantMilestone } from '#lib/assistant-results.js';
+import { gamePanelText, gameReply, gameText, parseGameChat, parseGameUi } from '#lib/game-chat.js';
 import {
 	panelActivity,
 	panelBlueprints,
 	panelDesign,
 	panelDrone,
 	panelUpdates
-} from '$lib/toby-panel';
+} from '#lib/toby-panel.js';
 import { routeAmbientChat } from './ambient-chat';
 import { touchChat } from './assistant-chats';
 import { db } from './db';

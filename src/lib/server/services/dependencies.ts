@@ -3,10 +3,10 @@ import {
 	isBundledMod,
 	satisfiesVersion,
 	supportsFactorio
-} from '$lib/dependencies';
-import type { Mod } from '$lib/server/db/schema';
+} from '#lib/dependencies.js';
+import type { Mod } from '#lib/server/db/schema.js';
 
-export { parseDependencies } from '$lib/dependencies';
+export { parseDependencies } from '#lib/dependencies.js';
 
 export function validateDependencies(
 	mods: (Pick<Mod, 'name' | 'enabled' | 'dependencies' | 'version'> & {

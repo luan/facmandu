@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { type FactoryLayoutInput, factoryLayoutJobInput } from '$lib/factory-layout';
+import { type FactoryLayoutInput, factoryLayoutJobInput } from '#lib/factory-layout.js';
 import { ServerError } from './server-files';
 
 const rate = z

@@ -7,8 +7,9 @@ A failed or unfinished rerun blocks deployment. Pull request checks never deploy
 
 The updater uses a user-level file lock and systemd oneshot service, so overlapping
 checks cannot deploy twice. It installs frozen dependencies and builds without
-production environment variables in an isolated release directory. Preparation
-does not alter the running app or game processes.
+production environment variables in an isolated release directory. It copies old
+immutable client assets before the build so open tabs can still load their chunks.
+Preparation does not alter the running app or game processes.
 
 Deployments defer while server or mod-list assistant work is running, and check again
 before restarting the web app.
@@ -41,7 +42,10 @@ systemctl --user enable --now facmandu-deploy.timer
 systemctl --user start facmandu-deploy.service
 ```
 
-Python 3.12 or newer, Git, Node, Lua 5.4 (`lua`), and Bun 1.4.2 must already be installed. The
+Python 3.12 or newer, Git, Node, and Lua 5.4 (`lua`) must already be installed. Install the
+official Bun 1.4.4 executable at `~/.local/share/facmandu-deploy/bun/1.4.4/bun` and
+verify its version before installing the updater. The app uses this private binary
+for builds and service startup, leaving the system Bun and rollback configuration intact. The
 existing dev service and Cloudflare Tunnel remain the only app listener and public
 route. No second app process runs against the replica. Before the first cutover,
 save private backups of the environment, a consistent SQLite replica backup, and
@@ -72,7 +76,10 @@ login and `/api/health` after rollback (the original checkout predates that endp
 Restart the timer only when the desired main revision is safe to deploy again.
 
 Update the installed updater script and timer explicitly when deployment behavior
-changes; application releases do not silently replace the updater itself.
+changes; application releases do not silently replace the updater itself. For the
+SvelteKit 3 upgrade, install the app-specific Bun and updated `deploy.py` before pushing the app revision.
+The previous updater copies old assets after the build, when adapter-node 6 can no
+longer add them to its static asset table.
 
 ## Game connectivity
 

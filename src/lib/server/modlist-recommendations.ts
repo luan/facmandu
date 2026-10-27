@@ -1,12 +1,12 @@
 import { and, eq, inArray, isNull, or } from 'drizzle-orm';
-import { type DecisionRequest, decisionsModel } from '$lib/decisions';
+import { type DecisionRequest, decisionsModel } from '#lib/decisions.js';
 import {
 	composeRanking,
 	type RecommendationRating,
 	rankingAnswerSchema,
 	rankingQuestions,
 	rankingState
-} from '$lib/recommendation-ranking';
+} from '#lib/recommendation-ranking.js';
 import {
 	type RecommendationCandidate,
 	type RecommendationMod,
@@ -14,7 +14,7 @@ import {
 	recommendationPageSize,
 	recommendationPriority,
 	recommendationRelease
-} from '$lib/recommendations';
+} from '#lib/recommendations.js';
 import { listOwnerKey } from './accounts';
 import { db, userHasModlistAccess } from './db';
 import { mod, modList, portalCache, recommendationFeedback } from './db/schema';

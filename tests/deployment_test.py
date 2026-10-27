@@ -1,6 +1,7 @@
 import importlib.util
 import io
 import sqlite3
+import tarfile
 from pathlib import Path
 import tempfile
 import unittest
@@ -18,19 +19,59 @@ class DeploymentTests(unittest.TestCase):
             previous = Path(directory) / 'previous'
             destination = Path(directory) / 'next'
             old = previous / 'build/client/_app/immutable/nodes'
-            new = destination / 'build/client/_app/immutable/nodes'
+            new = destination / 'static/_app/immutable/nodes'
             old.mkdir(parents=True)
             new.mkdir(parents=True)
             (old / 'old.hash.js').write_text('old chunk')
+            (old / 'old.hash.js.gz').write_text('old compressed chunk')
             (old / 'shared.hash.js').write_text('previous')
             (new / 'shared.hash.js').write_text('current')
             (previous / '.env').write_text('private')
+            (old / 'private.js').symlink_to(previous / '.env')
             deploy.retain_client_assets(previous, destination)
             self.assertEqual((new / 'old.hash.js').read_text(), 'old chunk')
             self.assertEqual((new / 'shared.hash.js').read_text(), 'current')
             self.assertFalse((destination / '.env').exists())
+            self.assertFalse((new / 'private.js').exists())
+            self.assertFalse((new / 'old.hash.js.gz').exists())
             deploy.retain_client_assets(previous, destination)
             deploy.retain_client_assets(Path(directory) / 'missing', destination)
+
+    def test_old_chunks_are_included_before_the_new_release_build(self):
+        revision = 'a' * 40
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory).resolve()
+            root = home / 'state'
+            root.mkdir()
+            previous = home / 'previous'
+            old = previous / 'build/client/_app/immutable/nodes'
+            old.mkdir(parents=True)
+            (old / 'old.hash.js').write_text('old chunk')
+            (root / 'current').symlink_to(previous)
+            bun = str(root / 'bun' / deploy.BUN_VERSION / 'bun')
+            observed = []
+
+            def command(*args, **kwargs):
+                if args[:2] == ('git', 'ls-remote'):
+                    return type('Result', (), {'stdout': revision + '\trefs/heads/main\n'})()
+                if args[:2] == (bun, '--version'):
+                    return type('Result', (), {'stdout': deploy.BUN_VERSION + '\n'})()
+                for arg in args:
+                    if arg.startswith('--output='):
+                        with tarfile.open(arg.removeprefix('--output='), 'w'):
+                            pass
+                if args == (bun, 'run', 'build'):
+                    observed.append((kwargs['cwd'] / 'static/_app/immutable/nodes/old.hash.js').read_text())
+                    self.assertEqual(kwargs['env']['PATH'].split(':')[0], str(Path(bun).parent))
+                return type('Result', (), {'stdout': ''})()
+
+            with patch.object(deploy, 'ROOT', root), patch.object(deploy, 'SOURCE', previous), \
+                 patch('pathlib.Path.home', return_value=home), patch.object(deploy, 'run', side_effect=command), \
+                 patch.object(deploy, 'install_dropin'), patch.object(deploy, 'health'), \
+                 patch.object(deploy, 'assistant_busy', return_value=False), \
+                 patch.object(deploy, 'renderer_busy', return_value=False):
+                deploy.deploy(revision)
+            self.assertEqual(observed, ['old chunk'])
 
     def test_cold_login_retries_timeout_but_rejects_invalid_page(self):
         revision = "a" * 40
@@ -79,9 +120,11 @@ class DeploymentTests(unittest.TestCase):
     def test_release_runs_the_built_server_on_the_existing_private_listener(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory).resolve()
-            with patch('pathlib.Path.home', return_value=home), patch.object(deploy, 'run'):
+            root = home / 'state'
+            with patch('pathlib.Path.home', return_value=home), patch.object(deploy, 'ROOT', root), patch.object(deploy, 'run'):
                 deploy.install_dropin('a' * 40)
             text = (home / '.config/systemd/user/facmandu-dev.service.d/50-release.conf').read_text()
+            self.assertIn('ExecStart=' + str(root / 'bun' / deploy.BUN_VERSION / 'bun') + ' ', text)
             self.assertIn(' run start\n', text)
             self.assertIn('Environment=HOST=127.0.0.1\n', text)
             self.assertIn('Environment=PORT=5173\n', text)
@@ -147,6 +190,8 @@ class DeploymentTests(unittest.TestCase):
 
             def command(*args, **kwargs):
                 deploy_calls.append(args)
+                if args[-1] == '--version':
+                    return type("Result", (), {"stdout": deploy.BUN_VERSION + "\n"})()
                 return type("Result", (), {"stdout": revision + "\trefs/heads/main\n"})()
 
             with patch.object(deploy, "ROOT", root), patch.object(deploy, "SOURCE", previous), \
@@ -161,6 +206,24 @@ class DeploymentTests(unittest.TestCase):
                 self.assertEqual(dropin.read_text(), original_configuration)
                 self.assertFalse((root / "deployed.json").exists())
                 self.assertEqual(deploy_calls.count(("systemctl", "--user", "restart", deploy.SERVICE)), 2)
+
+    def test_wrong_bun_version_cannot_switch_a_prepared_release(self):
+        revision = 'a' * 40
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory).resolve()
+            root = home / 'state'
+            previous = home / 'previous'
+            previous.mkdir()
+            release = root / 'releases' / revision
+            release.mkdir(parents=True)
+            (release / '.ready').write_text(revision)
+            (root / 'current').symlink_to(previous)
+            result = type('Result', (), {'stdout': '1.4.2\n'})()
+            with patch.object(deploy, 'ROOT', root), patch.object(deploy, 'run', return_value=result) as command:
+                with self.assertRaisesRegex(RuntimeError, 'Bun 1.4.4 is required'):
+                    deploy.deploy(revision)
+            self.assertEqual((root / 'current').resolve(), previous)
+            self.assertEqual(command.call_count, 1)
 
 
 if __name__ == "__main__":

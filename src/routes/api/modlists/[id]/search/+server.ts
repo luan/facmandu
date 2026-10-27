@@ -1,9 +1,9 @@
 import { json } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
-import { db, userHasModlistAccess } from '$lib/server/db';
-import * as table from '$lib/server/db/schema';
-import { searchFactorioMods } from '$lib/server/factorio-search';
-import { PortalHttpError } from '$lib/server/portal-cache';
+import { db, userHasModlistAccess } from '#lib/server/db/index.js';
+import * as table from '#lib/server/db/schema.js';
+import { searchFactorioMods } from '#lib/server/factorio-search.js';
+import { PortalHttpError } from '#lib/server/portal-cache.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async (event) => {

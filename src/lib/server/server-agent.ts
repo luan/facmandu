@@ -12,16 +12,16 @@ import {
 } from '@flue/runtime';
 import * as v from 'valibot';
 import { z } from 'zod';
-import { observedFactoryBuild } from '$lib/assistant-completion';
-import { serverToolGroups } from '$lib/assistant-routing';
+import { observedFactoryBuild } from '#lib/assistant-completion.js';
+import { serverToolGroups } from '#lib/assistant-routing.js';
 import {
 	type BuildOutputSample,
 	blueprintArtifactSchema,
 	buildOutputSampleSchema,
 	measureBuildOutput
-} from '$lib/blueprints';
-import type { FactoryImage } from '$lib/factory-images';
-import { factoryLayoutInput } from '$lib/factory-layout';
+} from '#lib/blueprints.js';
+import type { FactoryImage } from '#lib/factory-images.js';
+import { factoryLayoutInput } from '#lib/factory-layout.js';
 import { assistantProviderName } from './assistant-models';
 import { useAssistantToolGroups } from './assistant-tool-groups';
 import {

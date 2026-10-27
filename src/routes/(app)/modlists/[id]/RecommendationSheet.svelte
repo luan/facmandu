@@ -1,18 +1,18 @@
 <script lang="ts">
-	import * as Tooltip from '$lib/components/ui/tooltip';
-	import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
-	import { modThumbnailUrl } from '$lib/utils';
+	import * as Tooltip from '#lib/components/ui/tooltip/index.js';
+	import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
+	import { modThumbnailUrl } from '#lib/utils.js';
 	import { enhance } from '$app/forms';
 	import { invalidate } from '$app/navigation';
 	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { MessageSquareIcon, PlusIcon, UndoIcon, EyeOffIcon, EyeIcon, RefreshCwIcon, ChevronLeftIcon, ChevronRightIcon, PackageIcon, LinkIcon, LoaderCircleIcon } from '@lucide/svelte';
-	import * as Sheet from '$lib/components/ui/sheet';
-	import { Button } from '$lib/components/ui/button';
-	import { recommendationCandidates, recommendationRelease, recommendationPriority, recommendationPageSize, type RecommendationMod } from '$lib/recommendations';
-	import type { RecommendationRating } from '$lib/recommendation-ranking';
-	import type { PortalMod } from '$lib/server/portal-cache';
-	import { createRejectedRecommendationsStore } from '$lib/stores/rejected-recommendations.svelte';
+	import * as Sheet from '#lib/components/ui/sheet/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { recommendationCandidates, recommendationRelease, recommendationPriority, recommendationPageSize, type RecommendationMod } from '#lib/recommendations.js';
+	import type { RecommendationRating } from '#lib/recommendation-ranking.js';
+	import type { PortalMod } from '#lib/server/portal-cache.js';
+	import { createRejectedRecommendationsStore } from '#lib/stores/rejected-recommendations.svelte.js';
 	import ModPreviewSheet from './ModPreviewSheet.svelte';
 
 	let { mods, modlistId, factorioVersion, curationAvailable, canEdit, open = $bindable(false) }: { mods: (RecommendationMod & { title?: string | null; version?: string | null; summary?: string | null; lastFetched?: Date | null })[]; modlistId: string; factorioVersion: string; curationAvailable: boolean; canEdit: boolean; open?: boolean } = $props();

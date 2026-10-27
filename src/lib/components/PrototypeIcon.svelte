@@ -1,5 +1,5 @@
 <script lang="ts">
- import type { PrototypeRef } from '$lib/factory-results';
+ import type { PrototypeRef } from '#lib/factory-results.js';
  let { prototype, serverId, large = false, fallbackText }: { prototype: PrototypeRef; serverId: string; large?: boolean; fallbackText?: string } = $props();
  const src = $derived(`/api/servers/${encodeURIComponent(serverId)}/icons/${prototype.kind}/${encodeURIComponent(prototype.name)}`);
  let image = $state('');

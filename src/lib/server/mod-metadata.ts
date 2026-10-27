@@ -1,5 +1,5 @@
-import { compareVersions, inspectDependencies, supportsFactorio } from '$lib/dependencies';
-import type { PortalMod, PortalRelease } from '$lib/server/portal-cache';
+import { compareVersions, inspectDependencies, supportsFactorio } from '#lib/dependencies.js';
+import type { PortalMod, PortalRelease } from '#lib/server/portal-cache.js';
 
 export function latestCompatibleRelease(
 	info: PortalMod,

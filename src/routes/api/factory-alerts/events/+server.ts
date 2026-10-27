@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
-import { eventStream } from '$lib/server/event-stream';
-import { subscribeFactoryAlerts } from '$lib/server/factory-watches';
-import { canManageServer } from '$lib/server/servers';
+import { eventStream } from '#lib/server/event-stream.js';
+import { subscribeFactoryAlerts } from '#lib/server/factory-watches.js';
+import { canManageServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = ({ locals, request }) => {

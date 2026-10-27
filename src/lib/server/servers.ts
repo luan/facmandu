@@ -1,14 +1,14 @@
 import { error } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { env } from '$env/dynamic/private';
-import { db } from '$lib/server/db';
-import { type ManagedServer, managedServer } from '$lib/server/db/schema';
+import { db } from '#lib/server/db/index.js';
+import { type ManagedServer, managedServer } from '#lib/server/db/schema.js';
+import { FACMANDU_OPERATOR_USER_IDS } from '$app/env/private';
 
 export type ServerSummary = ManagedServer;
 export const canManageServer = (userId: string | undefined): boolean =>
 	!!userId &&
-	(env.FACMANDU_OPERATOR_USER_IDS ?? '')
+	(FACMANDU_OPERATOR_USER_IDS ?? '')
 		.split(',')
 		.map((id) => id.trim())
 		.includes(userId);

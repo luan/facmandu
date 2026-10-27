@@ -2,11 +2,11 @@
 	import { enhance } from '$app/forms';
 	import { toast } from 'svelte-sonner';
 	import { invalidate } from '$app/navigation';
-	import Button from '$lib/components/ui/button/button.svelte';
-	import type { ModSummary } from '$lib/server/db/schema';
-	import type { SubmitFunction } from '@sveltejs/kit';
+	import Button from '#lib/components/ui/button/button.svelte';
+	import type { ModSummary } from '#lib/server/db/schema.js';
+	import type { SubmitFunction } from '$app/forms';
 	import { LockIcon, PackageCheck, CheckIcon, MinusIcon, LoaderCircleIcon } from '@lucide/svelte';
-	import * as Tooltip from '$lib/components/ui/tooltip';
+	import * as Tooltip from '#lib/components/ui/tooltip/index.js';
 
 	interface Props {
 		mod: Omit<ModSummary, 'updatedBy'>;

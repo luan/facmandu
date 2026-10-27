@@ -1,6 +1,6 @@
-import { eventStream } from '$lib/server/event-stream';
-import { subscribeLogs } from '$lib/server/server-logs';
-import { requireServer } from '$lib/server/servers';
+import { eventStream } from '#lib/server/event-stream.js';
+import { subscribeLogs } from '#lib/server/server-logs.js';
+import { requireServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, params, request }) => {

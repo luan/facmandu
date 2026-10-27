@@ -1,7 +1,7 @@
 <script lang="ts">
  import type { Snippet } from 'svelte';
  import { PlusIcon, SearchIcon } from '@lucide/svelte';
- import Button from '$lib/components/ui/button/button.svelte';
+ import Button from '#lib/components/ui/button/button.svelte';
  let { title, createHref, createLabel, searchLabel, query = $bindable(''), columns, children, empty, emptyMessage, context }: {
   title:string; createHref:string; createLabel:string; searchLabel:string; query?:string;
   columns:[string,string,string]; children:Snippet; empty:boolean; emptyMessage:string; context?:Snippet;

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { unzipSync } from 'fflate';
 import { z } from 'zod';
-import { compareVersions } from '$lib/dependencies';
+import { compareVersions } from '#lib/dependencies.js';
 import { db } from './db';
 import type { ManagedServer } from './db/schema';
 import { mod, portalCache } from './db/schema';

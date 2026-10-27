@@ -1,11 +1,11 @@
-import type { Handle } from '@sveltejs/kit';
-import { building } from '$app/environment';
-import * as auth from '$lib/server/auth.js';
-import { initializeDatabase } from '$lib/server/db';
-import { startDropboxBackups } from '$lib/server/dropbox-backups';
-import { startFactoryWatchSampler } from '$lib/server/factory-watches';
-import { startInGameAssistants } from '$lib/server/in-game-assistant';
-import { startInGameLayouts } from '$lib/server/in-game-layout';
+import type { Handle } from '@sveltejs/kit/hooks';
+import * as auth from '#lib/server/auth.js';
+import { initializeDatabase } from '#lib/server/db/index.js';
+import { startDropboxBackups } from '#lib/server/dropbox-backups.js';
+import { startFactoryWatchSampler } from '#lib/server/factory-watches.js';
+import { startInGameAssistants } from '#lib/server/in-game-assistant.js';
+import { startInGameLayouts } from '#lib/server/in-game-layout.js';
+import { building } from '$app/env';
 
 // The hook module loads with the web process, including before its first request.
 if (!building)
@@ -58,13 +58,11 @@ const handleSecurity: Handle = async ({ event, resolve }) => {
 };
 
 export const handle: Handle = async ({ event, resolve }) => {
-	// GHSA-pfhg-q3qv-9q6r: reject protocol-relative action paths before routing.
-	if (event.url.pathname.startsWith('//')) return new Response('Invalid path', { status: 400 });
 	await initializeDatabase();
 	startFactoryWatchSampler();
 	startDropboxBackups();
 	startInGameAssistants();
 	startInGameLayouts();
 	// Chain the handlers
-	return handleSecurity({ event, resolve: (event) => handleAuth({ event, resolve }) });
+	return handleSecurity({ event, resolve: async (event) => handleAuth({ event, resolve }) });
 };

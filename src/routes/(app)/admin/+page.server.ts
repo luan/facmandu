@@ -1,9 +1,9 @@
 import { fail } from '@sveltejs/kit';
 import { sql } from 'drizzle-orm';
-import { issueInvite, requireAdmin } from '$lib/server/accounts';
-import { authenticationForm } from '$lib/server/auth';
-import { db } from '$lib/server/db';
-import { invite, user } from '$lib/server/db/schema';
+import { issueInvite, requireAdmin } from '#lib/server/accounts.js';
+import { authenticationForm } from '#lib/server/auth.js';
+import { db } from '#lib/server/db/index.js';
+import { invite, user } from '#lib/server/db/schema.js';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {

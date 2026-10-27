@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
-import { modSettingDef, modSettingsCatalog } from '$lib/server/mod-settings-defs';
-import { requireServer } from '$lib/server/servers';
+import { modSettingDef, modSettingsCatalog } from '#lib/server/mod-settings-defs.js';
+import { requireServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params, locals, url }) => {

@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { bundledModTitle, isBundledMod } from '$lib/dependencies';
-	import * as Tooltip from '$lib/components/ui/tooltip';
-	import type { ModSummary } from '$lib/server/db/schema';
+	import { bundledModTitle, isBundledMod } from '#lib/dependencies.js';
+	import * as Tooltip from '#lib/components/ui/tooltip/index.js';
+	import type { ModSummary } from '#lib/server/db/schema.js';
 	import { ExternalLinkIcon } from '@lucide/svelte';
 
 	interface Props {

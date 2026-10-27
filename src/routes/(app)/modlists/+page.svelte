@@ -2,8 +2,8 @@
  import { toast } from 'svelte-sonner';
 	import { ServerIcon, CopyIcon, UsersIcon, LoaderCircleIcon } from '@lucide/svelte';
 	import { enhance } from '$app/forms';
-	import ListPage from '$lib/components/ListPage.svelte';
- import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
+	import ListPage from '#lib/components/ListPage.svelte';
+ import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
 
 	let { data }: import('./$types').PageProps = $props();
 	let copying = $state<string | null>(null);

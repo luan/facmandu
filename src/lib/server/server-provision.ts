@@ -4,8 +4,8 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { env } from '$env/dynamic/private';
-import { compareVersions, isBundledMod } from '$lib/dependencies';
+import { compareVersions, isBundledMod } from '#lib/dependencies.js';
+import { FACMANDU_SERVER_DIRECTORY } from '$app/env/private';
 import { publishActivity } from './activity';
 import { db, userHasModlistAccess } from './db';
 import * as table from './db/schema';
@@ -480,7 +480,7 @@ export async function createServerFromList(
 		total: mods.filter((m) => m.enabled && !m.icebox).length + 2
 	};
 	const directory = join(
-		env.FACMANDU_SERVER_DIRECTORY || join(homedir(), '.local/share/facmandu/servers'),
+		FACMANDU_SERVER_DIRECTORY || join(homedir(), '.local/share/facmandu/servers'),
 		serverId
 	);
 	const release = reserveServer(serverId, 'Setting up server');

@@ -1,10 +1,10 @@
-import { sha256 } from '@oslojs/crypto/sha2';
-import { encodeBase64url, encodeHexLowerCase } from '@oslojs/encoding';
+import { createHash } from 'node:crypto';
+import { encodeBase64url } from '@oslojs/encoding';
 import { error, type RequestEvent } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
-import { env } from '$env/dynamic/private';
-import { db } from '$lib/server/db';
-import * as table from '$lib/server/db/schema';
+import { db } from '#lib/server/db/index.js';
+import * as table from '#lib/server/db/schema.js';
+import { ORIGIN } from '$app/env/private';
 
 const DAY_IN_MS = 1000 * 60 * 60 * 24;
 
@@ -94,7 +94,7 @@ export function generateSessionToken() {
 }
 
 export async function createSession(token: string, userId: string) {
-	const sessionId = encodeHexLowerCase(sha256(new TextEncoder().encode(token)));
+	const sessionId = createHash('sha256').update(token).digest('hex');
 	const session: table.Session = {
 		id: sessionId,
 		userId,
@@ -105,7 +105,7 @@ export async function createSession(token: string, userId: string) {
 }
 
 export async function validateSessionToken(token: string) {
-	const sessionId = encodeHexLowerCase(sha256(new TextEncoder().encode(token)));
+	const sessionId = createHash('sha256').update(token).digest('hex');
 	const [result] = await db
 		.select({
 			// Adjust user table here to tweak returned data
@@ -166,6 +166,6 @@ export function deleteSessionTokenCookie(event: RequestEvent) {
 
 export function requireSameOrigin(request: Request, url: URL) {
 	// Vite sees the tunnel's HTTP origin; ORIGIN is the configured public HTTPS origin.
-	const origin = env.ORIGIN ? new URL(env.ORIGIN).origin : url.origin;
+	const origin = ORIGIN ? new URL(ORIGIN).origin : url.origin;
 	if (request.headers.get('origin') !== origin) error(403, 'Invalid request origin');
 }

@@ -2,8 +2,8 @@
 	import { toast } from 'svelte-sonner';
 	import { navigating, page } from '$app/state';
 	import AppHeader from './AppHeader.svelte';
-	import { setActivityState } from '$lib/activity.svelte';
-	import type { Activity as ActivityItem } from '$lib/server/activity';
+	import { setActivityState } from '#lib/activity.svelte.js';
+	import type { Activity as ActivityItem } from '#lib/server/activity.js';
 	let { data, children } = $props();
 	const activityState = $state<{ items: ActivityItem[] }>({ items: [] });
 	setActivityState(activityState);

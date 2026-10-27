@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
-import { loadServerView } from '$lib/server/server-view';
-import { requireServer } from '$lib/server/servers';
+import { loadServerView } from '#lib/server/server-view.js';
+import { requireServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params, locals, url }) => {

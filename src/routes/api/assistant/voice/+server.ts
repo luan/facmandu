@@ -1,12 +1,12 @@
 import { error, isHttpError } from '@sveltejs/kit';
 import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { resolveChat } from '$lib/server/assistant-chats';
-import { authenticationForm, requireSameOrigin } from '$lib/server/auth';
-import { connectCodexVoice } from '$lib/server/codex-voice';
-import { db, userHasModlistAccess } from '$lib/server/db';
-import { assistantTurn, serverAssistantTurn } from '$lib/server/db/schema';
-import { requireServer } from '$lib/server/servers';
+import { resolveChat } from '#lib/server/assistant-chats.js';
+import { authenticationForm, requireSameOrigin } from '#lib/server/auth.js';
+import { connectCodexVoice } from '#lib/server/codex-voice.js';
+import { db, userHasModlistAccess } from '#lib/server/db/index.js';
+import { assistantTurn, serverAssistantTurn } from '#lib/server/db/schema.js';
+import { requireServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 
 const targetSchema = z.union([

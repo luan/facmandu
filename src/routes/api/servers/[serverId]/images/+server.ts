@@ -1,8 +1,8 @@
 import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
-import { FactoryImagePending, renderFactoryBlueprint } from '$lib/server/factory-images';
-import { ServerError } from '$lib/server/server-files';
-import { requireServer } from '$lib/server/servers';
+import { FactoryImagePending, renderFactoryBlueprint } from '#lib/server/factory-images.js';
+import { ServerError } from '#lib/server/server-files.js';
+import { requireServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {

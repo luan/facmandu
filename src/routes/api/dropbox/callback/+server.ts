@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
-import { finishDropbox } from '$lib/server/dropbox';
-import { ServerError } from '$lib/server/server-files';
+import { finishDropbox } from '#lib/server/dropbox.js';
+import { ServerError } from '#lib/server/server-files.js';
 import type { RequestHandler } from './$types';
 export const GET: RequestHandler = async (event) => {
 	try {

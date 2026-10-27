@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import * as Tooltip from '$lib/components/ui/tooltip';
-	import { cn, type WithElementRef } from '$lib/utils.js';
-	import { browser } from '$app/environment';
+	import * as Tooltip from '#lib/components/ui/tooltip/index.js';
+	import { cn, type WithElementRef } from '#lib/utils.js';
+	import { browser } from '$app/env';
 	import { afterNavigate } from '$app/navigation';
 	import type { HTMLAttributes } from 'svelte/elements';
 	import {

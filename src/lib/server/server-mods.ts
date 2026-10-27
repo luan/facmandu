@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { copyFile, mkdir, readdir, rename, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { compareVersions } from '$lib/dependencies';
+import { compareVersions } from '#lib/dependencies.js';
 import type { ManagedServer } from './db/schema';
 import { modArchive } from './mod-downloads';
 import { validModName } from './mod-names';

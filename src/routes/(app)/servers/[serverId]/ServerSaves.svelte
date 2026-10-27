@@ -1,11 +1,11 @@
 <script lang="ts">
  import { CheckIcon, DownloadIcon, FileArchiveIcon, LoaderCircleIcon, PlusIcon, TrashIcon, UploadIcon, FolderOpenIcon, PencilIcon } from '@lucide/svelte';
  import { enhance } from '$app/forms';
- import type { SubmitFunction } from '@sveltejs/kit';
- import TooltipButton from '$lib/components/ui/button/tooltip-button.svelte';
- import * as Dialog from '$lib/components/ui/dialog';
- import type { ServerView } from '$lib/server/server-view';
- import { defaultWorldGenerationSettings, type WorldGenerationSettings } from '$lib/map-generation';
+ import type { SubmitFunction } from '$app/forms';
+ import TooltipButton from '#lib/components/ui/button/tooltip-button.svelte';
+ import * as Dialog from '#lib/components/ui/dialog/index.js';
+ import type { ServerView } from '#lib/server/server-view.js';
+ import { defaultWorldGenerationSettings, type WorldGenerationSettings } from '#lib/map-generation.js';
  import WorldGenerationEditor from './WorldGenerationEditor.svelte';
  import DropboxSaves from './DropboxSaves.svelte';
  let { saves, selected, resumeAutosave, running, configured, busyReason, creating, action, base, serverId, submit }: {

@@ -1,9 +1,9 @@
 <script lang="ts">
  import { onDestroy, onMount } from 'svelte';
- import { goto, invalidateAll } from '$app/navigation';
+ import { goto, refreshAll } from '$app/navigation';
  import { LogInIcon, XIcon, LoaderCircleIcon, RefreshCwIcon } from '@lucide/svelte';
- import { Input } from '$lib/components/ui/input';
- import { Button } from '$lib/components/ui/button';
+ import { Input } from '#lib/components/ui/input/index.js';
+ import { Button } from '#lib/components/ui/button/index.js';
  let {
   linking = false,
   provider,
@@ -23,7 +23,7 @@
  }
  async function finish() {
   waiting = true; message = '';
-  try { await request('finish'); code = ''; ready = false; if (linking) await invalidateAll(); else await goto('/'); }
+  try { await request('finish'); code = ''; ready = false; if (linking) await refreshAll(); else await goto('/'); }
   catch (cause) { message = cause instanceof Error ? cause.message : 'Could not finish sign-in'; }
   finally { waiting = false; }
  }

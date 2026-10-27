@@ -90,7 +90,7 @@ export const factoryPlanInput = v.object({
 	)
 });
 export type FactoryPlanInput = v.InferInput<typeof factoryPlanInput>;
-export { nativeFactoryPlanInput } from '$lib/factory-plan-input';
+export { nativeFactoryPlanInput } from '#lib/factory-plan-input.js';
 
 type Product = z.infer<typeof material>;
 type Rate = { name: string; type: Product['type']; per_min: number };
