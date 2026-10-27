@@ -2559,6 +2559,30 @@ done
 		'review hashes, running-server protection, operation locks, exact installs and idempotent re-review'
 	);
 	const serverAssistantPath = `${secondPath}/assistant`;
+	const webDefaultConfig = await readState(1, 'facmandu.json');
+	const webDefaultConfigPath = join(machineDirs[1], 'facmandu.json');
+	const saveWebDefault = (model, effort) =>
+		writeFile(
+			webDefaultConfigPath,
+			JSON.stringify({
+				...webDefaultConfig,
+				gameAssistant: { ...webDefaultConfig.gameAssistant, model, effort }
+			})
+		);
+	await saveWebDefault('gpt-6-sol', 'high');
+	const emptyServerChat = await json(serverAssistantPath, { cookie: cookies.owner });
+	assert.equal(emptyServerChat.model, 'gpt-6-sol');
+	assert.equal(emptyServerChat.effort, 'high');
+	assert.equal(emptyServerChat.turns.length, 0);
+	assert.equal(
+		(await json(`${serverPath}/assistant`, { cookie: cookies.owner })).model,
+		'gpt-6-luna'
+	);
+	await saveWebDefault('unavailable-model', 'high');
+	assert.equal((await json(serverAssistantPath, { cookie: cookies.owner })).model, 'gpt-6-luna');
+	await saveWebDefault('gpt-6-sol', 'max');
+	assert.equal((await json(serverAssistantPath, { cookie: cookies.owner })).effort, 'medium');
+	await saveWebDefault('gpt-6-sol', 'high');
 	const metadataReply = await request(serverAssistantPath, {
 		cookie: cookies.owner,
 		method: 'POST',
@@ -2587,7 +2611,12 @@ done
 	});
 	assert.equal(serverReply.status, 200);
 	assert.match(await serverReply.text(), /Fixture contextual explanation/u);
-	assert.equal((await json(serverAssistantPath, { cookie: cookies.owner })).turns.length, 2);
+	const selectedServerChat = await json(serverAssistantPath, { cookie: cookies.owner });
+	assert.equal(selectedServerChat.turns.length, 2);
+	assert.equal(selectedServerChat.model, 'gpt-6-astra');
+	assert.equal(selectedServerChat.effort, 'medium');
+	await writeFile(webDefaultConfigPath, JSON.stringify(webDefaultConfig));
+	passed('Empty server chats use configured model defaults without overriding existing selections');
 	const serverHistory = await json(`${serverAssistantPath}?models=0`, { cookie: cookies.owner });
 	assert.equal(serverHistory.turns.length, 2);
 	assert.equal('models' in serverHistory, false);

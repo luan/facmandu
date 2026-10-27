@@ -19,6 +19,7 @@ import {
 	serverAssistantRequests,
 	steerServerTurn
 } from '#lib/server/server-assistant.js';
+import { serverConfig } from '#lib/server/server-files.js';
 import { startModSync } from '#lib/server/server-mod-sync.js';
 import { requireServer } from '#lib/server/servers.js';
 import type { RequestHandler } from './$types';
@@ -73,6 +74,12 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
 							'Could not load models. Check your Codex, Muse, or Copilot connection in Account settings.'
 					}))
 			: null;
+	const savedSelection = turns.find(
+		(turn) => turn.model && (!catalog || catalog.models.some((model) => model.id === turn.model))
+	);
+	const configured =
+		!savedSelection && catalog?.models.length ? (await serverConfig(server)).gameAssistant : null;
+	const defaultModel = catalog?.models.find((model) => model.id === configured?.model);
 	return json(
 		{
 			...catalog,
@@ -86,14 +93,16 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
 			})),
 			hasMore: turns.length > 30,
 			model:
-				turns.find(
-					(turn) =>
-						turn.model && (!catalog || catalog.models.some((model) => model.id === turn.model))
-				)?.model ??
+				savedSelection?.model ??
+				defaultModel?.id ??
 				catalog?.models.find((model) => model.id.includes('luna'))?.id ??
 				catalog?.models[0]?.id ??
 				'',
-			effort: turns.find((turn) => turn.effort)?.effort ?? '',
+			effort: savedSelection
+				? (turns.find((turn) => turn.effort)?.effort ?? '')
+				: configured && defaultModel?.efforts.some((effort) => effort === configured.effort)
+					? configured.effort
+					: (defaultModel?.defaultEffort ?? ''),
 			turns: turns
 				.slice(0, 30)
 				.reverse()
