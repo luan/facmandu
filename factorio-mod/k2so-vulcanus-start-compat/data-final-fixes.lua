@@ -18,6 +18,17 @@ if crusher and crusher.research_trigger and crusher.research_trigger.type == 'cr
   and crusher.research_trigger.item == 'stone' then
   crusher.research_trigger = { type = 'craft-item', item = 'stone-brick', count = 50 }
 end
+-- K2 only places rare metal ore on Nauvis, so rare metal processing can never trigger
+-- on Vulcanus. It gates advanced chemistry, which unlocks the hydrogen chloride that
+-- rare metals from lava need. Research it with the rare metal mining cost instead.
+local rare_metal_mining = data.raw.technology['kr-rare-metal-mining']
+local rare_metal_processing = data.raw.technology['kr-rare-metal-processing']
+if rare_metal_mining and rare_metal_mining.unit and rare_metal_processing
+  and rare_metal_processing.research_trigger
+  and rare_metal_processing.research_trigger.type == 'mine-entity' then
+  rare_metal_processing.research_trigger = nil
+  rare_metal_processing.unit = table.deepcopy(rare_metal_mining.unit)
+end
 -- Retire this override once upstream no longer introduces the reversed dependency.
 if electronics and automation and includes(automation.prerequisites, 'electronics')
   and includes(electronics.prerequisites, 'automation') then

@@ -1,0 +1,15 @@
+---------------------------------------------------------------------------------------------------
+Version: 0.0.3
+Date: 2026-11-11
+  Bugfixes:
+    - Fixed rare metals being unobtainable on a Vulcanus start. Rare metal processing is now researched with science packs, at the same cost as rare metal mining, because rare metal ore only spawns on Nauvis.
+---------------------------------------------------------------------------------------------------
+Version: 0.0.2
+Date: 2026-10-12
+  Bugfixes:
+    - Fixed the crusher being unresearchable on a Vulcanus start. It now unlocks by smelting 50 stone bricks.
+---------------------------------------------------------------------------------------------------
+Version: 0.0.1
+Date: 2026-10-12
+  Info:
+    - Initial release. Fixes the electronics research cycle on a Vulcanus start.
