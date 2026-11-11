@@ -1,3 +1,5 @@
+local Reader = require("reader-qa")
+
 local function record(name, value)
   storage.results[name] = value
   helpers.write_file("platform-logistics-qa.json", helpers.table_to_json(storage.results), false)
@@ -69,6 +71,7 @@ script.on_init(function()
   game.surfaces.nauvis.force_generate_chunk_requests()
   tiles(game.surfaces.nauvis, -10, -10, 10, 10, "refined-concrete")
   storage.planet = chest(game.surfaces.nauvis, "requester-chest", {0.5, 0.5}, "player")
+  Reader.setup(platform)
   storage.stage = "delivery"
   storage.started = game.tick
 end)
@@ -80,6 +83,7 @@ script.on_nth_tick(30, function()
       assert(storage.requester.get_item_count("steel-plate") == 20)
       assert(storage.extended.get_item_count("stone-brick") == 50)
       assert(storage.ghost.valid)
+      Reader.check(32)
       record("save_reload", true)
     end
     return
@@ -147,6 +151,15 @@ script.on_nth_tick(30, function()
       assert(network.all_construction_robots == 0)
       assert(storage.ghost.valid)
       record("idle_retirement_and_no_construction", true)
+      Reader.check(43)
+      Reader.blueprint(platform)
+      record("reader_wires_qualities_robots_blueprints", true)
+      assert(storage.reader_qa.stock.remove_item {name = "iron-stick", count = 11} == 11)
+      storage.stage = "reader_updated"
+      storage.started = game.tick
+    elseif storage.stage == "reader_updated" and elapsed >= 60 then
+      Reader.check(32)
+      record("reader_live_updates", true)
       local port = surface.find_entities_filtered {name = "platform-logistics-port"}[1]
       local p = port.position
       tiles(surface, math.floor(p.x), math.floor(p.y), math.floor(p.x), math.floor(p.y), "empty-space")

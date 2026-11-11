@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.1
+Date: 2026-11-11
+  Features:
+    - Added a one-tile platform logistics reader with native roboport circuit controls for network contents and robot statistics.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.0
 Date: 2026-11-11
   Features:

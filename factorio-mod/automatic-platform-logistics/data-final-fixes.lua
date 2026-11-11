@@ -73,3 +73,5 @@ item.spoil_ticks = nil
 item.spoil_result = nil
 
 data:extend {port, robot, item}
+
+require("reader")

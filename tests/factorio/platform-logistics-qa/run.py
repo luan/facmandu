@@ -35,6 +35,8 @@ for name, source in [
     ("automatic-platform-logistics", root / "factorio-mod/automatic-platform-logistics"),
     ("platform-logistics-qa", Path(__file__).resolve().parent),
 ]:
+    for old in mods.glob(name + "_*.zip"):
+        old.unlink()
     shutil.copytree(source, mods / name, ignore=shutil.ignore_patterns("__pycache__", "run.py"))
     manifest["mods"] = [mod for mod in manifest["mods"] if mod["name"] != name]
     manifest["mods"].append({"name": name, "enabled": True})
