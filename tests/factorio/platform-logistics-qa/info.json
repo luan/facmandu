@@ -4,5 +4,7 @@
 	"title": "Platform logistics isolated QA",
 	"author": "cfcluan",
 	"factorio_version": "2.1",
-	"dependencies": ["platform-logistics"]
+	"dependencies": [
+		"automatic-platform-logistics"
+	]
 }

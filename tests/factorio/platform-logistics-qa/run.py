@@ -32,7 +32,7 @@ else:
     manifest = {"mods": [{"name": name, "enabled": True} for name in
                          ["base", "space-age", "quality", "elevated-rails"]]}
 for name, source in [
-    ("platform-logistics", root / "factorio-mod/platform-logistics"),
+    ("automatic-platform-logistics", root / "factorio-mod/automatic-platform-logistics"),
     ("platform-logistics-qa", Path(__file__).resolve().parent),
 ]:
     shutil.copytree(source, mods / name, ignore=shutil.ignore_patterns("__pycache__", "run.py"))
