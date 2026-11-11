@@ -1,0 +1,8 @@
+{
+	"name": "platform-logistics-qa",
+	"version": "0.1.0",
+	"title": "Platform logistics isolated QA",
+	"author": "cfcluan",
+	"factorio_version": "2.1",
+	"dependencies": ["platform-logistics"]
+}

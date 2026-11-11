@@ -1,0 +1,9 @@
+{
+	"name": "platform-logistics",
+	"version": "0.1.0",
+	"title": "Automatic Platform Logistics",
+	"author": "cfcluan",
+	"factorio_version": "2.1",
+	"dependencies": ["base >= 2.1.0", "space-age"],
+	"description": "Powered space platforms get automatic logistic coverage and logistic robots. No roboports or robot deliveries needed. Planets and construction are unchanged."
+}
